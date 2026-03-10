@@ -485,6 +485,24 @@ class GameView:
             self._do_save()
         self._return_signal = "menu"
 
+    def _do_save(self) -> None:
+        """Save game to the default slot if a saves directory is configured."""
+        if self._saves_dir and self.game.station:
+            slot = Path(self._saves_dir) / AUTOSAVE_FILENAME
+            try:
+                self.game.save_game(slot)
+                self._save_msg = "Saved  \u2713"
+                self._save_msg_timer = 2.5
+            except Exception as exc:
+                self._save_msg = f"Save failed: {exc}"
+                self._save_msg_timer = 3.0
+
+    def _do_save_and_menu(self) -> None:
+        """Save the game (if auto-save is enabled) and signal a return to the main menu."""
+        if self._auto_save:
+            self._do_save()
+        self._return_signal = "menu"
+
     def _on_click(self, pos: tuple[int, int]) -> None:
         # Save button
         if self._save_btn_rect().collidepoint(pos):
