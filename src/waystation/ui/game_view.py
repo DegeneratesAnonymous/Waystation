@@ -738,8 +738,10 @@ class GameView:
                 cap_c = (T.DANGER if pct >= 0.95 else
                          T.WARN   if pct >= 0.75 else T.OK)
                 cap_str = f"{used:.0f}/{cap}"
+                # Offset below damage badge if damage is visible to avoid overlap
+                cap_y = rect.y + 20 if mod.damage >= 0.01 else rect.y + 7
                 D.text(self.screen, self.fonts.sm, cap_str,
-                       (rect.right - 8, rect.y + 7), cap_c, "topright")
+                       (rect.right - 8, cap_y), cap_c, "topright")
                 # Capacity bar across bottom of room
                 bar_rect = pygame.Rect(rect.x + 4, rect.bottom - 8, rect.width - 8, 4)
                 D.hbar(self.screen, bar_rect, used, cap, cap_c)

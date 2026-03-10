@@ -74,13 +74,13 @@ class InventorySystem:
         if cap_total <= 0:
             return False
 
-        # Check type filter
-        if module.cargo_settings and module.cargo_settings.allowed_types:
-            item_defn = self.registry.items.get(item_id)
-            if item_defn and item_defn.item_type not in module.cargo_settings.allowed_types:
+        item_defn = self.registry.items.get(item_id)
+
+        # Check type filter via allows_type()
+        if module.cargo_settings and item_defn:
+            if not module.cargo_settings.allows_type(item_defn.item_type):
                 return False
 
-        item_defn = self.registry.items.get(item_id)
         weight = item_defn.weight if item_defn else 1.0
         return self.get_capacity_free(module) >= weight * qty
 
@@ -107,16 +107,25 @@ class InventorySystem:
         if cap_total <= 0:
             return 0
 
-        # Enforce type filter
-        if module.cargo_settings and module.cargo_settings.allowed_types:
-            item_defn = self.registry.items.get(item_id)
-            if item_defn and item_defn.item_type not in module.cargo_settings.allowed_types:
+        item_defn = self.registry.items.get(item_id)  # single lookup
+
+        # Enforce type filter via allows_type()
+        if module.cargo_settings and item_defn:
+            if not module.cargo_settings.allows_type(item_defn.item_type):
                 return 0
 
-        item_defn = self.registry.items.get(item_id)
         weight = item_defn.weight if item_defn else 1.0
 
         free = self.get_capacity_free(module)
+        # Enforce reserved capacity: subtract capacity locked for other types
+        if item_defn and module.cargo_settings and module.cargo_settings.reserved_by_type:
+            cap_locked = sum(
+                frac * cap_total
+                for res_type, frac in module.cargo_settings.reserved_by_type.items()
+                if res_type != item_defn.item_type
+            )
+            free = max(0.0, free - cap_locked)
+
         max_addable = int(free / weight) if weight > 0 else qty
         actual = min(qty, max_addable)
         if actual <= 0:
@@ -223,20 +232,24 @@ class InventorySystem:
 
     def _decay_perishables(self, station: "StationState",
                            module: "ModuleInstance", tick: int) -> None:
-        """Remove perishable items whose shelf life has expired."""
-        to_remove = []
+        """Decay perishable items by 1 unit per perishable_ticks interval."""
+        to_decay: list[tuple[str, int]] = []
         for item_id, qty in module.inventory.items():
             defn = self.registry.items.get(item_id)
             if defn is None or defn.perishable_ticks <= 0:
                 continue
-            # Items decay when (tick % perishable_ticks == 0)
-            if tick > 0 and tick % defn.perishable_ticks == 0:
-                to_remove.append((item_id, qty))
+            if tick > 0 and tick % defn.perishable_ticks == 0 and qty > 0:
+                to_decay.append((item_id, qty))  # capture snapshot of current qty
 
-        for item_id, qty in to_remove:
-            module.inventory.pop(item_id, None)
+        for item_id, current_qty in to_decay:
+            decay_qty = min(1, current_qty)
+            new_qty = current_qty - decay_qty
+            if new_qty <= 0:
+                module.inventory.pop(item_id, None)
+            else:
+                module.inventory[item_id] = new_qty
             item_name = (self.registry.items[item_id].display_name
                          if item_id in self.registry.items else item_id)
             station.log_event(
-                f"Warning: {qty}× {item_name} in {module.display_name} has perished."
+                f"Warning: {decay_qty}× {item_name} in {module.display_name} has perished."
             )
