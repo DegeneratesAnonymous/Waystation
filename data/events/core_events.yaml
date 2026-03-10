@@ -1,0 +1,480 @@
+# Core event definitions for Frontier Waystation
+# schema_version: "1"
+#
+# Events are the primary content engine.
+# They fire based on conditions, present choices, and drive consequences.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ARRIVAL EVENTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: event.arrival_generic
+  category: arrival
+  schema_version: "1"
+  title: "Ship Approaching"
+  description: >
+    A vessel has entered docking range and is hailing the station.
+    They're requesting permission to dock.
+  weight: 0.0         # weight 0 — only fires when explicitly queued by visitor system
+  cooldown: 0
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions: []
+  choices:
+    - id: admit
+      label: "Grant docking clearance"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "Docking clearance granted."
+    - id: deny
+      label: "Deny docking — turn them away"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "Docking denied. Ship standing off."
+    - id: inspect
+      label: "Grant clearance — but require full inspection"
+      conditions:
+        - type: tag_present
+          target: active_trading
+          negate: true
+      outcomes:
+        - type: log_message
+          value: "Conditional clearance issued. Inspection crew standing by."
+        - type: set_tag
+          target: inspection_in_progress
+
+- id: event.hostile_ship
+  category: incident
+  schema_version: "1"
+  title: "Hostile Vessel"
+  description: >
+    A ship has gone hostile in the docking approach zone. Their weapons are
+    active and they're broadcasting demands.
+  weight: 0.0
+  cooldown: 10
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions: []
+  choices:
+    - id: negotiate
+      label: "Open a channel — attempt to negotiate"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "Channel open. Negotiations underway. This could go either way."
+    - id: pay
+      label: "Pay tribute — transfer credits"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 100
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 150
+        - type: log_message
+          value: "Tribute paid. The ship withdraws — for now."
+        - type: modify_rep
+          target: faction.raider_clans
+          value: 5
+    - id: defend
+      label: "Alert security — prepare to repel boarders"
+      conditions:
+        - type: crew_count_above
+          value: 2
+      outcomes:
+        - type: set_tag
+          target: boarding_alert
+        - type: log_message
+          value: "Security to battle stations. This is going to get bloody."
+      followup_event: event.boarding_attempt
+
+# ──────────────────────────────────────────────────────────────────────────────
+# STATION EVENTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: event.food_shortage_warning
+  category: station
+  schema_version: "1"
+  title: "Food Stocks Running Low"
+  description: >
+    The quartermaster reports that food reserves will not last another week
+    at current consumption rates. Something needs to change.
+  weight: 1.0
+  cooldown: 20
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: resource_below
+      target: food
+      value: 40
+  choices:
+    - id: ration
+      label: "Implement rationing — reduce crew food consumption"
+      conditions: []
+      outcomes:
+        - type: set_tag
+          target: food_rationing
+        - type: log_message
+          value: "Rationing order posted. Morale will suffer."
+    - id: buy
+      label: "Purchase emergency supplies from next trader"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 200
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 200
+        - type: add_resource
+          target: food
+          value: 80
+        - type: log_message
+          value: "Emergency food purchase authorized. Supply incoming."
+
+- id: event.power_fluctuation
+  category: station
+  schema_version: "1"
+  title: "Power Grid Fluctuation"
+  description: >
+    The engineering console is throwing alerts. The power grid is cycling
+    unevenly — likely a failing relay. If it blows, secondary systems go dark.
+  weight: 0.8
+  cooldown: 15
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: resource_below
+      target: power
+      value: 30
+  choices:
+    - id: repair
+      label: "Dispatch engineering crew — emergency repair"
+      conditions:
+        - type: crew_count_above
+          value: 1
+      outcomes:
+        - type: add_resource
+          target: power
+          value: 20
+        - type: remove_resource
+          target: parts
+          value: 10
+        - type: log_message
+          value: "Engineering reports relay replaced. Grid stable — for now."
+    - id: shutdown
+      label: "Shed non-essential systems to reduce load"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "Non-essential systems taken offline. The station feels very quiet."
+
+- id: event.unexpected_trader
+  category: arrival
+  schema_version: "1"
+  title: "Unexpected Trade Offer"
+  description: >
+    A merchant vessel has hailed the station with an unusual offer — they're
+    carrying a surplus of medical supplies and offering them at cut price in
+    exchange for quick turnaround docking.
+  weight: 0.6
+  cooldown: 30
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: tick_above
+      value: 5
+  choices:
+    - id: accept
+      label: "Accept the deal — fast dock, pay the discounted rate"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 120
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 120
+        - type: add_resource
+          target: parts
+          value: 30
+        - type: log_message
+          value: "Deal done. Medical supplies transferred. Ship departing in a hurry."
+    - id: decline
+      label: "Decline — you don't like quick deals"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "You wave them off. They seem disappointed but leave without incident."
+    - id: inspect
+      label: "Insist on a full inspection before any transaction"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "They reluctantly agree. Inspection begins. Something feels off about the manifest."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FACTION EVENTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: event.imperial_inspection_demand
+  category: faction
+  schema_version: "1"
+  title: "Imperial Inspection Order"
+  description: >
+    An Imperial Remnant cutter has delivered formal notification: under Imperial
+    Commerce Code 7-Gamma, your station is subject to a compliance inspection.
+    The inspector is polite but firm.
+  weight: 0.5
+  cooldown: 40
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: faction_rep_above
+      target: faction.imperial_remnant
+      value: -30
+    - type: tick_above
+      value: 10
+  choices:
+    - id: comply
+      label: "Comply fully — open all decks to inspection"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.imperial_remnant
+          value: 10
+        - type: log_message
+          value: "Inspector completes review. Report filed. They note 'acceptable compliance'."
+    - id: partial
+      label: "Comply partially — restrict sensitive areas"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.imperial_remnant
+          value: -5
+        - type: log_message
+          value: "Inspector notes access restrictions. A formal query will follow."
+    - id: refuse
+      label: "Refuse — this station is not under Imperial jurisdiction"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.imperial_remnant
+          value: -20
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: 10
+        - type: log_message
+          value: "The inspector withdraws to file a non-compliance report. You've made a statement."
+
+- id: event.refugee_wave
+  category: arrival
+  schema_version: "1"
+  title: "Refugee Convoy Requesting Asylum"
+  description: >
+    A convoy of seven ships is approaching — overcrowded, low on fuel, running
+    on emergency life support. They say they're fleeing a Raider blockade two
+    systems over. They need docking space, food, and medical access.
+  weight: 0.4
+  cooldown: 50
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: tick_above
+      value: 15
+  choices:
+    - id: grant_asylum
+      label: "Grant full asylum — open the docks"
+      conditions: []
+      outcomes:
+        - type: remove_resource
+          target: food
+          value: 60
+        - type: modify_rep
+          target: faction.refugee_fleets
+          value: 20
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: 10
+        - type: log_message
+          value: "Docks open. The convoy moves in slowly. The station fills with noise and need."
+    - id: limited
+      label: "Offer limited assistance — fuel and medics only, no docking"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 80
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 80
+        - type: modify_rep
+          target: faction.refugee_fleets
+          value: 5
+        - type: log_message
+          value: "Fuel tanker and med-shuttle dispatched. Convoy resumes course."
+    - id: deny
+      label: "Deny — you can't absorb this many people"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.refugee_fleets
+          value: -15
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: -5
+        - type: log_message
+          value: "The convoy holds position briefly, then slowly turns away. Someone is crying on the open channel."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# INCIDENT EVENTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: event.boarding_attempt
+  category: incident
+  schema_version: "1"
+  title: "Boarding Action"
+  description: >
+    The hostile ship has matched velocity and launched a breach pod. Raiders
+    are cutting through Docking Bay A. Security has thirty seconds to respond.
+  weight: 0.0
+  cooldown: 30
+  required_tags:
+    - boarding_alert
+  excluded_tags: []
+  trigger_conditions: []
+  choices:
+    - id: fight
+      label: "Hold the line — security engages"
+      conditions:
+        - type: crew_count_above
+          value: 1
+      outcomes:
+        - type: remove_resource
+          target: parts
+          value: 20
+        - type: clear_tag
+          target: boarding_alert
+        - type: modify_rep
+          target: faction.raider_clans
+          value: -10
+        - type: log_message
+          value: "Boarding party repelled after a brutal corridor fight. Two crew injured. The breach pod is slag."
+    - id: fallback
+      label: "Seal bulkheads — contain the breach, protect the core"
+      conditions: []
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 100
+        - type: clear_tag
+          target: boarding_alert
+        - type: log_message
+          value: "Raiders loot the docking bay before withdrawing. Expensive lesson."
+    - id: surrender
+      label: "Broadcast surrender — give them what they want"
+      conditions: []
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 200
+        - type: remove_resource
+          target: food
+          value: 40
+        - type: clear_tag
+          target: boarding_alert
+        - type: log_message
+          value: "Raiders take tribute and leave without casualties. Some victories feel like losses."
+
+- id: event.crew_morale_crisis
+  category: station
+  schema_version: "1"
+  title: "Crew Morale Breaking Down"
+  description: >
+    Three crew members haven't spoken in days. Shifts are being missed.
+    Someone scrawled "WHEN DO WE LEAVE?" on the engineering bay wall.
+  weight: 0.6
+  cooldown: 25
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: crew_count_above
+      value: 2
+    - type: resource_below
+      target: food
+      value: 60
+  choices:
+    - id: address
+      label: "Hold a crew meeting — acknowledge the situation"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "You speak plainly. It helps — not much, but some. People feel seen."
+    - id: bonus
+      label: "Issue a morale bonus — pull from station funds"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 100
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 100
+        - type: log_message
+          value: "Bonus issued. Grumbling quiets down. It won't last, but it helps for now."
+    - id: ignore
+      label: "Ignore it — they'll adapt"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "Nobody says anything. The tension doesn't go away. It just goes underground."
+
+- id: event.archive_research_request
+  category: faction
+  schema_version: "1"
+  title: "Archive Order Research Request"
+  description: >
+    An Archive Order vessel is requesting extended docking access. Their team
+    wants to cross-reference your regional sensor logs against their ruin site
+    surveys. They're offering information in exchange.
+  weight: 0.4
+  cooldown: 45
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: tick_above
+      value: 20
+  choices:
+    - id: allow
+      label: "Allow full data access"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.archive_order
+          value: 15
+        - type: add_resource
+          target: credits
+          value: 50
+        - type: log_message
+          value: "Researchers work quietly for several days, then thank you formally and depart."
+    - id: partial
+      label: "Allow limited access — some logs are sensitive"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.archive_order
+          value: 5
+        - type: log_message
+          value: "They take what you allow without complaint. A small but genuine thanks."
+    - id: refuse
+      label: "Decline — your sensor data is station property"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.archive_order
+          value: -5
+        - type: log_message
+          value: "They accept the refusal professionally and request standard resupply instead."

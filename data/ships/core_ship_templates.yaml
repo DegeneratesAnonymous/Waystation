@@ -1,0 +1,122 @@
+# Ship templates for Frontier Waystation
+# schema_version: "1"
+
+- id: ship.light_freighter
+  schema_version: "1"
+  role: trader
+  cargo_capacity: 40
+  passenger_capacity: 2
+  threat_level: 1
+  behavior_tags:
+    - trade_stop
+    - docks_readily
+  faction_restrictions: []
+
+- id: ship.heavy_freighter
+  schema_version: "1"
+  role: trader
+  cargo_capacity: 120
+  passenger_capacity: 4
+  threat_level: 1
+  behavior_tags:
+    - trade_stop
+    - carries_valuables
+  faction_restrictions:
+    - faction.merchant_league
+
+- id: ship.refugee_convoy
+  schema_version: "1"
+  role: refugee
+  cargo_capacity: 10
+  passenger_capacity: 20
+  threat_level: 0
+  behavior_tags:
+    - requests_asylum
+    - strains_resources
+  faction_restrictions:
+    - faction.refugee_fleets
+    - faction.frontier_collective
+
+- id: ship.refugee_shuttle
+  schema_version: "1"
+  role: refugee
+  cargo_capacity: 2
+  passenger_capacity: 6
+  threat_level: 0
+  behavior_tags:
+    - requests_asylum
+  faction_restrictions: []
+
+- id: ship.imperial_cutter
+  schema_version: "1"
+  role: inspector
+  cargo_capacity: 5
+  passenger_capacity: 3
+  threat_level: 4
+  behavior_tags:
+    - official_inspection
+    - armed_escort
+    - hostile_if_denied
+  faction_restrictions:
+    - faction.imperial_remnant
+
+- id: ship.smuggler_runner
+  schema_version: "1"
+  role: smuggler
+  cargo_capacity: 20
+  passenger_capacity: 2
+  threat_level: 2
+  behavior_tags:
+    - evasive
+    - carries_contraband
+    - hostile_if_boarded
+  faction_restrictions: []
+
+- id: ship.raider_corvette
+  schema_version: "1"
+  role: raider
+  cargo_capacity: 15
+  passenger_capacity: 6
+  threat_level: 7
+  behavior_tags:
+    - hostile_if_denied
+    - boarding_capable
+    - demands_tribute
+  faction_restrictions:
+    - faction.raider_clans
+
+- id: ship.raider_skiff
+  schema_version: "1"
+  role: raider
+  cargo_capacity: 5
+  passenger_capacity: 3
+  threat_level: 4
+  behavior_tags:
+    - hostile_if_denied
+    - hit_and_run
+  faction_restrictions:
+    - faction.raider_clans
+
+- id: ship.archive_research_vessel
+  schema_version: "1"
+  role: transport
+  cargo_capacity: 8
+  passenger_capacity: 4
+  threat_level: 0
+  behavior_tags:
+    - requests_docking_permit
+    - trades_information
+  faction_restrictions:
+    - faction.archive_order
+
+- id: ship.collective_transport
+  schema_version: "1"
+  role: transport
+  cargo_capacity: 25
+  passenger_capacity: 8
+  threat_level: 1
+  behavior_tags:
+    - trade_stop
+    - carries_settlers
+  faction_restrictions:
+    - faction.frontier_collective

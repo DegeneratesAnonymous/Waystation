@@ -1,0 +1,172 @@
+# Core faction definitions for Frontier Waystation
+# schema_version: "1"
+
+- id: faction.imperial_remnant
+  display_name: Imperial Remnant
+  type: major
+  schema_version: "1"
+  description: >
+    Fragments of the collapsed interstellar empire clinging to legitimacy and old
+    bureaucratic structures. They still claim authority over registered stations
+    and enforce Imperial commerce codes where they can.
+  ideology_tags:
+    - authoritarian
+    - bureaucratic
+    - legitimist
+  diplomacy_profile:
+    default_stance: cautious
+    recognises_independent_stations: true
+    sends_inspectors: true
+  economic_profile:
+    trade_preference: regulated_goods
+    tariff_stance: high
+  behavior_tags:
+    - sends_inspectors
+    - trades_regulated
+  relationships:
+    faction.merchant_league:  0.3
+    faction.frontier_collective: -0.5
+    faction.archive_order:    0.4
+    faction.raider_clans:    -0.8
+    faction.refugee_fleets:  -0.2
+
+- id: faction.merchant_league
+  display_name: Merchant League
+  type: major
+  schema_version: "1"
+  description: >
+    A coalition of trading houses and independent freighters that formed after
+    the collapse to fill the commercial vacuum. Pragmatic, profit-driven, and
+    surprisingly well-armed.
+  ideology_tags:
+    - mercantile
+    - pragmatic
+    - expansionist
+  diplomacy_profile:
+    default_stance: friendly
+    bribeable: true
+  economic_profile:
+    trade_preference: all_goods
+    tariff_stance: low
+  behavior_tags:
+    - trades_always
+    - rewards_trade_hubs
+  relationships:
+    faction.imperial_remnant:    0.3
+    faction.frontier_collective: 0.1
+    faction.archive_order:       0.2
+    faction.raider_clans:       -0.6
+    faction.refugee_fleets:      0.0
+
+- id: faction.frontier_collective
+  display_name: Frontier Collective
+  type: major
+  schema_version: "1"
+  description: >
+    A loose confederation of independent stations, colonists, and settlers
+    on the edge of recovered space. They distrust centralized authority but
+    cooperate for mutual survival.
+  ideology_tags:
+    - egalitarian
+    - anti-imperial
+    - communal
+  diplomacy_profile:
+    default_stance: neutral
+    dislikes_authority_displays: true
+  economic_profile:
+    trade_preference: essentials
+    tariff_stance: minimal
+  behavior_tags:
+    - sends_refugees
+    - rewards_asylum
+  relationships:
+    faction.imperial_remnant:    -0.5
+    faction.merchant_league:      0.1
+    faction.archive_order:        0.3
+    faction.raider_clans:        -0.4
+    faction.refugee_fleets:       0.7
+
+- id: faction.raider_clans
+  display_name: Raider Clans
+  type: major
+  schema_version: "1"
+  description: >
+    Disparate bands of pirates, warlords, and outcast fleets who prey on
+    trade routes and isolated stations. Not monolithic — some can be paid off,
+    others cannot.
+  ideology_tags:
+    - predatory
+    - opportunist
+  diplomacy_profile:
+    default_stance: hostile
+    can_be_bought_off: true
+  economic_profile:
+    trade_preference: contraband
+    looting_preference: high_value
+  behavior_tags:
+    - raids_weak_stations
+    - aggressive
+    - hostile_if_denied
+  relationships:
+    faction.imperial_remnant:    -0.8
+    faction.merchant_league:     -0.6
+    faction.frontier_collective: -0.4
+    faction.archive_order:       -0.3
+    faction.refugee_fleets:      -0.1
+
+- id: faction.archive_order
+  display_name: Archive Order
+  type: major
+  schema_version: "1"
+  description: >
+    A scholarly organization dedicated to recovering and preserving knowledge
+    from Imperial ruin sites. They fund expeditions, trade information, and
+    maintain careful neutrality.
+  ideology_tags:
+    - scholarly
+    - neutral
+    - preservationist
+  diplomacy_profile:
+    default_stance: neutral
+    values_knowledge_exchange: true
+  economic_profile:
+    trade_preference: relics_and_data
+    tariff_stance: minimal
+  behavior_tags:
+    - sends_researchers
+    - rewards_ruin_access
+  relationships:
+    faction.imperial_remnant:     0.4
+    faction.merchant_league:      0.2
+    faction.frontier_collective:  0.3
+    faction.raider_clans:        -0.3
+    faction.refugee_fleets:       0.1
+
+- id: faction.refugee_fleets
+  display_name: Refugee Fleets
+  type: major
+  schema_version: "1"
+  description: >
+    Massive mobile populations displaced by the collapse, ruin events, or
+    factional conflict. They move in convoy-scale groups and desperately need
+    safe harbors, food, and medical care.
+  ideology_tags:
+    - desperate
+    - communal
+    - survivalist
+  diplomacy_profile:
+    default_stance: grateful
+    sensitive_to_exploitation: true
+  economic_profile:
+    trade_preference: essentials
+    labour_available: true
+  behavior_tags:
+    - sends_refugees
+    - high_passenger_capacity
+    - rewards_asylum
+  relationships:
+    faction.imperial_remnant:    -0.2
+    faction.merchant_league:      0.0
+    faction.frontier_collective:  0.7
+    faction.raider_clans:        -0.1
+    faction.archive_order:        0.1

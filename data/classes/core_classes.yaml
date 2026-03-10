@@ -1,0 +1,120 @@
+# Crew class definitions for Frontier Waystation
+# schema_version: "1"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Top-level classes (no parent)
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: class.security
+  display_name: Security
+  schema_version: "1"
+  description: >
+    Trained in threat assessment, weapon systems, and crowd control.
+    Security officers are essential for boarding defense, contraband
+    detection, and maintaining order when visitors become problems.
+  modifiers:
+    combat: 1.4
+    intimidation: 1.3
+    perception: 1.2
+  allowed_jobs:
+    - job.guard_post
+    - job.patrol
+    - job.boarding_response
+    - job.contraband_inspection
+
+- id: class.engineering
+  display_name: Engineering
+  schema_version: "1"
+  description: >
+    Keeps the station running. Engineers manage power distribution,
+    oxygen recycling, structural repair, and module construction.
+    Without them, the lights go out.
+  modifiers:
+    repair: 1.5
+    fabrication: 1.3
+    technical: 1.4
+  allowed_jobs:
+    - job.module_repair
+    - job.power_management
+    - job.life_support
+    - job.fabrication
+
+- id: class.operations
+  display_name: Operations
+  schema_version: "1"
+  description: >
+    Manages logistics, docking coordination, resource allocation, and
+    crew scheduling. Operations staff are generalists who keep the
+    station running as a system.
+  modifiers:
+    logistics: 1.4
+    coordination: 1.3
+    negotiation: 1.1
+  allowed_jobs:
+    - job.dock_control
+    - job.resource_management
+    - job.crew_scheduling
+    - job.trade_coordination
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Subclasses
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: class.security.enforcer
+  display_name: Enforcer
+  parent: class.security
+  schema_version: "1"
+  description: Heavy-response security specialist. Built for confrontation.
+  modifiers:
+    combat: 1.6
+    intimidation: 1.5
+    repair: 0.7
+
+- id: class.security.analyst
+  display_name: Security Analyst
+  parent: class.security
+  schema_version: "1"
+  description: Intelligence and threat assessment focus. Less muscle, more mind.
+  modifiers:
+    perception: 1.6
+    investigation: 1.5
+    combat: 0.9
+
+- id: class.engineering.systems
+  display_name: Systems Engineer
+  parent: class.engineering
+  schema_version: "1"
+  description: Specialist in life support and power grid management.
+  modifiers:
+    technical: 1.6
+    repair: 1.4
+    fabrication: 0.9
+
+- id: class.engineering.fabricator
+  display_name: Fabricator
+  parent: class.engineering
+  schema_version: "1"
+  description: Module construction and materials specialist.
+  modifiers:
+    fabrication: 1.7
+    repair: 1.2
+    technical: 1.0
+
+- id: class.operations.quartermaster
+  display_name: Quartermaster
+  parent: class.operations
+  schema_version: "1"
+  description: Resource tracking and supply chain expert.
+  modifiers:
+    logistics: 1.6
+    negotiation: 1.2
+
+- id: class.operations.diplomat
+  display_name: Liaison Officer
+  parent: class.operations
+  schema_version: "1"
+  description: Faction relations and diplomatic negotiation specialist.
+  modifiers:
+    negotiation: 1.6
+    coordination: 1.3
+    logistics: 0.9

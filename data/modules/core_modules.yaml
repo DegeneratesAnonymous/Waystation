@@ -1,0 +1,133 @@
+# Station module definitions for Frontier Waystation
+# schema_version: "1"
+
+- id: module.command_center
+  display_name: Command Center
+  category: utility
+  schema_version: "1"
+  description: The nerve center of the station. Handles sensor arrays, communications, and station-wide coordination.
+  capacity: 4
+  resource_effects:
+    power: -2.0
+    oxygen: -0.5
+  tags:
+    - command
+    - required
+
+- id: module.docking_bay_a
+  display_name: Docking Bay A
+  category: dock
+  schema_version: "1"
+  description: Primary docking bay for incoming vessels up to freighter class.
+  capacity: 8
+  resource_effects:
+    power: -1.0
+    oxygen: -1.0
+  tags:
+    - dock
+    - cargo_handling
+
+- id: module.docking_bay_b
+  display_name: Docking Bay B
+  category: dock
+  schema_version: "1"
+  description: Secondary docking bay. Often used for visitor ships and overflow traffic.
+  capacity: 8
+  resource_effects:
+    power: -1.0
+    oxygen: -1.0
+  tags:
+    - dock
+
+- id: module.crew_quarters
+  display_name: Crew Quarters
+  category: hab
+  schema_version: "1"
+  description: Living space for the station's permanent crew. Adequate, if not comfortable.
+  capacity: 12
+  resource_effects:
+    power: -1.0
+    food: -0.5
+    oxygen: -2.0
+  tags:
+    - hab
+    - crew_rest
+
+- id: module.med_bay
+  display_name: Medical Bay
+  category: utility
+  schema_version: "1"
+  description: Basic medical treatment and triage facility.
+  capacity: 4
+  resource_effects:
+    power: -1.5
+    parts: -0.1
+  tags:
+    - medical
+
+- id: module.storage_hold
+  display_name: Storage Hold
+  category: utility
+  schema_version: "1"
+  description: General-purpose pressurized cargo storage. Houses food, parts, and trade goods.
+  capacity: 0
+  resource_effects:
+    power: -0.5
+    food: 1.0
+    parts: 0.2
+  tags:
+    - storage
+    - cargo
+
+- id: module.power_core
+  display_name: Power Core
+  category: utility
+  schema_version: "1"
+  description: Fusion reactor module. Primary power source for the station.
+  capacity: 2
+  resource_effects:
+    power: 8.0
+    parts: -0.2
+  tags:
+    - power_generation
+  unlock_conditions:
+    - has_engineer
+
+- id: module.hydroponics
+  display_name: Hydroponics Bay
+  category: production
+  schema_version: "1"
+  description: Grows food crops using station water and light. Reduces food dependency on traders.
+  capacity: 3
+  resource_effects:
+    power: -2.0
+    food: 3.0
+    oxygen: 1.0
+  tags:
+    - food_production
+
+- id: module.security_post
+  display_name: Security Post
+  category: security
+  schema_version: "1"
+  description: Armed checkpoint and monitoring station. Deters contraband and hostile visitors.
+  capacity: 4
+  resource_effects:
+    power: -1.0
+  tags:
+    - security
+    - deterrence
+
+- id: module.visitor_lounge
+  display_name: Visitor Lounge
+  category: hab
+  schema_version: "1"
+  description: Public space for visiting travelers. Improves visitor mood and station reputation.
+  capacity: 20
+  resource_effects:
+    power: -0.5
+    food: -1.0
+    credits: 2.0
+  tags:
+    - visitor_services
+    - social
