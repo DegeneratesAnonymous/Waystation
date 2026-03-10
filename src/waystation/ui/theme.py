@@ -121,10 +121,12 @@ FONT_XL  = 22
 FONT_HD  = 28
 
 # ── Speed settings ────────────────────────────────────────────────────────────
-# Real seconds per game tick at each speed level
+# Real seconds per game tick at each speed level.
+# One full day = TICKS_PER_DAY (24) ticks.
+# At x1: 24 × 5.0 = 120 s ≈ 2 min/day  (matches design requirement)
 TICK_INTERVAL: dict[int, float] = {
     0: 999.0,   # paused
-    1: 2.0,     # x1 normal
-    2: 1.0,     # x2
-    4: 0.35,    # x4
+    1: 5.0,     # x1 normal  — ~2 min per day
+    2: 2.5,     # x2         — ~1 min per day
+    4: 1.25,    # x4         — ~30 s per day
 }

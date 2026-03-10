@@ -53,6 +53,8 @@
     A ship has gone hostile in the docking approach zone. Their weapons are
     active and they're broadcasting demands.
   weight: 0.0
+  hostile: true
+  expires_in: 0
   cooldown: 10
   required_tags: []
   excluded_tags: []
@@ -103,6 +105,7 @@
     The quartermaster reports that food reserves will not last another week
     at current consumption rates. Something needs to change.
   weight: 1.0
+  expires_in: 10
   cooldown: 20
   required_tags: []
   excluded_tags: []
@@ -143,6 +146,7 @@
     The engineering console is throwing alerts. The power grid is cycling
     unevenly — likely a failing relay. If it blows, secondary systems go dark.
   weight: 0.8
+  expires_in: 8
   cooldown: 15
   required_tags: []
   excluded_tags: []
@@ -181,6 +185,7 @@
     carrying a surplus of medical supplies and offering them at cut price in
     exchange for quick turnaround docking.
   weight: 0.6
+  expires_in: 6
   cooldown: 30
   required_tags: []
   excluded_tags: []
@@ -229,6 +234,7 @@
     Commerce Code 7-Gamma, your station is subject to a compliance inspection.
     The inspector is polite but firm.
   weight: 0.5
+  expires_in: 12
   cooldown: 40
   required_tags: []
   excluded_tags: []
@@ -279,6 +285,7 @@
     on emergency life support. They say they're fleeing a Raider blockade two
     systems over. They need docking space, food, and medical access.
   weight: 0.4
+  expires_in: 10
   cooldown: 50
   required_tags: []
   excluded_tags: []
@@ -341,6 +348,8 @@
     The hostile ship has matched velocity and launched a breach pod. Raiders
     are cutting through Docking Bay A. Security has thirty seconds to respond.
   weight: 0.0
+  hostile: true
+  expires_in: 0
   cooldown: 30
   required_tags:
     - boarding_alert
@@ -393,6 +402,7 @@
     Three crew members haven't spoken in days. Shifts are being missed.
     Someone scrawled "WHEN DO WE LEAVE?" on the engineering bay wall.
   weight: 0.6
+  expires_in: 12
   cooldown: 25
   required_tags: []
   excluded_tags: []
@@ -437,6 +447,7 @@
     wants to cross-reference your regional sensor logs against their ruin site
     surveys. They're offering information in exchange.
   weight: 0.4
+  expires_in: 14
   cooldown: 45
   required_tags: []
   excluded_tags: []

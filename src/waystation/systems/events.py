@@ -3,9 +3,9 @@ Event System — tag-driven, data-authored event pipeline.
 
 Responsibilities:
   - evaluate which events are eligible given current station state
-  - select events by weighted random
+  - select events by weighted random on a difficulty-scaled schedule
   - apply outcome effects to the station
-  - manage cooldowns
+  - manage cooldowns and event expiry
   - queue follow-up events
   - surface pending events as player choices
 
@@ -19,7 +19,7 @@ import logging
 import random
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from waystation.core.registry import ContentRegistry
@@ -27,6 +27,29 @@ if TYPE_CHECKING:
     from waystation.models.templates import EventDefinition, EventChoice
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Difficulty configuration
+# ---------------------------------------------------------------------------
+
+class _DifficultyConfig(NamedTuple):
+    min_gap: int                  # minimum ticks between random events
+    max_gap: int                  # maximum ticks between random events
+    hostile_multiplier: float     # weight multiplier applied to hostile events
+
+
+# With TICKS_PER_DAY=24 these translate to roughly:
+#   easy    → 2 events/day   (gap 10–14 ticks)
+#   normal  → 3–4 events/day (gap  6–10 ticks)
+#   hard    → 5–6 events/day (gap  4–6  ticks)
+#   intense → 7–8 events/day (gap  2–4  ticks), heavier hostile bias
+DIFFICULTY_SETTINGS: dict[str, _DifficultyConfig] = {
+    "easy":    _DifficultyConfig(10, 14, 0.3),
+    "normal":  _DifficultyConfig( 6, 10, 1.0),
+    "hard":    _DifficultyConfig( 4,  6, 1.5),
+    "intense": _DifficultyConfig( 2,  4, 2.0),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +62,8 @@ class PendingEvent:
     context: dict[str, Any] = field(default_factory=dict)  # runtime context data (ship uid, etc.)
     resolved: bool = False
     chosen_choice_id: str | None = None
+    # Game tick when this event expires (0 = never expires)
+    expires_at: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -182,18 +207,36 @@ class ConditionEvaluator:
 class EventSystem:
     """
     Manages the full lifecycle of events: selection → presentation → resolution.
+
+    ``difficulty`` controls how often events fire and how frequently hostile
+    events are selected.  Valid values: ``"easy"``, ``"normal"``, ``"hard"``,
+    ``"intense"``.
     """
 
-    def __init__(self, registry: "ContentRegistry") -> None:
+    def __init__(self, registry: "ContentRegistry",
+                 difficulty: str = "normal") -> None:
         self.registry = registry
         self.resolver = EffectResolver()
         self.evaluator = ConditionEvaluator()
+
+        self._difficulty = difficulty
+        if difficulty not in DIFFICULTY_SETTINGS:
+            log.warning(
+                "Unknown difficulty '%s' — falling back to 'normal'. "
+                "Valid values: %s",
+                difficulty, list(DIFFICULTY_SETTINGS),
+            )
+            self._difficulty = "normal"
 
         # Queue of events pending player interaction
         self._pending: deque[PendingEvent] = deque()
 
         # Queue of event IDs to fire next tick (from followups / effects)
         self._followup_queue: deque[tuple[str, dict]] = deque()
+
+        # Tick at which the next random event may fire (scheduling)
+        _cfg = DIFFICULTY_SETTINGS[self._difficulty]
+        self._next_event_tick: int = random.randint(_cfg.min_gap, _cfg.max_gap)
 
     # ------------------------------------------------------------------
     # Registration hook (other systems register effect handlers here)
@@ -218,24 +261,51 @@ class EventSystem:
             event_id, context = self._followup_queue.popleft()
             ev = self.registry.events.get(event_id)
             if ev:
-                pending = PendingEvent(definition=ev, context=context)
+                pending = PendingEvent(
+                    definition=ev,
+                    context=context,
+                    expires_at=(station.tick + ev.expires_in) if ev.expires_in > 0 else 0,
+                )
                 self._pending.append(pending)
                 new_events.append(pending)
 
-        # Only fire a new random event if no choices are already pending player response
-        if self.get_pending():
+        # Expire timed-out events (non-hostile only; hostile events never expire)
+        for p in list(self._pending):
+            if (not p.resolved
+                    and p.expires_at > 0
+                    and station.tick >= p.expires_at
+                    and not p.definition.hostile):
+                station.log_event(f"EVENT MISSED: {p.definition.title}")
+                log.debug("Event '%s' expired at tick %d", p.definition.id, station.tick)
+                # Route through the normal finish pipeline so cooldowns are applied.
+                self._finish_event(p.definition, p, station)
+
+        # Don't schedule new random events while a hostile event awaits the player
+        hostile_pending = any(
+            not p.resolved and p.definition.hostile for p in self._pending
+        )
+        if hostile_pending:
+            return new_events
+
+        # Time-based scheduling: only fire when the scheduled tick is reached
+        if station.tick < self._next_event_tick:
             return new_events
 
         # Attempt to fire a random eligible event this tick
         candidate = self._select_event(station)
         if candidate:
-            pending = PendingEvent(definition=candidate)
+            expires_at = (station.tick + candidate.expires_in) if candidate.expires_in > 0 else 0
+            pending = PendingEvent(definition=candidate, expires_at=expires_at)
             self._pending.append(pending)
             new_events.append(pending)
 
             # Auto-resolve if no choices
             if not candidate.choices:
                 self._auto_resolve(pending, station)
+
+        # Schedule the next random event after a difficulty-appropriate gap
+        cfg = DIFFICULTY_SETTINGS.get(self._difficulty, DIFFICULTY_SETTINGS["normal"])
+        self._next_event_tick = station.tick + random.randint(cfg.min_gap, cfg.max_gap)
 
         return new_events
 
@@ -244,6 +314,7 @@ class EventSystem:
     # ------------------------------------------------------------------
 
     def _select_event(self, station: "StationState") -> "EventDefinition | None":
+        cfg = DIFFICULTY_SETTINGS.get(self._difficulty, DIFFICULTY_SETTINGS["normal"])
         eligible = []
         weights = []
 
@@ -252,8 +323,9 @@ class EventSystem:
                 continue   # weight-0 events are queue-only, never randomly selected
             if not self._is_eligible(ev, station):
                 continue
+            w = ev.weight * (cfg.hostile_multiplier if ev.hostile else 1.0)
             eligible.append(ev)
-            weights.append(ev.weight)
+            weights.append(w)
 
         if not eligible:
             return None
