@@ -125,7 +125,7 @@ class StarField:
         for _ in range(count):
             x       = rng.randint(0, T.FLOOR_W - 1)
             y       = rng.randint(0, T.FLOOR_H - 1)
-            r       = rng.choices([1, 1, 1, 2, 2, 3], weights=[30, 25, 20, 15, 7, 3])[0]
+            r       = rng.choices([1, 2, 3], weights=[75, 22, 3])[0]
             color   = rng.choices(self._COLORS, weights=self._WEIGHTS)[0]
             phase   = rng.uniform(0, math.pi * 2)
             twinkle = rng.random() < 0.18
@@ -163,11 +163,12 @@ class NebulaField:
 
     @staticmethod
     def _prerender(nebulae: list[tuple]) -> pygame.Surface:
+        NEBULA_LAYERS = 5
         s = pygame.Surface((T.FLOOR_W, T.FLOOR_H), pygame.SRCALPHA)
         for x, y, rx, ry, color, alpha in nebulae:
-            # Four concentric ellipses fading outward
-            for step in range(5):
-                frac = 1.0 - step / 5.0
+            # Concentric ellipses fading outward for a soft-glow effect
+            for step in range(NEBULA_LAYERS):
+                frac = 1.0 - step / NEBULA_LAYERS
                 a    = int(alpha * frac * frac)
                 er   = pygame.Rect(
                     int(x - rx * frac),
@@ -330,7 +331,10 @@ class GameView:
             return next(iter(self.s.modules))
         return None
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
+    # NPC sprite rendering constants
+    _PULSE_ALPHA     = 45   # transparency of the working-pulse ring
+    _BODY_DARKEN     = 45   # how much darker the body is vs. class colour
+    _HEAD_HIGHLIGHT  = 90   # brightness added to the head highlight
 
     def run(self) -> None:
         while True:
@@ -599,11 +603,13 @@ class GameView:
         pygame.draw.rect(self.screen, tuple(max(0, c-10) for c in floor), inner, border_radius=4)
 
         # Room grid / floor-tile lines (subtle texture)
+        h_line_color = tuple(min(255, c + 6) for c in floor)
+        v_line_color = tuple(min(255, c + 4) for c in floor)
         for gy in range(rect.y + 10, rect.bottom, 20):
-            pygame.draw.line(self.screen, tuple(min(255, c + 6) for c in floor),
+            pygame.draw.line(self.screen, h_line_color,
                              (rect.x + 4, gy), (rect.right - 4, gy))
         for gx in range(rect.x + 10, rect.right, 20):
-            pygame.draw.line(self.screen, tuple(min(255, c + 4) for c in floor),
+            pygame.draw.line(self.screen, v_line_color,
                              (gx, rect.y + 4), (gx, rect.bottom - 4))
 
         # Wall border
@@ -752,8 +758,8 @@ class GameView:
             if working:
                 t = pygame.time.get_ticks() / 1000.0
                 pulse = int(10 + 4 * abs(math.sin(t * 2)))
-                pygame.draw.circle(self.screen, (*dot.color[:3], 45), pos,
-                                   pulse + 4)
+                pygame.draw.circle(self.screen, (*dot.color[:3], self._PULSE_ALPHA),
+                                   pos, pulse + 4)
 
             # Humanoid sprite
             self._draw_npc_sprite(pos, dot.color, working)
@@ -774,7 +780,7 @@ class GameView:
         surf   = self.screen
 
         # Darken colour for body (torso in shade)
-        body_color = tuple(max(0, c - 45) for c in color[:3])
+        body_color = tuple(max(0, c - self._BODY_DARKEN) for c in color[:3])
 
         # Body (slightly wider oval below head)
         pygame.draw.ellipse(surf, body_color,
@@ -787,7 +793,7 @@ class GameView:
         pygame.draw.circle(surf, (0, 0, 0), (cx, cy - 4), 5, 1)
 
         # Bright highlight on head (top-left)
-        hi = tuple(min(255, c + 90) for c in color[:3])
+        hi = tuple(min(255, c + self._HEAD_HIGHLIGHT) for c in color[:3])
         pygame.draw.circle(surf, hi, (cx - 1, cy - 5), 2)
 
     def _draw_tooltip(self, line1: str, line2: str, pos: tuple) -> None:
