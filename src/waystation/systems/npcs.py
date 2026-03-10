@@ -53,8 +53,15 @@ def _roll_skills(template: "NPCTemplate") -> dict[str, int]:
     return skills
 
 
-def _pick_traits(template: "NPCTemplate", count: int = 2) -> list[str]:
+def _pick_traits(template: "NPCTemplate", count: int = 3) -> list[str]:
     pool = list(template.trait_pool)
+    if not pool:
+        return []
+    return random.sample(pool, min(count, len(pool)))
+
+
+def _pick_aspirations(template: "NPCTemplate", count: int = 1) -> list[str]:
+    pool = list(template.aspirations_pool)
     if not pool:
         return []
     return random.sample(pool, min(count, len(pool)))
@@ -108,6 +115,7 @@ class NPCSystem:
 
         npc.skills = _roll_skills(template)
         npc.traits = _pick_traits(template)
+        npc.aspirations = _pick_aspirations(template)
         npc.faction_id = _pick_faction(template)
         npc.status_tags = list(status_tags or [])
 
@@ -132,10 +140,14 @@ class NPCSystem:
     # ------------------------------------------------------------------
 
     NEEDS_DECAY_RATE: dict[str, float] = {
-        "hunger": -0.04,
-        "rest":   -0.03,
-        "social": -0.01,
-        "safety":  0.00,   # safety is driven by events, not passive decay
+        "oxygen":       -0.03,  # depleted by breathing; restored by life support
+        "temperature":   0.00,  # driven by station environment systems, not passive decay
+        "food":         -0.04,
+        "thirst":       -0.05,  # thirst depletes slightly faster than hunger
+        "sleep":        -0.03,
+        "bathroom":     -0.02,
+        "recreation":   -0.01,
+        "safety":        0.00,  # driven by events, not passive decay
     }
 
     # Skill XP gained per tick while working a relevant job
@@ -171,29 +183,32 @@ class NPCSystem:
         # Decay needs
         npc.update_needs(self.NEEDS_DECAY_RATE)
 
-        # Crew have food provided if station has food
+        # Crew and visitors consume food and water from station supplies
         if npc.is_crew() or npc.is_visitor():
             if station.get_resource("food") > 0:
-                npc.update_needs({"hunger": 0.06})   # fed
+                npc.update_needs({"food": 0.06})   # fed
                 station.modify_resource("food", -0.5)
+            if station.get_resource("water") > 0:
+                npc.update_needs({"thirst": 0.08})  # hydrated
+                station.modify_resource("water", -0.3)
             if station.get_resource("oxygen") > 0:
-                pass  # oxygen is ambient; no per-NPC tick cost here
+                npc.update_needs({"oxygen": 0.05})  # breathing
 
-        # Social need recovers slightly when there are multiple people around.
+        # Recreation need recovers slightly when there are multiple people around.
         # Both crew and visitors contribute to social density.
-        social_recovery = min(
+        recreation_recovery = min(
             self._MAX_PASSIVE_SOCIAL_RECOVERY,
             (population - 1) * self._SOCIAL_RECOVERY_PER_PERSON
         )
-        if social_recovery > 0:
-            npc.update_needs({"social": social_recovery})
+        if recreation_recovery > 0:
+            npc.update_needs({"recreation": recreation_recovery})
 
-        # Visitor lounge boosts social for nearby NPCs
+        # Visitor lounge boosts recreation for nearby NPCs
         if any(
             m.active and "visitor_lounge" in m.definition_id
             for m in station.modules.values()
         ):
-            npc.update_needs({"social": 0.01})
+            npc.update_needs({"recreation": 0.01})
 
         # Injured NPCs slowly recover in med bay
         if npc.injuries > 0 and any(
@@ -210,10 +225,14 @@ class NPCSystem:
             self._try_advance_skill(npc)
 
         # Distress logging (sampled to avoid log spam)
-        if npc.needs["hunger"] < 0.2 and random.random() < 0.1:
+        if npc.needs.get("food", 1.0) < 0.2 and random.random() < 0.1:
             station.log_event(f"{npc.name} is starving.")
-        if npc.needs["rest"] < 0.1 and random.random() < 0.1:
+        if npc.needs.get("sleep", 1.0) < 0.1 and random.random() < 0.1:
             station.log_event(f"{npc.name} is exhausted.")
+        if npc.needs.get("oxygen", 1.0) < 0.2 and random.random() < 0.1:
+            station.log_event(f"{npc.name} is struggling to breathe.")
+        if npc.needs.get("thirst", 1.0) < 0.2 and random.random() < 0.1:
+            station.log_event(f"{npc.name} is severely dehydrated.")
 
     # ------------------------------------------------------------------
     # Convenience queries

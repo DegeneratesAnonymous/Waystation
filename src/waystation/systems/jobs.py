@@ -107,8 +107,8 @@ _REST_JOB   = "job.rest"
 _EAT_JOB    = "job.eat"
 
 # Priority need thresholds that override normal job assignment
-_HUNGER_CRITICAL = 0.25
-_REST_CRITICAL   = 0.20
+_FOOD_CRITICAL  = 0.25
+_SLEEP_CRITICAL = 0.20
 
 # Class → preferred day-phase jobs (in priority order)
 _CLASS_DAY_JOBS: dict[str, list[str]] = {
@@ -132,6 +132,9 @@ class JobSystem:
         for npc in station.npcs.values():
             if not npc.is_crew():
                 continue
+            # NPCs owned by a faction keep their ship-assigned jobs; skip auto-assignment
+            if npc.owner_id and npc.owner_id != "player":
+                continue
             self._tick_npc(npc, station)
 
     def _tick_npc(self, npc: "NPCInstance", station: "StationState") -> None:
@@ -142,11 +145,11 @@ class JobSystem:
             return
 
         # Needs override: hungry or exhausted → prioritise recovery
-        if npc.needs.get("hunger", 1.0) < _HUNGER_CRITICAL:
+        if npc.needs.get("food", 1.0) < _FOOD_CRITICAL:
             if npc.current_job_id != _EAT_JOB:
                 self._set_job(npc, _EAT_JOB, station)
                 return
-        if npc.needs.get("rest", 1.0) < _REST_CRITICAL:
+        if npc.needs.get("sleep", 1.0) < _SLEEP_CRITICAL:
             if npc.current_job_id != _REST_JOB:
                 self._set_job(npc, _REST_JOB, station)
                 return
@@ -183,8 +186,8 @@ class JobSystem:
         if job is None:
             return
 
-        # Find a suitable module
-        module = self._find_module(job, station)
+        # Find a suitable module (respects NPC ownership)
+        module = self._find_module(job, station, npc)
         npc.current_job_id  = job_id
         npc.job_module_uid  = module.uid if module else None
         npc.job_timer       = job.duration_ticks
@@ -192,17 +195,29 @@ class JobSystem:
             npc.location = module.definition_id
 
     def _find_module(self, job: JobDefinition,
-                     station: "StationState") -> "ModuleInstance | None":
-        """Find an active module matching the job's preferred category."""
+                     station: "StationState",
+                     npc: "NPCInstance | None" = None) -> "ModuleInstance | None":
+        """Find an active module matching the job's preferred category.
+
+        If the NPC has an owner_id (faction ship crew), restrict to modules
+        that share the same owner_id so their activities stay on their own ship.
+        """
+        owner = npc.owner_id if npc else None
+
+        def _owned(m: "ModuleInstance") -> bool:
+            if owner and owner != "player":
+                return m.owner_id == owner
+            return m.owner_id is None or m.owner_id == "player"
+
         preferred = [
             m for m in station.modules.values()
-            if m.active and m.category == job.preferred_module_category
+            if m.active and m.category == job.preferred_module_category and _owned(m)
         ]
         if preferred:
             return random.choice(preferred)
         fallback = [
             m for m in station.modules.values()
-            if m.active and m.category == job.fallback_module_category
+            if m.active and m.category == job.fallback_module_category and _owned(m)
         ]
         return random.choice(fallback) if fallback else None
 

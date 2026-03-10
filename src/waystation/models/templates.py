@@ -149,6 +149,7 @@ class NPCTemplate:
     allowed_subclasses: tuple[str, ...] = ()
     skill_ranges: dict[str, SkillRange] = field(default_factory=dict)
     trait_pool: tuple[str, ...] = ()
+    aspirations_pool: tuple[str, ...] = ()  # pool of possible NPC goals/ambitions
     faction_bias: dict[str, float] = field(default_factory=dict)
     name_pool: tuple[str, ...] = ()     # optional curated names
     equipment_pool: tuple[str, ...] = ()
@@ -167,6 +168,7 @@ class NPCTemplate:
             allowed_subclasses=tuple(raw.get("allowed_subclasses", [])),
             skill_ranges=skill_ranges,
             trait_pool=tuple(raw.get("trait_pool", [])),
+            aspirations_pool=tuple(raw.get("aspirations_pool", [])),
             faction_bias={k: float(v) for k, v in raw.get("faction_bias", {}).items()},
             name_pool=tuple(raw.get("name_pool", [])),
             equipment_pool=tuple(raw.get("equipment_pool", [])),

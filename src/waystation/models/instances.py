@@ -30,15 +30,22 @@ class NPCInstance:
     # Derived skills (rolled from template ranges at spawn)
     skills: dict[str, int] = field(default_factory=dict)
 
-    # Personality / behaviour traits (drawn from template trait_pool)
+    # Personality / behaviour traits (drawn from template trait_pool) — 3 traits
     traits: list[str] = field(default_factory=list)
+
+    # Aspirations — personal goals and ambitions
+    aspirations: list[str] = field(default_factory=list)
 
     # Needs — 0.0 (critical) to 1.0 (fully satisfied)
     needs: dict[str, float] = field(default_factory=lambda: {
-        "hunger": 1.0,
-        "rest": 1.0,
-        "social": 0.5,
-        "safety": 1.0,
+        "oxygen":      1.0,
+        "temperature": 1.0,
+        "food":        1.0,
+        "thirst":      1.0,
+        "sleep":       1.0,
+        "bathroom":    1.0,
+        "recreation":  0.5,
+        "safety":      1.0,
     })
 
     # -1.0 (miserable) to 1.0 (content)
@@ -55,6 +62,12 @@ class NPCInstance:
 
     # Faction association
     faction_id: str | None = None
+
+    # Ownership — None / "player" = player-owned; faction_id or ship_uid = belongs to that entity
+    owner_id: str | None = None
+
+    # Relationship scores with other NPCs keyed by NPC uid (-1.0 hostile to 1.0 close)
+    relationships: dict[str, float] = field(default_factory=dict)
 
     # Legal / residency status tags
     status_tags: list[str] = field(default_factory=list)  # e.g. ["crew", "visitor", "detained"]
@@ -93,8 +106,17 @@ class NPCInstance:
             self.needs[need] = max(0.0, min(1.0, self.needs.get(need, 0.5) + change))
 
     def recalculate_mood(self) -> None:
-        """Simple mood model: average of needs with safety weighted double."""
-        weights = {"hunger": 1.0, "rest": 1.0, "social": 0.5, "safety": 2.0}
+        """Mood model: weighted average of needs; critical needs (oxygen, safety) count most."""
+        weights = {
+            "oxygen":      3.0,
+            "safety":      2.0,
+            "temperature": 2.0,
+            "food":        1.5,
+            "thirst":      1.5,
+            "sleep":       1.0,
+            "bathroom":    0.8,
+            "recreation":  0.5,
+        }
         total_weight = sum(weights.values())
         weighted_sum = sum(self.needs.get(n, 0.5) * w for n, w in weights.items())
         # Traits can shift mood
@@ -125,6 +147,7 @@ class NPCInstance:
             "subclass_id":    self.subclass_id,
             "skills":         dict(self.skills),
             "traits":         list(self.traits),
+            "aspirations":    list(self.aspirations),
             "needs":          dict(self.needs),
             "mood":           self.mood,
             "location":       self.location,
@@ -133,6 +156,8 @@ class NPCInstance:
             "job_timer":      self.job_timer,
             "job_interrupted": self.job_interrupted,
             "faction_id":     self.faction_id,
+            "owner_id":       self.owner_id,
+            "relationships":  dict(self.relationships),
             "status_tags":    list(self.status_tags),
             "memory":         dict(self.memory),
         }
@@ -147,6 +172,7 @@ class NPCInstance:
             subclass_id=d.get("subclass_id"),
             skills=d.get("skills", {}),
             traits=d.get("traits", []),
+            aspirations=d.get("aspirations", []),
             needs=d.get("needs", {}),
             mood=d.get("mood", 0.5),
             location=d.get("location", "commons"),
@@ -155,6 +181,8 @@ class NPCInstance:
             job_timer=d.get("job_timer", 0),
             job_interrupted=d.get("job_interrupted", False),
             faction_id=d.get("faction_id"),
+            owner_id=d.get("owner_id"),
+            relationships=d.get("relationships", {}),
             status_tags=d.get("status_tags", []),
             memory=d.get("memory", {}),
         )
@@ -177,6 +205,9 @@ class ShipInstance:
     passenger_uids: list[str] = field(default_factory=list)
     threat_level: int = 0
     behavior_tags: list[str] = field(default_factory=list)
+
+    # Ownership — None = unaffiliated; "player" = player-owned; faction_id = faction ship
+    owner_id: str | None = None
 
     # Docking state
     status: str = "incoming"               # incoming / docked / departing / hostile / destroyed
@@ -227,6 +258,7 @@ class ShipInstance:
             "passenger_uids":  list(self.passenger_uids),
             "threat_level":    self.threat_level,
             "behavior_tags":   list(self.behavior_tags),
+            "owner_id":        self.owner_id,
             "status":          self.status,
             "docked_at":       self.docked_at,
             "ticks_docked":    self.ticks_docked,
@@ -245,6 +277,7 @@ class ShipInstance:
             passenger_uids=d.get("passenger_uids", []),
             threat_level=d.get("threat_level", 0),
             behavior_tags=d.get("behavior_tags", []),
+            owner_id=d.get("owner_id"),
             status=d.get("status", "incoming"),
             docked_at=d.get("docked_at"),
             ticks_docked=d.get("ticks_docked", 0),
@@ -303,6 +336,9 @@ class ModuleInstance:
     active: bool = True
     damage: float = 0.0                                   # 0.0 = fine, 1.0 = destroyed
 
+    # Ownership — None = station-owned (player); faction_id or ship_uid = belongs to that entity
+    owner_id: str | None = None
+
     # Inventory: item_id -> quantity stored in this module
     inventory: dict[str, int] = field(default_factory=dict)
     # Cargo hold configuration (None if this module is not a cargo hold)
@@ -333,6 +369,7 @@ class ModuleInstance:
             "docked_ship":  self.docked_ship,
             "active":       self.active,
             "damage":       self.damage,
+            "owner_id":     self.owner_id,
             "inventory":    dict(self.inventory),
             "cargo_settings": self.cargo_settings.to_dict() if self.cargo_settings else None,
         }
@@ -349,6 +386,7 @@ class ModuleInstance:
             docked_ship=d.get("docked_ship"),
             active=d.get("active", True),
             damage=d.get("damage", 0.0),
+            owner_id=d.get("owner_id"),
             inventory=d.get("inventory", {}),
             cargo_settings=CargoHoldSettings.from_dict(cs_raw) if cs_raw else None,
         )
@@ -374,6 +412,7 @@ class StationState:
         "oxygen":  100.0,
         "parts":    50.0,
         "ice":     200.0,   # raw ice — processed into water/oxygen by life support
+        "water":   150.0,   # potable water — refined from ice or recycled
     })
 
     # Entity registries (keyed by uid)

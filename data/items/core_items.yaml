@@ -54,6 +54,17 @@
   tags: [bulk]
   schema_version: "1"
 
+- id: item.ice
+  display_name: Ice
+  item_type: Material
+  subtype: Raw Materials
+  description: Solid water ice. A key raw resource refined into drinking water or split into hydrogen and oxygen.
+  weight: 0.8
+  stack_size: 400
+  value: 0.8
+  tags: [bulk, water, life-support]
+  schema_version: "1"
+
 - id: item.biomass
   display_name: Organic Biomass
   item_type: Material
@@ -148,6 +159,19 @@
   stack_size: 200
   value: 5.0
   tags: [military, security]
+  schema_version: "1"
+
+- id: item.water
+  display_name: Water
+  item_type: Material
+  subtype: Refined Materials
+  description: Purified drinking water, refined from ice or recovered via recycling. Essential for crew survival.
+  weight: 0.5
+  stack_size: 300
+  value: 2.0
+  build_cost:
+    ice: 2.0
+  tags: [life-support, consumable]
   schema_version: "1"
 
 # ── Material :: Exotic Materials ───────────────────────────────────────────────
@@ -372,6 +396,18 @@
   value: 6.0
   perishable_ticks: 200
   tags: [food]
+  schema_version: "1"
+
+- id: item.food_ration
+  display_name: Food Ration
+  item_type: Biological
+  subtype: Food
+  description: A single pre-packaged meal unit. Compact, shelf-stable, and sufficient for one person for one day.
+  weight: 0.3
+  stack_size: 500
+  value: 3.0
+  perishable_ticks: 800
+  tags: [food, crew, consumable]
   schema_version: "1"
 
 # ── Biological :: Plants ───────────────────────────────────────────────────────
