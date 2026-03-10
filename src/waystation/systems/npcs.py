@@ -165,9 +165,9 @@ class NPCSystem:
     _SKILL_XP_PER_TICK = 0.008
     # XP needed to advance one skill level (accumulated in skill_xp float)
     _XP_PER_LEVEL = 1.0
-    # Social need recovery constants
-    _MAX_PASSIVE_SOCIAL_RECOVERY = 0.02
-    _SOCIAL_RECOVERY_PER_PERSON = 0.005
+    # Recreation need recovery constants
+    _MAX_PASSIVE_RECREATION_RECOVERY = 0.02
+    _RECREATION_RECOVERY_PER_PERSON = 0.005
     # Chance per tick that an injured NPC heals one injury in med bay
     _INJURY_RECOVERY_CHANCE = 0.05
 
@@ -203,13 +203,19 @@ class NPCSystem:
                 npc.update_needs({"thirst": 0.08})  # hydrated
                 station.modify_resource("water", -0.3)
             if station.get_resource("oxygen") > 0:
-                npc.update_needs({"oxygen": 0.05})  # breathing
+                # Scale recovery by oxygen abundance: a full tank (100) gives full
+                # recovery; a critically low supply gives proportionally less.
+                # This ensures low-oxygen states meaningfully affect NPC oxygen need
+                # before the resource is completely exhausted.
+                oxygen_level = station.get_resource("oxygen")
+                oxygen_scale = min(1.0, oxygen_level / 100.0)
+                npc.update_needs({"oxygen": 0.05 * oxygen_scale})
 
         # Recreation need recovers slightly when there are multiple people around.
-        # Both crew and visitors contribute to social density.
+        # Both crew and visitors contribute to population density.
         recreation_recovery = min(
-            self._MAX_PASSIVE_SOCIAL_RECOVERY,
-            (population - 1) * self._SOCIAL_RECOVERY_PER_PERSON
+            self._MAX_PASSIVE_RECREATION_RECOVERY,
+            (population - 1) * self._RECREATION_RECOVERY_PER_PERSON
         )
         if recreation_recovery > 0:
             npc.update_needs({"recreation": recreation_recovery})

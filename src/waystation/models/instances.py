@@ -19,6 +19,26 @@ def _new_uid() -> str:
 # NPC Instance
 # ---------------------------------------------------------------------------
 
+# Legacy need keys from saves written before the rename (hunger→food, rest→sleep,
+# social→recreation). Kept at module level to avoid per-call dict construction.
+_NPC_LEGACY_NEED_KEYS: dict[str, str] = {
+    "hunger": "food",
+    "rest":   "sleep",
+    "social": "recreation",
+}
+
+# Default NPC needs merged into any loaded save so new keys are always present.
+_NPC_DEFAULT_NEEDS: dict[str, float] = {
+    "oxygen":      1.0,
+    "temperature": 1.0,
+    "food":        1.0,
+    "thirst":      1.0,
+    "sleep":       1.0,
+    "bathroom":    1.0,
+    "recreation":  0.5,
+    "safety":      1.0,
+}
+
 @dataclass
 class NPCInstance:
     uid: str
@@ -186,6 +206,15 @@ class NPCInstance:
 
     @classmethod
     def from_dict(cls, d: dict) -> "NPCInstance":
+        # Build the needs dict: start from defaults, then overlay saved values.
+        # Legacy keys (pre-rename) are translated so older saves load cleanly.
+        raw_needs: dict[str, float] = d.get("needs", {})
+        merged_needs = dict(_NPC_DEFAULT_NEEDS)
+        for key, val in raw_needs.items():
+            canonical = _NPC_LEGACY_NEED_KEYS.get(key, key)
+            if canonical in merged_needs:
+                merged_needs[canonical] = val
+
         return cls(
             uid=d["uid"],
             template_id=d["template_id"],
@@ -196,7 +225,7 @@ class NPCInstance:
             skills=d.get("skills", {}),
             traits=d.get("traits", []),
             aspirations=d.get("aspirations", []),
-            needs=d.get("needs", {}),
+            needs=merged_needs,
             mood=d.get("mood", 0.5),
             health=d.get("health", 100),
             max_health=d.get("max_health", 100),
@@ -424,6 +453,19 @@ class ModuleInstance:
 # Station State
 # ---------------------------------------------------------------------------
 
+# Default station resources merged into any loaded save so new resource keys
+# (e.g. "water", "ice") are always present. Kept at module level to avoid
+# per-call dict construction in from_dict.
+_STATION_DEFAULT_RESOURCES: dict[str, float] = {
+    "credits": 500.0,
+    "food":    100.0,
+    "power":   100.0,
+    "oxygen":  100.0,
+    "parts":    50.0,
+    "ice":     200.0,
+    "water":   150.0,
+}
+
 @dataclass
 class StationState:
     """
@@ -548,7 +590,11 @@ class StationState:
     def from_dict(cls, d: dict) -> "StationState":
         obj = cls(name=d["name"])
         obj.tick               = d.get("tick", 0)
-        obj.resources          = d.get("resources", {})
+        # Merge saved resources into defaults so new keys (e.g. "water", "ice")
+        # are always present even in saves written before they were added.
+        merged_resources = dict(_STATION_DEFAULT_RESOURCES)
+        merged_resources.update(d.get("resources", {}))
+        obj.resources          = merged_resources
         obj.npcs               = {uid: NPCInstance.from_dict(v)   for uid, v in d.get("npcs",    {}).items()}
         obj.ships              = {uid: ShipInstance.from_dict(v)   for uid, v in d.get("ships",   {}).items()}
         obj.modules            = {uid: ModuleInstance.from_dict(v) for uid, v in d.get("modules", {}).items()}
