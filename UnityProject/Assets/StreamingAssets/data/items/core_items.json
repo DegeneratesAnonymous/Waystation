@@ -1,0 +1,91 @@
+[
+  {
+    "id": "item.ore_iron",
+    "display_name": "Iron Ore",
+    "item_type": "Material",
+    "subtype": "Raw Materials",
+    "description": "Unprocessed iron ore. Basic industrial feedstock.",
+    "weight": 2.0,
+    "stack_size": 200,
+    "value": 3.0,
+    "tags": ["bulk", "industrial"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.scrap_metal",
+    "display_name": "Scrap Metal",
+    "item_type": "Material",
+    "subtype": "Raw Materials",
+    "description": "Salvaged metal fragments. Recyclable or used for quick repairs.",
+    "weight": 1.5,
+    "stack_size": 200,
+    "value": 1.5,
+    "tags": ["bulk", "salvage"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.ration_pack",
+    "display_name": "Ration Pack",
+    "item_type": "Biological",
+    "subtype": "Food",
+    "description": "Compressed nutrient rations. Long shelf life, low morale.",
+    "weight": 0.5,
+    "stack_size": 200,
+    "value": 5.0,
+    "perishable_ticks": 500,
+    "tags": ["food"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.fresh_produce",
+    "display_name": "Fresh Produce",
+    "item_type": "Biological",
+    "subtype": "Food",
+    "description": "Fresh grown vegetables and protein. Boosts crew morale.",
+    "weight": 1.0,
+    "stack_size": 100,
+    "value": 8.0,
+    "perishable_ticks": 50,
+    "tags": ["food", "luxury"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.repair_parts",
+    "display_name": "Repair Parts",
+    "item_type": "Material",
+    "subtype": "Components",
+    "description": "General-purpose mechanical and electronic components for module maintenance.",
+    "weight": 1.0,
+    "stack_size": 100,
+    "value": 10.0,
+    "tags": ["industrial", "maintenance"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.contraband_stims",
+    "display_name": "Stimulants",
+    "item_type": "Biological",
+    "subtype": "Pharmaceuticals",
+    "description": "Regulated chemical stimulants. Illegal without a medical licence.",
+    "weight": 0.2,
+    "stack_size": 50,
+    "value": 50.0,
+    "legal": false,
+    "quality": "poor",
+    "tags": ["contraband", "pharmaceutical"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.luxury_goods",
+    "display_name": "Luxury Goods",
+    "item_type": "Valuables",
+    "subtype": "Trade Goods",
+    "description": "High-value consumer goods. Popular with wealthy visitors.",
+    "weight": 0.5,
+    "stack_size": 50,
+    "value": 100.0,
+    "quality": "fine",
+    "tags": ["luxury", "trade"],
+    "schema_version": "1"
+  }
+]

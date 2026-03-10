@@ -1,0 +1,200 @@
+[
+  {
+    "id": "event.arrival_generic",
+    "category": "arrival",
+    "title": "Incoming Vessel",
+    "description": "A ship is requesting docking clearance.",
+    "weight": 0,
+    "hostile": false,
+    "choices": [
+      {
+        "id": "choice.admit",
+        "label": "Grant docking clearance",
+        "conditions": [],
+        "outcomes": [],
+        "followup_event": null
+      },
+      {
+        "id": "choice.deny",
+        "label": "Deny entry",
+        "conditions": [],
+        "outcomes": [],
+        "followup_event": null
+      }
+    ],
+    "schema_version": "1"
+  },
+  {
+    "id": "event.hostile_ship",
+    "category": "arrival",
+    "title": "Hostile Vessel",
+    "description": "A hostile ship is moving to board the station!",
+    "weight": 0,
+    "hostile": true,
+    "choices": [
+      {
+        "id": "choice.defend",
+        "label": "Defend the station",
+        "conditions": [],
+        "outcomes": [{ "type": "resolve_boarding", "target": "", "value": null }],
+        "followup_event": null
+      },
+      {
+        "id": "choice.negotiate",
+        "label": "Attempt to negotiate",
+        "conditions": [],
+        "outcomes": [
+          { "type": "remove_resource", "target": "credits", "value": 200 },
+          { "type": "log_message", "target": "", "value": "You paid the raiders off. They withdraw." }
+        ],
+        "followup_event": null
+      }
+    ],
+    "schema_version": "1"
+  },
+  {
+    "id": "event.supply_convoy",
+    "category": "random",
+    "title": "Supply Convoy Arrival",
+    "description": "A supply convoy has arrived at the station, offering goods at competitive prices.",
+    "weight": 2.0,
+    "hostile": false,
+    "trigger_conditions": [{ "type": "tick_above", "target": "", "value": 10 }],
+    "auto_outcomes": [
+      { "type": "add_resource", "target": "food",  "value": 50 },
+      { "type": "add_resource", "target": "parts", "value": 20 },
+      { "type": "log_message",  "target": "", "value": "Supply convoy delivered food and parts." }
+    ],
+    "schema_version": "1"
+  },
+  {
+    "id": "event.power_fluctuation",
+    "category": "station",
+    "title": "Power Fluctuation",
+    "description": "The power grid is experiencing instability. Engineering crews are needed.",
+    "weight": 1.5,
+    "hostile": false,
+    "trigger_conditions": [{ "type": "resource_above", "target": "power", "value": 20 }],
+    "choices": [
+      {
+        "id": "choice.emergency_repair",
+        "label": "Deploy engineering crew",
+        "conditions": [{ "type": "resource_above", "target": "parts", "value": 10 }],
+        "outcomes": [
+          { "type": "remove_resource", "target": "parts", "value": 10 },
+          { "type": "log_message", "target": "", "value": "Engineering crew stabilises the power grid." }
+        ]
+      },
+      {
+        "id": "choice.reduce_load",
+        "label": "Reduce station power load",
+        "conditions": [],
+        "outcomes": [
+          { "type": "remove_resource", "target": "power", "value": 30 },
+          { "type": "log_message", "target": "", "value": "Non-essential systems powered down." }
+        ]
+      }
+    ],
+    "schema_version": "1"
+  },
+  {
+    "id": "event.refugee_crisis",
+    "category": "faction",
+    "title": "Refugee Crisis",
+    "description": "A desperate refugee vessel is requesting emergency asylum. Supplies are critically low aboard.",
+    "weight": 1.0,
+    "hostile": false,
+    "trigger_conditions": [{ "type": "resource_above", "target": "food", "value": 50 }],
+    "choices": [
+      {
+        "id": "choice.accept_refugees",
+        "label": "Accept refugees and provide aid",
+        "conditions": [{ "type": "resource_above", "target": "food", "value": 50 }],
+        "outcomes": [
+          { "type": "remove_resource", "target": "food", "value": 40 },
+          { "type": "modify_rep",      "target": "faction.refugee_network", "value": 15 },
+          { "type": "log_message", "target": "", "value": "Refugees welcomed. Reputation with Refugee Network improved." }
+        ]
+      },
+      {
+        "id": "choice.deny_refugees",
+        "label": "Turn them away",
+        "conditions": [],
+        "outcomes": [
+          { "type": "modify_rep", "target": "faction.refugee_network", "value": -20 },
+          { "type": "log_message", "target": "", "value": "Refugees denied entry. The network remembers." }
+        ]
+      }
+    ],
+    "cooldown": 50,
+    "schema_version": "1"
+  },
+  {
+    "id": "event.contraband_found",
+    "category": "station",
+    "title": "Contraband Discovered",
+    "description": "Security has discovered illegal goods aboard a docked vessel.",
+    "weight": 0,
+    "hostile": false,
+    "choices": [
+      {
+        "id": "choice.confiscate",
+        "label": "Confiscate and fine the crew",
+        "conditions": [],
+        "outcomes": [
+          { "type": "add_resource",  "target": "credits", "value": 300 },
+          { "type": "modify_rep",    "target": "faction.stellar_authority", "value": 10 },
+          { "type": "log_message",   "target": "", "value": "Contraband seized and crew fined 300 credits." }
+        ]
+      },
+      {
+        "id": "choice.look_away",
+        "label": "Look the other way (take a cut)",
+        "conditions": [],
+        "outcomes": [
+          { "type": "add_resource",  "target": "credits", "value": 150 },
+          { "type": "modify_rep",    "target": "faction.stellar_authority", "value": -15 },
+          { "type": "log_message",   "target": "", "value": "You pocket 150 credits and let the smugglers go." }
+        ]
+      }
+    ],
+    "schema_version": "1"
+  },
+  {
+    "id": "event.faction_tribute",
+    "category": "faction",
+    "title": "Faction Tribute Demand",
+    "description": "The Scavenger Clans are demanding a tribute payment for safe passage in this sector.",
+    "weight": 0.8,
+    "hostile": true,
+    "required_tags": [],
+    "trigger_conditions": [
+      { "type": "faction_rep_below", "target": "faction.scavenger_clans", "value": -20 }
+    ],
+    "choices": [
+      {
+        "id": "choice.pay_tribute",
+        "label": "Pay the tribute (500 credits)",
+        "conditions": [{ "type": "resource_above", "target": "credits", "value": 500 }],
+        "outcomes": [
+          { "type": "remove_resource", "target": "credits", "value": 500 },
+          { "type": "modify_rep",      "target": "faction.scavenger_clans", "value": 10 },
+          { "type": "log_message",     "target": "", "value": "Tribute paid. The Scavenger Clans stand down." }
+        ]
+      },
+      {
+        "id": "choice.refuse_tribute",
+        "label": "Refuse and prepare defences",
+        "conditions": [],
+        "outcomes": [
+          { "type": "modify_rep",  "target": "faction.scavenger_clans", "value": -15 },
+          { "type": "set_tag",     "target": "dangerous_region", "value": null },
+          { "type": "log_message", "target": "", "value": "Tribute refused. Raiders are moving to attack positions." }
+        ],
+        "followup_event": "event.hostile_ship"
+      }
+    ],
+    "cooldown": 80,
+    "schema_version": "1"
+  }
+]

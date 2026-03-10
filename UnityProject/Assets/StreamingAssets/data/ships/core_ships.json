@@ -1,0 +1,78 @@
+[
+  {
+    "id": "ship.freighter",
+    "role": "trader",
+    "cargo_capacity": 80,
+    "passenger_capacity": 4,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.light_freighter",
+    "role": "trader",
+    "cargo_capacity": 40,
+    "passenger_capacity": 2,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.refugee_transport",
+    "role": "refugee",
+    "cargo_capacity": 10,
+    "passenger_capacity": 20,
+    "threat_level": 0,
+    "behavior_tags": [],
+    "faction_restrictions": ["faction.refugee_network"],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.authority_cutter",
+    "role": "inspector",
+    "cargo_capacity": 0,
+    "passenger_capacity": 6,
+    "threat_level": 4,
+    "behavior_tags": ["carries_inspectors"],
+    "faction_restrictions": ["faction.stellar_authority"],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.smuggler_runner",
+    "role": "smuggler",
+    "cargo_capacity": 30,
+    "passenger_capacity": 2,
+    "threat_level": 2,
+    "behavior_tags": ["carries_contraband", "hostile_if_denied"],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.raider_corvette",
+    "role": "raider",
+    "cargo_capacity": 20,
+    "passenger_capacity": 8,
+    "threat_level": 7,
+    "behavior_tags": ["hostile_if_denied", "aggressive"],
+    "faction_restrictions": ["faction.scavenger_clans"],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.patrol_gunship",
+    "role": "patrol",
+    "cargo_capacity": 0,
+    "passenger_capacity": 4,
+    "threat_level": 5,
+    "behavior_tags": [],
+    "faction_restrictions": ["faction.stellar_authority"],
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.colony_transport",
+    "role": "transport",
+    "cargo_capacity": 50,
+    "passenger_capacity": 30,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "schema_version": "1"
+  }
+]

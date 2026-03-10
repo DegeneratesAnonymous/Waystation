@@ -1,0 +1,114 @@
+[
+  {
+    "id": "npc.engineer",
+    "base_class": "class.engineering",
+    "allowed_subclasses": ["class.engineering"],
+    "skill_ranges": {
+      "repair":    [3, 8],
+      "technical": [3, 7],
+      "combat":    [1, 3]
+    },
+    "trait_pool": ["methodical", "resilient", "curious", "anxious"],
+    "name_pool": [],
+    "equipment_pool": [],
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.security_officer",
+    "base_class": "class.security",
+    "allowed_subclasses": ["class.security"],
+    "skill_ranges": {
+      "combat":      [4, 9],
+      "perception":  [3, 7],
+      "investigation":[2, 6]
+    },
+    "trait_pool": ["vigilant", "resilient", "bitter", "brave"],
+    "name_pool": [],
+    "equipment_pool": [],
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.operations",
+    "base_class": "class.operations",
+    "allowed_subclasses": ["class.operations"],
+    "skill_ranges": {
+      "coordination": [3, 7],
+      "negotiation":  [2, 7],
+      "logistics":    [3, 7]
+    },
+    "trait_pool": ["organised", "optimistic", "pragmatic"],
+    "name_pool": [],
+    "equipment_pool": [],
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.trader",
+    "base_class": "class.trader",
+    "allowed_subclasses": [],
+    "skill_ranges": {
+      "negotiation": [3, 8],
+      "logistics":   [2, 6]
+    },
+    "trait_pool": ["opportunistic", "friendly", "pragmatic"],
+    "faction_bias": {
+      "faction.free_traders_guild": 0.7,
+      "faction.stellar_authority":  0.3
+    },
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.refugee",
+    "base_class": "class.civilian",
+    "allowed_subclasses": [],
+    "skill_ranges": {
+      "negotiation": [1, 4]
+    },
+    "trait_pool": ["resilient", "anxious", "desperate"],
+    "faction_bias": { "faction.refugee_network": 1.0 },
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.inspector",
+    "base_class": "class.security",
+    "allowed_subclasses": [],
+    "skill_ranges": {
+      "investigation": [5, 9],
+      "perception":    [4, 8]
+    },
+    "trait_pool": ["methodical", "vigilant", "authoritarian"],
+    "faction_bias": { "faction.stellar_authority": 1.0 },
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.smuggler",
+    "base_class": "class.trader",
+    "allowed_subclasses": [],
+    "skill_ranges": {
+      "negotiation": [4, 8],
+      "logistics":   [3, 7],
+      "combat":      [2, 5]
+    },
+    "trait_pool": ["cunning", "pragmatic", "opportunistic"],
+    "spawn_rules": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "npc.raider",
+    "base_class": "class.security",
+    "allowed_subclasses": [],
+    "skill_ranges": {
+      "combat":     [5, 10],
+      "perception": [2, 6]
+    },
+    "trait_pool": ["brutal", "aggressive", "cunning"],
+    "faction_bias": { "faction.scavenger_clans": 1.0 },
+    "spawn_rules": {},
+    "schema_version": "1"
+  }
+]

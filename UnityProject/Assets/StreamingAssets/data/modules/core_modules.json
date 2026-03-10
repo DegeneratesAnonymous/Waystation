@@ -1,0 +1,115 @@
+[
+  {
+    "id": "module.command_center",
+    "display_name": "Command Center",
+    "category": "utility",
+    "description": "The nerve center of the station. Handles sensor arrays, communications, and station-wide coordination.",
+    "capacity": 4,
+    "resource_effects": { "power": -2.0, "oxygen": -0.5 },
+    "tags": ["command", "required"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.docking_bay_a",
+    "display_name": "Docking Bay A",
+    "category": "dock",
+    "description": "Primary docking bay for incoming vessels up to freighter class.",
+    "capacity": 8,
+    "resource_effects": { "power": -1.0, "oxygen": -1.0 },
+    "tags": ["dock", "cargo_handling"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.docking_bay_b",
+    "display_name": "Docking Bay B",
+    "category": "dock",
+    "description": "Secondary docking bay. Often used for visitor ships and overflow traffic.",
+    "capacity": 8,
+    "resource_effects": { "power": -1.0, "oxygen": -1.0 },
+    "tags": ["dock"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.crew_quarters",
+    "display_name": "Crew Quarters",
+    "category": "hab",
+    "description": "Living space for the station's permanent crew. Adequate, if not comfortable.",
+    "capacity": 12,
+    "resource_effects": { "power": -1.0, "food": -0.5, "oxygen": -2.0 },
+    "tags": ["hab", "crew_rest"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.med_bay",
+    "display_name": "Medical Bay",
+    "category": "utility",
+    "description": "Basic medical treatment and triage facility.",
+    "capacity": 4,
+    "resource_effects": { "power": -1.5, "parts": -0.1 },
+    "tags": ["medical"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.storage_hold",
+    "display_name": "Storage Hold",
+    "category": "utility",
+    "cargo_capacity": 100,
+    "description": "General-purpose pressurized cargo storage.",
+    "capacity": 0,
+    "resource_effects": { "power": -0.5, "food": 1.0, "parts": 0.2 },
+    "tags": ["storage", "cargo"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.power_core",
+    "display_name": "Power Core",
+    "category": "utility",
+    "description": "Fusion reactor module. Primary power source for the station.",
+    "capacity": 2,
+    "resource_effects": { "power": 8.0, "parts": -0.2 },
+    "tags": ["power_generation"],
+    "unlock_conditions": ["has_engineer"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.hydroponics",
+    "display_name": "Hydroponics Bay",
+    "category": "production",
+    "description": "Grows food crops using station water and light.",
+    "capacity": 3,
+    "resource_effects": { "power": -2.0, "food": 3.0, "oxygen": 1.0 },
+    "tags": ["food_production"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.security_post",
+    "display_name": "Security Post",
+    "category": "security",
+    "description": "Armed checkpoint and monitoring station. Deters contraband and hostile visitors.",
+    "capacity": 4,
+    "resource_effects": { "power": -1.0 },
+    "tags": ["security", "deterrence"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.visitor_lounge",
+    "display_name": "Visitor Lounge",
+    "category": "hab",
+    "description": "Public space for visiting travelers. Improves visitor mood and station reputation.",
+    "capacity": 20,
+    "resource_effects": { "power": -0.5, "food": -1.0, "credits": 2.0 },
+    "tags": ["visitor_services", "social"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.cargo_hold",
+    "display_name": "Cargo Hold",
+    "category": "cargo",
+    "cargo_capacity": 200,
+    "description": "Dedicated pressurized cargo bay. Larger storage capacity.",
+    "capacity": 2,
+    "resource_effects": { "power": -1.0 },
+    "tags": ["storage", "cargo", "dedicated_cargo"],
+    "schema_version": "1"
+  }
+]
