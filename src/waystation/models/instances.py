@@ -62,6 +62,13 @@ class NPCInstance:
     # Arbitrary memory hooks for events to read/write
     memory: dict[str, Any] = field(default_factory=dict)
 
+    # ── Inventory (for hauling build materials) ──────────────────────────────
+    inventory: dict[str, float] = field(default_factory=dict)
+    inventory_capacity: float = 10.0    # max total resource units carried at once
+
+    # If set, this NPC is assigned to a build order (uid)
+    build_order_uid: str | None = None
+
     @classmethod
     def create(cls,
                template_id: str,
@@ -168,6 +175,72 @@ class ShipInstance:
 
 
 # ---------------------------------------------------------------------------
+# Build Order Instance (a player-placed construction blueprint)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BuildOrderInstance:
+    """
+    Runtime state for a single in-progress construction order.
+
+    Lifecycle:
+      pending  → hauling   (engineer starts carrying materials)
+      hauling  → constructing  (all materials delivered)
+      constructing → complete  (construction finished, module created)
+    """
+    uid: str
+    buildable_id: str
+
+    # Lifecycle status
+    status: str = "pending"     # pending | hauling | constructing | complete
+
+    # Resource tracking
+    materials_needed:    dict[str, float] = field(default_factory=dict)
+    materials_delivered: dict[str, float] = field(default_factory=dict)
+
+    # Construction progress 0.0 → 1.0
+    progress: float = 0.0
+
+    # Engineer currently working this order (NPC uid)
+    assigned_npc_uid: str | None = None
+
+    @classmethod
+    def create(cls, buildable_id: str,
+               materials_needed: dict[str, float]) -> "BuildOrderInstance":
+        return cls(
+            uid=_new_uid(),
+            buildable_id=buildable_id,
+            materials_needed=dict(materials_needed),
+        )
+
+    def materials_fulfilled(self) -> bool:
+        """Return True when all required resources have been delivered."""
+        for res, needed in self.materials_needed.items():
+            if self.materials_delivered.get(res, 0.0) < needed - 0.01:
+                return False
+        return True
+
+    def delivery_fraction(self) -> float:
+        """0.0–1.0 fraction of total materials that have been hauled."""
+        total = sum(self.materials_needed.values())
+        if total <= 0:
+            return 1.0
+        delivered = sum(self.materials_delivered.get(r, 0.0)
+                        for r in self.materials_needed)
+        return min(1.0, delivered / total)
+
+    def progress_label(self) -> str:
+        if self.status == "pending":
+            return "Awaiting engineer"
+        if self.status == "hauling":
+            pct = self.delivery_fraction()
+            return f"Hauling materials {pct:.0%}"
+        if self.status == "constructing":
+            return f"Building {self.progress:.0%}"
+        return "Complete"
+
+
+# ---------------------------------------------------------------------------
 # Module Instance (station room)
 # ---------------------------------------------------------------------------
 
@@ -225,6 +298,9 @@ class StationState:
     ships: dict[str, ShipInstance] = field(default_factory=dict)
     modules: dict[str, ModuleInstance] = field(default_factory=dict)
 
+    # Active build orders (keyed by uid)
+    build_orders: dict[str, BuildOrderInstance] = field(default_factory=dict)
+
     # Faction reputation: faction_id -> -100..100
     faction_reputation: dict[str, float] = field(default_factory=dict)
 
@@ -254,6 +330,12 @@ class StationState:
 
     def add_module(self, module: ModuleInstance) -> None:
         self.modules[module.uid] = module
+
+    def add_build_order(self, order: "BuildOrderInstance") -> None:
+        self.build_orders[order.uid] = order
+
+    def get_active_build_orders(self) -> "list[BuildOrderInstance]":
+        return [o for o in self.build_orders.values() if o.status != "complete"]
 
     def get_resource(self, key: str) -> float:
         return self.resources.get(key, 0.0)

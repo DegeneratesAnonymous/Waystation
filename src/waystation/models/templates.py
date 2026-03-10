@@ -289,3 +289,41 @@ class ModuleDefinition:
             unlock_conditions=tuple(raw.get("unlock_conditions", [])),
             schema_version=str(raw.get("schema_version", "1")),
         )
+
+
+# ---------------------------------------------------------------------------
+# Buildable Definition (player-constructable items)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BuildableDefinition:
+    """
+    Template for something the player can order to be built.
+
+    Loaded from /data/buildables/*.yaml or a mod's buildables folder.
+    When construction completes a produces_module_id entry is used to
+    instantiate a new ModuleInstance on the station.
+    """
+    id: str
+    display_name: str
+    category: str = "utility"           # groups items in the build menu
+    description: str = ""
+    cost: dict[str, float] = field(default_factory=dict)    # resource cost
+    build_time_ticks: int = 20          # ticks to construct once materials arrived
+    produces_module_id: str | None = None   # module to create on completion
+    required_tags: tuple[str, ...] = ()     # station must have all of these
+    schema_version: str = "1"
+
+    @classmethod
+    def from_raw(cls, raw: dict) -> "BuildableDefinition":
+        return cls(
+            id=raw["id"],
+            display_name=raw.get("display_name", raw["id"]),
+            category=raw.get("category", "utility"),
+            description=raw.get("description", ""),
+            cost={k: float(v) for k, v in raw.get("cost", {}).items()},
+            build_time_ticks=int(raw.get("build_time_ticks", 20)),
+            produces_module_id=raw.get("produces_module_id"),
+            required_tags=tuple(raw.get("required_tags", [])),
+            schema_version=str(raw.get("schema_version", "1")),
+        )

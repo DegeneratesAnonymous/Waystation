@@ -191,3 +191,36 @@
   need_effects:
     rest: -0.04
     social: 0.08
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILDING SYSTEM — assigned by BuildingSystem, not chosen by JobSystem
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: job.haul_materials
+  display_name: Hauling Materials
+  schema_version: "1"
+  phase: day
+  allowed_classes:
+    - class.engineering
+  preferred_module_category: utility
+  fallback_module_category: utility
+  duration_ticks: 4     # one haul trip cycle length
+  skill_used: logistics
+  resource_effects: {}  # BuildingSystem handles actual resource transfer
+  need_effects:
+    rest: -0.06
+
+- id: job.construct
+  display_name: Constructing
+  schema_version: "1"
+  phase: day
+  allowed_classes:
+    - class.engineering
+  preferred_module_category: utility
+  fallback_module_category: utility
+  duration_ticks: 6     # one construction cycle length
+  skill_used: repair
+  resource_effects:
+    parts: -0.3         # small ongoing parts cost while building
+  need_effects:
+    rest: -0.07

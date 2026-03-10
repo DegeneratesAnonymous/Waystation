@@ -165,13 +165,21 @@ class JobSystem:
         day = is_day_phase(station)
 
         if day:
-            candidates = _CLASS_DAY_JOBS.get(npc.class_id, [])
-            # Filter to jobs that exist in registry
-            candidates = [j for j in candidates if j in self.jobs.jobs]
-            if candidates:
-                job_id = random.choice(candidates)
+            # Engineers assigned to a build order use build-specific jobs
+            if (npc.class_id == "class.engineering" and
+                    npc.build_order_uid is not None):
+                order = station.build_orders.get(npc.build_order_uid)
+                if order is not None and order.status == "hauling":
+                    job_id = "job.haul_materials"
+                elif order is not None and order.status == "constructing":
+                    job_id = "job.construct"
+                else:
+                    job_id = _REST_JOB     # order complete / gone
             else:
-                job_id = _REST_JOB
+                candidates = _CLASS_DAY_JOBS.get(npc.class_id, [])
+                # Filter to jobs that exist in registry
+                candidates = [j for j in candidates if j in self.jobs.jobs]
+                job_id = random.choice(candidates) if candidates else _REST_JOB
         else:
             job_id = _REST_JOB
 

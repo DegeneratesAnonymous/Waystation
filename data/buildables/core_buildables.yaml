@@ -1,0 +1,102 @@
+# Buildable definitions for Frontier Waystation
+# These are items the player can order engineers to construct.
+# schema_version: "1"
+#
+# cost         — resources consumed from station stores during hauling
+# build_time_ticks — construction ticks once all materials are delivered
+# produces_module_id — module definition spawned on completion (optional)
+# required_tags — station active_tags that must be present to unlock
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRODUCTION
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: build.hydroponics
+  display_name: Hydroponics Bay
+  category: production
+  schema_version: "1"
+  description: >
+    A self-contained growing module. Produces food each tick and improves
+    oxygen levels. Requires parts and ice to construct.
+  cost:
+    parts: 80.0
+    ice:   40.0
+  build_time_ticks: 30
+  produces_module_id: module.hydroponics
+
+- id: build.workshop
+  display_name: Workshop
+  category: production
+  schema_version: "1"
+  description: >
+    A heavy-duty fabrication bay. Engineers use it to manufacture parts and
+    repair equipment more efficiently.
+  cost:
+    parts:   100.0
+    credits:  80.0
+  build_time_ticks: 40
+  produces_module_id: module.workshop
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: build.security_post
+  display_name: Security Post
+  category: security
+  schema_version: "1"
+  description: >
+    Armed checkpoint and sensor suite. Deters contraband, reduces raid
+    incidents, and improves station safety rating.
+  cost:
+    parts:   60.0
+    credits: 40.0
+  build_time_ticks: 20
+  produces_module_id: module.security_post
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HABITATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: build.visitor_lounge
+  display_name: Visitor Lounge
+  category: hab
+  schema_version: "1"
+  description: >
+    A comfortable public space that improves visitor mood and generates
+    small credit income from tips and vending fees.
+  cost:
+    parts:   70.0
+    credits: 60.0
+    food:    20.0
+  build_time_ticks: 25
+  produces_module_id: module.visitor_lounge
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UTILITY / INFRASTRUCTURE
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: build.storage_expansion
+  display_name: Storage Expansion
+  category: utility
+  schema_version: "1"
+  description: >
+    An additional pressurised hold bolted onto the station frame.
+    Increases food and parts reserves each tick.
+  cost:
+    parts: 50.0
+  build_time_ticks: 15
+  produces_module_id: module.storage_hold_b
+
+- id: build.life_support_ext
+  display_name: Life Support Extension
+  category: utility
+  schema_version: "1"
+  description: >
+    A secondary atmospheric processor. Processes ice into water and
+    boosts oxygen output, vital for larger crews.
+  cost:
+    parts: 70.0
+    ice:   50.0
+  build_time_ticks: 25
+  produces_module_id: module.life_support_ext

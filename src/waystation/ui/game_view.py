@@ -36,7 +36,10 @@ from waystation.systems.events import PendingEvent
 
 if TYPE_CHECKING:
     from waystation.game import Game
-    from waystation.models.instances import ModuleInstance, NPCInstance
+    from waystation.models.instances import (
+        ModuleInstance, NPCInstance, BuildOrderInstance
+    )
+    from waystation.models.templates import BuildableDefinition
 
 
 # ── Fonts ──────────────────────────────────────────────────────────────────────
@@ -162,6 +165,11 @@ class GameView:
         self._event_btns:  list[dict]  = []
         self._hovered_btn: int | None  = None
         self._log_scroll               = 0
+
+        # ── Build menu state ────────────────────────────────────────────────
+        self._build_menu_open: bool = False
+        self._build_selected_id: str | None = None   # highlighted buildable id
+        self._build_menu_scroll: int = 0
 
         # Stars (visual background)
         self._stars = StarField(game.seed)
@@ -330,11 +338,23 @@ class GameView:
         elif ev.key == pygame.K_4:
             self._speed = 4
         elif ev.key in (pygame.K_q, pygame.K_ESCAPE):
-            pygame.event.post(pygame.event.Event(pygame.QUIT))
+            if self._build_menu_open:
+                self._build_menu_open = False
+            else:
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+        elif ev.key == pygame.K_b:
+            self._build_menu_open = not self._build_menu_open
+            self._build_selected_id = None
         elif ev.key == pygame.K_UP:
-            self._log_scroll = max(0, self._log_scroll - 1)
+            if self._build_menu_open:
+                self._build_menu_scroll = max(0, self._build_menu_scroll - 1)
+            else:
+                self._log_scroll = max(0, self._log_scroll - 1)
         elif ev.key == pygame.K_DOWN:
-            self._log_scroll = min(len(self.s.log) - 1, self._log_scroll + 1)
+            if self._build_menu_open:
+                self._build_menu_scroll += 1
+            else:
+                self._log_scroll = min(len(self.s.log) - 1, self._log_scroll + 1)
 
     def _on_click(self, pos: tuple[int, int]) -> None:
         # Speed buttons
@@ -342,6 +362,36 @@ class GameView:
             if rect.collidepoint(pos):
                 self._speed = speed
                 return
+
+        # Build menu toggle button
+        btn_rect = self._build_btn_rect()
+        if btn_rect.collidepoint(pos):
+            self._build_menu_open = not self._build_menu_open
+            self._build_selected_id = None
+            return
+
+        # Build menu item clicks
+        if self._build_menu_open:
+            for item in self._build_menu_item_rects():
+                if item["rect"].collidepoint(pos):
+                    if self._build_selected_id == item["id"]:
+                        # Second click = place order
+                        if (self.game.building_system and
+                                self.game.building_system.can_afford(
+                                    item["id"], self.s)):
+                            self.game.building_system.place_order(
+                                item["id"], self.s)
+                            self._build_menu_open = False
+                            self._build_selected_id = None
+                    else:
+                        self._build_selected_id = item["id"]
+                    return
+            # Click outside menu → close
+            menu_rect = self._build_menu_rect()
+            if not menu_rect.collidepoint(pos):
+                self._build_menu_open = False
+                self._build_selected_id = None
+            return
 
         # Event buttons
         for btn in self._event_btns:
@@ -377,6 +427,38 @@ class GameView:
             4: pygame.Rect(bx + (bw+gap)*3,   by, bw, bh),
         }
 
+    def _build_btn_rect(self) -> pygame.Rect:
+        """Rect for the 'BUILD' toggle button in the top bar."""
+        bx = T.SCREEN_W - T.SIDEBAR_W - 260 - 80
+        return pygame.Rect(bx, 7, 70, 28)
+
+    def _build_menu_rect(self) -> pygame.Rect:
+        """Rect for the floating build menu panel."""
+        return pygame.Rect(T.FLOOR_X + 10,
+                           T.FLOOR_Y + 10,
+                           460, T.FLOOR_H - 20)
+
+    def _build_menu_item_rects(self) -> list[dict]:
+        """Return list of dicts {id, rect, defn} for visible build menu rows."""
+        if not self.game.building_system:
+            return []
+        items = []
+        buildables = self.game.building_system.available_buildables(self.s)
+        rect = self._build_menu_rect()
+        iy = rect.y + 56   # below header
+        ih = 60
+        gap = 4
+        visible_start = self._build_menu_scroll
+        for i, defn in enumerate(buildables):
+            if i < visible_start:
+                continue
+            r = pygame.Rect(rect.x + 8, iy, rect.width - 16, ih)
+            if iy + ih > rect.bottom - 8:
+                break
+            items.append({"id": defn.id, "rect": r, "defn": defn})
+            iy += ih + gap
+        return items
+
     def _build_event_buttons(self) -> None:
         self._event_btns = []
         pending = [p for p in self._pending if not p.resolved]
@@ -408,6 +490,8 @@ class GameView:
         self._render_top_bar()
         self._render_sidebar()
         self._render_log_panel()
+        if self._build_menu_open:
+            self._render_build_menu()
 
     # ── Floor plan ────────────────────────────────────────────────────────────
 
@@ -638,6 +722,15 @@ class GameView:
                    rect.center,
                    T.BG if is_active else T.TEXT, "center")
 
+        # Build menu toggle button
+        brect = self._build_btn_rect()
+        b_active = self._build_menu_open
+        b_bg = T.BUILD_MENU_EDGE if b_active else T.PANEL_EDGE
+        pygame.draw.rect(self.screen, b_bg, brect, border_radius=4)
+        pygame.draw.rect(self.screen, T.BUILD_MENU_EDGE, brect, 1, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "BUILD [B]",
+               brect.center, T.TEXT_BRIGHT if b_active else T.TEXT, "center")
+
         # Tick counter
         D.text(self.screen, self.fonts.sm, f"Tick {self.s.tick:04d}",
                (T.SCREEN_W - T.SIDEBAR_W - 8, 14), T.TEXT_DIM, "topright")
@@ -744,6 +837,33 @@ class GameView:
                 D.text(self.screen, self.fonts.sm, f"[{tag}]", (x, y), T.WARN)
                 y += 13
 
+        # ── Active build orders ──
+        active_orders = self.s.get_active_build_orders()
+        if active_orders and y + 20 < T.SCREEN_H - 10:
+            y += 4
+            D.divider(self.screen, x, y, x+rw, y)
+            y += 8
+            D.text(self.screen, self.fonts.lg, "CONSTRUCTION", (x, y), T.BUILD_MENU_EDGE)
+            y += 20
+            for order in active_orders[:4]:
+                if y + 28 > T.SCREEN_H - 10:
+                    break
+                defn = self.game.registry.buildables.get(order.buildable_id)
+                name = defn.display_name[:16] if defn else order.buildable_id[:16]
+                D.text(self.screen, self.fonts.sm, name, (x, y), T.TEXT)
+                D.text(self.screen, self.fonts.sm,
+                       order.status.upper(), (x+rw, y),
+                       T.WARN if order.status == "hauling" else
+                       T.OK if order.status == "constructing" else T.TEXT_DIM,
+                       "topright")
+                y += 14
+                bar_rect = pygame.Rect(x, y, rw, 5)
+                frac = (order.delivery_fraction() if order.status == "hauling"
+                        else order.progress)
+                D.hbar(self.screen, bar_rect, frac, 1.0, T.BUILD_PROGRESS_FG,
+                       T.BUILD_PROGRESS_BG)
+                y += 10
+
     # ── Log / event panel ─────────────────────────────────────────────────────
 
     def _render_log_panel(self) -> None:
@@ -802,14 +922,90 @@ class GameView:
         x = rect.x + 12
         y = rect.y + 8
         D.text(self.screen, self.fonts.sm,
-               "STATION LOG    P=pause  1/2/4=speed  ↑↓=scroll",
+               "STATION LOG    P=pause  1/2/4=speed  B=build menu  ↑↓=scroll",
                (x, y), T.TEXT_DIM)
         y += 17
 
         for entry in self.s.log[self._log_scroll: self._log_scroll + 9]:
             fc = (T.DANGER if "CRITICAL" in entry else
                   T.WARN   if "Warning"  in entry else
-                  T.OK     if any(w in entry for w in ("docked","joined","Trade:","+")) else
+                  T.OK     if any(w in entry for w in ("docked","joined","Trade:","+","Blueprint","completed")) else
                   T.TEXT_DIM)
             D.text(self.screen, self.fonts.sm, entry[:110], (x, y), fc)
             y += 17
+
+    # ── Build menu overlay ────────────────────────────────────────────────────
+
+    def _render_build_menu(self) -> None:
+        """Render the full-height build menu panel over the floor plan."""
+        rect = self._build_menu_rect()
+
+        # Translucent background
+        overlay = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        overlay.fill((*T.BUILD_MENU_BG, 230))
+        self.screen.blit(overlay, rect.topleft)
+        pygame.draw.rect(self.screen, T.BUILD_MENU_EDGE, rect, 2, border_radius=6)
+
+        x  = rect.x + 12
+        rw = rect.width - 24
+        y  = rect.y + 10
+
+        # Header
+        D.text(self.screen, self.fonts.hd, "BUILD MENU", (x, y), T.BUILD_SELECTED)
+        y += 34
+        D.text(self.screen, self.fonts.sm,
+               "Click once to select  ·  Click again to place order  ·  ESC to close",
+               (x, y), T.TEXT_DIM)
+        y += 16
+        pygame.draw.line(self.screen, T.BUILD_MENU_EDGE,
+                         (rect.x, y), (rect.right, y))
+        y += 8
+
+        if not self.game.building_system:
+            return
+
+        for item in self._build_menu_item_rects():
+            defn   = item["defn"]
+            ir     = item["rect"]
+            can    = self.game.building_system.can_afford(defn.id, self.s)
+            sel    = self._build_selected_id == defn.id
+
+            # Row background
+            row_bg = (T.BUILD_SELECTED[0]//4,
+                      T.BUILD_SELECTED[1]//4,
+                      T.BUILD_SELECTED[2]//4) if sel else T.BUILD_MENU_BG
+            pygame.draw.rect(self.screen, row_bg, ir, border_radius=4)
+            border_c = T.BUILD_SELECTED if sel else (
+                T.BUILD_AFFORDABLE if can else T.BUILD_MENU_EDGE)
+            pygame.draw.rect(self.screen, border_c, ir, 1, border_radius=4)
+
+            # Name & category badge
+            name_c = T.BUILD_SELECTED if sel else (
+                T.BUILD_AFFORDABLE if can else T.BUILD_UNAVAILABLE)
+            D.text(self.screen, self.fonts.md, defn.display_name,
+                   (ir.x + 8, ir.y + 6), name_c)
+            D.text(self.screen, self.fonts.sm,
+                   f"[{defn.category.upper()}]",
+                   (ir.right - 8, ir.y + 6), T.TEXT_DIM, "topright")
+
+            # Cost line
+            cost_str = "  ".join(
+                f"{int(v)} {r}" for r, v in defn.cost.items()
+            )
+            D.text(self.screen, self.fonts.sm, f"Cost: {cost_str}",
+                   (ir.x + 8, ir.y + 24),
+                   T.TEXT if can else T.BUILD_UNAVAILABLE)
+
+            # Build time
+            D.text(self.screen, self.fonts.sm,
+                   f"{defn.build_time_ticks} ticks",
+                   (ir.right - 8, ir.y + 24), T.TEXT_DIM, "topright")
+
+            # "Can't afford" hint
+            if not can:
+                D.text(self.screen, self.fonts.sm, "Insufficient resources",
+                       (ir.x + 8, ir.y + 40), T.DANGER)
+            elif sel:
+                D.text(self.screen, self.fonts.sm,
+                       "Click again to confirm order",
+                       (ir.x + 8, ir.y + 40), T.BUILD_SELECTED)

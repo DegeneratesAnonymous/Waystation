@@ -21,6 +21,7 @@ from waystation.systems.resources import ResourceSystem
 from waystation.systems.factions import FactionSystem
 from waystation.systems.visitors import VisitorSystem
 from waystation.systems.jobs import JobSystem, JobRegistry
+from waystation.systems.building import BuildingSystem
 from waystation.systems import time_system
 
 log = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ class Game:
         self.visitor_system: VisitorSystem | None = None
         self.job_registry   = JobRegistry()
         self.job_system: JobSystem | None = None
+        self.building_system: BuildingSystem | None = None
 
         self._running = False
         self._pending_events: list[PendingEvent] = []
@@ -115,6 +117,7 @@ class Game:
             self.registry, self.npc_system, self.event_system
         )
         self.job_system = JobSystem(self.job_registry)
+        self.building_system = BuildingSystem(self.registry)
 
         # Wire event effect handlers from other systems
         self.event_system.register_effect_handler(
@@ -224,6 +227,7 @@ class Game:
         self.station.tick += 1
 
         self.resource_system.tick(self.station)
+        self.building_system.tick(self.station)   # before job_system so NPCs get correct jobs
         self.job_system.tick(self.station)
         self.npc_system.tick(self.station)
         self.faction_system.tick(self.station)
@@ -345,6 +349,9 @@ class Game:
             case "modules" | "m":
                 self._show_modules()
 
+            case "build" | "b":
+                self._cmd_build(parts)
+
             case "help" | "h" | "?":
                 self._show_help()
 
@@ -427,6 +434,78 @@ class Game:
             dock_str = f" [ship: {module.docked_ship}]" if module.docked_ship else ""
             print(f"  {module.display_name:<24} {module.category:<12} {status}{dock_str}")
 
+    def _cmd_build(self, parts: list[str]) -> None:
+        """Handle the 'build' command.
+
+        build           — list available buildables
+        build <id>      — queue a new build order
+        build orders    — show active build orders
+        """
+        assert self.station is not None
+        assert self.building_system is not None
+
+        if len(parts) < 2 or parts[1] == "list":
+            self._show_buildables()
+        elif parts[1] == "orders":
+            self._show_build_orders()
+        else:
+            buildable_id = parts[1]
+            defn = self.registry.buildables.get(buildable_id)
+            if defn is None:
+                print(f"Unknown buildable '{buildable_id}'. Type 'build' to list options.")
+                return
+            order = self.building_system.place_order(buildable_id, self.station)
+            if order:
+                print(_c(Fore.GREEN,
+                         f"Order placed: {defn.display_name}  "
+                         f"[{order.uid}]"))
+            else:
+                print(_c(Fore.RED, "Failed to place order."))
+
+    def _show_buildables(self) -> None:
+        assert self.station is not None
+        assert self.building_system is not None
+
+        buildables = self.building_system.available_buildables(self.station)
+        if not buildables:
+            print("No buildables available.")
+            return
+
+        print(f"\n  {'ID':<30} {'Name':<24} {'Cost':<38} {'Time'}")
+        print("  " + "─" * 100)
+        for defn in buildables:
+            cost_str = ", ".join(
+                f"{int(v)} {r}" for r, v in defn.cost.items()
+            )
+            can = self.building_system.can_afford(defn.id, self.station)
+            row = (f"  {defn.id:<30} {defn.display_name:<24} "
+                   f"{cost_str:<38} {defn.build_time_ticks} ticks")
+            color = Fore.GREEN if can else Fore.RED
+            print(_c(color, row))
+
+        print()
+        print(_c(Style.DIM,
+                 "  Type 'build <id>' to queue a construction order."))
+
+    def _show_build_orders(self) -> None:
+        assert self.station is not None
+        orders = self.station.get_active_build_orders()
+        if not orders:
+            print("No active build orders.")
+            return
+
+        print(f"\n  {'UID':<10} {'Buildable':<30} {'Status':<20} {'Progress'}")
+        print("  " + "─" * 70)
+        for order in orders:
+            defn = self.registry.buildables.get(order.buildable_id)
+            name = defn.display_name if defn else order.buildable_id
+            bar_w = 20
+            filled = int(bar_w * order.progress)
+            bar = "[" + "█" * filled + "░" * (bar_w - filled) + "]"
+            print(f"  {order.uid:<10} {name:<30} {order.progress_label():<20} {bar}")
+
+        print()
+
     def _cmd_admit(self, parts: list[str]) -> None:
         incoming = self.station.get_incoming_ships()
         if not incoming:
@@ -462,16 +541,19 @@ class Game:
         print("""
   COMMANDS
   ─────────────────────────────────────────────────────
-  tick [n]      — Advance n ticks (default 1)
-  auto [n]      — Run n ticks, pausing on events
-  events        — Show and respond to pending events
-  crew          — Show crew roster and status
-  ships         — Show tracked ships
-  factions      — Show faction reputation
-  modules       — Show station modules
-  admit [n]     — Admit incoming ship (by index or uid)
-  deny  [n]     — Deny incoming ship
-  log [n]       — Show last n log entries (default 20)
-  help          — Show this help
-  quit          — Exit game
+  tick [n]         — Advance n ticks (default 1)
+  auto [n]         — Run n ticks, pausing on events
+  events           — Show and respond to pending events
+  crew             — Show crew roster and status
+  ships            — Show tracked ships
+  factions         — Show faction reputation
+  modules          — Show station modules
+  build            — Show build menu (available constructions)
+  build <id>       — Queue a construction order
+  build orders     — Show active build orders
+  admit [n]        — Admit incoming ship (by index or uid)
+  deny  [n]        — Deny incoming ship
+  log [n]          — Show last n log entries (default 20)
+  help             — Show this help
+  quit             — Exit game
 """)

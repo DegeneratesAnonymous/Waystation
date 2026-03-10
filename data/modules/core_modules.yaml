@@ -131,3 +131,44 @@
   tags:
     - visitor_services
     - social
+
+- id: module.workshop
+  display_name: Workshop
+  category: production
+  schema_version: "1"
+  description: Heavy fabrication bay. Engineers manufacture parts and repair equipment more efficiently here.
+  capacity: 4
+  resource_effects:
+    power: -2.0
+    parts: 1.5
+  tags:
+    - fabrication
+    - production
+
+- id: module.storage_hold_b
+  display_name: Storage Hold B
+  category: utility
+  schema_version: "1"
+  description: Secondary pressurised cargo hold. Extra capacity for food and parts reserves.
+  capacity: 0
+  resource_effects:
+    power: -0.5
+    food: 0.8
+    parts: 0.3
+  tags:
+    - storage
+    - cargo
+
+- id: module.life_support_ext
+  display_name: Life Support Ext.
+  category: utility
+  schema_version: "1"
+  description: Secondary atmospheric processor. Boosts oxygen output and processes ice more efficiently.
+  capacity: 2
+  resource_effects:
+    power: -1.5
+    oxygen: 2.0
+    ice: -1.0
+  tags:
+    - life_support
+    - atmosphere

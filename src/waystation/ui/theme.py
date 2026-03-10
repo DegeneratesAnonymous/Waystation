@@ -27,6 +27,7 @@ MODULE_FLOOR = {
     "hab":        ( 55,  32,  20),
     "production": ( 22,  50,  22),
     "security":   ( 60,  18,  18),
+    "blueprint":  ( 10,  30,  55),   # under-construction placeholder
 }
 MODULE_WALL = {
     "utility":    ( 50,  90, 160),
@@ -34,6 +35,7 @@ MODULE_WALL = {
     "hab":        (130,  75,  45),
     "production": ( 55, 130,  55),
     "security":   (140,  40,  40),
+    "blueprint":  ( 40, 100, 180),
 }
 MODULE_LABEL = {
     "utility":    ( 80, 140, 220),
@@ -41,6 +43,7 @@ MODULE_LABEL = {
     "hab":        (190, 110,  70),
     "production": ( 80, 190,  80),
     "security":   (200,  70,  70),
+    "blueprint":  ( 80, 160, 240),
 }
 
 # ── NPC colours ───────────────────────────────────────────────────────────────
@@ -115,3 +118,15 @@ TICK_INTERVAL: dict[int, float] = {
     2: 1.0,     # x2
     4: 0.35,    # x4
 }
+
+# ── Build menu ─────────────────────────────────────────────────────────────────
+BLUEPRINT_FLOOR   = ( 10,  30,  55)    # floor fill for an un-built blueprint
+BLUEPRINT_WALL    = ( 40, 100, 180)    # wall / outline for a blueprint
+BLUEPRINT_LABEL   = ( 80, 160, 240)    # text inside a blueprint tile
+BUILD_MENU_BG     = ( 12,  22,  42)    # build menu panel background
+BUILD_MENU_EDGE   = ( 40,  80, 160)    # build menu panel border
+BUILD_AFFORDABLE  = ( 60, 200, 100)    # item row when player can afford it
+BUILD_UNAVAILABLE = ( 90,  90, 110)    # item row when player can't afford it
+BUILD_SELECTED    = (  0, 200, 255)    # highlighted / selected buildable row
+BUILD_PROGRESS_FG = ( 60, 200, 100)    # construction progress bar fill
+BUILD_PROGRESS_BG = ( 20,  40,  60)    # construction progress bar background
