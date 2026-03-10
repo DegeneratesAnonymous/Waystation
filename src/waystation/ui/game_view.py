@@ -213,6 +213,8 @@ class GameView:
         self._mod_rects: dict[str, pygame.Rect] = {}
         # module uid -> list of NPC slot positions
         self._mod_slots: dict[str, list[tuple[float, float]]] = {}
+        # Cached hull bounding rect (recomputed only in _rebuild_layout)
+        self._hull_rect: pygame.Rect | None = None
 
         # NPC dots
         self._dots: dict[str, NPCDot] = {}
@@ -251,6 +253,19 @@ class GameView:
 
             self._mod_rects[uid] = rect
             self._mod_slots[uid] = self._compute_slots(rect)
+
+        # Cache hull bounds so _render_station_hull() doesn't recompute every frame
+        if self._mod_rects:
+            pad   = T.HULL_PAD
+            rects = list(self._mod_rects.values())
+            self._hull_rect = pygame.Rect(
+                min(r.left   for r in rects) - pad,
+                min(r.top    for r in rects) - pad,
+                max(r.right  for r in rects) + pad - (min(r.left for r in rects) - pad),
+                max(r.bottom for r in rects) + pad - (min(r.top  for r in rects) - pad),
+            )
+        else:
+            self._hull_rect = None
 
     def _compute_slots(self, rect: pygame.Rect) -> list[tuple[float, float]]:
         """Return evenly distributed NPC standing positions inside a room."""
@@ -477,15 +492,9 @@ class GameView:
 
     def _render_station_hull(self) -> None:
         """Draw the station outer superstructure / hull behind all modules."""
-        if not self._mod_rects:
+        hull = self._hull_rect
+        if hull is None:
             return
-        rects = list(self._mod_rects.values())
-        pad   = T.HULL_PAD
-        min_x = min(r.left   for r in rects) - pad
-        min_y = min(r.top    for r in rects) - pad
-        max_x = max(r.right  for r in rects) + pad
-        max_y = max(r.bottom for r in rects) + pad
-        hull  = pygame.Rect(min_x, min_y, max_x - min_x, max_y - min_y)
 
         # Main hull body
         pygame.draw.rect(self.screen, T.HULL_BG, hull, border_radius=12)
@@ -775,7 +784,11 @@ class GameView:
 
     def _draw_npc_sprite(self, pos: tuple[int, int], color: tuple,
                          working: bool) -> None:
-        """Draw a small top-down humanoid figure (head + body)."""
+        """Draw a small top-down humanoid figure (head + body).
+
+        If `working` is True, a small activity indicator is drawn above the
+        head to show the NPC is actively carrying out a job.
+        """
         cx, cy = pos
         surf   = self.screen
 
@@ -795,6 +808,12 @@ class GameView:
         # Bright highlight on head (top-left)
         hi = tuple(min(255, c + self._HEAD_HIGHLIGHT) for c in color[:3])
         pygame.draw.circle(surf, hi, (cx - 1, cy - 5), 2)
+
+        # Activity indicator: small diamond above the head while working
+        if working:
+            dy = cy - 14
+            diamond = [(cx, dy - 3), (cx + 3, dy), (cx, dy + 3), (cx - 3, dy)]
+            pygame.draw.polygon(surf, T.OK, diamond)
 
     def _draw_tooltip(self, line1: str, line2: str, pos: tuple) -> None:
         tw = max(self.fonts.sm.size(line1)[0], self.fonts.sm.size(line2)[0]) + 12
