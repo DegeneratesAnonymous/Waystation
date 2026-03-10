@@ -330,5 +330,19 @@ namespace Waystation.Core
 
         public void SetSpeed(float ticksPerSecond)
             => secondsPerTick = ticksPerSecond > 0f ? 1f / ticksPerSecond : 0.5f;
+
+        // ── Difficulty control ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Override the difficulty setting. Can be called before or during a game.
+        /// Delegates to EventSystem.SetDifficulty() so no system rebuild is needed.
+        /// </summary>
+        public void SetDifficulty(string newDifficulty)
+        {
+            if (string.IsNullOrEmpty(newDifficulty)) return;
+            difficulty = newDifficulty;
+            // Update the EventSystem in-place if it has already been created.
+            Events?.SetDifficulty(difficulty, Station != null ? Station.tick : 0);
+        }
     }
 }

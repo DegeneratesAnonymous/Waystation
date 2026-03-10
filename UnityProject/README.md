@@ -7,15 +7,23 @@ This directory contains the Unity 6 (6000.0 LTS) project for **Frontier Waystati
 1. Install **Unity Hub** and Unity version **6000.0.40f1** (or later 6000.x release).
 2. In Unity Hub, click **Add → Add project from disk** and select this `UnityProject/` folder.
 3. Unity will import all assets and generate the `Library/` cache — this takes a few minutes on first open.
-4. Open either **Assets/Scenes/MainMenuScene.unity** or **Assets/Scenes/GameScene.unity** from the Project window.
-5. Press **▶ Play** to run the game in the Editor.
+4. **Create the scenes** — no `.unity` scene files are committed to the repository (visual/audio assets and scene layouts are out of scope for this PR). Create two empty scenes in the Editor and save them as:
+   - `Assets/Scenes/MainMenuScene.unity`
+   - `Assets/Scenes/GameScene.unity`
+5. In each scene, add a `GameObject` and attach the relevant manager script:
+   - **MainMenuScene** → `MainMenuManager` MonoBehaviour (plus uGUI canvas with the wired-up buttons and input fields described below).
+   - **GameScene** → `GameManager` + `ContentRegistry` + `GameViewController` MonoBehaviours.
+6. Add both scenes to **File → Build Settings** (drag them into the Scenes In Build list).
+7. Press **▶ Play** while `GameScene` is open to run the simulation in the Editor.
+
+> **Quick-start tip:** To test the game loop without building a full UI, add `GameManager` and `ContentRegistry` to an empty scene, call `GameManager.NewGame("Test Station")` from a small bootstrap script, and inspect `GameManager.Station` in the Inspector each tick.
 
 ## Project Structure
 
 ```
 UnityProject/
 ├── Assets/
-│   ├── Scenes/                         # Unity scene files (MainMenuScene, GameScene)
+│   ├── Scenes/                         # NOT committed — create MainMenuScene and GameScene in-editor
 │   ├── Scripts/
 │   │   ├── Core/
 │   │   │   ├── GameManager.cs          # Singleton orchestrator — owns all systems

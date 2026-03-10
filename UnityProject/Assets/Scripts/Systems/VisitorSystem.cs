@@ -172,6 +172,9 @@ namespace Waystation.Systems
             ship.status    = "docked";
             ship.dockedAt  = dock.uid;
             dock.dockedShip = shipUid;
+            // Record a deterministic departure tick so TickDocked doesn't re-roll every tick.
+            ship.plannedDepartureTick = station.tick +
+                UnityEngine.Random.Range(DockedDurationMin, DockedDurationMax + 1);
             station.LogEvent($"{ship.name} docked at {dock.displayName}.");
 
             SpawnPassengers(ship, station);
@@ -240,8 +243,14 @@ namespace Waystation.Systems
             foreach (var ship in new List<ShipInstance>(station.GetDockedShips()))
             {
                 ship.ticksDocked++;
-                int stay = UnityEngine.Random.Range(DockedDurationMin, DockedDurationMax + 1);
-                if (ship.ticksDocked >= stay)
+                // Compare against the departure tick assigned at docking time.
+                // If not set (legacy / edge-case), reconstruct from ticksDocked so the
+                // ship doesn't depart immediately if already docked for a while.
+                if (ship.plannedDepartureTick < 0)
+                    ship.plannedDepartureTick = (station.tick - ship.ticksDocked) +
+                        UnityEngine.Random.Range(DockedDurationMin, DockedDurationMax + 1);
+
+                if (station.tick >= ship.plannedDepartureTick)
                     DepartShip(ship.uid, station);
             }
         }

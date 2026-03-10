@@ -3,10 +3,4 @@
 --- !u!1045 &1
 EditorBuildSettings:
   serializedVersion: 2
-  m_Scenes:
-  - enabled: 1
-    path: Assets/Scenes/MainMenuScene.unity
-    guid: 00000000000000000000000000000001
-  - enabled: 1
-    path: Assets/Scenes/GameScene.unity
-    guid: 00000000000000000000000000000002
+  m_Scenes: []

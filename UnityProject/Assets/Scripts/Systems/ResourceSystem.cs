@@ -65,7 +65,8 @@ namespace Waystation.Systems
                         float efficiency  = baseEff * moraleMod;
                         float current     = station.GetResource(kv.Key);
                         float cap         = SoftCaps.ContainsKey(kv.Key) ? SoftCaps[kv.Key] : float.MaxValue;
-                        delta = Mathf.Min(kv.Value * efficiency, cap - current);
+                        // Clamp to zero so being over-cap never drives a negative production delta.
+                        delta = Mathf.Max(0f, Mathf.Min(kv.Value * efficiency, cap - current));
                     }
                     else
                     {

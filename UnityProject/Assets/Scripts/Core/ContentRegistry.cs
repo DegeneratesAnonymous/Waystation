@@ -68,9 +68,8 @@ namespace Waystation.Core
             foreach (string file in Directory.GetFiles(path, "*.json"))
             {
                 string json = File.ReadAllText(file);
-                var records = JsonUtility.FromJson<JsonArrayWrapper>(WrapArray(json));
-                if (records == null) continue;
-                // Deserialise as raw list via MiniJSON
+                // Use MiniJSON for all parsing — JsonUtility cannot handle
+                // arbitrary object graphs (Dictionary<string,object> etc.).
                 var list = MiniJSON.Json.Deserialize(json) as List<object>;
                 if (list == null) continue;
                 foreach (var item in list)
@@ -89,10 +88,6 @@ namespace Waystation.Core
                 yield return null;
             }
         }
-
-        // Helpers to keep JSON array loading simple; MiniJSON handles real parsing.
-        private static string WrapArray(string json) => $"{{\"items\":{json}}}";
-        [Serializable] private class JsonArrayWrapper { public object[] items; }
 
         // ── Per-type registrars ──────────────────────────────────────────────
 

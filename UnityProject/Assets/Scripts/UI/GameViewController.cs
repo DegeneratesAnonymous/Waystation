@@ -68,6 +68,9 @@ namespace Waystation.UI
         private GameManager   _gm;
         private PendingEvent  _activeEvent;
         private List<Button>  _spawnedChoiceButtons = new List<Button>();
+        // Tracks whether the current event panel was the cause of an auto-pause,
+        // so DismissEventPanel only unpauses when *it* paused the game.
+        private bool          _eventCausedPause;
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -121,6 +124,9 @@ namespace Waystation.UI
             int?   seed = PlayerPrefs.HasKey("pending_seed")
                           ? (int?)PlayerPrefs.GetInt("pending_seed")
                           : null;
+
+            // Apply the difficulty chosen on the main menu before starting the game.
+            _gm.SetDifficulty(diff);
 
             if (!string.IsNullOrEmpty(name))
                 _gm.NewGame(name, seed);
@@ -255,6 +261,12 @@ namespace Waystation.UI
 
             _activeEvent = pending;
 
+            // Auto-pause the game while the player responds to the event.
+            // Remember whether we were already paused so DismissEventPanel
+            // only resumes if *this* event caused the pause.
+            _eventCausedPause = !_gm.IsPaused;
+            if (_eventCausedPause) _gm.IsPaused = true;
+
             if (eventPanel)       eventPanel.SetActive(true);
             if (eventTitleLabel)  eventTitleLabel.text = pending.definition.title;
             if (eventDescLabel)   eventDescLabel.text  = pending.definition.description;
@@ -302,7 +314,13 @@ namespace Waystation.UI
         {
             _activeEvent = null;
             if (eventPanel) eventPanel.SetActive(false);
-            _gm.IsPaused = false;
+            // Only resume if the event itself caused the pause; otherwise keep
+            // the player-requested pause state intact.
+            if (_eventCausedPause)
+            {
+                _gm.IsPaused = false;
+                _eventCausedPause = false;
+            }
         }
 
         // ── Speed & pause controls ────────────────────────────────────────────

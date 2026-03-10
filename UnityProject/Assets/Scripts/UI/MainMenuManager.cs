@@ -116,12 +116,13 @@ namespace Waystation.UI
 
         private void OnLoadGame()
         {
-            // In the current implementation saves are loaded automatically
-            // from GameManager in the game scene.
-            PlayerPrefs.SetString("pending_station_name", "");
-            PlayerPrefs.SetString("pending_load", "1");
-            SetActivePanel(loadingPanel);
-            StartCoroutine(LoadGameScene());
+            // Load Game is not yet implemented — saving serialises resources,
+            // tags, and the log but full NPC/ship/module state is out of scope
+            // for this release. Show a warning and stay on the main menu rather
+            // than transitioning to the game scene with no StationState.
+            Debug.LogWarning("[MainMenuManager] Load Game requested, but loading is not yet implemented.");
+            if (loadGameButton != null) loadGameButton.interactable = false;
+            SetActivePanel(mainPanel);
         }
 
         private void OnQuit()

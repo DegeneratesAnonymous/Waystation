@@ -173,6 +173,17 @@ namespace Waystation.Systems
             Action<OutcomeEffect, StationState, Dictionary<string, object>> handler)
             => _resolver.Register(type, handler);
 
+        /// <summary>
+        /// Change the difficulty in-place without rebuilding the EventSystem.
+        /// Safe to call at any point; recalculates the next-event gap immediately.
+        /// </summary>
+        public void SetDifficulty(string newDifficulty, int currentTick = 0)
+        {
+            _difficulty = DifficultySettings.ContainsKey(newDifficulty) ? newDifficulty : "normal";
+            var cfg = DifficultySettings[_difficulty];
+            _nextEventTick = currentTick + UnityEngine.Random.Range(cfg.minGap, cfg.maxGap + 1);
+        }
+
         // ── Tick ──────────────────────────────────────────────────────────────
 
         public List<PendingEvent> Tick(StationState station)

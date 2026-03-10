@@ -137,6 +137,8 @@ namespace Waystation.Models
         public string status    = "incoming";  // incoming / docked / departing / hostile / destroyed
         public string dockedAt;
         public int    ticksDocked = 0;
+        // Set when the ship docks; used by VisitorSystem to avoid re-rolling departure each tick.
+        public int    plannedDepartureTick = -1;
 
         public static ShipInstance Create(string templateId, string name, string role,
                                           string intent = "unknown", string factionId = null,
