@@ -35,7 +35,7 @@ from waystation.ui import theme as T
 from waystation.ui import draw as D
 from waystation.systems import time_system
 from waystation.systems.events import PendingEvent
-from waystation.models.tilemap import TileMap
+from waystation.models.tilemap import TileMap, WALL_MAX_HP
 from waystation.models.instances import ModuleInstance
 
 if TYPE_CHECKING:
@@ -45,6 +45,22 @@ if TYPE_CHECKING:
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 AUTOSAVE_FILENAME = "autosave.json"
+
+
+def _wall_hp_color(base: tuple, hp: int) -> tuple:
+    """
+    Blend a wall base color toward red as hp falls below WALL_MAX_HP.
+    Full health returns base unchanged; 0 hp returns a deep red.
+    """
+    frac = max(0.0, min(1.0, hp / WALL_MAX_HP)) if WALL_MAX_HP > 0 else 1.0
+    if frac >= 1.0:
+        return base
+    damage = (210, 45, 15)
+    return (
+        int(base[0] + (damage[0] - base[0]) * (1.0 - frac)),
+        int(base[1] + (damage[1] - base[1]) * (1.0 - frac)),
+        int(base[2] + (damage[2] - base[2]) * (1.0 - frac)),
+    )
 
 # ── Fonts ──────────────────────────────────────────────────────────────────────
 
@@ -944,7 +960,7 @@ class GameView:
                 pygame.draw.rect(self.screen, base, rect)
 
                 # Draw wall segments (thick lines on tile edges); doors = coloured gap
-                wc  = T.BUILD_WALL_LINE
+                seg_base = T.BUILD_WALL_LINE
                 door_color = T.BUILD_DOOR
                 for side, (x1, y1, x2, y2) in {
                     "N": (rect.x,        rect.y,          rect.right - 1,  rect.y),
@@ -954,6 +970,8 @@ class GameView:
                 }.items():
                     if not cell.walls.get(side, False):
                         continue
+                    seg_hp = cell.wall_segment_hp.get(side, WALL_MAX_HP)
+                    wc = _wall_hp_color(seg_base, seg_hp)
                     if cell.doors.get(side, False):
                         # Door: draw two short wall stubs with a coloured gap in centre
                         mid_x = (x1 + x2) // 2
@@ -971,9 +989,10 @@ class GameView:
                         pygame.draw.line(self.screen, wc, (x1, y1), (x2, y2), 2)
 
             elif cell.tile_type == "wall":
-                pygame.draw.rect(self.screen, T.BUILD_WALL_LINE, rect)
-                pygame.draw.rect(self.screen, tuple(min(255, c + 30) for c in T.BUILD_WALL_LINE),
-                                 rect, 1)
+                wall_fill = _wall_hp_color(T.BUILD_WALL_LINE, cell.wall_hp)
+                pygame.draw.rect(self.screen, wall_fill, rect)
+                wall_edge = tuple(min(255, c + 30) for c in wall_fill)
+                pygame.draw.rect(self.screen, wall_edge, rect, 1)
 
         # Room name labels + atmosphere stats
         for room in tm.rooms.values():

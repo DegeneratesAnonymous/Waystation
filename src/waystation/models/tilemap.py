@@ -23,6 +23,29 @@ def _new_uid() -> str:
 _OPPOSITE:  dict[str, str]            = {"N": "S", "S": "N", "E": "W", "W": "E"}
 _DIR_DELTA: dict[str, tuple[int, int]] = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
 
+# ── Wall integrity constants ──────────────────────────────────────────────────
+
+#: Full health value for every newly placed wall tile or wall segment.
+WALL_MAX_HP: int = 100
+
+# Per-tick atmosphere / temperature leak rates from a single damaged wall unit.
+# A wall at >66 % HP leaks nothing.  33–66 % → small leak.  <33 % → large leak.
+_LEAK_SMALL_ATM:   float = 0.001    # atmosphere fraction lost per tick
+_LEAK_LARGE_ATM:   float = 0.005    # atmosphere fraction lost per tick
+_LEAK_SMALL_TEMP:  float = 0.3      # °C drift toward space per tick
+_LEAK_LARGE_TEMP:  float = 1.5      # °C drift toward space per tick
+_SPACE_TEMPERATURE: float = -40.0   # ambient space temperature (°C) used as drain target
+
+
+def _wall_leak_rates(hp: int) -> tuple[float, float]:
+    """Return (atm_leak, temp_drift) per tick for a wall at *hp* hit-points."""
+    frac = hp / WALL_MAX_HP if WALL_MAX_HP > 0 else 1.0
+    if frac > 0.66:
+        return 0.0, 0.0
+    if frac > 0.33:
+        return _LEAK_SMALL_ATM, _LEAK_SMALL_TEMP
+    return _LEAK_LARGE_ATM, _LEAK_LARGE_TEMP
+
 
 # ---------------------------------------------------------------------------
 # TileCell — a single cell on the tile grid
@@ -47,6 +70,15 @@ class TileCell:
         gap in a wall segment — only meaningful when the corresponding wall is
         also True.
 
+    wall_hp — hit-points for a solid wall tile (tile_type == "wall").
+        Starts at WALL_MAX_HP.  When reduced to 0 the tile is destroyed.
+        >66 % HP: no atmosphere/temperature leak.
+        33–66 % HP: small leak.  <33 % HP: large leak.
+
+    wall_segment_hp — per-edge HP for wall segments on a floor tile.
+        Indexed by "N"/"S"/"E"/"W".  Only meaningful when walls[side] is True.
+        Same HP thresholds and leak rules as wall_hp.
+
     room_uid — uid of the RoomInstance that has claimed this tile, or None.
     """
     col: int
@@ -58,16 +90,22 @@ class TileCell:
     doors: dict[str, bool] = field(default_factory=lambda: {
         "N": False, "S": False, "E": False, "W": False,
     })
+    wall_hp: int = WALL_MAX_HP
+    wall_segment_hp: dict[str, int] = field(default_factory=lambda: {
+        "N": WALL_MAX_HP, "S": WALL_MAX_HP, "E": WALL_MAX_HP, "W": WALL_MAX_HP,
+    })
     room_uid: str | None = None
 
     def to_dict(self) -> dict:
         return {
-            "col":       self.col,
-            "row":       self.row,
-            "tile_type": self.tile_type,
-            "walls":     dict(self.walls),
-            "doors":     dict(self.doors),
-            "room_uid":  self.room_uid,
+            "col":             self.col,
+            "row":             self.row,
+            "tile_type":       self.tile_type,
+            "walls":           dict(self.walls),
+            "doors":           dict(self.doors),
+            "wall_hp":         self.wall_hp,
+            "wall_segment_hp": dict(self.wall_segment_hp),
+            "room_uid":        self.room_uid,
         }
 
     @classmethod
@@ -76,12 +114,18 @@ class TileCell:
         walls = {k: bool(stored_walls.get(k, False)) for k in ("N", "S", "E", "W")}
         stored_doors = d.get("doors", {})
         doors = {k: bool(stored_doors.get(k, False)) for k in ("N", "S", "E", "W")}
+        stored_seg_hp = d.get("wall_segment_hp", {})
+        wall_segment_hp = {
+            k: int(stored_seg_hp.get(k, WALL_MAX_HP)) for k in ("N", "S", "E", "W")
+        }
         return cls(
             col=int(d["col"]),
             row=int(d["row"]),
             tile_type=d.get("tile_type", "empty"),
             walls=walls,
             doors=doors,
+            wall_hp=int(d.get("wall_hp", WALL_MAX_HP)),
+            wall_segment_hp=wall_segment_hp,
             room_uid=d.get("room_uid"),
         )
 
@@ -230,6 +274,7 @@ class TileMap:
         cell = self.get_cell(col, row)
         cell.tile_type = "wall"
         cell.walls = {"N": False, "S": False, "E": False, "W": False}
+        cell.wall_hp = WALL_MAX_HP      # freshly placed — full health
         cell.room_uid = None
         # Update neighbours that may have shared walls
         for dc, dr, side, opp in (
@@ -257,10 +302,11 @@ class TileMap:
                     nb.walls[opp] = True
 
     def add_wall_segment(self, col: int, row: int, side: str) -> None:
-        """Add a wall segment to the given side of a floor tile."""
+        """Add a wall segment to the given side of a floor tile (full health)."""
         cell = self.cells.get((col, row))
         if cell and cell.tile_type == "floor":
             cell.walls[side] = True
+            cell.wall_segment_hp[side] = WALL_MAX_HP  # freshly placed — full health
 
     def remove_wall_segment(self, col: int, row: int, side: str) -> None:
         """Remove a wall segment from the given side of a floor tile.
@@ -307,6 +353,125 @@ class TileMap:
             nb = self.cells.get((col + dc, row + dr))
             if nb and nb.tile_type == "floor":
                 nb.doors[_OPPOSITE[side]] = False
+
+    # ── Wall damage & repair ─────────────────────────────────────────────
+
+    def damage_wall(self, col: int, row: int, amount: int) -> bool:
+        """
+        Apply *amount* damage to the solid wall tile at (col, row).
+
+        Damage is strictly local — only this single tile's HP is reduced.
+        If HP reaches 0 the tile is erased from the map.
+
+        Returns True if the wall was destroyed, False otherwise.
+        """
+        cell = self.cells.get((col, row))
+        if cell is None or cell.tile_type != "wall":
+            return False
+        cell.wall_hp = max(0, cell.wall_hp - amount)
+        if cell.wall_hp <= 0:
+            self.erase(col, row)
+            return True
+        return False
+
+    def damage_wall_segment(self, col: int, row: int, side: str, amount: int) -> bool:
+        """
+        Apply *amount* damage to the wall segment on *side* of the floor tile at
+        (col, row).
+
+        Damage is strictly local — only this edge's HP is reduced.
+        If HP reaches 0 the segment is removed and the mirrored segment on the
+        neighbouring floor tile is cleared too (the physical wall is gone).
+
+        Returns True if the segment was destroyed, False otherwise.
+        """
+        cell = self.cells.get((col, row))
+        if cell is None or cell.tile_type != "floor":
+            return False
+        if not cell.walls.get(side, False):
+            return False
+        cell.wall_segment_hp[side] = max(0, cell.wall_segment_hp.get(side, WALL_MAX_HP) - amount)
+        if cell.wall_segment_hp[side] <= 0:
+            # Remove segment and its door from this tile
+            cell.walls[side] = False
+            cell.doors[side] = False
+            cell.wall_segment_hp[side] = WALL_MAX_HP  # ready for rebuild
+            # Clear the mirrored segment on the neighbour
+            dc, dr = _DIR_DELTA[side]
+            nb = self.cells.get((col + dc, row + dr))
+            if nb and nb.tile_type == "floor":
+                opp = _OPPOSITE[side]
+                nb.walls[opp] = False
+                nb.doors[opp] = False
+                nb.wall_segment_hp[opp] = WALL_MAX_HP
+            return True
+        return False
+
+    def repair_wall(self, col: int, row: int, amount: int) -> None:
+        """Restore *amount* HP to a solid wall tile (capped at WALL_MAX_HP)."""
+        cell = self.cells.get((col, row))
+        if cell and cell.tile_type == "wall":
+            cell.wall_hp = min(WALL_MAX_HP, cell.wall_hp + amount)
+
+    def repair_wall_segment(self, col: int, row: int, side: str, amount: int) -> None:
+        """Restore *amount* HP to a wall segment edge (capped at WALL_MAX_HP)."""
+        cell = self.cells.get((col, row))
+        if cell and cell.tile_type == "floor" and cell.walls.get(side, False):
+            cell.wall_segment_hp[side] = min(
+                WALL_MAX_HP, cell.wall_segment_hp.get(side, 0) + amount
+            )
+
+    def tick_room_environments(self) -> None:
+        """
+        Per-tick environment update: atmosphere and temperature leak from damaged
+        walls into each RoomInstance.
+
+        For every room, the boundary walls (wall segments on its floor tiles, plus
+        adjacent solid wall tiles) are checked.  Each damaged wall contributes a
+        leak according to its HP fraction:
+
+            >66 % HP  — no leak
+            33–66 % HP — small leak  (_LEAK_SMALL_ATM atmosphere / _LEAK_SMALL_TEMP °C)
+            <33 % HP  — large leak   (_LEAK_LARGE_ATM atmosphere / _LEAK_LARGE_TEMP °C)
+
+        Atmosphere drains toward 0.0; temperature drifts toward _SPACE_TEMPERATURE.
+        """
+        for room in self.rooms.values():
+            total_atm_leak  = 0.0
+            total_temp_leak = 0.0
+            seen_wall_tiles: set[tuple[int, int]] = set()   # avoid counting a shared wall tile twice
+
+            for pos in room.tile_positions:
+                cell = self.cells.get(pos)
+                if cell is None or cell.tile_type != "floor":
+                    continue
+                # Wall segments on this floor tile
+                for side in ("N", "S", "E", "W"):
+                    if not cell.walls.get(side, False):
+                        continue
+                    hp = cell.wall_segment_hp.get(side, WALL_MAX_HP)
+                    da, dt = _wall_leak_rates(hp)
+                    total_atm_leak  += da
+                    total_temp_leak += dt
+                # Adjacent solid wall tiles — each counted at most once per room
+                col, row = pos
+                for dc, dr in ((0, -1), (0, 1), (1, 0), (-1, 0)):
+                    npos = (col + dc, row + dr)
+                    if npos in seen_wall_tiles:
+                        continue
+                    nb = self.cells.get(npos)
+                    if nb and nb.tile_type == "wall":
+                        seen_wall_tiles.add(npos)
+                        da, dt = _wall_leak_rates(nb.wall_hp)
+                        total_atm_leak  += da
+                        total_temp_leak += dt
+
+            if total_atm_leak > 0.0:
+                room.atmosphere = max(0.0, room.atmosphere - total_atm_leak)
+            if total_temp_leak > 0.0 and room.temperature > _SPACE_TEMPERATURE:
+                room.temperature = max(
+                    _SPACE_TEMPERATURE, room.temperature - total_temp_leak
+                )
 
     # ── Room management ──────────────────────────────────────────────────
 
