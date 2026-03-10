@@ -213,10 +213,13 @@ class BuildOrderInstance:
             materials_needed=dict(materials_needed),
         )
 
+    # Floating-point tolerance for resource delivery checks
+    _EPSILON: float = 0.01
+
     def materials_fulfilled(self) -> bool:
         """Return True when all required resources have been delivered."""
         for res, needed in self.materials_needed.items():
-            if self.materials_delivered.get(res, 0.0) < needed - 0.01:
+            if self.materials_delivered.get(res, 0.0) < needed - self._EPSILON:
                 return False
         return True
 

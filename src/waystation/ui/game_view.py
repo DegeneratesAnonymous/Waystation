@@ -34,6 +34,9 @@ from waystation.ui import draw as D
 from waystation.systems import time_system
 from waystation.systems.events import PendingEvent
 
+# Keywords that give a log entry a green OK colour
+_LOG_OK_KEYWORDS = ("docked", "joined", "Trade:", "+", "Blueprint", "completed")
+
 if TYPE_CHECKING:
     from waystation.game import Game
     from waystation.models.instances import (
@@ -929,7 +932,7 @@ class GameView:
         for entry in self.s.log[self._log_scroll: self._log_scroll + 9]:
             fc = (T.DANGER if "CRITICAL" in entry else
                   T.WARN   if "Warning"  in entry else
-                  T.OK     if any(w in entry for w in ("docked","joined","Trade:","+","Blueprint","completed")) else
+                  T.OK     if any(w in entry for w in _LOG_OK_KEYWORDS) else
                   T.TEXT_DIM)
             D.text(self.screen, self.fonts.sm, entry[:110], (x, y), fc)
             y += 17

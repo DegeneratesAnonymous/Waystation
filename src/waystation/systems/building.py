@@ -6,7 +6,10 @@ Lifecycle of a build order:
   2. System finds a free engineer and marks them as assigned (status→"hauling")
   3. Each tick, the engineer carries a portion of required resources from the
      station's stores to the build site (deducted from station, added to
-     materials_delivered).  NPC inventory_capacity limits the load per tick.
+     materials_delivered).  NPC inventory_capacity limits the load per trip,
+     and _HAUL_RATE_PER_TICK further caps how much moves in one tick — the
+     effective amount per tick is min(inventory_capacity, _HAUL_RATE_PER_TICK,
+     remaining_needed, available_on_station).
   4. When all materials are delivered (status→"constructing") the engineer
      works construction cycles until progress reaches 1.0.
   5. On completion the system spawns the new ModuleInstance and logs the event.
@@ -31,11 +34,16 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# How many resource units an engineer can carry per tick (represents inventory)
+# Maximum resource units moved from station to build site per tick.
+# Together with NPCInstance.inventory_capacity this determines haul speed:
+# per-tick transfer = min(_HAUL_RATE_PER_TICK, npc.inventory_capacity, ...)
 _HAUL_RATE_PER_TICK = 5.0
 
 # Base construction progress per tick (scaled by engineer repair skill)
 _BASE_BUILD_RATE = 0.02
+
+# Floating-point tolerance for "has this resource been fully delivered?"
+_RESOURCE_EPSILON = 0.01
 
 
 class BuildingSystem:
@@ -158,7 +166,7 @@ class BuildingSystem:
                 break
             already_delivered = order.materials_delivered.get(res, 0.0)
             still_needed = total_needed - already_delivered
-            if still_needed <= 0.01:
+            if still_needed <= _RESOURCE_EPSILON:
                 continue
 
             # Limited by what's on the station and what the engineer can carry
