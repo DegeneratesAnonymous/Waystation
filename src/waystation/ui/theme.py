@@ -134,3 +134,36 @@ TICK_INTERVAL: dict[int, float] = {
     2: 2.5,     # x2         — ~1 min per day
     4: 1.25,    # x4         — ~30 s per day
 }
+
+# ── Tile / build-mode constants ───────────────────────────────────────────────
+TILE_W: int = 24        # tile width in pixels
+TILE_H: int = 24        # tile height in pixels
+TILE_COLS: int = 40     # columns in the tile grid
+TILE_ROWS: int = 22     # rows in the tile grid
+
+# Build-mode tile palette
+BUILD_EMPTY_BG   = ( 8,  10,  18)   # vacant space
+BUILD_FLOOR      = (28,  42,  72)   # placed floor tile
+BUILD_FLOOR_ALT  = (24,  36,  62)   # checker alternate (faint)
+BUILD_WALL_LINE  = (60,  90, 155)   # wall segment drawn on floor edge
+BUILD_GRID_LINE  = (20,  26,  44)   # faint grid guide lines
+BUILD_HOVER      = (50,  70, 120)   # hovered tile highlight
+BUILD_DRAG       = (40, 100, 180)   # tiles being dragged over
+BUILD_ERASE      = (90,  20,  20)   # erase-drag highlight
+
+# Room designation overlay tints (semi-transparent fill on assigned tiles)
+BUILD_ROOM_TINTS: dict[str, tuple] = {
+    "utility":    (50,  90, 160),
+    "dock":       (55, 130,  75),
+    "hab":        (130,  75,  45),
+    "production": (55, 130,  55),
+    "security":   (140,  40,  40),
+    "cargo":      (160, 130,  50),
+}
+
+# Build toolbar (drawn in log panel area)
+BUILD_BTN_BG      = (22,  30,  55)
+BUILD_BTN_ACTIVE  = (50, 100, 200)
+BUILD_BTN_HOVER   = (35,  55, 100)
+BUILD_ASSIGN_OK   = ( 40, 180,  90)
+BUILD_ASSIGN_FAIL = (180,  60,  40)

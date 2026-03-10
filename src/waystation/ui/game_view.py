@@ -11,14 +11,15 @@ Layout:
   │   crew humanoid sprites walking      │  Factions      │
   │   approaching ships (right lane)     │                │
   +──────────────────────────────────────+────────────────+
-  │   EVENT CARD  or  LOG FEED                            │
+  │   EVENT CARD  or  LOG FEED  or  BUILD TOOLBAR         │
   +───────────────────────────────────────────────────────+
 
 Controls:
   P / Space  — pause / unpause
   1 / 2 / 4  — set speed multiplier
+  B          — toggle build mode
   Click      — select module or event choice
-  Q / Esc    — quit
+  Q / Esc    — quit (or close build sub-menus)
 """
 
 from __future__ import annotations
@@ -34,10 +35,12 @@ from waystation.ui import theme as T
 from waystation.ui import draw as D
 from waystation.systems import time_system
 from waystation.systems.events import PendingEvent
+from waystation.models.tilemap import TileMap
+from waystation.models.instances import ModuleInstance
 
 if TYPE_CHECKING:
     from waystation.game import Game
-    from waystation.models.instances import ModuleInstance, NPCInstance
+    from waystation.models.instances import NPCInstance
 
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -243,6 +246,26 @@ class GameView:
         self._save_msg: str = ""
         self._save_msg_timer: float = 0.0
 
+        # ── Build mode state ──────────────────────────────────────────────
+        self._build_mode: bool = False
+        # Current tool: "floor" | "wall_add" | "wall_remove" | "erase" | "assign"
+        self._build_tool: str = "floor"
+        # Mouse drag tracking (None when not dragging)
+        self._build_drag_start: tuple[int, int] | None = None
+        self._build_last_cell:  tuple[int, int] | None = None
+        self._build_dragging: bool = False
+        # Hovered tile (col, row) in build mode
+        self._build_hover: tuple[int, int] | None = None
+        # Wall-tool drag: which side to toggle
+        self._build_wall_side: str = "N"
+        # Area-assign popup state
+        self._assign_popup: bool = False
+        self._assign_region: list[tuple[int, int]] = []
+        self._assign_scroll: int = 0
+        # Build-mode message (feedback)
+        self._build_msg: str = ""
+        self._build_msg_timer: float = 0.0
+
         self._rebuild_layout()
         self._sync_dots()
 
@@ -376,9 +399,18 @@ class GameView:
                 elif ev.type == pygame.KEYDOWN:
                     self._on_key(ev)
                 elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                    self._on_click(ev.pos)
+                    if self._build_mode:
+                        self._build_mousedown(ev.pos)
+                    else:
+                        self._on_click(ev.pos)
+                elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+                    if self._build_mode:
+                        self._build_mouseup(ev.pos)
                 elif ev.type == pygame.MOUSEMOTION:
-                    self._on_hover(ev.pos)
+                    if self._build_mode:
+                        self._build_mousemove(ev.pos)
+                    else:
+                        self._on_hover(ev.pos)
 
             if self._return_signal:
                 return self._return_signal
@@ -413,6 +445,12 @@ class GameView:
             if self._save_msg_timer <= 0:
                 self._save_msg = ""
 
+        # Build message timer
+        if self._build_msg_timer > 0:
+            self._build_msg_timer -= dt
+            if self._build_msg_timer <= 0:
+                self._build_msg = ""
+
     def _do_tick(self) -> None:
         self.game._tick()
         new = [p for p in self.game.event_system.get_pending()
@@ -427,6 +465,27 @@ class GameView:
     # ── Input ─────────────────────────────────────────────────────────────────
 
     def _on_key(self, ev: pygame.event.Event) -> None:
+        if self._build_mode:
+            if ev.key == pygame.K_ESCAPE:
+                if self._assign_popup:
+                    self._assign_popup = False
+                else:
+                    self._build_mode = False
+                return
+            if ev.key == pygame.K_b:
+                self._build_mode = False
+                return
+            # Allow scroll in assign popup
+            if self._assign_popup:
+                if ev.key == pygame.K_UP:
+                    self._assign_scroll = max(0, self._assign_scroll - 1)
+                elif ev.key == pygame.K_DOWN:
+                    self._assign_scroll = min(
+                        max(0, len(self.game.registry.room_types) - 7),
+                        self._assign_scroll + 1,
+                    )
+            return  # consume all other keys in build mode
+
         if ev.key in (pygame.K_p, pygame.K_SPACE):
             self._speed = 0 if self._speed != 0 else 1
         elif ev.key == pygame.K_1:
@@ -435,6 +494,8 @@ class GameView:
             self._speed = 2
         elif ev.key == pygame.K_4:
             self._speed = 4
+        elif ev.key == pygame.K_b:
+            self._build_mode = True
         elif ev.key in (pygame.K_q, pygame.K_ESCAPE):
             self._do_save_and_menu()
         elif ev.key == pygame.K_s and (pygame.key.get_mods() & pygame.KMOD_CTRL):
@@ -463,6 +524,13 @@ class GameView:
         self._return_signal = "menu"
 
     def _on_click(self, pos: tuple[int, int]) -> None:
+        # Top-bar buttons are always active
+        # BUILD button
+        if self._build_btn_rect().collidepoint(pos):
+            self._build_mode = not self._build_mode
+            self._assign_popup = False
+            return
+
         # Save button
         if self._save_btn_rect().collidepoint(pos):
             self._do_save()
@@ -473,34 +541,41 @@ class GameView:
             self._do_save_and_menu()
             return
 
-        # Speed buttons
-        for speed, rect in self._speed_btn_rects().items():
-            if rect.collidepoint(pos):
-                self._speed = speed
-                return
+        # Speed buttons (only when not in build mode)
+        if not self._build_mode:
+            for speed, rect in self._speed_btn_rects().items():
+                if rect.collidepoint(pos):
+                    self._speed = speed
+                    return
 
-        # Event buttons
-        for btn in self._event_btns:
-            if btn["rect"].collidepoint(pos):
-                p = btn["pending"]
-                self.game.event_system.resolve_choice(p, btn["choice_id"], self.s)
-                self._pending = [x for x in self._pending if not x.resolved]
-                self._build_event_buttons()
-                if self._speed == 0:
-                    self._speed = 1   # resume after choice
-                return
+            # Event buttons
+            for btn in self._event_btns:
+                if btn["rect"].collidepoint(pos):
+                    p = btn["pending"]
+                    self.game.event_system.resolve_choice(p, btn["choice_id"], self.s)
+                    self._pending = [x for x in self._pending if not x.resolved]
+                    self._build_event_buttons()
+                    if self._speed == 0:
+                        self._speed = 1   # resume after choice
+                    return
 
-        # Module selection
-        for uid, rect in self._mod_rects.items():
-            if rect.collidepoint(pos):
-                self._selected_mod = uid if self._selected_mod != uid else None
-                return
+            # Module selection
+            for uid, rect in self._mod_rects.items():
+                if rect.collidepoint(pos):
+                    self._selected_mod = uid if self._selected_mod != uid else None
+                    return
+        else:
+            # Build mode click handling
+            self._build_on_click(pos)
 
     def _on_hover(self, pos: tuple[int, int]) -> None:
         self._hovered_btn = None
-        for btn in self._event_btns:
-            if btn["rect"].collidepoint(pos):
-                self._hovered_btn = id(btn)
+        if self._build_mode:
+            self._build_hover = self._pixel_to_tile(pos)
+        else:
+            for btn in self._event_btns:
+                if btn["rect"].collidepoint(pos):
+                    self._hovered_btn = id(btn)
 
     def _speed_btn_rects(self) -> dict[int, pygame.Rect]:
         bx = T.SCREEN_W - T.SIDEBAR_W - 260
@@ -518,6 +593,520 @@ class GameView:
 
     def _menu_btn_rect(self) -> pygame.Rect:
         return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 414, 7, 70, 28)
+
+    def _build_btn_rect(self) -> pygame.Rect:
+        return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 494, 7, 72, 28)
+
+    # ── Build mode — coordinate helpers ──────────────────────────────────────
+
+    def _pixel_to_tile(self, pos: tuple[int, int]) -> tuple[int, int] | None:
+        """Convert a screen pixel position to a tile (col, row), or None if outside grid."""
+        px, py = pos
+        # Tile grid starts at FLOOR_X, FLOOR_Y
+        col = (px - T.FLOOR_X) // T.TILE_W
+        row = (py - T.FLOOR_Y) // T.TILE_H
+        if 0 <= col < T.TILE_COLS and 0 <= row < T.TILE_ROWS:
+            return (col, row)
+        return None
+
+    def _tile_rect(self, col: int, row: int) -> pygame.Rect:
+        x = T.FLOOR_X + col * T.TILE_W
+        y = T.FLOOR_Y + row * T.TILE_H
+        return pygame.Rect(x, y, T.TILE_W, T.TILE_H)
+
+    # ── Build mode — mouse events ─────────────────────────────────────────────
+
+    def _build_mousedown(self, pos: tuple[int, int]) -> None:
+        """Handle mouse-button-down in build mode."""
+        # Check toolbar buttons first (in the log panel area)
+        if self._handle_build_toolbar_click(pos):
+            return
+        # If assign popup is open, check if a room type was clicked
+        if self._assign_popup:
+            self._handle_assign_popup_click(pos)
+            return
+        # Start drawing/erasing on the tile grid
+        tile = self._pixel_to_tile(pos)
+        if tile is None:
+            return
+        self._build_drag_start = tile
+        self._build_last_cell  = tile
+        self._build_dragging   = True
+        self._apply_build_tool(tile)
+
+    def _build_mouseup(self, pos: tuple[int, int]) -> None:
+        """Handle mouse-button-up in build mode — end drag."""
+        self._build_dragging = False
+        self._build_drag_start = None
+        self._build_last_cell = None
+
+    def _build_mousemove(self, pos: tuple[int, int]) -> None:
+        """Handle mouse motion in build mode (hover + drag painting)."""
+        self._build_hover = self._pixel_to_tile(pos)
+        if self._build_dragging:
+            tile = self._pixel_to_tile(pos)
+            if tile and tile != self._build_last_cell:
+                self._build_last_cell = tile
+                self._apply_build_tool(tile)
+
+    def _build_on_click(self, pos: tuple[int, int]) -> None:
+        """Handle a full click (down + up on same tile) in build mode."""
+        if self._handle_build_toolbar_click(pos):
+            return
+        if self._assign_popup:
+            self._handle_assign_popup_click(pos)
+
+    def _apply_build_tool(self, tile: tuple[int, int]) -> None:
+        """Apply the current build tool to (col, row)."""
+        if self._assign_popup:
+            return  # Don't paint while popup is open
+        col, row = tile
+        tm = self.s.tile_map
+        if self._build_tool == "floor":
+            tm.set_floor(col, row)
+        elif self._build_tool == "wall_tile":
+            tm.set_wall(col, row)
+        elif self._build_tool == "erase":
+            tm.erase(col, row)
+        elif self._build_tool == "wall_add":
+            # Add wall segment on nearest edge based on position within tile
+            tm.add_wall_segment(col, row, self._build_wall_side)
+        elif self._build_tool == "wall_remove":
+            tm.remove_wall_segment(col, row, self._build_wall_side)
+
+    # ── Build mode — toolbar buttons ──────────────────────────────────────────
+
+    _BUILD_TOOLS = [
+        ("floor",       "FLOOR"),
+        ("wall_tile",   "WALL TILE"),
+        ("wall_add",    "ADD WALL EDGE"),
+        ("wall_remove", "DEL WALL EDGE"),
+        ("erase",       "ERASE"),
+        ("assign",      "ASSIGN AREA"),
+    ]
+    _WALL_SIDES = ["N", "E", "S", "W"]
+
+    def _build_toolbar_rects(self) -> list[tuple[str, str, pygame.Rect]]:
+        """Return list of (tool_id, label, rect) for the build toolbar."""
+        log_y   = T.SCREEN_H - T.LOG_H
+        bw, bh  = 118, 28
+        gap     = 6
+        start_x = T.FLOOR_X + 8
+        y       = log_y + 10
+        rects = []
+        x = start_x
+        for tool_id, label in self._BUILD_TOOLS:
+            rects.append((tool_id, label, pygame.Rect(x, y, bw, bh)))
+            x += bw + gap
+        return rects
+
+    def _build_wall_side_rects(self) -> list[tuple[str, pygame.Rect]]:
+        """Wall-side selector buttons (N/E/S/W) shown when wall tool is active."""
+        log_y = T.SCREEN_H - T.LOG_H
+        bw, bh = 36, 22
+        gap = 4
+        x = T.FLOOR_X + 8
+        y = log_y + 46
+        rects = []
+        for side in self._WALL_SIDES:
+            rects.append((side, pygame.Rect(x, y, bw, bh)))
+            x += bw + gap
+        return rects
+
+    def _handle_build_toolbar_click(self, pos: tuple[int, int]) -> bool:
+        """Handle click on a build toolbar button. Returns True if consumed."""
+        for tool_id, _label, rect in self._build_toolbar_rects():
+            if rect.collidepoint(pos):
+                if tool_id == "assign":
+                    self._start_assign_flow(pos)
+                else:
+                    self._build_tool = tool_id
+                    self._assign_popup = False
+                return True
+        # Wall side selector
+        if self._build_tool in ("wall_add", "wall_remove"):
+            for side, rect in self._build_wall_side_rects():
+                if rect.collidepoint(pos):
+                    self._build_wall_side = side
+                    return True
+        return False
+
+    # ── Build mode — area assignment ─────────────────────────────────────────
+
+    def _start_assign_flow(self, _pos: tuple[int, int]) -> None:
+        """
+        Start the area-assign flow. If a region of floor tiles is hovered,
+        flood-fill from hover position to collect the region.
+        Else open the popup centred on the grid — the user can then click a
+        floor tile to select the region.
+        """
+        tm = self.s.tile_map
+        if self._build_hover:
+            region = tm.get_connected_floor(*self._build_hover)
+            if region:
+                self._assign_region  = region
+                self._assign_popup   = True
+                self._assign_scroll  = 0
+                self._build_tool     = "assign"
+                return
+        self._build_msg = "Hover over a floor area then click ASSIGN AREA"
+        self._build_msg_timer = 3.0
+        self._build_tool = "assign"
+
+    def _handle_assign_popup_click(self, pos: tuple[int, int]) -> None:
+        """Handle click inside the room-type assignment popup."""
+        popup_rect = self._assign_popup_rect()
+        if not popup_rect.collidepoint(pos):
+            # Click outside popup — check if the player clicked a floor tile
+            tile = self._pixel_to_tile(pos)
+            if tile:
+                tm = self.s.tile_map
+                region = tm.get_connected_floor(*tile)
+                if region:
+                    self._assign_region = region
+                    self._assign_scroll = 0
+            return
+
+        # Click inside popup — hit-test each room-type row
+        room_types = sorted(self.game.registry.room_types.values(),
+                            key=lambda rt: rt.display_name)
+        visible = room_types[self._assign_scroll: self._assign_scroll + 7]
+        item_h = 28
+        content_y = popup_rect.y + 34
+        for i, rt in enumerate(visible):
+            row_rect = pygame.Rect(popup_rect.x + 4, content_y + i * item_h,
+                                   popup_rect.width - 8, item_h - 2)
+            if row_rect.collidepoint(pos):
+                self._do_assign_room(rt.id)
+                return
+
+        # Close button (top-right "X")
+        close_rect = pygame.Rect(popup_rect.right - 26, popup_rect.y + 4, 22, 22)
+        if close_rect.collidepoint(pos):
+            self._assign_popup = False
+            self._assign_region = []
+
+    def _assign_popup_rect(self) -> pygame.Rect:
+        """Return the pygame.Rect for the assign popup panel."""
+        pw, ph = 420, 240
+        cx = T.FLOOR_X + (T.FLOOR_W - pw) // 2
+        cy = T.FLOOR_Y + (T.FLOOR_H - ph) // 2
+        return pygame.Rect(cx, cy, pw, ph)
+
+    def _check_requirements(self, room_type_id: str,
+                             tile_count: int) -> tuple[bool, str]:
+        """
+        Return (can_assign: bool, reason: str).
+        Checks min_tiles, resource_requirements, and component_requirements.
+        """
+        rt = self.game.registry.room_types.get(room_type_id)
+        if rt is None:
+            return False, "Unknown room type."
+        if tile_count < rt.min_tiles:
+            return False, f"Need ≥ {rt.min_tiles} floor tiles (have {tile_count})."
+        for res, amount in rt.resource_requirements.items():
+            if self.s.get_resource(res) < amount:
+                return False, f"Need {amount:.0f} {res} (have {self.s.get_resource(res):.0f})."
+        for item_id, qty in rt.component_requirements.items():
+            # Check total across all cargo holds
+            total = sum(
+                mod.inventory.get(item_id, 0)
+                for mod in self.s.modules.values()
+            )
+            if total < qty:
+                item_name = (self.game.registry.items[item_id].display_name
+                             if item_id in self.game.registry.items else item_id)
+                return False, f"Need {qty}× {item_name} (have {total})."
+        return True, ""
+
+    def _do_assign_room(self, room_type_id: str) -> None:
+        """Perform the room assignment after all checks pass."""
+        rt = self.game.registry.room_types.get(room_type_id)
+        if rt is None:
+            return
+        region  = self._assign_region
+        ok, reason = self._check_requirements(room_type_id, len(region))
+        if not ok:
+            self._build_msg       = f"Cannot assign: {reason}"
+            self._build_msg_timer = 3.0
+            return
+
+        # Consume resources
+        for res, amount in rt.resource_requirements.items():
+            self.s.modify_resource(res, -amount)
+
+        # Consume components from the first cargo hold that has them
+        for item_id, qty_needed in rt.component_requirements.items():
+            remaining = qty_needed
+            for mod in self.s.modules.values():
+                have = mod.inventory.get(item_id, 0)
+                if have > 0:
+                    used = min(have, remaining)
+                    mod.inventory[item_id] -= used
+                    if mod.inventory[item_id] == 0:
+                        del mod.inventory[item_id]
+                    remaining -= used
+                if remaining <= 0:
+                    break
+
+        # Find or create a RoomInstance for this region, then assign type
+        tm  = self.s.tile_map
+        # Check if all tiles already belong to the same room
+        room_uids = {tm.cells[pos].room_uid
+                     for pos in region
+                     if pos in tm.cells and tm.cells[pos].room_uid}
+        if len(room_uids) == 1:
+            room_uid = next(iter(room_uids))
+        else:
+            # Merge into a new room (removes any existing room references)
+            for ruid in room_uids:
+                tm.delete_room(ruid)
+            name = f"{rt.display_name} {len(tm.rooms) + 1}"
+            room = tm.create_room(name, region)
+            room_uid = room.uid
+
+        # Create or update the backing ModuleInstance if room type maps to a module
+        module_uid = None
+        if rt.module_id:
+            module_def = self.game.registry.modules.get(rt.module_id)
+            if module_def:
+                module = ModuleInstance.create(
+                    definition_id=rt.module_id,
+                    display_name=tm.rooms[room_uid].name,
+                    category=module_def.category,
+                )
+                self.s.add_module(module)
+                module_uid = module.uid
+                self._rebuild_layout()
+                self._sync_dots()
+
+        tm.assign_room_type(room_uid, room_type_id, module_uid)
+
+        self._assign_popup  = False
+        self._assign_region = []
+        self._build_msg       = f"Assigned: {rt.display_name}"
+        self._build_msg_timer = 2.5
+        self.s.log_event(f"Build: {tm.rooms[room_uid].name} designated as {rt.display_name}.")
+
+    # ── Build mode — rendering ─────────────────────────────────────────────────
+
+    def _render_build_mode(self) -> None:
+        """Render the tile grid in build mode (replaces the normal floor plan)."""
+        floor_rect = pygame.Rect(T.FLOOR_X, T.FLOOR_Y, T.FLOOR_W, T.FLOOR_H)
+        self.screen.fill(T.BUILD_EMPTY_BG, floor_rect)
+
+        # Draw faint grid guide lines
+        for c in range(T.TILE_COLS + 1):
+            x = T.FLOOR_X + c * T.TILE_W
+            pygame.draw.line(self.screen, T.BUILD_GRID_LINE,
+                             (x, T.FLOOR_Y), (x, T.FLOOR_Y + T.TILE_ROWS * T.TILE_H))
+        for r in range(T.TILE_ROWS + 1):
+            y = T.FLOOR_Y + r * T.TILE_H
+            pygame.draw.line(self.screen, T.BUILD_GRID_LINE,
+                             (T.FLOOR_X, y), (T.FLOOR_X + T.TILE_COLS * T.TILE_W, y))
+
+        tm = self.s.tile_map
+
+        # Determine drag highlight set
+        drag_set: set[tuple[int, int]] = set()
+
+        # Draw all placed tiles
+        for (col, row), cell in tm.cells.items():
+            if cell.tile_type == "empty":
+                continue
+            rect = self._tile_rect(col, row)
+
+            if cell.tile_type == "floor":
+                # Room tint overlay
+                room_color = T.BUILD_FLOOR
+                if cell.room_uid:
+                    room = tm.rooms.get(cell.room_uid)
+                    if room and room.room_type_id:
+                        rt = self.game.registry.room_types.get(room.room_type_id)
+                        if rt:
+                            tint = T.BUILD_ROOM_TINTS.get(rt.category, T.BUILD_FLOOR)
+                            room_color = tint
+
+                # Alternating checker for readability
+                alt = ((col + row) % 2 == 0)
+                base = room_color if not alt else tuple(max(0, c - 8) for c in room_color)
+                pygame.draw.rect(self.screen, base, rect)
+
+                # Draw wall segments (as thick lines on tile edges)
+                wc = T.BUILD_WALL_LINE
+                tw, th = T.TILE_W, T.TILE_H
+                if cell.walls.get("N"):
+                    pygame.draw.line(self.screen, wc,
+                                     (rect.x, rect.y), (rect.right - 1, rect.y), 2)
+                if cell.walls.get("S"):
+                    pygame.draw.line(self.screen, wc,
+                                     (rect.x, rect.bottom - 1),
+                                     (rect.right - 1, rect.bottom - 1), 2)
+                if cell.walls.get("W"):
+                    pygame.draw.line(self.screen, wc,
+                                     (rect.x, rect.y), (rect.x, rect.bottom - 1), 2)
+                if cell.walls.get("E"):
+                    pygame.draw.line(self.screen, wc,
+                                     (rect.right - 1, rect.y),
+                                     (rect.right - 1, rect.bottom - 1), 2)
+
+            elif cell.tile_type == "wall":
+                pygame.draw.rect(self.screen, T.BUILD_WALL_LINE, rect)
+                pygame.draw.rect(self.screen, tuple(min(255, c + 30) for c in T.BUILD_WALL_LINE),
+                                 rect, 1)
+
+        # Room name labels
+        for room in tm.rooms.values():
+            if not room.tile_positions:
+                continue
+            avg_c = sum(p[0] for p in room.tile_positions) // len(room.tile_positions)
+            avg_r = sum(p[1] for p in room.tile_positions) // len(room.tile_positions)
+            label_x = T.FLOOR_X + avg_c * T.TILE_W + T.TILE_W // 2
+            label_y = T.FLOOR_Y + avg_r * T.TILE_H + T.TILE_H // 2
+            # Only draw if it fits in floor area
+            if (T.FLOOR_X <= label_x < T.FLOOR_X + T.FLOOR_W and
+                    T.FLOOR_Y <= label_y < T.FLOOR_Y + T.FLOOR_H):
+                rt = (self.game.registry.room_types.get(room.room_type_id)
+                      if room.room_type_id else None)
+                label = rt.display_name if rt else room.name
+                D.text(self.screen, self.fonts.sm, label,
+                       (label_x, label_y), T.TEXT_BRIGHT, "center")
+
+        # Draw assign-region highlight
+        if self._assign_region:
+            for pos in self._assign_region:
+                r = self._tile_rect(*pos)
+                hl_surf = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+                hl_surf.fill((80, 140, 255, 80))
+                self.screen.blit(hl_surf, r.topleft)
+                pygame.draw.rect(self.screen, (80, 140, 255), r, 1)
+
+        # Draw hover highlight
+        if self._build_hover and not self._assign_popup:
+            h = self._build_hover
+            if 0 <= h[0] < T.TILE_COLS and 0 <= h[1] < T.TILE_ROWS:
+                r = self._tile_rect(*h)
+                if self._build_tool == "erase":
+                    hl_c = (*T.BUILD_ERASE, 80)
+                elif self._build_tool == "assign":
+                    hl_c = (80, 140, 255, 80)
+                else:
+                    hl_c = (*T.BUILD_HOVER, 80)
+                hl_surf = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+                hl_surf.fill(hl_c)
+                self.screen.blit(hl_surf, r.topleft)
+
+        # Assign popup overlay
+        if self._assign_popup:
+            self._render_assign_popup()
+
+    def _render_assign_popup(self) -> None:
+        """Render the room-type assignment popup over the build grid."""
+        popup = self._assign_popup_rect()
+        D.rect_rounded(self.screen, T.PANEL_BG, popup, 8)
+        D.rect_outline(self.screen, T.ACCENT, popup, 2, 8)
+
+        x = popup.x + 10
+        y = popup.y + 8
+        tile_count = len(self._assign_region)
+        D.text(self.screen, self.fonts.md, f"ASSIGN ROOM TYPE  ({tile_count} tiles)",
+               (x, y), T.ACCENT)
+
+        # Close button
+        close_r = pygame.Rect(popup.right - 26, popup.y + 4, 22, 22)
+        pygame.draw.rect(self.screen, T.DANGER, close_r, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "✕", close_r.center, T.TEXT_BRIGHT, "center")
+
+        y += 24
+        pygame.draw.line(self.screen, T.PANEL_EDGE,
+                         (popup.x + 4, y), (popup.right - 4, y))
+        y += 4
+
+        room_types = sorted(self.game.registry.room_types.values(),
+                            key=lambda rt: rt.display_name)
+        visible = room_types[self._assign_scroll: self._assign_scroll + 7]
+        item_h  = 28
+
+        for i, rt in enumerate(visible):
+            row_rect = pygame.Rect(popup.x + 4, y + i * item_h, popup.width - 8, item_h - 2)
+            mx, my = pygame.mouse.get_pos()
+            is_hover = row_rect.collidepoint(mx, my)
+
+            ok, _reason = self._check_requirements(rt.id, tile_count)
+
+            bg = T.BUILD_BTN_HOVER if is_hover else (T.BUILD_BTN_BG if ok else (30, 22, 22))
+            pygame.draw.rect(self.screen, bg, row_rect, border_radius=3)
+
+            req_c = T.BUILD_ASSIGN_OK if ok else T.BUILD_ASSIGN_FAIL
+            D.text(self.screen, self.fonts.sm, rt.display_name[:28],
+                   (row_rect.x + 6, row_rect.y + 7), T.TEXT if ok else T.TEXT_DIM)
+            min_label = f"≥{rt.min_tiles}t"
+            D.text(self.screen, self.fonts.sm, min_label,
+                   (row_rect.right - 50, row_rect.y + 7), req_c)
+            ok_label = "✓" if ok else "✗"
+            D.text(self.screen, self.fonts.sm, ok_label,
+                   (row_rect.right - 16, row_rect.y + 7), req_c)
+
+        # Scroll hint
+        if len(room_types) > 7:
+            hint = f"↑↓ scroll  {self._assign_scroll + 1}–{min(self._assign_scroll + 7, len(room_types))}/{len(room_types)}"
+            D.text(self.screen, self.fonts.sm, hint,
+                   (popup.x + 8, popup.bottom - 18), T.TEXT_DIM)
+
+    def _render_build_toolbar(self) -> None:
+        """Render the build toolbar in the log panel area."""
+        log_rect = pygame.Rect(0, T.SCREEN_H - T.LOG_H,
+                               T.SCREEN_W - T.SIDEBAR_W, T.LOG_H)
+        D.panel(self.screen, log_rect, 0)
+        pygame.draw.line(self.screen, T.PANEL_EDGE,
+                         (0, T.SCREEN_H - T.LOG_H),
+                         (T.SCREEN_W - T.SIDEBAR_W, T.SCREEN_H - T.LOG_H))
+
+        mx, my = pygame.mouse.get_pos()
+
+        for tool_id, label, rect in self._build_toolbar_rects():
+            active = (self._build_tool == tool_id)
+            is_hov = rect.collidepoint(mx, my)
+            bg = T.BUILD_BTN_ACTIVE if active else (T.BUILD_BTN_HOVER if is_hov else T.BUILD_BTN_BG)
+            pygame.draw.rect(self.screen, bg, rect, border_radius=4)
+            edge_c = T.OK if active else T.ACCENT
+            pygame.draw.rect(self.screen, edge_c, rect, 1, border_radius=4)
+            D.text(self.screen, self.fonts.sm, label, rect.center,
+                   T.TEXT_BRIGHT if active else T.TEXT, "center")
+
+        # Wall side selector
+        if self._build_tool in ("wall_add", "wall_remove"):
+            log_y = T.SCREEN_H - T.LOG_H
+            D.text(self.screen, self.fonts.sm, "Edge:",
+                   (T.FLOOR_X + 8, log_y + 50), T.TEXT_DIM)
+            for side, rect in self._build_wall_side_rects():
+                active = (self._build_wall_side == side)
+                is_hov = rect.collidepoint(mx, my)
+                bg = T.BUILD_BTN_ACTIVE if active else (T.BUILD_BTN_HOVER if is_hov else T.BUILD_BTN_BG)
+                pygame.draw.rect(self.screen, bg, rect, border_radius=3)
+                D.text(self.screen, self.fonts.sm, side, rect.center,
+                       T.TEXT_BRIGHT, "center")
+
+        # Tile count / assignment hint
+        tm = self.s.tile_map
+        floor_count = sum(1 for c in tm.cells.values() if c.tile_type == "floor")
+        room_count  = len(tm.rooms)
+        hint = f"  Floor tiles: {floor_count}  |  Rooms defined: {room_count}"
+        D.text(self.screen, self.fonts.sm, hint,
+               (T.FLOOR_X + 8, T.SCREEN_H - 22), T.TEXT_DIM)
+
+        # Keyboard hints
+        D.text(self.screen, self.fonts.sm, "B / ESC = exit build mode",
+               (T.FLOOR_X + 8, T.SCREEN_H - 38), T.TEXT_DIM)
+
+        # Feedback message
+        if self._build_msg:
+            msg_c = (T.BUILD_ASSIGN_OK if "Assigned" in self._build_msg
+                     else T.BUILD_ASSIGN_FAIL)
+            D.text(self.screen, self.fonts.sm, self._build_msg,
+                   (T.FLOOR_X + T.FLOOR_W // 2, T.SCREEN_H - 22), msg_c, "center")
+
+    # ── Build mode ends — back to normal render flow ──────────────────────────
 
     def _build_event_buttons(self) -> None:
         self._event_btns = []
@@ -546,10 +1135,16 @@ class GameView:
 
     def _render(self) -> None:
         self.screen.fill(T.BG)
-        self._render_floor()
+        if self._build_mode:
+            self._render_build_mode()
+        else:
+            self._render_floor()
         self._render_top_bar()
         self._render_sidebar()
-        self._render_log_panel()
+        if not self._build_mode:
+            self._render_log_panel()
+        else:
+            self._render_build_toolbar()
 
     # ── Floor plan ────────────────────────────────────────────────────────────
 
@@ -1053,6 +1648,17 @@ class GameView:
         pygame.draw.rect(self.screen, T.ACCENT, menu_rect, 1, border_radius=4)
         D.text(self.screen, self.fonts.sm, "MENU",
                menu_rect.center, T.BG if menu_hov else T.TEXT, "center")
+
+        # Build mode button
+        build_rect = self._build_btn_rect()
+        build_hov  = build_rect.collidepoint(mx, my)
+        build_active = self._build_mode
+        build_bg = T.OK if build_active else (T.BUILD_BTN_HOVER if build_hov else T.BUILD_BTN_BG)
+        pygame.draw.rect(self.screen, build_bg, build_rect, border_radius=4)
+        edge_c = T.OK if build_active else T.ACCENT
+        pygame.draw.rect(self.screen, edge_c, build_rect, 1, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "BUILD [B]",
+               build_rect.center, T.BG if build_active else T.TEXT, "center")
 
         # Save feedback message
         if self._save_msg:

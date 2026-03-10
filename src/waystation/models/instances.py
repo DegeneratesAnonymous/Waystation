@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import uuid
 
+from waystation.models.tilemap import TileMap
+
 
 def _new_uid() -> str:
     return str(uuid.uuid4())[:8]
@@ -399,6 +401,9 @@ class StationState:
     # Log of recent events/messages (most recent first)
     log: list[str] = field(default_factory=list)
 
+    # Tile map — the spatial floor-plan built in build mode
+    tile_map: TileMap = field(default_factory=TileMap)
+
     def add_npc(self, npc: NPCInstance) -> None:
         self.npcs[npc.uid] = npc
 
@@ -475,6 +480,7 @@ class StationState:
             "policy":             dict(self.policy),
             "event_cooldowns":    dict(self.event_cooldowns),
             "log":                list(self.log),
+            "tile_map":           self.tile_map.to_dict(),
         }
 
     @classmethod
@@ -490,4 +496,6 @@ class StationState:
         obj.policy             = d.get("policy", {})
         obj.event_cooldowns    = d.get("event_cooldowns", {})
         obj.log                = d.get("log", [])
+        tile_map_data          = d.get("tile_map")
+        obj.tile_map           = TileMap.from_dict(tile_map_data) if tile_map_data else TileMap()
         return obj

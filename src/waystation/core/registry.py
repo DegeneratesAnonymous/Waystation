@@ -29,6 +29,7 @@ from waystation.models.templates import (
     FactionDefinition,
     ModuleDefinition,
     ItemDefinition,
+    RoomTypeDefinition,
 )
 
 log = logging.getLogger(__name__)
@@ -94,23 +95,25 @@ class ContentRegistry:
     """
 
     REQUIRED_FIELDS: dict[str, list[str]] = {
-        "events":   ["id", "category", "title"],
-        "npcs":     ["id", "base_class"],
-        "ships":    ["id", "role"],
-        "classes":  ["id"],
-        "factions": ["id", "display_name"],
-        "modules":  ["id", "display_name"],
-        "items":    ["id", "display_name", "item_type"],
+        "events":     ["id", "category", "title"],
+        "npcs":       ["id", "base_class"],
+        "ships":      ["id", "role"],
+        "classes":    ["id"],
+        "factions":   ["id", "display_name"],
+        "modules":    ["id", "display_name"],
+        "items":      ["id", "display_name", "item_type"],
+        "room_types": ["id", "display_name"],
     }
 
     def __init__(self) -> None:
-        self.events:   dict[str, EventDefinition]   = {}
-        self.npcs:     dict[str, NPCTemplate]       = {}
-        self.ships:    dict[str, ShipTemplate]      = {}
-        self.classes:  dict[str, ClassDefinition]   = {}
-        self.factions: dict[str, FactionDefinition] = {}
-        self.modules:  dict[str, ModuleDefinition]  = {}
-        self.items:    dict[str, ItemDefinition]    = {}
+        self.events:     dict[str, EventDefinition]     = {}
+        self.npcs:       dict[str, NPCTemplate]         = {}
+        self.ships:      dict[str, ShipTemplate]        = {}
+        self.classes:    dict[str, ClassDefinition]     = {}
+        self.factions:   dict[str, FactionDefinition]   = {}
+        self.modules:    dict[str, ModuleDefinition]    = {}
+        self.items:      dict[str, ItemDefinition]      = {}
+        self.room_types: dict[str, RoomTypeDefinition]  = {}
 
         self._errors: list[str] = []
         self._loaded_mods: list[str] = []
@@ -123,18 +126,21 @@ class ContentRegistry:
     def load_core(self, data_root: Path) -> None:
         """Load all core content from the /data directory."""
         log.info("Loading core content from %s", data_root)
-        self._load_content_folder(data_root / "events",  "events")
-        self._load_content_folder(data_root / "npcs",    "npcs")
-        self._load_content_folder(data_root / "ships",   "ships")
-        self._load_content_folder(data_root / "classes", "classes")
-        self._load_content_folder(data_root / "factions","factions")
-        self._load_content_folder(data_root / "modules", "modules")
-        self._load_content_folder(data_root / "items",   "items")
+        self._load_content_folder(data_root / "events",     "events")
+        self._load_content_folder(data_root / "npcs",       "npcs")
+        self._load_content_folder(data_root / "ships",      "ships")
+        self._load_content_folder(data_root / "classes",    "classes")
+        self._load_content_folder(data_root / "factions",   "factions")
+        self._load_content_folder(data_root / "modules",    "modules")
+        self._load_content_folder(data_root / "items",      "items")
+        self._load_content_folder(data_root / "room_types", "room_types")
         self._loaded = True
         log.info(
-            "Core load complete — events:%d npcs:%d ships:%d classes:%d factions:%d modules:%d items:%d",
+            "Core load complete — events:%d npcs:%d ships:%d classes:%d factions:%d "
+            "modules:%d items:%d room_types:%d",
             len(self.events), len(self.npcs), len(self.ships),
-            len(self.classes), len(self.factions), len(self.modules), len(self.items),
+            len(self.classes), len(self.factions), len(self.modules),
+            len(self.items), len(self.room_types),
         )
 
     def load_mods(self, mods_root: Path) -> None:
@@ -157,13 +163,14 @@ class ContentRegistry:
 
     def summary(self) -> str:
         lines = [
-            f"  events:   {len(self.events)}",
-            f"  npcs:     {len(self.npcs)}",
-            f"  ships:    {len(self.ships)}",
-            f"  classes:  {len(self.classes)}",
-            f"  factions: {len(self.factions)}",
-            f"  modules:  {len(self.modules)}",
-            f"  items:    {len(self.items)}",
+            f"  events:     {len(self.events)}",
+            f"  npcs:       {len(self.npcs)}",
+            f"  ships:      {len(self.ships)}",
+            f"  classes:    {len(self.classes)}",
+            f"  factions:   {len(self.factions)}",
+            f"  modules:    {len(self.modules)}",
+            f"  items:      {len(self.items)}",
+            f"  room_types: {len(self.room_types)}",
         ]
         if self._loaded_mods:
             lines.append(f"  mods: {', '.join(self._loaded_mods)}")
@@ -188,7 +195,10 @@ class ContentRegistry:
             self._register(raw, content_type, source=str(folder))
 
     def _load_mod_folder(self, mod_folder: Path, mod_id: str) -> None:
-        for content_type in ("events", "npcs", "ships", "classes", "factions", "modules", "items"):
+        for content_type in (
+            "events", "npcs", "ships", "classes", "factions",
+            "modules", "items", "room_types",
+        ):
             folder = mod_folder / content_type
             records = _load_folder(folder)
             for raw in records:
@@ -227,6 +237,8 @@ class ContentRegistry:
                 self.modules[record_id] = ModuleDefinition.from_raw(raw)
             elif content_type == "items":
                 self.items[record_id] = ItemDefinition.from_raw(raw)
+            elif content_type == "room_types":
+                self.room_types[record_id] = RoomTypeDefinition.from_raw(raw)
         except Exception as e:
             self._error(source, content_type, record_id, str(e))
 
