@@ -39,6 +39,10 @@ log = logging.getLogger(__name__)
 # per-tick transfer = min(_HAUL_RATE_PER_TICK, npc.inventory_capacity, ...)
 _HAUL_RATE_PER_TICK = 5.0
 
+# Fallback build time (ticks) when a buildable definition cannot be found at
+# construction time.  Should not occur in normal play; acts as a safe sentinel.
+_DEFAULT_BUILD_TIME_TICKS = 50
+
 # Floating-point tolerance for "has this resource been fully delivered?"
 _RESOURCE_EPSILON = 0.01
 
@@ -202,7 +206,7 @@ class BuildingSystem:
         # skilled engineer finishes faster and a slow one takes longer, but the
         # baseline always reflects the per-buildable design intent.
         defn = self.registry.buildables.get(order.buildable_id)
-        build_time = defn.build_time_ticks if defn is not None else 50
+        build_time = defn.build_time_ticks if defn is not None else _DEFAULT_BUILD_TIME_TICKS
         increment = (1.0 / build_time) * scale
         order.progress = min(1.0, order.progress + increment)
 
