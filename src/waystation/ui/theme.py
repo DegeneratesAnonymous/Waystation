@@ -20,6 +20,19 @@ WARN        = (240, 180,  40)
 NIGHT_TINT  = (10,  15,  40)
 DAY_TINT    = (255, 240, 200)
 
+# ── Station hull / superstructure ─────────────────────────────────────────────
+HULL_BG     = (18,  26,  50)    # structural panelling behind modules
+HULL_EDGE   = (40,  60, 110)    # hull frame / girder lines
+HULL_PAD    = 18                # pixels of hull visible around module grid
+
+# ── Nebula background colours ─────────────────────────────────────────────────
+NEBULA_COLORS = [
+    (15, 25, 80),   # deep blue
+    (40,  8, 65),   # purple
+    ( 8, 45, 35),   # teal-green
+    (50, 15,  8),   # deep red-orange
+]
+
 # ── Module colours by category ────────────────────────────────────────────────
 MODULE_FLOOR = {
     "utility":    ( 22,  38,  65),
@@ -120,9 +133,6 @@ TICK_INTERVAL: dict[int, float] = {
 }
 
 # ── Build menu ─────────────────────────────────────────────────────────────────
-BLUEPRINT_FLOOR   = ( 10,  30,  55)    # floor fill for an un-built blueprint
-BLUEPRINT_WALL    = ( 40, 100, 180)    # wall / outline for a blueprint
-BLUEPRINT_LABEL   = ( 80, 160, 240)    # text inside a blueprint tile
 BUILD_MENU_BG     = ( 12,  22,  42)    # build menu panel background
 BUILD_MENU_EDGE   = ( 40,  80, 160)    # build menu panel border
 BUILD_AFFORDABLE  = ( 60, 200, 100)    # item row when player can afford it

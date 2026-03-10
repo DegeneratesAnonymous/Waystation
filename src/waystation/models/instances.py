@@ -62,6 +62,12 @@ class NPCInstance:
     # Arbitrary memory hooks for events to read/write
     memory: dict[str, Any] = field(default_factory=dict)
 
+    # Skill XP accumulation (float; integer part = skill level to apply)
+    skill_xp: dict[str, float] = field(default_factory=dict)
+
+    # Injury count — healed over time in med bay
+    injuries: int = 0
+
     # ── Inventory (for hauling build materials) ──────────────────────────────
     inventory: dict[str, float] = field(default_factory=dict)
     inventory_capacity: float = 10.0    # max total resource units carried at once
@@ -116,62 +122,6 @@ class NPCInstance:
         if self.mood >= -0.6:
             return "distressed"
         return "miserable"
-
-
-# ---------------------------------------------------------------------------
-# Ship Instance
-# ---------------------------------------------------------------------------
-
-@dataclass
-class ShipInstance:
-    uid: str
-    template_id: str
-    name: str
-    role: str
-
-    faction_id: str | None = None
-    intent: str = "unknown"                 # trade / refuge / raid / inspect / transit
-    cargo: dict[str, int] = field(default_factory=dict)
-    passenger_uids: list[str] = field(default_factory=list)
-    threat_level: int = 0
-    behavior_tags: list[str] = field(default_factory=list)
-
-    # Docking state
-    status: str = "incoming"               # incoming / docked / departing / hostile / destroyed
-    docked_at: str | None = None           # module uid
-    ticks_docked: int = 0
-
-    @classmethod
-    def create(cls,
-               template_id: str,
-               name: str,
-               role: str,
-               intent: str = "unknown",
-               faction_id: str | None = None,
-               threat_level: int = 0) -> "ShipInstance":
-        return cls(
-            uid=_new_uid(),
-            template_id=template_id,
-            name=name,
-            role=role,
-            intent=intent,
-            faction_id=faction_id,
-            threat_level=threat_level,
-        )
-
-    def is_hostile(self) -> bool:
-        return self.status == "hostile" or self.intent == "raid"
-
-    def threat_label(self) -> str:
-        if self.threat_level == 0:
-            return "none"
-        if self.threat_level <= 2:
-            return "low"
-        if self.threat_level <= 5:
-            return "moderate"
-        if self.threat_level <= 8:
-            return "high"
-        return "extreme"
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +191,62 @@ class BuildOrderInstance:
         if self.status == "constructing":
             return f"Building {self.progress:.0%}"
         return "Complete"
+
+
+# ---------------------------------------------------------------------------
+# Ship Instance
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ShipInstance:
+    uid: str
+    template_id: str
+    name: str
+    role: str
+
+    faction_id: str | None = None
+    intent: str = "unknown"                 # trade / refuge / raid / inspect / transit
+    cargo: dict[str, int] = field(default_factory=dict)
+    passenger_uids: list[str] = field(default_factory=list)
+    threat_level: int = 0
+    behavior_tags: list[str] = field(default_factory=list)
+
+    # Docking state
+    status: str = "incoming"               # incoming / docked / departing / hostile / destroyed
+    docked_at: str | None = None           # module uid
+    ticks_docked: int = 0
+
+    @classmethod
+    def create(cls,
+               template_id: str,
+               name: str,
+               role: str,
+               intent: str = "unknown",
+               faction_id: str | None = None,
+               threat_level: int = 0) -> "ShipInstance":
+        return cls(
+            uid=_new_uid(),
+            template_id=template_id,
+            name=name,
+            role=role,
+            intent=intent,
+            faction_id=faction_id,
+            threat_level=threat_level,
+        )
+
+    def is_hostile(self) -> bool:
+        return self.status == "hostile" or self.intent == "raid"
+
+    def threat_label(self) -> str:
+        if self.threat_level == 0:
+            return "none"
+        if self.threat_level <= 2:
+            return "low"
+        if self.threat_level <= 5:
+            return "moderate"
+        if self.threat_level <= 8:
+            return "high"
+        return "extreme"
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +321,9 @@ class StationState:
 
     # Cooldown tracker: event_id -> tick it can next fire
     event_cooldowns: dict[str, int] = field(default_factory=dict)
+
+    # Active trade offers keyed by ship uid (populated when trader docks)
+    trade_offers: dict[str, Any] = field(default_factory=dict)
 
     # Log of recent events/messages (most recent first)
     log: list[str] = field(default_factory=list)

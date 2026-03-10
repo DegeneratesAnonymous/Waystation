@@ -45,10 +45,37 @@ class ResourceSystem:
 
     def tick(self, station: "StationState") -> None:
         """Apply all module resource deltas and check thresholds."""
-        self._apply_module_effects(station)
+        morale_mod = self._morale_modifier(station)
+        self._apply_module_effects(station, morale_mod)
         self._check_thresholds(station)
 
-    def _apply_module_effects(self, station: "StationState") -> None:
+    def morale_modifier(self, station: "StationState") -> float:
+        """
+        Public accessor for the production efficiency multiplier based on crew mood.
+
+        Ranges from 0.70 (miserable crew) to 1.15 (content crew).
+        Neutral mood (0.0) = 1.0 efficiency.
+        """
+        return self._morale_modifier(station)
+
+    @staticmethod
+    def _morale_modifier(station: "StationState") -> float:
+        """
+        Returns a production efficiency multiplier based on average crew mood.
+
+        Ranges from 0.70 (miserable crew) to 1.15 (content crew).
+        Neutral mood (0.0) = 1.0 efficiency.
+        """
+        crew = station.get_crew()
+        if not crew:
+            return 1.0
+        avg_mood = sum(n.mood for n in crew) / len(crew)
+        # Linear interpolation: mood -1 → 0.70, mood 0 → 1.0, mood 1 → 1.15
+        if avg_mood >= 0:
+            return 1.0 + avg_mood * 0.15
+        return 1.0 + avg_mood * 0.30   # steeper penalty below neutral
+
+    def _apply_module_effects(self, station: "StationState", morale_mod: float = 1.0) -> None:
         """Each active module applies its resource_effects per tick."""
         for module in station.modules.values():
             if not module.active or module.damage >= 1.0:
@@ -56,15 +83,19 @@ class ResourceSystem:
             definition = self.registry.modules.get(module.definition_id)
             if definition is None:
                 continue
-            # Efficiency scales with module damage
-            efficiency = 1.0 - module.damage
+            # Base efficiency scales with module damage
+            base_efficiency = 1.0 - module.damage
             for resource, delta in definition.resource_effects.items():
-                effective_delta = delta * efficiency
-                current = station.get_resource(resource)
-                cap = SOFT_CAPS.get(resource, float("inf"))
-                # Only apply positive deltas up to cap
-                if effective_delta > 0:
+                if delta > 0:
+                    # Production: boosted by both structural integrity and crew morale
+                    efficiency = base_efficiency * morale_mod
+                    effective_delta = delta * efficiency
+                    current = station.get_resource(resource)
+                    cap = SOFT_CAPS.get(resource, float("inf"))
                     effective_delta = min(effective_delta, cap - current)
+                else:
+                    # Consumption: only reduced by structural damage (morale doesn't affect it)
+                    effective_delta = delta * base_efficiency
                 station.modify_resource(resource, effective_delta)
 
     def _check_thresholds(self, station: "StationState") -> None:

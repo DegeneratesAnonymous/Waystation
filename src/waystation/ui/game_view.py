@@ -5,11 +5,11 @@ Layout:
   +──────────────────────────────────────+────────────────+
   │  TOP BAR  name | time | speed        │                │
   +──────────────────────────────────────│   SIDEBAR      │
-  │                                      │  Resources     │
+  │  space background (nebula + stars)   │  Resources     │
   │   STATION FLOOR PLAN                 │  Crew / Jobs   │
-  │   rooms + corridors                  │  Ships         │
-  │   crew figures walking to jobs       │  Factions      │
-  │                                      │                │
+  │   hull → rooms + corridors + icons   │  Ships         │
+  │   crew humanoid sprites walking      │  Factions      │
+  │   approaching ships (right lane)     │                │
   +──────────────────────────────────────+────────────────+
   │   EVENT CARD  or  LOG FEED                            │
   +───────────────────────────────────────────────────────+
@@ -34,15 +34,15 @@ from waystation.ui import draw as D
 from waystation.systems import time_system
 from waystation.systems.events import PendingEvent
 
-# Keywords that give a log entry a green OK colour
-_LOG_OK_KEYWORDS = ("docked", "joined", "Trade:", "+", "Blueprint", "completed")
-
 if TYPE_CHECKING:
     from waystation.game import Game
     from waystation.models.instances import (
         ModuleInstance, NPCInstance, BuildOrderInstance
     )
     from waystation.models.templates import BuildableDefinition
+
+# Keywords that give a log entry a green OK colour
+_LOG_OK_KEYWORDS = ("docked", "joined", "Trade:", "+", "Blueprint", "completed")
 
 
 # ── Fonts ──────────────────────────────────────────────────────────────────────
@@ -114,20 +114,80 @@ def _module_rect(col: int, row: int, col_span: int, row_span: int,
 # ── Star field ─────────────────────────────────────────────────────────────────
 
 class StarField:
-    def __init__(self, seed: int, count: int = 120) -> None:
+    """Procedural star background with varied sizes, colours, and twinkling."""
+
+    _COLORS  = [
+        (200, 210, 255),  # blue-white
+        (255, 252, 240),  # warm white
+        (180, 195, 235),  # soft blue
+        (255, 225, 150),  # yellow-white
+        (160, 210, 255),  # icy blue
+    ]
+    _WEIGHTS = [35, 30, 20, 10, 5]
+
+    def __init__(self, seed: int, count: int = 250) -> None:
         rng = random.Random(seed)
-        self.stars = [
-            (rng.randint(0, T.FLOOR_W - 1),
-             rng.randint(0, T.FLOOR_H - 1),
-             rng.choice([(180, 190, 220), (140, 150, 180), (220, 220, 255)]),
-             rng.randint(1, 2))
-            for _ in range(count)
-        ]
+        self.stars: list[tuple] = []
+        for _ in range(count):
+            x       = rng.randint(0, T.FLOOR_W - 1)
+            y       = rng.randint(0, T.FLOOR_H - 1)
+            r       = rng.choices([1, 2, 3], weights=[75, 22, 3])[0]
+            color   = rng.choices(self._COLORS, weights=self._WEIGHTS)[0]
+            phase   = rng.uniform(0, math.pi * 2)
+            twinkle = rng.random() < 0.18
+            self.stars.append((x, y, color, r, twinkle, phase))
 
     def draw(self, surf: pygame.Surface, alpha: float) -> None:
-        for x, y, color, r in self.stars:
-            dimmed = tuple(int(c * (1 - alpha * 0.6)) for c in color)
-            pygame.draw.circle(surf, dimmed, (x, y + T.FLOOR_Y), r)
+        t = pygame.time.get_ticks() / 1000.0
+        for x, y, color, r, twinkle, phase in self.stars:
+            if twinkle:
+                brightness = 0.55 + 0.45 * abs(math.sin(t * 1.8 + phase))
+            else:
+                brightness = 1.0
+            dim   = 1.0 - alpha * 0.65
+            final = tuple(int(c * brightness * dim) for c in color)
+            pygame.draw.circle(surf, final, (x, y + T.FLOOR_Y), r)
+
+
+# ── Nebula field ───────────────────────────────────────────────────────────────
+
+class NebulaField:
+    """Faint coloured nebula blobs pre-rendered for fast blitting each frame."""
+
+    def __init__(self, seed: int) -> None:
+        rng = random.Random(seed + 999)
+        nebulae: list[tuple] = []
+        for _ in range(5):
+            x     = rng.randint(50, T.FLOOR_W - 50)
+            y     = rng.randint(20, T.FLOOR_H - 20)
+            rx    = rng.randint(70, 190)
+            ry    = rng.randint(50, 130)
+            color = rng.choice(T.NEBULA_COLORS)
+            alpha = rng.randint(18, 32)
+            nebulae.append((x, y, rx, ry, color, alpha))
+        self._surf = self._prerender(nebulae)
+
+    @staticmethod
+    def _prerender(nebulae: list[tuple]) -> pygame.Surface:
+        NEBULA_LAYERS = 5
+        s = pygame.Surface((T.FLOOR_W, T.FLOOR_H), pygame.SRCALPHA)
+        for x, y, rx, ry, color, alpha in nebulae:
+            # Concentric ellipses fading outward for a soft-glow effect
+            for step in range(NEBULA_LAYERS):
+                frac = 1.0 - step / NEBULA_LAYERS
+                a    = int(alpha * frac * frac)
+                er   = pygame.Rect(
+                    int(x - rx * frac),
+                    int(y - ry * frac),
+                    int(rx * frac * 2),
+                    int(ry * frac * 2),
+                )
+                if er.width > 2 and er.height > 2:
+                    pygame.draw.ellipse(s, (*color, a), er)
+        return s
+
+    def draw(self, surf: pygame.Surface) -> None:
+        surf.blit(self._surf, (T.FLOOR_X, T.FLOOR_Y))
 
 
 # ── Main GameView ───────────────────────────────────────────────────────────────
@@ -159,6 +219,8 @@ class GameView:
         self._mod_rects: dict[str, pygame.Rect] = {}
         # module uid -> list of NPC slot positions
         self._mod_slots: dict[str, list[tuple[float, float]]] = {}
+        # Cached hull bounding rect (recomputed only in _rebuild_layout)
+        self._hull_rect: pygame.Rect | None = None
 
         # NPC dots
         self._dots: dict[str, NPCDot] = {}
@@ -174,8 +236,9 @@ class GameView:
         self._build_selected_id: str | None = None   # highlighted buildable id
         self._build_menu_scroll: int = 0
 
-        # Stars (visual background)
-        self._stars = StarField(game.seed)
+        # Stars and space background
+        self._stars  = StarField(game.seed)
+        self._nebula = NebulaField(game.seed)
 
         self._rebuild_layout()
         self._sync_dots()
@@ -201,6 +264,19 @@ class GameView:
 
             self._mod_rects[uid] = rect
             self._mod_slots[uid] = self._compute_slots(rect)
+
+        # Cache hull bounds so _render_station_hull() doesn't recompute every frame
+        if self._mod_rects:
+            pad   = T.HULL_PAD
+            rects = list(self._mod_rects.values())
+            self._hull_rect = pygame.Rect(
+                min(r.left   for r in rects) - pad,
+                min(r.top    for r in rects) - pad,
+                max(r.right  for r in rects) + pad - (min(r.left for r in rects) - pad),
+                max(r.bottom for r in rects) + pad - (min(r.top  for r in rects) - pad),
+            )
+        else:
+            self._hull_rect = None
 
     def _compute_slots(self, rect: pygame.Rect) -> list[tuple[float, float]]:
         """Return evenly distributed NPC standing positions inside a room."""
@@ -281,7 +357,10 @@ class GameView:
             return next(iter(self.s.modules))
         return None
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
+    # NPC sprite rendering constants
+    _PULSE_ALPHA     = 45   # transparency of the working-pulse ring
+    _BODY_DARKEN     = 45   # how much darker the body is vs. class colour
+    _HEAD_HIGHLIGHT  = 90   # brightness added to the head highlight
 
     def run(self) -> None:
         while True:
@@ -498,13 +577,48 @@ class GameView:
 
     # ── Floor plan ────────────────────────────────────────────────────────────
 
+    def _render_station_hull(self) -> None:
+        """Draw the station outer superstructure / hull behind all modules."""
+        hull = self._hull_rect
+        if hull is None:
+            return
+
+        # Main hull body
+        pygame.draw.rect(self.screen, T.HULL_BG, hull, border_radius=12)
+
+        # Structural spine lines (cross-braces)
+        mid_x = hull.centerx
+        mid_y = hull.centery
+        pygame.draw.line(self.screen, T.HULL_EDGE,
+                         (hull.left + 6,  mid_y), (hull.right - 6, mid_y), 2)
+        pygame.draw.line(self.screen, T.HULL_EDGE,
+                         (mid_x, hull.top + 6),   (mid_x, hull.bottom - 6), 2)
+
+        # Hull frame border
+        pygame.draw.rect(self.screen, T.HULL_EDGE, hull, 2, border_radius=12)
+
+        # Corner reinforcement brackets
+        bsize = 8
+        for (bx, by) in [
+            (hull.left + 4,       hull.top + 4),
+            (hull.right - 4 - bsize, hull.top + 4),
+            (hull.right - 4 - bsize, hull.bottom - 4 - bsize),
+            (hull.left + 4,       hull.bottom - 4 - bsize),
+        ]:
+            pygame.draw.rect(self.screen, T.HULL_EDGE,
+                             pygame.Rect(bx, by, bsize, bsize), 1)
+
     def _render_floor(self) -> None:
         floor_rect = pygame.Rect(T.FLOOR_X, T.FLOOR_Y, T.FLOOR_W, T.FLOOR_H)
         pygame.draw.rect(self.screen, T.FLOOR_BG, floor_rect)
 
+        # Space atmosphere — nebula blobs first, then stars on top
+        self._nebula.draw(self.screen)
         alpha = time_system.sky_alpha(self.s)
         self._stars.draw(self.screen, alpha)
 
+        # Station structure
+        self._render_station_hull()
         self._render_corridors()
 
         for uid, mod in self.s.modules.items():
@@ -516,7 +630,7 @@ class GameView:
         self._render_incoming_lane()
 
     def _render_corridors(self) -> None:
-        """Draw thin passages between horizontally/vertically adjacent rooms."""
+        """Draw connecting passages between horizontally/vertically adjacent rooms."""
         rects = list(self._mod_rects.values())
         pad   = T.CELL_PAD
 
@@ -527,20 +641,42 @@ class GameView:
                     oy1 = max(ra.top,  rb.top)
                     oy2 = min(ra.bottom, rb.bottom)
                     if oy2 > oy1 + 20:
-                        cx = (min(ra.right, rb.right) + max(ra.left, rb.left)) // 2
-                        ch_w = pad
+                        cx   = (min(ra.right, rb.right) + max(ra.left, rb.left)) // 2
+                        ch_w = max(pad, 6)
+                        # Corridor body
                         pygame.draw.rect(self.screen, T.CORRIDOR,
                                          (cx - ch_w//2, oy1, ch_w, oy2 - oy1))
+                        # Centre guide line
+                        pygame.draw.line(self.screen,
+                                         tuple(min(255, c + 12) for c in T.CORRIDOR),
+                                         (cx, oy1 + 2), (cx, oy2 - 2), 1)
+                        # Edge highlights
+                        edge_c = tuple(min(255, c + 20) for c in T.CORRIDOR)
+                        pygame.draw.line(self.screen, edge_c,
+                                         (cx - ch_w//2, oy1), (cx - ch_w//2, oy2), 1)
+                        pygame.draw.line(self.screen, edge_c,
+                                         (cx + ch_w//2 - 1, oy1), (cx + ch_w//2 - 1, oy2), 1)
 
                 # Vertical adjacency
                 if abs(ra.bottom - rb.top) <= pad + 2 or abs(rb.bottom - ra.top) <= pad + 2:
                     ox1 = max(ra.left,  rb.left)
                     ox2 = min(ra.right, rb.right)
                     if ox2 > ox1 + 20:
-                        cy = (min(ra.bottom, rb.bottom) + max(ra.top, rb.top)) // 2
-                        cv_h = pad
+                        cy   = (min(ra.bottom, rb.bottom) + max(ra.top, rb.top)) // 2
+                        cv_h = max(pad, 6)
+                        # Corridor body
                         pygame.draw.rect(self.screen, T.CORRIDOR,
                                          (ox1, cy - cv_h//2, ox2 - ox1, cv_h))
+                        # Centre guide line
+                        pygame.draw.line(self.screen,
+                                         tuple(min(255, c + 12) for c in T.CORRIDOR),
+                                         (ox1 + 2, cy), (ox2 - 2, cy), 1)
+                        # Edge highlights
+                        edge_c = tuple(min(255, c + 20) for c in T.CORRIDOR)
+                        pygame.draw.line(self.screen, edge_c,
+                                         (ox1, cy - cv_h//2), (ox2, cy - cv_h//2), 1)
+                        pygame.draw.line(self.screen, edge_c,
+                                         (ox1, cy + cv_h//2 - 1), (ox2, cy + cv_h//2 - 1), 1)
 
     def _render_room(self, mod: "ModuleInstance", rect: pygame.Rect,
                      selected: bool) -> None:
@@ -562,10 +698,15 @@ class GameView:
         inner = rect.inflate(-4, -4)
         pygame.draw.rect(self.screen, tuple(max(0, c-10) for c in floor), inner, border_radius=4)
 
-        # Room grid lines (subtle texture)
+        # Room grid / floor-tile lines (subtle texture)
+        h_line_color = tuple(min(255, c + 6) for c in floor)
+        v_line_color = tuple(min(255, c + 4) for c in floor)
         for gy in range(rect.y + 10, rect.bottom, 20):
-            pygame.draw.line(self.screen, tuple(max(0, c+5) for c in floor),
+            pygame.draw.line(self.screen, h_line_color,
                              (rect.x + 4, gy), (rect.right - 4, gy))
+        for gx in range(rect.x + 10, rect.right, 20):
+            pygame.draw.line(self.screen, v_line_color,
+                             (gx, rect.y + 4), (gx, rect.bottom - 4))
 
         # Wall border
         border_w = 3 if selected else 2
@@ -585,6 +726,11 @@ class GameView:
         # Category sub-label
         D.text(self.screen, self.fonts.sm,
                cat.upper(), (rect.x + 8, rect.y + 22), label)
+
+        # Module-type icon (centre of room, below title area)
+        icon_x = rect.centerx
+        icon_y = rect.centery + 12
+        self._draw_module_icon(mod.definition_id, icon_x, icon_y, label)
 
         # Dock ship status
         if mod.is_dock():
@@ -616,6 +762,82 @@ class GameView:
             D.text(self.screen, self.fonts.sm, fx_str,
                    (rect.x + 8, rect.bottom - 16), T.TEXT_DIM)
 
+    def _draw_module_icon(self, definition_id: str, cx: int, cy: int,
+                          color: tuple) -> None:
+        """Draw a small symbolic icon for the module type."""
+        mid = definition_id.lower()
+        surf = self.screen
+
+        if "command" in mid:
+            # Crosshair / targeting reticle
+            pygame.draw.circle(surf, color, (cx, cy), 9, 1)
+            pygame.draw.circle(surf, color, (cx, cy), 3)
+            pygame.draw.line(surf, color, (cx - 13, cy), (cx - 10, cy), 1)
+            pygame.draw.line(surf, color, (cx + 10, cy), (cx + 13, cy), 1)
+            pygame.draw.line(surf, color, (cx, cy - 13), (cx, cy - 10), 1)
+            pygame.draw.line(surf, color, (cx, cy + 10), (cx, cy + 13), 1)
+
+        elif "dock" in mid:
+            # Arrow pointing left (ship entering)
+            pts = [(cx + 10, cy - 5), (cx + 2, cy - 5),
+                   (cx + 2, cy - 9),  (cx - 10, cy),
+                   (cx + 2, cy + 9),  (cx + 2, cy + 5),
+                   (cx + 10, cy + 5)]
+            pygame.draw.polygon(surf, color, pts, 1)
+
+        elif "power" in mid:
+            # Lightning bolt
+            pts = [(cx + 3, cy - 11), (cx - 4,  cy - 1),
+                   (cx + 1, cy -  1), (cx - 3,  cy + 11),
+                   (cx + 4, cy +  1), (cx - 1,  cy + 1)]
+            pygame.draw.polygon(surf, color, pts)
+
+        elif "med" in mid:
+            # Medical cross
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 2, cy - 9, 4, 18))
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 9, cy - 2, 18, 4))
+
+        elif "security" in mid:
+            # Shield outline
+            pts = [(cx, cy - 10), (cx + 9, cy - 6),
+                   (cx + 9, cy + 2), (cx,    cy + 10),
+                   (cx - 9, cy + 2), (cx - 9, cy - 6)]
+            pygame.draw.polygon(surf, color, pts, 1)
+            pygame.draw.line(surf, color, (cx, cy - 6), (cx, cy + 5), 1)
+
+        elif "quarters" in mid or "hab" in mid:
+            # Bed outline
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 9, cy - 4, 18, 9), 1)
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 9, cy - 7, 5, 11), 1)
+
+        elif "hydro" in mid:
+            # Stylised plant: stem + two leaves
+            pygame.draw.line(surf, color, (cx, cy + 9), (cx, cy - 4), 2)
+            pygame.draw.arc(surf, color,
+                            pygame.Rect(cx - 9, cy - 9, 12, 10),
+                            0, math.pi, 2)
+            pygame.draw.arc(surf, color,
+                            pygame.Rect(cx - 3, cy - 6, 12, 10),
+                            math.pi, math.pi * 2, 2)
+
+        elif "storage" in mid:
+            # Crate / box
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 8, cy - 7, 16, 14), 1)
+            pygame.draw.line(surf, color, (cx - 8, cy), (cx + 8, cy), 1)
+            pygame.draw.line(surf, color, (cx, cy - 7), (cx, cy), 1)
+
+        elif "lounge" in mid or "visitor" in mid:
+            # Two small person silhouettes
+            for ox in (-5, 5):
+                pygame.draw.circle(surf, color, (cx + ox, cy - 5), 3)
+                pygame.draw.ellipse(surf, color,
+                                    pygame.Rect(cx + ox - 4, cy - 1, 8, 6))
+
+        else:
+            # Generic: small gear ring
+            pygame.draw.circle(surf, color, (cx, cy), 7, 2)
+            pygame.draw.circle(surf, color, (cx, cy), 3)
+
     def _render_npc_dots(self) -> None:
         mx, my = pygame.mouse.get_pos()
         for uid, dot in self._dots.items():
@@ -626,15 +848,17 @@ class GameView:
                     T.FLOOR_Y <= pos[1] < T.FLOOR_Y + T.FLOOR_H):
                 continue
 
-            # Pulsing ring if working (job active)
-            if npc and npc.current_job_id and npc.job_timer > 0:
-                t = pygame.time.get_ticks() / 1000.0
-                pulse = int(4 + 2 * abs(math.sin(t * 2)))
-                pygame.draw.circle(self.screen, (*dot.color, 60), pos,
-                                   pulse + 4)
+            working = bool(npc and npc.current_job_id and npc.job_timer > 0)
 
-            # Main dot
-            D.dot(self.screen, dot.color, pos, 6, (0, 0, 0))
+            # Working pulse ring (drawn beneath the sprite)
+            if working:
+                t = pygame.time.get_ticks() / 1000.0
+                pulse = int(10 + 4 * abs(math.sin(t * 2)))
+                pygame.draw.circle(self.screen, (*dot.color[:3], self._PULSE_ALPHA),
+                                   pos, pulse + 4)
+
+            # Humanoid sprite
+            self._draw_npc_sprite(pos, dot.color, working)
 
             # Hover tooltip: name + job
             if npc and math.hypot(mx - pos[0], my - pos[1]) < 14:
@@ -642,8 +866,41 @@ class GameView:
                 self._draw_tooltip(
                     f"{npc.name}  [{npc.class_id.replace('class.','')}]",
                     f"{job_label}  mood:{npc.mood_label()}",
-                    (pos[0] + 10, pos[1] - 10)
+                    (pos[0] + 12, pos[1] - 14)
                 )
+
+    def _draw_npc_sprite(self, pos: tuple[int, int], color: tuple,
+                         working: bool) -> None:
+        """Draw a small top-down humanoid figure (head + body).
+
+        If `working` is True, a small activity indicator is drawn above the
+        head to show the NPC is actively carrying out a job.
+        """
+        cx, cy = pos
+        surf   = self.screen
+
+        # Darken colour for body (torso in shade)
+        body_color = tuple(max(0, c - self._BODY_DARKEN) for c in color[:3])
+
+        # Body (slightly wider oval below head)
+        pygame.draw.ellipse(surf, body_color,
+                            pygame.Rect(cx - 5, cy, 10, 7))
+
+        # Head (circle, above body)
+        pygame.draw.circle(surf, color, (cx, cy - 4), 5)
+
+        # Head outline for definition
+        pygame.draw.circle(surf, (0, 0, 0), (cx, cy - 4), 5, 1)
+
+        # Bright highlight on head (top-left)
+        hi = tuple(min(255, c + self._HEAD_HIGHLIGHT) for c in color[:3])
+        pygame.draw.circle(surf, hi, (cx - 1, cy - 5), 2)
+
+        # Activity indicator: small diamond above the head while working
+        if working:
+            dy = cy - 14
+            diamond = [(cx, dy - 3), (cx + 3, dy), (cx, dy + 3), (cx - 3, dy)]
+            pygame.draw.polygon(surf, T.OK, diamond)
 
     def _draw_tooltip(self, line1: str, line2: str, pos: tuple) -> None:
         tw = max(self.fonts.sm.size(line1)[0], self.fonts.sm.size(line2)[0]) + 12
@@ -657,40 +914,96 @@ class GameView:
         D.text(self.screen, self.fonts.sm, line2, (tx + 6, ty + 18), T.TEXT_DIM)
 
     def _render_incoming_lane(self) -> None:
-        """Approaching ships shown as glowing dots on the right edge."""
+        """Approaching ships shown as silhouettes in the right approach corridor."""
         incoming = self.s.get_incoming_ships()
         if not incoming:
             return
 
-        lx    = T.FLOOR_X + T.FLOOR_W - 10
-        ly    = T.FLOOR_Y + 10
-        t     = pygame.time.get_ticks() / 1000.0
+        t   = pygame.time.get_ticks() / 1000.0
 
+        # Approach corridor — right strip of the floor area
+        lane_x  = T.FLOOR_X + T.FLOOR_W - 185
+        lane_x2 = T.FLOOR_X + T.FLOOR_W - 8
+        lane_y  = T.FLOOR_Y + 12
+
+        # Lane header
         D.text(self.screen, self.fonts.sm, "APPROACH",
-               (lx - 4, ly), T.TEXT_DIM, "topright")
-        ly += 16
+               (lane_x, lane_y), T.ACCENT_WARM)
+        lane_y += 18
 
-        for i, ship in enumerate(incoming[:6]):
+        # Subtle separator
+        pygame.draw.line(self.screen, T.HULL_EDGE,
+                         (lane_x, lane_y), (lane_x2, lane_y), 1)
+        lane_y += 6
+
+        for i, ship in enumerate(incoming[:5]):
             ic = T.INTENT_COLOR.get(ship.intent, T.TEXT_DIM)
-            tc = T.DANGER if ship.threat_level >= 6 else T.WARN if ship.threat_level >= 3 else T.TEXT_DIM
-            pulse = int(3 + 2 * abs(math.sin(t * 1.5 + i)))
-            dot_x = lx - 6
-            dot_y = ly + 4
-            pygame.draw.circle(self.screen, ic, (dot_x, dot_y), pulse)
-            pygame.draw.circle(self.screen, (*ic, 80), (dot_x, dot_y), pulse + 4)
-            D.text(self.screen, self.fonts.sm, ship.name[:18],
-                   (lx - 14, ly), ic, "topright")
-            ly += 14
+            tc = (T.DANGER if ship.threat_level >= 6 else
+                  T.WARN   if ship.threat_level >= 3 else T.TEXT_DIM)
+
+            # Animate ship x position (gentle approach drift)
+            drift    = abs(math.sin(t * 0.35 + i * 1.4))
+            ship_x   = int(lane_x2 - 18 - drift * 28)
+            ship_y   = lane_y + 10
+
+            # Approach trail
+            trail_x0 = lane_x2
+            trail_c  = tuple(c // 5 for c in ic[:3])
+            pygame.draw.line(self.screen, trail_c,
+                             (ship_x + 14, ship_y), (trail_x0, ship_y), 1)
+
+            # Ship silhouette (simple polygon pointing left)
+            self._draw_ship_shape(ship_x, ship_y, ic)
+
+            # Engine glow (rightmost point of the ship)
+            glow_t   = 0.6 + 0.4 * abs(math.sin(t * 3.0 + i))
+            glow_c   = tuple(int(c * glow_t) for c in ic[:3])
+            pygame.draw.circle(self.screen, glow_c, (ship_x + 14, ship_y), 3)
+
+            # Labels
+            D.text(self.screen, self.fonts.sm, ship.name[:16],
+                   (ship_x - 4, ship_y - 10), ic, "topright")
             D.text(self.screen, self.fonts.sm,
                    f"{ship.role} / {ship.intent}",
-                   (lx - 14, ly), T.TEXT_DIM, "topright")
-            ly += 12
+                   (ship_x - 4, ship_y + 8), T.TEXT_DIM, "topright")
             if ship.threat_level > 0:
                 D.text(self.screen, self.fonts.sm,
-                       f"threat: {ship.threat_label()}",
-                       (lx - 14, ly), tc, "topright")
-                ly += 12
-            ly += 6
+                       f"threat {ship.threat_label()}",
+                       (ship_x - 4, ship_y + 20), tc, "topright")
+                lane_y += 38
+            else:
+                lane_y += 32
+            lane_y += 8
+
+    def _draw_ship_shape(self, cx: int, cy: int, color: tuple) -> None:
+        """Draw a simple spacecraft silhouette pointing left (toward the station)."""
+        # Main hull — elongated diamond pointing left
+        hull_pts = [
+            (cx - 14, cy),           # nose (left)
+            (cx -  2, cy - 6),       # top-front
+            (cx + 14, cy - 3),       # top-rear
+            (cx + 14, cy + 3),       # bottom-rear
+            (cx -  2, cy + 6),       # bottom-front
+        ]
+        pygame.draw.polygon(self.screen, color, hull_pts)
+        pygame.draw.polygon(self.screen, (0, 0, 0), hull_pts, 1)
+
+        # Wing fin (top)
+        wing_top = [
+            (cx + 4, cy - 5),
+            (cx + 14, cy - 10),
+            (cx + 14, cy - 3),
+        ]
+        wing_c = tuple(max(0, c - 40) for c in color[:3])
+        pygame.draw.polygon(self.screen, wing_c, wing_top)
+
+        # Wing fin (bottom)
+        wing_bot = [
+            (cx + 4,  cy + 5),
+            (cx + 14, cy + 10),
+            (cx + 14, cy + 3),
+        ]
+        pygame.draw.polygon(self.screen, wing_c, wing_bot)
 
     # ── Top bar ───────────────────────────────────────────────────────────────
 
@@ -1004,7 +1317,7 @@ class GameView:
                    f"{defn.build_time_ticks} ticks",
                    (ir.right - 8, ir.y + 24), T.TEXT_DIM, "topright")
 
-            # "Can't afford" hint
+            # Affordability / confirm hint
             if not can:
                 D.text(self.screen, self.fonts.sm, "Insufficient resources",
                        (ir.x + 8, ir.y + 40), T.DANGER)
