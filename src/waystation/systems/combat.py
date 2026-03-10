@@ -43,6 +43,7 @@ class CombatOutcome:
     food_lost: float = 0.0
     module_damage: float = 0.0  # fractional damage applied to a random dock module
     crew_trauma: float = 0.0    # safety need reduction applied to all crew
+    crew_injuries: int = 0      # number of crew injury points inflicted
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +187,7 @@ class CombatSystem:
                 tier=tier, narrative=narrative,
                 parts_lost=5.0 * threat_scale,
                 crew_trauma=0.05,
+                crew_injuries=0,
             )
         if tier == "repelled_damaged":
             return CombatOutcome(
@@ -193,6 +195,7 @@ class CombatSystem:
                 parts_lost=15.0 * threat_scale,
                 module_damage=0.15,
                 crew_trauma=0.15,
+                crew_injuries=1,    # one crew member takes a minor injury
             )
         if tier == "partial_defeat":
             return CombatOutcome(
@@ -202,6 +205,7 @@ class CombatSystem:
                 parts_lost=10.0 * threat_scale,
                 module_damage=0.25,
                 crew_trauma=0.25,
+                crew_injuries=2,    # two crew members injured
             )
         # overrun
         return CombatOutcome(
@@ -211,6 +215,7 @@ class CombatSystem:
             parts_lost=25.0 * threat_scale,
             module_damage=0.45,
             crew_trauma=0.4,
+            crew_injuries=3,        # multiple injuries across the crew
         )
 
     # ------------------------------------------------------------------
@@ -238,11 +243,19 @@ class CombatSystem:
                     target.active = False
                     station.log_event(f"{target.display_name} destroyed in combat!")
 
-        # Apply crew trauma (reduce safety need)
-        if outcome.crew_trauma > 0:
-            for npc in station.get_crew():
-                npc.update_needs({"safety": -outcome.crew_trauma})
-                npc.recalculate_mood()
+        # Apply crew trauma (reduce safety need) and record injuries
+        if outcome.crew_trauma > 0 or outcome.crew_injuries > 0:
+            crew = station.get_crew()
+            for npc in crew:
+                if outcome.crew_trauma > 0:
+                    npc.update_needs({"safety": -outcome.crew_trauma})
+                    npc.recalculate_mood()
+            # Distribute injuries: add one injury point to each of the N most-exposed crew
+            if outcome.crew_injuries > 0 and crew:
+                injured = random.sample(crew, min(outcome.crew_injuries, len(crew)))
+                for npc in injured:
+                    npc.injuries += 1
+                    station.log_event(f"{npc.name} was injured in the boarding action.")
 
     # ------------------------------------------------------------------
     # Convenience

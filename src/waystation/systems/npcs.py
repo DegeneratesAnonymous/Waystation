@@ -148,13 +148,26 @@ class NPCSystem:
     # Chance per tick that an injured NPC heals one injury in med bay
     _INJURY_RECOVERY_CHANCE = 0.05
 
+    # Maps job IDs to the skill they train (class-level to avoid per-tick allocation)
+    _JOB_SKILL_MAP: dict[str, str] = {
+        "job.guard_post":            "combat",
+        "job.patrol":                "perception",
+        "job.contraband_inspection": "investigation",
+        "job.module_maintenance":    "repair",
+        "job.power_management":      "technical",
+        "job.life_support":          "technical",
+        "job.dock_control":          "coordination",
+        "job.resource_management":   "logistics",
+        "job.visitor_intake":        "negotiation",
+    }
+
     def tick(self, station: "StationState") -> None:
         """Update all NPCs: needs decay, mood recalculation, distress events."""
-        crew_count = len(station.get_crew())
+        population = len(station.npcs)   # crew + visitors both contribute to social density
         for npc in station.npcs.values():
-            self._tick_npc(npc, station, crew_count)
+            self._tick_npc(npc, station, population)
 
-    def _tick_npc(self, npc: NPCInstance, station: "StationState", crew_count: int = 1) -> None:
+    def _tick_npc(self, npc: NPCInstance, station: "StationState", population: int = 1) -> None:
         # Decay needs
         npc.update_needs(self.NEEDS_DECAY_RATE)
 
@@ -166,11 +179,11 @@ class NPCSystem:
             if station.get_resource("oxygen") > 0:
                 pass  # oxygen is ambient; no per-NPC tick cost here
 
-        # Social need recovers slightly when there are multiple people around
-        # More crew/visitors = more social interaction
+        # Social need recovers slightly when there are multiple people around.
+        # Both crew and visitors contribute to social density.
         social_recovery = min(
             self._MAX_PASSIVE_SOCIAL_RECOVERY,
-            (crew_count - 1) * self._SOCIAL_RECOVERY_PER_PERSON
+            (population - 1) * self._SOCIAL_RECOVERY_PER_PERSON
         )
         if social_recovery > 0:
             npc.update_needs({"social": social_recovery})
@@ -208,19 +221,7 @@ class NPCSystem:
 
     def _try_advance_skill(self, npc: NPCInstance) -> None:
         """Accumulate XP for the job's primary skill; advance when threshold reached."""
-        # Map each job to the skill it trains
-        _JOB_SKILL_MAP: dict[str, str] = {
-            "job.guard_post":            "combat",
-            "job.patrol":                "perception",
-            "job.contraband_inspection": "investigation",
-            "job.module_maintenance":    "repair",
-            "job.power_management":      "technical",
-            "job.life_support":          "technical",
-            "job.dock_control":          "coordination",
-            "job.resource_management":   "logistics",
-            "job.visitor_intake":        "negotiation",
-        }
-        skill = _JOB_SKILL_MAP.get(npc.current_job_id or "", "")
+        skill = self._JOB_SKILL_MAP.get(npc.current_job_id or "", "")
         if not skill:
             return
         current_level = npc.skills.get(skill, 0)

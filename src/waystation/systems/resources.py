@@ -49,6 +49,15 @@ class ResourceSystem:
         self._apply_module_effects(station, morale_mod)
         self._check_thresholds(station)
 
+    def morale_modifier(self, station: "StationState") -> float:
+        """
+        Public accessor for the production efficiency multiplier based on crew mood.
+
+        Ranges from 0.70 (miserable crew) to 1.15 (content crew).
+        Neutral mood (0.0) = 1.0 efficiency.
+        """
+        return self._morale_modifier(station)
+
     @staticmethod
     def _morale_modifier(station: "StationState") -> float:
         """

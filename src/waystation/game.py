@@ -241,8 +241,8 @@ class Game:
         outcome = self.combat_system.resolve_boarding(station, ship)
         station.log_event(f"Combat outcome ({outcome.tier}): {outcome.narrative}")
         if outcome.tier in ("repelled_clean", "repelled_damaged"):
-            ship.status = "departing"
             station.log_event(f"{ship.name} withdraws after failed boarding attempt.")
+            self.visitor_system.depart_ship(ship.uid, station)
         station.clear_tag("boarding_alert")
 
     # ------------------------------------------------------------------
@@ -311,7 +311,7 @@ class Game:
         docked = s.get_docked_ships()
 
         avg_mood = self.npc_system.average_crew_mood(s)
-        morale_mod = self.resource_system._morale_modifier(s)
+        morale_mod = self.resource_system.morale_modifier(s)
         mood_str = (
             _c(Fore.GREEN, "content") if avg_mood > 0.2 else
             _c(Fore.YELLOW, "uneasy") if avg_mood > -0.2 else

@@ -106,14 +106,14 @@ class TradeOffer:
 
     def get_sell_lines(self) -> list[TradeLine]:
         """Lines where the ship is selling (player can buy)."""
-        return [l for l in self.lines if l.is_selling]
+        return [line for line in self.lines if line.is_selling]
 
     def get_buy_lines(self) -> list[TradeLine]:
         """Lines where the ship is buying (player can sell)."""
-        return [l for l in self.lines if l.is_buying]
+        return [line for line in self.lines if line.is_buying]
 
     def get_line(self, resource: str) -> TradeLine | None:
-        return next((l for l in self.lines if l.resource == resource), None)
+        return next((line for line in self.lines if line.resource == resource), None)
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +202,8 @@ class TradeSystem:
         Player buys *amount* units of *resource* from the ship.
         Returns (success, message).
         """
+        if amount <= 0:
+            return False, "Amount must be greater than zero."
         line = offer.get_line(resource)
         if line is None or not line.is_selling:
             return False, f"{resource} is not available from this ship."
@@ -241,6 +243,8 @@ class TradeSystem:
         Player sells *amount* units of *resource* to the ship.
         Returns (success, message).
         """
+        if amount <= 0:
+            return False, "Amount must be greater than zero."
         line = offer.get_line(resource)
         if line is None or not line.is_buying:
             return False, f"This ship is not buying {resource}."
