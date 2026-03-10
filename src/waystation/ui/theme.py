@@ -20,6 +20,19 @@ WARN        = (240, 180,  40)
 NIGHT_TINT  = (10,  15,  40)
 DAY_TINT    = (255, 240, 200)
 
+# ── Station hull / superstructure ─────────────────────────────────────────────
+HULL_BG     = (18,  26,  50)    # structural panelling behind modules
+HULL_EDGE   = (40,  60, 110)    # hull frame / girder lines
+HULL_PAD    = 18                # pixels of hull visible around module grid
+
+# ── Nebula background colours ─────────────────────────────────────────────────
+NEBULA_COLORS = [
+    (15, 25, 80),   # deep blue
+    (40,  8, 65),   # purple
+    ( 8, 45, 35),   # teal-green
+    (50, 15,  8),   # deep red-orange
+]
+
 # ── Module colours by category ────────────────────────────────────────────────
 MODULE_FLOOR = {
     "utility":    ( 22,  38,  65),
