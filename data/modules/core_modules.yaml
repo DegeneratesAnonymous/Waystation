@@ -71,6 +71,7 @@
   schema_version: "1"
   description: General-purpose pressurized cargo storage. Houses food, parts, and trade goods.
   capacity: 0
+  cargo_capacity: 100
   resource_effects:
     power: -0.5
     food: 1.0
@@ -131,3 +132,17 @@
   tags:
     - visitor_services
     - social
+
+- id: module.cargo_hold
+  display_name: Cargo Hold
+  category: cargo
+  schema_version: "1"
+  description: Dedicated pressurized cargo bay. Larger storage capacity than the general storage hold. Supports item filtering and reserved allocation by category.
+  capacity: 2
+  cargo_capacity: 200
+  resource_effects:
+    power: -1.0
+  tags:
+    - storage
+    - cargo
+    - dedicated_cargo

@@ -267,6 +267,52 @@ class FactionDefinition:
 
 
 # ---------------------------------------------------------------------------
+# Item Definition
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ItemDefinition:
+    """
+    Static definition for a single item type.
+
+    Loaded from /data/items/*.yaml or a mod's items folder.
+    """
+    id: str
+    display_name: str
+    item_type: str                          # Material / Equipment / Biological / Valuables / Waste
+    subtype: str = ""                       # e.g. Raw Materials, Refined Materials, Food, Currency
+    description: str = ""
+    weight: float = 1.0                     # cargo capacity units consumed per item unit
+    stack_size: int = 100                   # max units per stack slot
+    value: float = 1.0                      # credits per unit
+    perishable_ticks: int = 0              # 0 = not perishable; ticks before item decays
+    quality: str = "standard"              # poor / standard / fine / rare / exotic
+    legal: bool = True
+    tags: tuple[str, ...] = ()             # flexible metadata: luxury, volatile, medical, etc.
+    build_cost: dict[str, float] = field(default_factory=dict)  # resource cost to produce
+    schema_version: str = "1"
+
+    @classmethod
+    def from_raw(cls, raw: dict) -> "ItemDefinition":
+        return cls(
+            id=raw["id"],
+            display_name=raw.get("display_name", raw["id"]),
+            item_type=raw.get("item_type", "Material"),
+            subtype=raw.get("subtype", ""),
+            description=raw.get("description", ""),
+            weight=float(raw.get("weight", 1.0)),
+            stack_size=int(raw.get("stack_size", 100)),
+            value=float(raw.get("value", 1.0)),
+            perishable_ticks=int(raw.get("perishable_ticks", 0)),
+            quality=raw.get("quality", "standard"),
+            legal=bool(raw.get("legal", True)),
+            tags=tuple(raw.get("tags", [])),
+            build_cost={k: float(v) for k, v in raw.get("build_cost", {}).items()},
+            schema_version=str(raw.get("schema_version", "1")),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Module Definition (station room/structure)
 # ---------------------------------------------------------------------------
 
@@ -274,10 +320,11 @@ class FactionDefinition:
 class ModuleDefinition:
     id: str
     display_name: str
-    category: str = "utility"              # utility / dock / hab / production / security
+    category: str = "utility"              # utility / dock / hab / production / security / cargo
     description: str = ""
     resource_effects: dict[str, float] = field(default_factory=dict)  # per-tick deltas
     capacity: int = 0                       # crew/visitor slots
+    cargo_capacity: int = 0                 # item units this module can store (0 = not a cargo hold)
     tags: tuple[str, ...] = ()
     unlock_conditions: tuple[str, ...] = ()
     schema_version: str = "1"
@@ -291,6 +338,7 @@ class ModuleDefinition:
             description=raw.get("description", ""),
             resource_effects={k: float(v) for k, v in raw.get("resource_effects", {}).items()},
             capacity=int(raw.get("capacity", 0)),
+            cargo_capacity=int(raw.get("cargo_capacity", 0)),
             tags=tuple(raw.get("tags", [])),
             unlock_conditions=tuple(raw.get("unlock_conditions", [])),
             schema_version=str(raw.get("schema_version", "1")),
