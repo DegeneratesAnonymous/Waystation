@@ -31,6 +31,10 @@
     - Expose a hidden threat before it strikes
     - Build a reputation as the most reliable officer in the sector
     - Protect those who cannot protect themselves
+  species_pool: [human]
+  base_health: 110
+  base_armor: 5
+  base_speed: 10
   faction_bias:
     faction.imperial_remnant: 0.3
     faction.frontier_collective: 0.2
@@ -63,6 +67,10 @@
     - Fabricate a masterwork piece of equipment
     - Achieve perfect efficiency across the station's power grid
     - Leave this station better than you found it
+  species_pool: [human]
+  base_health: 90
+  base_armor: 0
+  base_speed: 9
   faction_bias:
     faction.merchant_league: 0.3
     faction.frontier_collective: 0.3
@@ -95,6 +103,10 @@
     - Negotiate a peace between warring factions
     - Become the station's most indispensable crew member
     - Find a way to turn a profit in every situation
+  species_pool: [human]
+  base_health: 90
+  base_armor: 0
+  base_speed: 10
   faction_bias:
     faction.merchant_league: 0.4
     faction.imperial_remnant: 0.3
@@ -127,6 +139,10 @@
     - Buy low, sell high — retire wealthy
     - Build a commercial empire from nothing
     - Find that one legendary cargo worth a fortune
+  species_pool: [human]
+  base_health: 80
+  base_armor: 0
+  base_speed: 10
   faction_bias:
     faction.merchant_league: 0.6
     faction.frontier_collective: 0.2
@@ -158,6 +174,10 @@
     - Start over somewhere the past can't follow
     - Prove that survival was worth the cost
     - Never feel powerless again
+  species_pool: [human]
+  base_health: 70
+  base_armor: 0
+  base_speed: 9
   faction_bias:
     faction.refugee_fleets: 0.6
     faction.frontier_collective: 0.3
@@ -190,6 +210,10 @@
     - File a perfect record — zero incidents, zero exceptions
     - Root out every illegal operation in this sector
     - Earn a promotion to the central authority
+  species_pool: [human]
+  base_health: 100
+  base_armor: 3
+  base_speed: 10
   faction_bias:
     faction.imperial_remnant: 0.9
     faction.merchant_league: 0.1
@@ -219,6 +243,10 @@
     - Build a network no one can unravel
     - Find out who betrayed you last time — and make it right
     - Go legitimate someday, when the price is right
+  species_pool: [human]
+  base_health: 90
+  base_armor: 2
+  base_speed: 11
   faction_bias:
     faction.merchant_league: 0.3
     faction.raider_clans: 0.3
@@ -250,6 +278,10 @@
     - Burn a name into the history of this sector
     - Survive long enough to become a legend
     - Claim a territory worth defending
+  species_pool: [human]
+  base_health: 130
+  base_armor: 8
+  base_speed: 10
   faction_bias:
     faction.raider_clans: 0.9
     faction.frontier_collective: 0.1

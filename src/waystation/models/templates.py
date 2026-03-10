@@ -150,6 +150,11 @@ class NPCTemplate:
     skill_ranges: dict[str, SkillRange] = field(default_factory=dict)
     trait_pool: tuple[str, ...] = ()
     aspirations_pool: tuple[str, ...] = ()  # pool of possible NPC goals/ambitions
+    species_pool: tuple[str, ...] = ()      # possible species; empty defaults to "human"
+    # Base combat stats — single values or [min, max] ranges in YAML
+    base_health: int = 100
+    base_armor: int = 0
+    base_speed: int = 10
     faction_bias: dict[str, float] = field(default_factory=dict)
     name_pool: tuple[str, ...] = ()     # optional curated names
     equipment_pool: tuple[str, ...] = ()
@@ -169,6 +174,10 @@ class NPCTemplate:
             skill_ranges=skill_ranges,
             trait_pool=tuple(raw.get("trait_pool", [])),
             aspirations_pool=tuple(raw.get("aspirations_pool", [])),
+            species_pool=tuple(raw.get("species_pool", [])),
+            base_health=int(raw.get("base_health", 100)),
+            base_armor=int(raw.get("base_armor", 0)),
+            base_speed=int(raw.get("base_speed", 10)),
             faction_bias={k: float(v) for k, v in raw.get("faction_bias", {}).items()},
             name_pool=tuple(raw.get("name_pool", [])),
             equipment_pool=tuple(raw.get("equipment_pool", [])),

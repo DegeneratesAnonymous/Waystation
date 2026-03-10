@@ -67,6 +67,12 @@ def _pick_aspirations(template: "NPCTemplate", count: int = 1) -> list[str]:
     return random.sample(pool, min(count, len(pool)))
 
 
+def _pick_species(template: "NPCTemplate") -> str:
+    if template.species_pool:
+        return random.choice(template.species_pool)
+    return "human"
+
+
 def _pick_subclass(template: "NPCTemplate") -> str | None:
     if not template.allowed_subclasses:
         return None
@@ -116,6 +122,11 @@ class NPCSystem:
         npc.skills = _roll_skills(template)
         npc.traits = _pick_traits(template)
         npc.aspirations = _pick_aspirations(template)
+        npc.species = _pick_species(template)
+        npc.health = template.base_health
+        npc.max_health = template.base_health
+        npc.armor = template.base_armor
+        npc.speed = template.base_speed
         npc.faction_id = _pick_faction(template)
         npc.status_tags = list(status_tags or [])
 

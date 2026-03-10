@@ -27,6 +27,9 @@ class NPCInstance:
     class_id: str
     subclass_id: str | None
 
+    # Biological identity
+    species: str = "human"                  # e.g. "human", "synth", "xeno"
+
     # Derived skills (rolled from template ranges at spawn)
     skills: dict[str, int] = field(default_factory=dict)
 
@@ -51,6 +54,15 @@ class NPCInstance:
     # -1.0 (miserable) to 1.0 (content)
     mood: float = 0.5
 
+    # ── Combat stats ────────────────────────────────────────────────────────
+    # health: current / max hit points
+    health: int = 100
+    max_health: int = 100
+    # armor: flat damage reduction per hit (0 = no protection)
+    armor: int = 0
+    # speed: action/movement speed multiplier (base 10; higher = faster)
+    speed: int = 10
+
     # Where this NPC is on the station (module definition_id or uid)
     location: str = "commons"
 
@@ -71,6 +83,10 @@ class NPCInstance:
 
     # Legal / residency status tags
     status_tags: list[str] = field(default_factory=list)  # e.g. ["crew", "visitor", "detained"]
+
+    # Personal inventory — items the NPC is currently carrying (item_id → quantity)
+    # Used for hauling tasks, personal effects, and equipment carried on their person
+    inventory: dict[str, int] = field(default_factory=dict)
 
     # Arbitrary memory hooks for events to read/write
     memory: dict[str, Any] = field(default_factory=dict)
@@ -145,11 +161,16 @@ class NPCInstance:
             "name":           self.name,
             "class_id":       self.class_id,
             "subclass_id":    self.subclass_id,
+            "species":        self.species,
             "skills":         dict(self.skills),
             "traits":         list(self.traits),
             "aspirations":    list(self.aspirations),
             "needs":          dict(self.needs),
             "mood":           self.mood,
+            "health":         self.health,
+            "max_health":     self.max_health,
+            "armor":          self.armor,
+            "speed":          self.speed,
             "location":       self.location,
             "current_job_id": self.current_job_id,
             "job_module_uid": self.job_module_uid,
@@ -159,6 +180,7 @@ class NPCInstance:
             "owner_id":       self.owner_id,
             "relationships":  dict(self.relationships),
             "status_tags":    list(self.status_tags),
+            "inventory":      dict(self.inventory),
             "memory":         dict(self.memory),
         }
 
@@ -170,11 +192,16 @@ class NPCInstance:
             name=d["name"],
             class_id=d["class_id"],
             subclass_id=d.get("subclass_id"),
+            species=d.get("species", "human"),
             skills=d.get("skills", {}),
             traits=d.get("traits", []),
             aspirations=d.get("aspirations", []),
             needs=d.get("needs", {}),
             mood=d.get("mood", 0.5),
+            health=d.get("health", 100),
+            max_health=d.get("max_health", 100),
+            armor=d.get("armor", 0),
+            speed=d.get("speed", 10),
             location=d.get("location", "commons"),
             current_job_id=d.get("current_job_id"),
             job_module_uid=d.get("job_module_uid"),
@@ -184,6 +211,7 @@ class NPCInstance:
             owner_id=d.get("owner_id"),
             relationships=d.get("relationships", {}),
             status_tags=d.get("status_tags", []),
+            inventory=d.get("inventory", {}),
             memory=d.get("memory", {}),
         )
 
