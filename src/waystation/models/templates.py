@@ -313,6 +313,49 @@ class ItemDefinition:
 
 
 # ---------------------------------------------------------------------------
+# Room Type Definition (user-designatable area type)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RoomTypeDefinition:
+    """
+    Static definition for a designatable room type.
+
+    Loaded from /data/room_types/*.yaml.
+    Room types are the semantic roles users can assign to drawn tile areas.
+    """
+    id: str
+    display_name: str
+    description: str = ""
+    category: str = "utility"       # matches module category palette
+    min_tiles: int = 1              # minimum floor tiles required
+    module_id: str | None = None    # module.* id that backs this room in simulation
+    component_requirements: dict[str, int] = field(default_factory=dict)   # item_id -> qty
+    resource_requirements: dict[str, float] = field(default_factory=dict)  # resource -> amount
+    benefits: tuple[str, ...] = ()
+    services: tuple[str, ...] = ()
+    schema_version: str = "1"
+
+    @classmethod
+    def from_raw(cls, raw: dict) -> "RoomTypeDefinition":
+        comp_raw = raw.get("component_requirements") or {}
+        res_raw  = raw.get("resource_requirements") or {}
+        return cls(
+            id=raw["id"],
+            display_name=raw.get("display_name", raw["id"]),
+            description=raw.get("description", ""),
+            category=raw.get("category", "utility"),
+            min_tiles=int(raw.get("min_tiles", 1)),
+            module_id=raw.get("module_id") or None,
+            component_requirements={k: int(v) for k, v in comp_raw.items()},
+            resource_requirements={k: float(v) for k, v in res_raw.items()},
+            benefits=tuple(raw.get("benefits", [])),
+            services=tuple(raw.get("services", [])),
+            schema_version=str(raw.get("schema_version", "1")),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Module Definition (station room/structure)
 # ---------------------------------------------------------------------------
 

@@ -374,6 +374,9 @@ class Game:
         new_events = self.event_system.tick(self.station)
         self._pending_events.extend(new_events)
 
+        # Apply atmosphere/temperature leaks from damaged walls to rooms
+        self.station.tile_map.tick_room_environments()
+
     # ------------------------------------------------------------------
     # Display
     # ------------------------------------------------------------------
