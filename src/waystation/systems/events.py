@@ -235,7 +235,8 @@ class EventSystem:
         self._followup_queue: deque[tuple[str, dict]] = deque()
 
         # Tick at which the next random event may fire (scheduling)
-        self._next_event_tick: int = random.randint(2, 5)
+        _cfg = DIFFICULTY_SETTINGS[self._difficulty]
+        self._next_event_tick: int = random.randint(_cfg.min_gap, _cfg.max_gap)
 
     # ------------------------------------------------------------------
     # Registration hook (other systems register effect handlers here)
@@ -269,14 +270,15 @@ class EventSystem:
                 new_events.append(pending)
 
         # Expire timed-out events (non-hostile only; hostile events never expire)
-        for p in self._pending:
+        for p in list(self._pending):
             if (not p.resolved
                     and p.expires_at > 0
                     and station.tick >= p.expires_at
                     and not p.definition.hostile):
                 station.log_event(f"EVENT MISSED: {p.definition.title}")
-                p.resolved = True
                 log.debug("Event '%s' expired at tick %d", p.definition.id, station.tick)
+                # Route through the normal finish pipeline so cooldowns are applied.
+                self._finish_event(p.definition, p, station)
 
         # Don't schedule new random events while a hostile event awaits the player
         hostile_pending = any(

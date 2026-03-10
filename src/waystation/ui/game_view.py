@@ -655,7 +655,21 @@ class GameView:
         t = pygame.time.get_ticks() / 1000.0
         pulse = abs(math.sin(t * (3.0 if is_hostile else 2.0)))
 
-        btn_rect = pygame.Rect(440, 7, 310, 29)
+        # Position the button so it never overlaps the speed buttons on the right.
+        _MAX_NOTIFICATION_W = 310
+        btn_x = 440
+        btn_y = 7
+        btn_h = 29
+        padding = 8
+        speed_rects = list(self._speed_btn_rects().values())
+        if speed_rects:
+            speed_left = min(r.left for r in speed_rects)
+            btn_w = min(_MAX_NOTIFICATION_W, speed_left - btn_x - padding)
+        else:
+            btn_w = _MAX_NOTIFICATION_W
+        if btn_w <= 0:
+            return
+        btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
 
         # Pulsing translucent background
         bg_alpha = int(50 + 90 * pulse)
