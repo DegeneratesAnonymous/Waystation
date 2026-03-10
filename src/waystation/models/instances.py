@@ -21,6 +21,26 @@ def _new_uid() -> str:
 # NPC Instance
 # ---------------------------------------------------------------------------
 
+# Legacy need keys from saves written before the rename (hunger→food, rest→sleep,
+# social→recreation). Kept at module level to avoid per-call dict construction.
+_NPC_LEGACY_NEED_KEYS: dict[str, str] = {
+    "hunger": "food",
+    "rest":   "sleep",
+    "social": "recreation",
+}
+
+# Default NPC needs merged into any loaded save so new keys are always present.
+_NPC_DEFAULT_NEEDS: dict[str, float] = {
+    "oxygen":      1.0,
+    "temperature": 1.0,
+    "food":        1.0,
+    "thirst":      1.0,
+    "sleep":       1.0,
+    "bathroom":    1.0,
+    "recreation":  0.5,
+    "safety":      1.0,
+}
+
 @dataclass
 class NPCInstance:
     uid: str
@@ -29,22 +49,41 @@ class NPCInstance:
     class_id: str
     subclass_id: str | None
 
+    # Biological identity
+    species: str = "human"                  # e.g. "human", "synth", "xeno"
+
     # Derived skills (rolled from template ranges at spawn)
     skills: dict[str, int] = field(default_factory=dict)
 
-    # Personality / behaviour traits (drawn from template trait_pool)
+    # Personality / behaviour traits (drawn from template trait_pool) — 3 traits
     traits: list[str] = field(default_factory=list)
+
+    # Aspirations — personal goals and ambitions
+    aspirations: list[str] = field(default_factory=list)
 
     # Needs — 0.0 (critical) to 1.0 (fully satisfied)
     needs: dict[str, float] = field(default_factory=lambda: {
-        "hunger": 1.0,
-        "rest": 1.0,
-        "social": 0.5,
-        "safety": 1.0,
+        "oxygen":      1.0,
+        "temperature": 1.0,
+        "food":        1.0,
+        "thirst":      1.0,
+        "sleep":       1.0,
+        "bathroom":    1.0,
+        "recreation":  0.5,
+        "safety":      1.0,
     })
 
     # -1.0 (miserable) to 1.0 (content)
     mood: float = 0.5
+
+    # ── Combat stats ────────────────────────────────────────────────────────
+    # health: current / max hit points
+    health: int = 100
+    max_health: int = 100
+    # armor: flat damage reduction per hit (0 = no protection)
+    armor: int = 0
+    # speed: action/movement speed multiplier (base 10; higher = faster)
+    speed: int = 10
 
     # Where this NPC is on the station (module definition_id or uid)
     location: str = "commons"
@@ -58,8 +97,18 @@ class NPCInstance:
     # Faction association
     faction_id: str | None = None
 
+    # Ownership — None / "player" = player-owned; faction_id or ship_uid = belongs to that entity
+    owner_id: str | None = None
+
+    # Relationship scores with other NPCs keyed by NPC uid (-1.0 hostile to 1.0 close)
+    relationships: dict[str, float] = field(default_factory=dict)
+
     # Legal / residency status tags
     status_tags: list[str] = field(default_factory=list)  # e.g. ["crew", "visitor", "detained"]
+
+    # Personal inventory — items the NPC is currently carrying (item_id → quantity)
+    # Used for hauling tasks, personal effects, and equipment carried on their person
+    inventory: dict[str, int] = field(default_factory=dict)
 
     # Arbitrary memory hooks for events to read/write
     memory: dict[str, Any] = field(default_factory=dict)
@@ -95,8 +144,17 @@ class NPCInstance:
             self.needs[need] = max(0.0, min(1.0, self.needs.get(need, 0.5) + change))
 
     def recalculate_mood(self) -> None:
-        """Simple mood model: average of needs with safety weighted double."""
-        weights = {"hunger": 1.0, "rest": 1.0, "social": 0.5, "safety": 2.0}
+        """Mood model: weighted average of needs; critical needs (oxygen, safety) count most."""
+        weights = {
+            "oxygen":      3.0,
+            "safety":      2.0,
+            "temperature": 2.0,
+            "food":        1.5,
+            "thirst":      1.5,
+            "sleep":       1.0,
+            "bathroom":    0.8,
+            "recreation":  0.5,
+        }
         total_weight = sum(weights.values())
         weighted_sum = sum(self.needs.get(n, 0.5) * w for n, w in weights.items())
         # Traits can shift mood
@@ -125,39 +183,66 @@ class NPCInstance:
             "name":           self.name,
             "class_id":       self.class_id,
             "subclass_id":    self.subclass_id,
+            "species":        self.species,
             "skills":         dict(self.skills),
             "traits":         list(self.traits),
+            "aspirations":    list(self.aspirations),
             "needs":          dict(self.needs),
             "mood":           self.mood,
+            "health":         self.health,
+            "max_health":     self.max_health,
+            "armor":          self.armor,
+            "speed":          self.speed,
             "location":       self.location,
             "current_job_id": self.current_job_id,
             "job_module_uid": self.job_module_uid,
             "job_timer":      self.job_timer,
             "job_interrupted": self.job_interrupted,
             "faction_id":     self.faction_id,
+            "owner_id":       self.owner_id,
+            "relationships":  dict(self.relationships),
             "status_tags":    list(self.status_tags),
+            "inventory":      dict(self.inventory),
             "memory":         dict(self.memory),
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "NPCInstance":
+        # Build the needs dict: start from defaults, then overlay saved values.
+        # Legacy keys (pre-rename) are translated so older saves load cleanly.
+        raw_needs: dict[str, float] = d.get("needs", {})
+        merged_needs = dict(_NPC_DEFAULT_NEEDS)
+        for key, val in raw_needs.items():
+            canonical = _NPC_LEGACY_NEED_KEYS.get(key, key)
+            if canonical in merged_needs:
+                merged_needs[canonical] = val
+
         return cls(
             uid=d["uid"],
             template_id=d["template_id"],
             name=d["name"],
             class_id=d["class_id"],
             subclass_id=d.get("subclass_id"),
+            species=d.get("species", "human"),
             skills=d.get("skills", {}),
             traits=d.get("traits", []),
-            needs=d.get("needs", {}),
+            aspirations=d.get("aspirations", []),
+            needs=merged_needs,
             mood=d.get("mood", 0.5),
+            health=d.get("health", 100),
+            max_health=d.get("max_health", 100),
+            armor=d.get("armor", 0),
+            speed=d.get("speed", 10),
             location=d.get("location", "commons"),
             current_job_id=d.get("current_job_id"),
             job_module_uid=d.get("job_module_uid"),
             job_timer=d.get("job_timer", 0),
             job_interrupted=d.get("job_interrupted", False),
             faction_id=d.get("faction_id"),
+            owner_id=d.get("owner_id"),
+            relationships=d.get("relationships", {}),
             status_tags=d.get("status_tags", []),
+            inventory=d.get("inventory", {}),
             memory=d.get("memory", {}),
         )
 
@@ -179,6 +264,9 @@ class ShipInstance:
     passenger_uids: list[str] = field(default_factory=list)
     threat_level: int = 0
     behavior_tags: list[str] = field(default_factory=list)
+
+    # Ownership — None = unaffiliated; "player" = player-owned; faction_id = faction ship
+    owner_id: str | None = None
 
     # Docking state
     status: str = "incoming"               # incoming / docked / departing / hostile / destroyed
@@ -229,6 +317,7 @@ class ShipInstance:
             "passenger_uids":  list(self.passenger_uids),
             "threat_level":    self.threat_level,
             "behavior_tags":   list(self.behavior_tags),
+            "owner_id":        self.owner_id,
             "status":          self.status,
             "docked_at":       self.docked_at,
             "ticks_docked":    self.ticks_docked,
@@ -247,6 +336,7 @@ class ShipInstance:
             passenger_uids=d.get("passenger_uids", []),
             threat_level=d.get("threat_level", 0),
             behavior_tags=d.get("behavior_tags", []),
+            owner_id=d.get("owner_id"),
             status=d.get("status", "incoming"),
             docked_at=d.get("docked_at"),
             ticks_docked=d.get("ticks_docked", 0),
@@ -305,6 +395,9 @@ class ModuleInstance:
     active: bool = True
     damage: float = 0.0                                   # 0.0 = fine, 1.0 = destroyed
 
+    # Ownership — None = station-owned (player); faction_id or ship_uid = belongs to that entity
+    owner_id: str | None = None
+
     # Inventory: item_id -> quantity stored in this module
     inventory: dict[str, int] = field(default_factory=dict)
     # Cargo hold configuration (None if this module is not a cargo hold)
@@ -335,6 +428,7 @@ class ModuleInstance:
             "docked_ship":  self.docked_ship,
             "active":       self.active,
             "damage":       self.damage,
+            "owner_id":     self.owner_id,
             "inventory":    dict(self.inventory),
             "cargo_settings": self.cargo_settings.to_dict() if self.cargo_settings else None,
         }
@@ -351,6 +445,7 @@ class ModuleInstance:
             docked_ship=d.get("docked_ship"),
             active=d.get("active", True),
             damage=d.get("damage", 0.0),
+            owner_id=d.get("owner_id"),
             inventory=d.get("inventory", {}),
             cargo_settings=CargoHoldSettings.from_dict(cs_raw) if cs_raw else None,
         )
@@ -359,6 +454,19 @@ class ModuleInstance:
 # ---------------------------------------------------------------------------
 # Station State
 # ---------------------------------------------------------------------------
+
+# Default station resources merged into any loaded save so new resource keys
+# (e.g. "water", "ice") are always present. Kept at module level to avoid
+# per-call dict construction in from_dict.
+_STATION_DEFAULT_RESOURCES: dict[str, float] = {
+    "credits": 500.0,
+    "food":    100.0,
+    "power":   100.0,
+    "oxygen":  100.0,
+    "parts":    50.0,
+    "ice":     200.0,
+    "water":   150.0,
+}
 
 @dataclass
 class StationState:
@@ -376,6 +484,7 @@ class StationState:
         "oxygen":  100.0,
         "parts":    50.0,
         "ice":     200.0,   # raw ice — processed into water/oxygen by life support
+        "water":   150.0,   # potable water — refined from ice or recycled
     })
 
     # Entity registries (keyed by uid)
@@ -487,7 +596,11 @@ class StationState:
     def from_dict(cls, d: dict) -> "StationState":
         obj = cls(name=d["name"])
         obj.tick               = d.get("tick", 0)
-        obj.resources          = d.get("resources", {})
+        # Merge saved resources into defaults so new keys (e.g. "water", "ice")
+        # are always present even in saves written before they were added.
+        merged_resources = dict(_STATION_DEFAULT_RESOURCES)
+        merged_resources.update(d.get("resources", {}))
+        obj.resources          = merged_resources
         obj.npcs               = {uid: NPCInstance.from_dict(v)   for uid, v in d.get("npcs",    {}).items()}
         obj.ships              = {uid: ShipInstance.from_dict(v)   for uid, v in d.get("ships",   {}).items()}
         obj.modules            = {uid: ModuleInstance.from_dict(v) for uid, v in d.get("modules", {}).items()}

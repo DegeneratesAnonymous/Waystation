@@ -266,6 +266,7 @@ class Game:
         self.station.resources["credits"] = 500.0
         self.station.resources["parts"]   =  60.0
         self.station.resources["ice"]     = 200.0
+        self.station.resources["water"]   = 150.0
 
     def _spawn_starter_crew(self) -> None:
         """Spawn the initial crew from templates."""
@@ -301,11 +302,14 @@ class Game:
 
         starter_items = [
             ("item.ration_pack",    30),
+            ("item.food_ration",    20),
             ("item.steel_plate",    10),
             ("item.circuit_board",   5),
             ("item.pressure_seal",  10),
             ("item.med_compounds",   5),
             ("item.ammunition_basic", 20),
+            ("item.ice",            50),
+            ("item.water",          30),
         ]
         for item_id, qty in starter_items:
             if item_id in self.registry.items:
