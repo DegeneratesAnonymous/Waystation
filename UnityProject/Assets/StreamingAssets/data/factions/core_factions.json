@@ -1,0 +1,42 @@
+[
+  {
+    "id": "faction.stellar_authority",
+    "display_name": "Stellar Authority",
+    "type": "major",
+    "description": "The dominant interstellar governing body. Bureaucratic and militaristic, but maintains order.",
+    "ideology_tags": ["authoritarian", "militarist", "expansionist"],
+    "behavior_tags": ["aggressive", "patrols_borders"],
+    "relationships": { "faction.free_traders_guild": -0.3, "faction.scavenger_clans": -0.6 },
+    "schema_version": "1"
+  },
+  {
+    "id": "faction.free_traders_guild",
+    "display_name": "Free Traders Guild",
+    "type": "regional",
+    "description": "Loose coalition of independent merchants and traders. Values profit over politics.",
+    "ideology_tags": ["mercantile", "libertarian"],
+    "behavior_tags": ["trades_always"],
+    "relationships": { "faction.stellar_authority": -0.2, "faction.scavenger_clans": 0.1 },
+    "schema_version": "1"
+  },
+  {
+    "id": "faction.scavenger_clans",
+    "display_name": "Scavenger Clans",
+    "type": "regional",
+    "description": "Nomadic salvagers and opportunists. Dangerous when cornered, useful when friendly.",
+    "ideology_tags": ["nomadic", "survivalist"],
+    "behavior_tags": ["raids_weak_stations", "aggressive"],
+    "relationships": { "faction.stellar_authority": -0.7, "faction.free_traders_guild": 0.2 },
+    "schema_version": "1"
+  },
+  {
+    "id": "faction.refugee_network",
+    "display_name": "Refugee Network",
+    "type": "minor",
+    "description": "Displaced civilians seeking safety. Grateful for shelter, desperate when ignored.",
+    "ideology_tags": ["humanitarian"],
+    "behavior_tags": [],
+    "relationships": { "faction.stellar_authority": -0.4 },
+    "schema_version": "1"
+  }
+]

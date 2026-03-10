@@ -1,0 +1,42 @@
+[
+  {
+    "id": "class.security",
+    "display_name": "Security Officer",
+    "description": "Station security personnel. Trained in combat, patrol, and contraband detection.",
+    "modifiers": { "combat": 1.5, "perception": 1.2 },
+    "allowed_jobs": ["job.guard_post", "job.patrol", "job.contraband_inspection"],
+    "schema_version": "1"
+  },
+  {
+    "id": "class.engineering",
+    "display_name": "Engineer",
+    "description": "Station maintenance and technical operations specialist.",
+    "modifiers": { "repair": 1.5, "technical": 1.3 },
+    "allowed_jobs": ["job.module_maintenance", "job.power_management", "job.life_support"],
+    "schema_version": "1"
+  },
+  {
+    "id": "class.operations",
+    "display_name": "Operations Officer",
+    "description": "Station administration, logistics, and visitor management.",
+    "modifiers": { "coordination": 1.4, "negotiation": 1.2, "logistics": 1.3 },
+    "allowed_jobs": ["job.dock_control", "job.visitor_intake", "job.resource_management"],
+    "schema_version": "1"
+  },
+  {
+    "id": "class.civilian",
+    "display_name": "Civilian",
+    "description": "Non-specialized station inhabitants. Visitors, refugees, and general workers.",
+    "modifiers": {},
+    "allowed_jobs": [],
+    "schema_version": "1"
+  },
+  {
+    "id": "class.trader",
+    "display_name": "Trader",
+    "description": "Merchant dealing in goods and resources. Skilled negotiators.",
+    "modifiers": { "negotiation": 1.5, "logistics": 1.2 },
+    "allowed_jobs": [],
+    "schema_version": "1"
+  }
+]
