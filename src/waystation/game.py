@@ -63,14 +63,17 @@ def _clear() -> None:
 
 class Game:
 
-    def __init__(self, data_root: Path, mods_root: Path, seed: int | None = None) -> None:
+    def __init__(self, data_root: Path, mods_root: Path, seed: int | None = None,
+                 registry: "ContentRegistry | None" = None,
+                 job_registry: "JobRegistry | None" = None) -> None:
         self.data_root = data_root
         self.mods_root = mods_root
         self.seed = seed or random.randint(0, 999_999)
 
         random.seed(self.seed)
 
-        self.registry = ContentRegistry()
+        self.registry     = registry     or ContentRegistry()
+        self.job_registry = job_registry or JobRegistry()
         self.station: StationState | None = None
 
         # Systems (created after registry is loaded)
@@ -79,7 +82,6 @@ class Game:
         self.resource_system: ResourceSystem | None = None
         self.faction_system: FactionSystem | None = None
         self.visitor_system: VisitorSystem | None = None
-        self.job_registry   = JobRegistry()
         self.job_system: JobSystem | None = None
 
         self._running = False
@@ -90,7 +92,9 @@ class Game:
     # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """Load all content from disk."""
+        """Load all content from disk (no-op if registry was injected pre-loaded)."""
+        if self.registry.is_loaded():
+            return
         self.registry.load_core(self.data_root)
         self.registry.load_mods(self.mods_root)
         self.job_registry.load(self.data_root)
@@ -177,6 +181,9 @@ class Game:
         self.event_system.register_effect_handler(
             "spawn_npc", self._effect_spawn_npc
         )
+
+        # Restore inter-faction relationship data from definitions
+        self.faction_system.initialize(self.station)
 
         log.info("Game loaded from %s (tick %d)", save_path, self.station.tick)
         print(f"\n{_c(Fore.CYAN, 'Station restored:')} {self.station.name}  "

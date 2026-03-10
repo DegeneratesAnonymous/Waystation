@@ -18,10 +18,8 @@ from __future__ import annotations
 
 import datetime
 import math
-import os
 import random
 from pathlib import Path
-from typing import Callable
 
 import pygame
 
@@ -232,6 +230,12 @@ class MainMenuView:
         )
         self._load_cursor = 0
 
+    # ── Public settings API ────────────────────────────────────────────────────
+
+    def get_setting(self, key: str, default: object = None) -> object:
+        """Return a setting value by key (safe public accessor)."""
+        return self._settings.get(key, default)
+
     # ── Main entry point ──────────────────────────────────────────────────────
 
     def run(self) -> tuple:
@@ -274,7 +278,7 @@ class MainMenuView:
             return self._click_load(pos)
         if self._state == _ST_SETTINGS:
             self._click_settings(pos)
-        if self._state == _ST_TUTORIAL:
+        elif self._state == _ST_TUTORIAL:
             self._click_tutorial(pos)
         return None
 
@@ -369,10 +373,12 @@ class MainMenuView:
             self._state = _ST_MAIN
             return None
         if ev.key == pygame.K_UP:
-            self._load_cursor = max(0, self._load_cursor - 1)
+            if self._load_saves:
+                self._load_cursor = max(0, self._load_cursor - 1)
         elif ev.key == pygame.K_DOWN:
-            self._load_cursor = min(len(self._load_saves) - 1,
-                                    self._load_cursor + 1)
+            if self._load_saves:
+                self._load_cursor = min(len(self._load_saves) - 1,
+                                        self._load_cursor + 1)
         elif ev.key == pygame.K_RETURN and self._load_saves:
             return ("load_game", self._load_saves[self._load_cursor])
         elif ev.key == pygame.K_DELETE and self._load_saves:

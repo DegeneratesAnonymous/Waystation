@@ -132,10 +132,12 @@ class StarField:
 
 class GameView:
 
-    def __init__(self, game: "Game", saves_dir: "Path | None" = None) -> None:
+    def __init__(self, game: "Game", saves_dir: "Path | None" = None,
+                 auto_save: bool = True) -> None:
         self.game = game
         self.s    = game.station
         self._saves_dir = saves_dir
+        self._auto_save = auto_save
 
         pygame.init()
         self.screen = pygame.display.set_mode((T.SCREEN_W, T.SCREEN_H))
@@ -372,8 +374,9 @@ class GameView:
                 self._save_msg_timer = 3.0
 
     def _do_save_and_menu(self) -> None:
-        """Save the game (if possible) and signal a return to the main menu."""
-        self._do_save()
+        """Save the game (if auto-save is enabled) and signal a return to the main menu."""
+        if self._auto_save:
+            self._do_save()
         self._return_signal = "menu"
 
     def _on_click(self, pos: tuple[int, int]) -> None:

@@ -46,11 +46,11 @@ def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode((1280, 800))
 
-    # ── Pre-load content registry once so the menu opens instantly ──────────
-    # (We share a single Game loader across sessions so we don't reload
-    #  the YAML data files on every new/load game.)
-    loader = Game(data_root=data_root, mods_root=mods_root)
-    loader.load()
+    # ── Pre-load content registry once; reuse it across all sessions ─────────
+    _preloader = Game(data_root=data_root, mods_root=mods_root)
+    _preloader.load()
+    shared_registry     = _preloader.registry
+    shared_job_registry = _preloader.job_registry
 
     while True:
         # ── Main Menu ────────────────────────────────────────────────────────
@@ -60,16 +60,22 @@ def main() -> None:
         if action[0] == "quit":
             break
 
+        auto_save = bool(menu.get_setting("auto_save", True))
+
         # ── Build / restore game from menu selection ──────────────────────
         if action[0] == "new_game":
             station_name, seed = action[1], action[2]
-            game = Game(data_root=data_root, mods_root=mods_root, seed=seed)
+            game = Game(data_root=data_root, mods_root=mods_root, seed=seed,
+                        registry=shared_registry,
+                        job_registry=shared_job_registry)
             game.load()
             game.new_game(station_name=station_name)
 
         elif action[0] == "load_game":
             save_path = action[1]
-            game = Game(data_root=data_root, mods_root=mods_root)
+            game = Game(data_root=data_root, mods_root=mods_root,
+                        registry=shared_registry,
+                        job_registry=shared_job_registry)
             game.load()
             try:
                 game.load_saved_game(save_path)
@@ -80,7 +86,7 @@ def main() -> None:
             continue
 
         # ── Run the game view ─────────────────────────────────────────────
-        view   = GameView(game, saves_dir=saves_dir)
+        view   = GameView(game, saves_dir=saves_dir, auto_save=auto_save)
         result = view.run()
 
         if result == "quit":
