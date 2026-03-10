@@ -297,11 +297,15 @@ class GameView:
         self._tick_acc += dt
         if self._tick_acc >= interval:
             self._tick_acc -= interval
-            if not self.game.event_system.get_pending():
-                self._do_tick()
-            else:
-                # Pause auto-advance when event needs attention
+            hostile_pending = any(
+                not p.resolved and p.definition.hostile
+                for p in self.game.event_system.get_pending()
+            )
+            if hostile_pending:
+                # Only hostile events pause the game
                 self._speed = 0
+            else:
+                self._do_tick()
 
         # Animate dots
         for dot in self._dots.values():
@@ -619,12 +623,8 @@ class GameView:
         time_str = time_system.time_label(self.s)
         D.text(self.screen, self.fonts.md, time_str, (260, 14), T.TEXT_DIM)
 
-        # Pending event indicator
-        pending = [p for p in self._pending if not p.resolved]
-        if pending:
-            D.text(self.screen, self.fonts.md,
-                   f"!  EVENT WAITING — game paused",
-                   (450, 14), T.WARN)
+        # Pending event notification button (pulsing)
+        self._render_event_notification()
 
         # Speed buttons
         speed_labels = {0: "PAUSE", 1: "x1", 2: "x2", 4: "x4"}
@@ -641,6 +641,36 @@ class GameView:
         # Tick counter
         D.text(self.screen, self.fonts.sm, f"Tick {self.s.tick:04d}",
                (T.SCREEN_W - T.SIDEBAR_W - 8, 14), T.TEXT_DIM, "topright")
+
+    def _render_event_notification(self) -> None:
+        """Pulsing notification button in the top bar when an event is available."""
+        pending = [p for p in self._pending if not p.resolved]
+        if not pending:
+            return
+
+        p = pending[0]
+        is_hostile = p.definition.hostile
+        base_color = T.DANGER if is_hostile else T.WARN
+
+        t = pygame.time.get_ticks() / 1000.0
+        pulse = abs(math.sin(t * (3.0 if is_hostile else 2.0)))
+
+        btn_rect = pygame.Rect(440, 7, 310, 29)
+
+        # Pulsing translucent background
+        bg_alpha = int(50 + 90 * pulse)
+        bg_surf = pygame.Surface((btn_rect.width, btn_rect.height), pygame.SRCALPHA)
+        bg_surf.fill((*base_color, bg_alpha))
+        self.screen.blit(bg_surf, btn_rect.topleft)
+
+        # Pulsing border (thickens at peak)
+        border_w = 1 + int(2 * pulse)
+        pygame.draw.rect(self.screen, base_color, btn_rect, border_w, border_radius=4)
+
+        # Label — event title truncated, with count if multiple queued
+        count_str = f"  (+{len(pending) - 1})" if len(pending) > 1 else ""
+        label = f"!  {p.definition.title[:30]}{count_str}"
+        D.text(self.screen, self.fonts.md, label, btn_rect.center, T.TEXT_BRIGHT, "center")
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
 

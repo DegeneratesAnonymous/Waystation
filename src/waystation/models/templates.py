@@ -106,6 +106,10 @@ class EventDefinition:
     # Fallback outcomes if there are no choices (auto-resolved events)
     auto_outcomes: tuple[OutcomeEffect, ...] = ()
     followup_events: tuple[str, ...] = ()   # additional events queued after resolution
+    # If True the event pauses the game until the player responds
+    hostile: bool = False
+    # Non-zero: event expires and is skipped after this many ticks
+    expires_in: int = 0
     schema_version: str = "1"
 
     @classmethod
@@ -125,6 +129,8 @@ class EventDefinition:
             choices=tuple(EventChoice.from_raw(c) for c in raw.get("choices", [])),
             auto_outcomes=tuple(OutcomeEffect.from_raw(o) for o in raw.get("auto_outcomes", [])),
             followup_events=tuple(raw.get("followup_events", [])),
+            hostile=bool(raw.get("hostile", False)),
+            expires_in=int(raw.get("expires_in", 0)),
             schema_version=str(raw.get("schema_version", "1")),
         )
 
