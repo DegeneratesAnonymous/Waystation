@@ -7,6 +7,8 @@ Responsibilities:
 - Spawn passenger NPCs for docked ships
 - Manage departure timing
 - Trigger hostile escalation for denied ships with hostile_if_denied tag
+- Generate trade offers for trading ships
+- Run contraband checks when inspection is active
 """
 
 from __future__ import annotations
@@ -22,9 +24,13 @@ if TYPE_CHECKING:
     from waystation.models.instances import StationState
     from waystation.systems.npcs import NPCSystem
     from waystation.systems.events import EventSystem
+    from waystation.systems.trade import TradeSystem
     from waystation.models.templates import ShipTemplate
 
 log = logging.getLogger(__name__)
+
+# Probability per check interval that contraband is found on a flagged ship
+CONTRABAND_DETECTION_CHANCE = 0.25
 
 
 # Ship name generators
@@ -75,15 +81,18 @@ class VisitorSystem:
     def __init__(self,
                  registry: "ContentRegistry",
                  npc_system: "NPCSystem",
-                 event_system: "EventSystem") -> None:
+                 event_system: "EventSystem",
+                 trade_system: "TradeSystem | None" = None) -> None:
         self.registry = registry
         self.npc_system = npc_system
         self.event_system = event_system
+        self.trade_system = trade_system
 
     def tick(self, station: "StationState") -> None:
         """Main per-tick update."""
         self._process_incoming(station)
         self._tick_docked(station)
+        self._tick_contraband_checks(station)
 
     # ------------------------------------------------------------------
     # Arrival generation
@@ -181,13 +190,19 @@ class VisitorSystem:
         # Spawn any passengers
         self._spawn_passengers(ship, station)
 
-        # Trade ships bring credits
-        if ship.intent == "trade":
-            trade_value = random.randint(50, 300)
-            station.modify_resource("credits", trade_value)
-            station.log_event(f"Trade: +{trade_value} credits from {ship.name}.")
+        # Generate a trade offer for trading/smuggling ships
+        if ship.intent in ("trade", "smuggle") and self.trade_system is not None:
+            offer = self.trade_system.generate_offer(ship, station)
+            if offer:
+                station.trade_offers[ship_uid] = offer
+                sell_count = len(offer.get_sell_lines())
+                buy_count = len(offer.get_buy_lines())
+                station.log_event(
+                    f"{ship.name} has a trade manifest: {sell_count} item(s) for sale, "
+                    f"{buy_count} item(s) wanted. Use 'trade' to browse."
+                )
 
-        # Refugee ships may strain food
+        # Refugee ships strain food
         if ship.intent == "refuge":
             station.log_event(f"Refugees aboard {ship.name} request food and shelter.")
 
@@ -237,6 +252,9 @@ class VisitorSystem:
         for npc_uid in list(ship.passenger_uids):
             station.remove_npc(npc_uid)
 
+        # Clean up trade offer
+        station.trade_offers.pop(ship_uid, None)
+
         station.log_event(f"{ship.name} departed.")
         station.remove_ship(ship_uid)
 
@@ -250,6 +268,41 @@ class VisitorSystem:
             stay = random.randint(*self.DOCKED_DURATION_RANGE)
             if ship.ticks_docked >= stay:
                 self.depart_ship(ship.uid, station)
+
+    # ------------------------------------------------------------------
+    # Contraband detection
+    # ------------------------------------------------------------------
+
+    def _tick_contraband_checks(self, station: "StationState") -> None:
+        """
+        If inspection_in_progress tag is set and security crew is patrolling
+        the docks, periodically discover contraband on smuggler ships.
+        """
+        if not station.has_tag("inspection_in_progress"):
+            return
+        # Only check every 3 ticks
+        if station.tick % 3 != 0:
+            return
+
+        # Need at least one security crew member with patrol/inspection job
+        security_on_duty = any(
+            n.is_crew() and n.class_id == "class.security" and
+            n.current_job_id in ("job.patrol", "job.contraband_inspection")
+            for n in station.npcs.values()
+        )
+        if not security_on_duty:
+            return
+
+        for ship in station.get_docked_ships():
+            template = self.registry.ships.get(ship.template_id)
+            if template and "carries_contraband" in template.behavior_tags:
+                if random.random() < CONTRABAND_DETECTION_CHANCE:
+                    self.event_system.queue_event(
+                        "event.contraband_found",
+                        context={"ship_uid": ship.uid, "ship_name": ship.name},
+                    )
+                    station.clear_tag("inspection_in_progress")
+                    return
 
     # ------------------------------------------------------------------
     # Passenger spawning

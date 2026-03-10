@@ -21,6 +21,8 @@ from waystation.systems.resources import ResourceSystem
 from waystation.systems.factions import FactionSystem
 from waystation.systems.visitors import VisitorSystem
 from waystation.systems.jobs import JobSystem, JobRegistry
+from waystation.systems.combat import CombatSystem
+from waystation.systems.trade import TradeSystem
 from waystation.systems import time_system
 
 log = logging.getLogger(__name__)
@@ -36,6 +38,28 @@ except ImportError:
         RED = YELLOW = GREEN = CYAN = WHITE = MAGENTA = RESET = ""
     class Style:  # type: ignore
         BRIGHT = DIM = RESET_ALL = ""
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# Cost to recruit a visiting NPC as crew
+RECRUIT_COST = 150.0
+
+# Parts required for an emergency module repair
+REPAIR_PARTS_COST = 10.0
+
+# How much damage is removed per emergency repair action
+REPAIR_DAMAGE_AMOUNT = 0.25
+
+# Station policies: key -> (valid_values, description)
+STATION_POLICIES: dict[str, tuple[list[str], str]] = {
+    "visitor_policy": (["open", "inspect", "restrict"], "How new visitors are processed"),
+    "refugee_policy": (["accept", "evaluate", "deny"],  "Response to refugee ships"),
+    "trade_stance":   (["active", "passive", "closed"],  "Trade engagement level"),
+    "security_level": (["minimal", "standard", "high"],  "Station security posture"),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +104,8 @@ class Game:
         self.visitor_system: VisitorSystem | None = None
         self.job_registry   = JobRegistry()
         self.job_system: JobSystem | None = None
+        self.combat_system: CombatSystem | None = None
+        self.trade_system: TradeSystem | None = None
 
         self._running = False
         self._pending_events: list[PendingEvent] = []
@@ -111,14 +137,20 @@ class Game:
         self.resource_system = ResourceSystem(self.registry)
         self.event_system    = EventSystem(self.registry)
         self.faction_system  = FactionSystem(self.registry)
+        self.combat_system   = CombatSystem()
+        self.trade_system    = TradeSystem(self.registry)
         self.visitor_system  = VisitorSystem(
-            self.registry, self.npc_system, self.event_system
+            self.registry, self.npc_system, self.event_system,
+            trade_system=self.trade_system,
         )
         self.job_system = JobSystem(self.job_registry)
 
         # Wire event effect handlers from other systems
         self.event_system.register_effect_handler(
             "spawn_npc", self._effect_spawn_npc
+        )
+        self.event_system.register_effect_handler(
+            "resolve_boarding", self._effect_resolve_boarding
         )
 
         # Initialize faction relationships
@@ -198,6 +230,21 @@ class Game:
             station.add_npc(npc)
             station.log_event(f"A new arrival: {npc.name}.")
 
+    def _effect_resolve_boarding(self, effect, station: StationState, context: dict) -> None:
+        """Resolve a boarding combat when triggered by an event effect."""
+        ship_uid = context.get("ship_uid", "")
+        ship = station.ships.get(ship_uid)
+        if ship is None:
+            log.warning("resolve_boarding: ship '%s' not found", ship_uid)
+            return
+        assert self.combat_system is not None
+        outcome = self.combat_system.resolve_boarding(station, ship)
+        station.log_event(f"Combat outcome ({outcome.tier}): {outcome.narrative}")
+        if outcome.tier in ("repelled_clean", "repelled_damaged"):
+            station.log_event(f"{ship.name} withdraws after failed boarding attempt.")
+            self.visitor_system.depart_ship(ship.uid, station)
+        station.clear_tag("boarding_alert")
+
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
@@ -240,11 +287,13 @@ class Game:
         s = self.station
         assert s is not None
 
+        time_str = time_system.time_label(s)
+
         print()
         print(_hr())
         print(
             _c(Fore.CYAN + Style.BRIGHT, f" {s.name}")
-            + _c(Style.DIM, f"  |  Tick {s.tick:04d}  |  Seed {self.seed}")
+            + _c(Style.DIM, f"  |  {time_str}  |  Tick {s.tick:04d}  |  Seed {self.seed}")
         )
         print(_hr())
 
@@ -262,17 +311,32 @@ class Game:
         docked = s.get_docked_ships()
 
         avg_mood = self.npc_system.average_crew_mood(s)
+        morale_mod = self.resource_system.morale_modifier(s)
         mood_str = (
             _c(Fore.GREEN, "content") if avg_mood > 0.2 else
             _c(Fore.YELLOW, "uneasy") if avg_mood > -0.2 else
             _c(Fore.RED, "distressed")
         )
+        eff_str = _c(
+            Fore.GREEN if morale_mod >= 1.0 else Fore.YELLOW if morale_mod >= 0.85 else Fore.RED,
+            f"{morale_mod:.0%}"
+        )
+        defence_str = _c(Fore.CYAN, self.combat_system.security_strength_label(s))
+
         print(
-            f" Crew: {len(crew)} (mood: {mood_str})  "
+            f" Crew: {len(crew)} (mood: {mood_str}, eff: {eff_str})  "
+            f"Defence: {defence_str}  "
             f"Visitors: {len(visitors)}  "
-            f"Docked ships: {len(docked)}  "
+            f"Docked: {len(docked)}  "
             f"Incoming: {_c(Fore.YELLOW, str(len(incoming)))}"
         )
+
+        # Trade offers active
+        if s.trade_offers:
+            offer_names = ", ".join(
+                o.ship_name for o in s.trade_offers.values()
+            )
+            print(f" {_c(Fore.CYAN, 'Trade offers:')} {offer_names}  (use 'trade' to browse)")
 
         # Tags
         if s.active_tags:
@@ -337,6 +401,18 @@ class Game:
             case "deny":
                 self._cmd_deny(parts)
 
+            case "trade" | "tr":
+                self._cmd_trade(parts)
+
+            case "recruit":
+                self._cmd_recruit(parts)
+
+            case "repair":
+                self._cmd_repair(parts)
+
+            case "policy" | "pol":
+                self._cmd_policy(parts)
+
             case "log" | "l":
                 count = int(parts[1]) if len(parts) > 1 else 20
                 for entry in self.station.log[:count]:
@@ -385,15 +461,16 @@ class Game:
         if not crew:
             print("No crew.")
             return
-        print(f"\n  {'Name':<20} {'Class':<18} {'Mood':<12} {'Needs'}")
-        print("  " + "─" * 65)
+        print(f"\n  {'Name':<20} {'Class':<18} {'Mood':<12} {'Job':<22} {'Key Skills'}")
+        print("  " + "─" * 85)
         for npc in crew:
-            needs_str = " ".join(
-                f"{k}:{v:.0%}" for k, v in list(npc.needs.items())[:2]
-            )
+            job_label = self.job_system.get_job_label(npc)
+            top_skills = sorted(npc.skills.items(), key=lambda x: -x[1])[:3]
+            skills_str = " ".join(f"{k[:4]}:{v}" for k, v in top_skills)
+            inj = f" [{npc.injuries}inj]" if npc.injuries else ""
             print(
                 f"  {npc.name:<20} {npc.class_id:<18} "
-                f"{npc.mood_label():<12} {needs_str}"
+                f"{npc.mood_label():<12} {job_label:<22} {skills_str}{inj}"
             )
 
     def _show_ships(self) -> None:
@@ -401,15 +478,16 @@ class Game:
         if not ships:
             print("No ships tracked.")
             return
-        print(f"\n  {'Name':<28} {'Role':<12} {'Intent':<10} {'Status':<12} {'Threat'}")
-        print("  " + "─" * 72)
-        for ship in ships:
+        print(f"\n  {'#':<4} {'Name':<28} {'Role':<12} {'Intent':<10} {'Status':<12} {'Threat'}")
+        print("  " + "─" * 78)
+        for i, ship in enumerate(ships):
             color = Fore.RED if ship.is_hostile() else (
                 Fore.YELLOW if ship.status == "incoming" else Fore.WHITE
             )
+            trade_indicator = " [trade]" if ship.uid in self.station.trade_offers else ""
             print(_c(color,
-                f"  {ship.name:<28} {ship.role:<12} {ship.intent:<10} "
-                f"{ship.status:<12} {ship.threat_label()}"
+                f"  {i:<4} {ship.name:<28} {ship.role:<12} {ship.intent:<10} "
+                f"{ship.status:<12} {ship.threat_label()}{trade_indicator}"
             ))
 
     def _show_factions(self) -> None:
@@ -418,14 +496,20 @@ class Game:
             print(line)
 
     def _show_modules(self) -> None:
-        print(f"\n  {'Module':<24} {'Category':<12} {'Status'}")
-        print("  " + "─" * 50)
+        print(f"\n  {'Module':<24} {'Category':<12} {'Damage':<10} {'Status'}")
+        print("  " + "─" * 60)
         for module in self.station.modules.values():
-            status = "OFFLINE" if not module.active else (
-                f"DAMAGED {module.damage:.0%}" if module.damage > 0.0 else "OK"
-            )
+            if not module.active:
+                status_str = _c(Fore.RED, "OFFLINE")
+            elif module.damage >= 0.5:
+                status_str = _c(Fore.RED, f"DAMAGED {module.damage:.0%}")
+            elif module.damage > 0.0:
+                status_str = _c(Fore.YELLOW, f"DAMAGED {module.damage:.0%}")
+            else:
+                status_str = _c(Fore.GREEN, "OK")
             dock_str = f" [ship: {module.docked_ship}]" if module.docked_ship else ""
-            print(f"  {module.display_name:<24} {module.category:<12} {status}{dock_str}")
+            dmg_bar = f"{module.damage:.0%}" if module.damage else "—"
+            print(f"  {module.display_name:<24} {module.category:<12} {dmg_bar:<10} {status_str}{dock_str}")
 
     def _cmd_admit(self, parts: list[str]) -> None:
         incoming = self.station.get_incoming_ships()
@@ -458,20 +542,220 @@ class Game:
         else:
             print("Ship not found.")
 
+    def _cmd_trade(self, parts: list[str]) -> None:
+        """Browse and execute trades with a docked ship."""
+        offers = self.station.trade_offers
+        if not offers:
+            print("No trade offers available. Admit a trading ship first.")
+            return
+
+        # Select offer
+        offer_list = list(offers.values())
+        if len(parts) > 1:
+            try:
+                idx = int(parts[1])
+                offer = offer_list[idx]
+            except (ValueError, IndexError):
+                # Try by ship uid
+                offer = offers.get(parts[1])
+            if offer is None:
+                print(f"No trade offer for '{parts[1]}'.")
+                return
+        elif len(offer_list) == 1:
+            offer = offer_list[0]
+        else:
+            print("Multiple trade offers — specify index:")
+            for i, o in enumerate(offer_list):
+                print(f"  [{i}] {o.ship_name}")
+            return
+
+        best_skill = self.trade_system.best_negotiator_skill(self.station)
+        print(f"\n  Trade with {_c(Fore.CYAN, offer.ship_name)}  "
+              f"(negotiation skill: {best_skill})\n")
+
+        sell_lines = offer.get_sell_lines()
+        buy_lines = offer.get_buy_lines()
+
+        if sell_lines:
+            print(f"  {'SELLING':<20} {'Price/unit':<14} {'Available'}")
+            print("  " + "─" * 45)
+            for line in sell_lines:
+                print(f"  {line.resource:<20} {line.price_per_unit:<14.1f} {line.available:.0f}")
+
+        if buy_lines:
+            print()
+            print(f"  {'BUYING':<20} {'Price/unit':<14} {'Wants'}")
+            print("  " + "─" * 45)
+            for line in buy_lines:
+                print(f"  {line.resource:<20} {line.price_per_unit:<14.1f} {abs(line.available):.0f}")
+
+        print(f"\n  Your credits: {self.station.get_resource('credits'):.0f}")
+        print("  Commands: 'buy <resource> <amount>'  'sell <resource> <amount>'  'done'")
+
+        while True:
+            try:
+                sub = input(_c(Fore.CYAN, "  trade> ")).strip().lower().split()
+            except (KeyboardInterrupt, EOFError):
+                break
+            if not sub or sub[0] in ("done", "exit", "quit", "back"):
+                break
+            if len(sub) < 3 or sub[0] not in ("buy", "sell"):
+                print("  Usage: buy/sell <resource> <amount>")
+                continue
+            try:
+                amount = float(sub[2])
+            except ValueError:
+                print("  Amount must be a number.")
+                continue
+            if sub[0] == "buy":
+                ok, msg = self.trade_system.player_buy(
+                    offer, sub[1], amount, self.station, best_skill
+                )
+            else:
+                ok, msg = self.trade_system.player_sell(
+                    offer, sub[1], amount, self.station, best_skill
+                )
+            color = Fore.GREEN if ok else Fore.RED
+            print(_c(color, f"  {msg}"))
+            print(f"  Credits now: {self.station.get_resource('credits'):.0f}")
+
+    def _cmd_recruit(self, parts: list[str]) -> None:
+        """Recruit a visitor as crew (costs credits)."""
+        visitors = self.station.get_visitors()
+        if not visitors:
+            print("No visitors on station to recruit.")
+            return
+
+        if len(parts) < 2:
+            print(f"\n  {'#':<4} {'Name':<20} {'Class':<18} {'Faction'}")
+            print("  " + "─" * 55)
+            for i, v in enumerate(visitors):
+                print(f"  {i:<4} {v.name:<20} {v.class_id:<18} {v.faction_id or '—'}")
+            print(f"\n  Cost: {RECRUIT_COST:.0f} credits. Usage: recruit <index>")
+            return
+
+        try:
+            idx = int(parts[1])
+            npc = visitors[idx]
+        except (ValueError, IndexError):
+            print("Invalid visitor index.")
+            return
+
+        if self.station.get_resource("credits") < RECRUIT_COST:
+            print(f"Not enough credits (need {RECRUIT_COST:.0f}).")
+            return
+
+        self.station.modify_resource("credits", -RECRUIT_COST)
+        npc.status_tags = [t for t in npc.status_tags if t != "visitor"]
+        npc.status_tags.append("crew")
+        self.station.log_event(
+            f"{npc.name} recruited as crew member ({npc.class_id}). "
+            f"Cost: {RECRUIT_COST:.0f} credits."
+        )
+        print(_c(Fore.GREEN, f"  {npc.name} joins the crew!"))
+
+    def _cmd_repair(self, parts: list[str]) -> None:
+        """Directly repair a damaged module using parts."""
+        damaged = [m for m in self.station.modules.values() if m.damage > 0.0]
+        if not damaged:
+            print("No damaged modules.")
+            return
+
+        if len(parts) < 2:
+            print(f"\n  {'#':<4} {'Module':<24} {'Damage'}")
+            print("  " + "─" * 40)
+            for i, m in enumerate(damaged):
+                print(f"  {i:<4} {m.display_name:<24} {m.damage:.0%}")
+            print(f"\n  Cost: {REPAIR_PARTS_COST:.0f} parts per repair. Usage: repair <index>")
+            return
+
+        try:
+            idx = int(parts[1])
+            module = damaged[idx]
+        except (ValueError, IndexError):
+            print("Invalid module index.")
+            return
+
+        if self.station.get_resource("parts") < REPAIR_PARTS_COST:
+            print(f"Not enough parts (need {REPAIR_PARTS_COST:.0f}).")
+            return
+
+        self.station.modify_resource("parts", -REPAIR_PARTS_COST)
+        old_damage = module.damage
+        module.damage = max(0.0, module.damage - REPAIR_DAMAGE_AMOUNT)
+        if module.damage == 0.0 and not module.active:
+            module.active = True
+        self.station.log_event(
+            f"Emergency repair: {module.display_name} {old_damage:.0%} → {module.damage:.0%}."
+        )
+        print(_c(Fore.GREEN, f"  Repaired {module.display_name}: damage {old_damage:.0%} → {module.damage:.0%}"))
+
+    def _cmd_policy(self, parts: list[str]) -> None:
+        """View or set station policies."""
+        if len(parts) == 1:
+            # Show all policies
+            print(f"\n  {'Policy':<22} {'Value':<12} {'Description'}")
+            print("  " + "─" * 65)
+            for key, (options, desc) in STATION_POLICIES.items():
+                current = self.station.policy.get(key, options[0])
+                print(f"  {key:<22} {_c(Fore.CYAN, current):<12} {desc}")
+            print(f"\n  Usage: policy set <key> <value>")
+            return
+
+        if len(parts) >= 4 and parts[1] == "set":
+            key = parts[2]
+            value = parts[3]
+            if key not in STATION_POLICIES:
+                print(f"Unknown policy key '{key}'. Valid: {', '.join(STATION_POLICIES)}")
+                return
+            valid_values = STATION_POLICIES[key][0]
+            if value not in valid_values:
+                print(f"Invalid value '{value}' for {key}. Valid: {', '.join(valid_values)}")
+                return
+            old = self.station.policy.get(key, valid_values[0])
+            self.station.policy[key] = value
+            # Apply tag effects based on policy
+            self._apply_policy_effects(key, value, old)
+            self.station.log_event(f"Policy '{key}' changed: {old} → {value}.")
+            print(_c(Fore.GREEN, f"  Policy set: {key} = {value}"))
+        else:
+            print("Usage: policy [set <key> <value>]")
+
+    def _apply_policy_effects(self, key: str, value: str, old_value: str) -> None:
+        """Apply station tag changes when policies change."""
+        s = self.station
+        if key == "trade_stance":
+            s.clear_tag("active_trading")
+            if value == "active":
+                s.set_tag("active_trading")
+        elif key == "security_level":
+            s.clear_tag("station_guarded")
+            if value == "high":
+                s.set_tag("station_guarded")
+        elif key == "visitor_policy":
+            s.clear_tag("inspection_in_progress")
+            if value == "inspect":
+                s.set_tag("inspection_in_progress")
+
     def _show_help(self) -> None:
         print("""
   COMMANDS
-  ─────────────────────────────────────────────────────
-  tick [n]      — Advance n ticks (default 1)
-  auto [n]      — Run n ticks, pausing on events
-  events        — Show and respond to pending events
-  crew          — Show crew roster and status
-  ships         — Show tracked ships
-  factions      — Show faction reputation
-  modules       — Show station modules
-  admit [n]     — Admit incoming ship (by index or uid)
-  deny  [n]     — Deny incoming ship
-  log [n]       — Show last n log entries (default 20)
-  help          — Show this help
-  quit          — Exit game
+  ─────────────────────────────────────────────────────────────
+  tick [n]             — Advance n ticks (default 1)
+  auto [n]             — Run n ticks, pausing on events
+  events               — Show and respond to pending events
+  crew                 — Show crew roster and status
+  ships                — Show tracked ships
+  factions             — Show faction reputation
+  modules              — Show station modules
+  admit [n]            — Admit incoming ship (by index or uid)
+  deny  [n]            — Deny incoming ship
+  trade [n]            — Browse/execute trades with a docked ship
+  recruit [n]          — Recruit a visitor as crew (150 credits)
+  repair [n]           — Repair a damaged module (10 parts)
+  policy               — View station policies
+  policy set <k> <v>   — Set a policy value
+  log [n]              — Show last n log entries (default 20)
+  help                 — Show this help
+  quit                 — Exit game
 """)

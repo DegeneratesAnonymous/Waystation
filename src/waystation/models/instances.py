@@ -62,6 +62,12 @@ class NPCInstance:
     # Arbitrary memory hooks for events to read/write
     memory: dict[str, Any] = field(default_factory=dict)
 
+    # Skill XP accumulation (float; integer part = skill level to apply)
+    skill_xp: dict[str, float] = field(default_factory=dict)
+
+    # Injury count — healed over time in med bay
+    injuries: int = 0
+
     @classmethod
     def create(cls,
                template_id: str,
@@ -236,6 +242,9 @@ class StationState:
 
     # Cooldown tracker: event_id -> tick it can next fire
     event_cooldowns: dict[str, int] = field(default_factory=dict)
+
+    # Active trade offers keyed by ship uid (populated when trader docks)
+    trade_offers: dict[str, Any] = field(default_factory=dict)
 
     # Log of recent events/messages (most recent first)
     log: list[str] = field(default_factory=list)
