@@ -123,6 +123,57 @@ class NPCInstance:
             return "distressed"
         return "miserable"
 
+    def to_dict(self) -> dict:
+        return {
+            "uid":               self.uid,
+            "template_id":       self.template_id,
+            "name":              self.name,
+            "class_id":          self.class_id,
+            "subclass_id":       self.subclass_id,
+            "skills":            dict(self.skills),
+            "traits":            list(self.traits),
+            "needs":             dict(self.needs),
+            "mood":              self.mood,
+            "location":          self.location,
+            "current_job_id":    self.current_job_id,
+            "job_module_uid":    self.job_module_uid,
+            "job_timer":         self.job_timer,
+            "job_interrupted":   self.job_interrupted,
+            "faction_id":        self.faction_id,
+            "status_tags":       list(self.status_tags),
+            "memory":            dict(self.memory),
+            "skill_xp":          dict(self.skill_xp),
+            "injuries":          self.injuries,
+            "inventory_capacity": self.inventory_capacity,
+            "build_order_uid":   self.build_order_uid,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "NPCInstance":
+        return cls(
+            uid=d["uid"],
+            template_id=d["template_id"],
+            name=d["name"],
+            class_id=d["class_id"],
+            subclass_id=d.get("subclass_id"),
+            skills=d.get("skills", {}),
+            traits=d.get("traits", []),
+            needs=d.get("needs", {}),
+            mood=d.get("mood", 0.5),
+            location=d.get("location", "commons"),
+            current_job_id=d.get("current_job_id"),
+            job_module_uid=d.get("job_module_uid"),
+            job_timer=d.get("job_timer", 0),
+            job_interrupted=d.get("job_interrupted", False),
+            faction_id=d.get("faction_id"),
+            status_tags=d.get("status_tags", []),
+            memory=d.get("memory", {}),
+            skill_xp=d.get("skill_xp", {}),
+            injuries=d.get("injuries", 0),
+            inventory_capacity=d.get("inventory_capacity", 10.0),
+            build_order_uid=d.get("build_order_uid"),
+        )
+
 
 # ---------------------------------------------------------------------------
 # Build Order Instance (a player-placed construction blueprint)
@@ -192,6 +243,29 @@ class BuildOrderInstance:
             return f"Building {self.progress:.0%}"
         return "Complete"
 
+    def to_dict(self) -> dict:
+        return {
+            "uid":                 self.uid,
+            "buildable_id":        self.buildable_id,
+            "status":              self.status,
+            "materials_needed":    dict(self.materials_needed),
+            "materials_delivered": dict(self.materials_delivered),
+            "progress":            self.progress,
+            "assigned_npc_uid":    self.assigned_npc_uid,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BuildOrderInstance":
+        return cls(
+            uid=d["uid"],
+            buildable_id=d["buildable_id"],
+            status=d.get("status", "pending"),
+            materials_needed=d.get("materials_needed", {}),
+            materials_delivered=d.get("materials_delivered", {}),
+            progress=d.get("progress", 0.0),
+            assigned_npc_uid=d.get("assigned_npc_uid"),
+        )
+
 
 # ---------------------------------------------------------------------------
 # Ship Instance
@@ -248,6 +322,41 @@ class ShipInstance:
             return "high"
         return "extreme"
 
+    def to_dict(self) -> dict:
+        return {
+            "uid":             self.uid,
+            "template_id":     self.template_id,
+            "name":            self.name,
+            "role":            self.role,
+            "faction_id":      self.faction_id,
+            "intent":          self.intent,
+            "cargo":           dict(self.cargo),
+            "passenger_uids":  list(self.passenger_uids),
+            "threat_level":    self.threat_level,
+            "behavior_tags":   list(self.behavior_tags),
+            "status":          self.status,
+            "docked_at":       self.docked_at,
+            "ticks_docked":    self.ticks_docked,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ShipInstance":
+        return cls(
+            uid=d["uid"],
+            template_id=d["template_id"],
+            name=d["name"],
+            role=d["role"],
+            faction_id=d.get("faction_id"),
+            intent=d.get("intent", "unknown"),
+            cargo=d.get("cargo", {}),
+            passenger_uids=d.get("passenger_uids", []),
+            threat_level=d.get("threat_level", 0),
+            behavior_tags=d.get("behavior_tags", []),
+            status=d.get("status", "incoming"),
+            docked_at=d.get("docked_at"),
+            ticks_docked=d.get("ticks_docked", 0),
+        )
+
 
 # ---------------------------------------------------------------------------
 # Module Instance (station room)
@@ -278,6 +387,31 @@ class ModuleInstance:
 
     def is_available_dock(self) -> bool:
         return self.is_dock() and self.docked_ship is None and self.active
+
+    def to_dict(self) -> dict:
+        return {
+            "uid":          self.uid,
+            "definition_id": self.definition_id,
+            "display_name": self.display_name,
+            "category":     self.category,
+            "occupants":    list(self.occupants),
+            "docked_ship":  self.docked_ship,
+            "active":       self.active,
+            "damage":       self.damage,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ModuleInstance":
+        return cls(
+            uid=d["uid"],
+            definition_id=d["definition_id"],
+            display_name=d["display_name"],
+            category=d["category"],
+            occupants=d.get("occupants", []),
+            docked_ship=d.get("docked_ship"),
+            active=d.get("active", True),
+            damage=d.get("damage", 0.0),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -396,3 +530,35 @@ class StationState:
         current = self.faction_reputation.get(faction_id, 0.0)
         self.faction_reputation[faction_id] = max(-100.0, min(100.0, current + delta))
         return self.faction_reputation[faction_id]
+
+    def to_dict(self) -> dict:
+        return {
+            "name":               self.name,
+            "tick":               self.tick,
+            "resources":          dict(self.resources),
+            "npcs":               {uid: npc.to_dict()   for uid, npc   in self.npcs.items()},
+            "ships":              {uid: ship.to_dict()  for uid, ship  in self.ships.items()},
+            "modules":            {uid: mod.to_dict()   for uid, mod   in self.modules.items()},
+            "build_orders":       {uid: bo.to_dict()    for uid, bo    in self.build_orders.items()},
+            "faction_reputation": dict(self.faction_reputation),
+            "active_tags":        list(self.active_tags),
+            "policy":             dict(self.policy),
+            "event_cooldowns":    dict(self.event_cooldowns),
+            "log":                list(self.log),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "StationState":
+        obj = cls(name=d["name"])
+        obj.tick               = d.get("tick", 0)
+        obj.resources          = d.get("resources", {})
+        obj.npcs               = {uid: NPCInstance.from_dict(v)      for uid, v in d.get("npcs",         {}).items()}
+        obj.ships              = {uid: ShipInstance.from_dict(v)      for uid, v in d.get("ships",        {}).items()}
+        obj.modules            = {uid: ModuleInstance.from_dict(v)    for uid, v in d.get("modules",      {}).items()}
+        obj.build_orders       = {uid: BuildOrderInstance.from_dict(v) for uid, v in d.get("build_orders", {}).items()}
+        obj.faction_reputation = d.get("faction_reputation", {})
+        obj.active_tags        = set(d.get("active_tags", []))
+        obj.policy             = d.get("policy", {})
+        obj.event_cooldowns    = d.get("event_cooldowns", {})
+        obj.log                = d.get("log", [])
+        return obj

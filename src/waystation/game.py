@@ -6,6 +6,7 @@ Initializes the station, loads content, and runs the tick/input cycle.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import random
@@ -87,14 +88,17 @@ def _clear() -> None:
 
 class Game:
 
-    def __init__(self, data_root: Path, mods_root: Path, seed: int | None = None) -> None:
+    def __init__(self, data_root: Path, mods_root: Path, seed: int | None = None,
+                 registry: "ContentRegistry | None" = None,
+                 job_registry: "JobRegistry | None" = None) -> None:
         self.data_root = data_root
         self.mods_root = mods_root
         self.seed = seed or random.randint(0, 999_999)
 
         random.seed(self.seed)
 
-        self.registry = ContentRegistry()
+        self.registry     = registry     or ContentRegistry()
+        self.job_registry = job_registry or JobRegistry()
         self.station: StationState | None = None
 
         # Systems (created after registry is loaded)
@@ -103,7 +107,6 @@ class Game:
         self.resource_system: ResourceSystem | None = None
         self.faction_system: FactionSystem | None = None
         self.visitor_system: VisitorSystem | None = None
-        self.job_registry   = JobRegistry()
         self.job_system: JobSystem | None = None
         self.combat_system: CombatSystem | None = None
         self.trade_system: TradeSystem | None = None
@@ -117,7 +120,9 @@ class Game:
     # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """Load all content from disk."""
+        """Load all content from disk (no-op if registry was injected pre-loaded)."""
+        if self.registry.is_loaded():
+            return
         self.registry.load_core(self.data_root)
         self.registry.load_mods(self.mods_root)
         self.job_registry.load(self.data_root)
@@ -168,6 +173,57 @@ class Game:
         print(f"\n{_c(Fore.CYAN, 'Station online:')} {self.station.name}")
         print(f"Crew: {len(self.station.get_crew())} | "
               f"Modules: {len(self.station.modules)}")
+
+    # ------------------------------------------------------------------
+    # Save / Load
+    # ------------------------------------------------------------------
+
+    def save_game(self, save_path: Path) -> None:
+        """Serialize the current game state to a JSON file."""
+        assert self.station is not None, "No active game to save."
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "version": 1,
+            "seed":    self.seed,
+            "station": self.station.to_dict(),
+        }
+        with open(save_path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+        log.info("Game saved to %s", save_path)
+
+    def load_saved_game(self, save_path: Path) -> None:
+        """Restore game state from a JSON save file."""
+        save_path = Path(save_path)
+        with open(save_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+
+        self.seed = data.get("seed", self.seed)
+        random.seed(self.seed)
+
+        self.station = StationState.from_dict(data["station"])
+
+        # Re-create all runtime systems (they are stateless relative to station)
+        self.npc_system      = NPCSystem(self.registry)
+        self.resource_system = ResourceSystem(self.registry)
+        self.event_system    = EventSystem(self.registry)
+        self.faction_system  = FactionSystem(self.registry)
+        self.visitor_system  = VisitorSystem(
+            self.registry, self.npc_system, self.event_system
+        )
+        self.job_system = JobSystem(self.job_registry)
+        self.building_system = BuildingSystem(self.registry)
+
+        self.event_system.register_effect_handler(
+            "spawn_npc", self._effect_spawn_npc
+        )
+
+        # Restore inter-faction relationship data from definitions
+        self.faction_system.initialize(self.station)
+
+        log.info("Game loaded from %s (tick %d)", save_path, self.station.tick)
+        print(f"\n{_c(Fore.CYAN, 'Station restored:')} {self.station.name}  "
+              f"(tick {self.station.tick})")
 
     # ------------------------------------------------------------------
     # Starter setup
@@ -425,7 +481,7 @@ class Game:
             case "modules" | "m":
                 self._show_modules()
 
-            case "build" | "b":
+            case "build":
                 self._cmd_build(parts)
 
             case "help" | "h" | "?":
@@ -541,8 +597,7 @@ class Game:
             order = self.building_system.place_order(buildable_id, self.station)
             if order:
                 print(_c(Fore.GREEN,
-                         f"Order placed: {defn.display_name}  "
-                         f"[{order.uid}]"))
+                         f"Order placed: {defn.display_name}  [{order.uid}]"))
             else:
                 print(_c(Fore.RED, "Failed to place order."))
 
@@ -558,18 +613,14 @@ class Game:
         print(f"\n  {'ID':<30} {'Name':<24} {'Cost':<38} {'Time'}")
         print("  " + "─" * 100)
         for defn in buildables:
-            cost_str = ", ".join(
-                f"{int(v)} {r}" for r, v in defn.cost.items()
-            )
+            cost_str = ", ".join(f"{int(v)} {r}" for r, v in defn.cost.items())
             can = self.building_system.can_afford(defn.id, self.station)
             row = (f"  {defn.id:<30} {defn.display_name:<24} "
                    f"{cost_str:<38} {defn.build_time_ticks} ticks")
-            color = Fore.GREEN if can else Fore.RED
-            print(_c(color, row))
+            print(_c(Fore.GREEN if can else Fore.RED, row))
 
         print()
-        print(_c(Style.DIM,
-                 "  Type 'build <id>' to queue a construction order."))
+        print(_c(Style.DIM, "  Type 'build <id>' to queue a construction order."))
 
     def _show_build_orders(self) -> None:
         assert self.station is not None

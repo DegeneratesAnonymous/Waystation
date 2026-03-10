@@ -106,6 +106,10 @@ class EventDefinition:
     # Fallback outcomes if there are no choices (auto-resolved events)
     auto_outcomes: tuple[OutcomeEffect, ...] = ()
     followup_events: tuple[str, ...] = ()   # additional events queued after resolution
+    # If True the event pauses the game until the player responds
+    hostile: bool = False
+    # Non-zero: event expires and is skipped after this many ticks
+    expires_in: int = 0
     schema_version: str = "1"
 
     @classmethod
@@ -125,6 +129,8 @@ class EventDefinition:
             choices=tuple(EventChoice.from_raw(c) for c in raw.get("choices", [])),
             auto_outcomes=tuple(OutcomeEffect.from_raw(o) for o in raw.get("auto_outcomes", [])),
             followup_events=tuple(raw.get("followup_events", [])),
+            hostile=bool(raw.get("hostile", False)),
+            expires_in=int(raw.get("expires_in", 0)),
             schema_version=str(raw.get("schema_version", "1")),
         )
 
@@ -308,10 +314,19 @@ class BuildableDefinition:
     display_name: str
     category: str = "utility"           # groups items in the build menu
     description: str = ""
-    cost: dict[str, float] = field(default_factory=dict)    # resource cost
-    build_time_ticks: int = 20          # ticks to construct once materials arrived
-    produces_module_id: str | None = None   # module to create on completion
-    required_tags: tuple[str, ...] = ()     # station must have all of these
+
+    # Resources consumed when the order is placed (deducted immediately)
+    cost: dict[str, float] = field(default_factory=dict)
+
+    # Station tags that must be present for this buildable to be available
+    required_tags: tuple[str, ...] = field(default_factory=tuple)
+
+    # How many ticks an engineer takes to fully construct this
+    build_time_ticks: int = 30
+
+    # Which module definition id is added to the station when complete
+    produces_module_id: str = ""
+
     schema_version: str = "1"
 
     @classmethod
@@ -322,8 +337,8 @@ class BuildableDefinition:
             category=raw.get("category", "utility"),
             description=raw.get("description", ""),
             cost={k: float(v) for k, v in raw.get("cost", {}).items()},
-            build_time_ticks=int(raw.get("build_time_ticks", 20)),
-            produces_module_id=raw.get("produces_module_id"),
             required_tags=tuple(raw.get("required_tags", [])),
+            build_time_ticks=int(raw.get("build_time_ticks", 30)),
+            produces_module_id=raw.get("produces_module_id", ""),
             schema_version=str(raw.get("schema_version", "1")),
         )

@@ -114,6 +114,7 @@ class ContentRegistry:
 
         self._errors: list[str] = []
         self._loaded_mods: list[str] = []
+        self._loaded: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -129,6 +130,7 @@ class ContentRegistry:
         self._load_content_folder(data_root / "factions",   "factions")
         self._load_content_folder(data_root / "modules",    "modules")
         self._load_content_folder(data_root / "buildables", "buildables")
+        self._loaded = True
         log.info(
             "Core load complete — events:%d npcs:%d ships:%d classes:%d "
             "factions:%d modules:%d buildables:%d",
@@ -173,6 +175,10 @@ class ContentRegistry:
 
     def errors(self) -> list[str]:
         return list(self._errors)
+
+    def is_loaded(self) -> bool:
+        """Return True if core content has been fully loaded into this registry."""
+        return self._loaded
 
     # ------------------------------------------------------------------
     # Internal loading

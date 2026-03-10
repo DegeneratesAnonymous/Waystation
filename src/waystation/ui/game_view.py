@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -41,9 +42,12 @@ if TYPE_CHECKING:
     )
     from waystation.models.templates import BuildableDefinition
 
+
+# ── Constants ──────────────────────────────────────────────────────────────────
+AUTOSAVE_FILENAME = "autosave.json"
+
 # Keywords that give a log entry a green OK colour
 _LOG_OK_KEYWORDS = ("docked", "joined", "Trade:", "+", "Blueprint", "completed")
-
 
 # ── Fonts ──────────────────────────────────────────────────────────────────────
 
@@ -194,9 +198,12 @@ class NebulaField:
 
 class GameView:
 
-    def __init__(self, game: "Game") -> None:
+    def __init__(self, game: "Game", saves_dir: "Path | None" = None,
+                 auto_save: bool = True) -> None:
         self.game = game
         self.s    = game.station
+        self._saves_dir = saves_dir
+        self._auto_save = auto_save
 
         pygame.init()
         self.screen = pygame.display.set_mode((T.SCREEN_W, T.SCREEN_H))
@@ -239,6 +246,13 @@ class GameView:
         # Stars and space background
         self._stars  = StarField(game.seed)
         self._nebula = NebulaField(game.seed)
+
+        # Return signal: "menu" when user exits back to the main menu
+        self._return_signal: str | None = None
+
+        # Save feedback message (shown briefly after saving)
+        self._save_msg: str = ""
+        self._save_msg_timer: float = 0.0
 
         self._rebuild_layout()
         self._sync_dots()
@@ -362,20 +376,23 @@ class GameView:
     _BODY_DARKEN     = 45   # how much darker the body is vs. class colour
     _HEAD_HIGHLIGHT  = 90   # brightness added to the head highlight
 
-    def run(self) -> None:
+    def run(self) -> str:
+        """Run the game loop; returns 'menu' or 'quit' when the player exits."""
         while True:
             dt = self.clock.tick(60) / 1000.0
 
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
-                    pygame.quit()
-                    return
+                    return "quit"
                 elif ev.type == pygame.KEYDOWN:
                     self._on_key(ev)
                 elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     self._on_click(ev.pos)
                 elif ev.type == pygame.MOUSEMOTION:
                     self._on_hover(ev.pos)
+
+            if self._return_signal:
+                return self._return_signal
 
             self._update(dt)
             self._render()
@@ -387,15 +404,25 @@ class GameView:
         self._tick_acc += dt
         if self._tick_acc >= interval:
             self._tick_acc -= interval
-            if not self.game.event_system.get_pending():
-                self._do_tick()
-            else:
-                # Pause auto-advance when event needs attention
+            hostile_pending = any(
+                not p.resolved and p.definition.hostile
+                for p in self.game.event_system.get_pending()
+            )
+            if hostile_pending:
+                # Only hostile events pause the game
                 self._speed = 0
+            else:
+                self._do_tick()
 
         # Animate dots
         for dot in self._dots.values():
             dot.update(dt)
+
+        # Save message timer
+        if self._save_msg_timer > 0:
+            self._save_msg_timer -= dt
+            if self._save_msg_timer <= 0:
+                self._save_msg = ""
 
     def _do_tick(self) -> None:
         self.game._tick()
@@ -423,7 +450,9 @@ class GameView:
             if self._build_menu_open:
                 self._build_menu_open = False
             else:
-                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                self._do_save_and_menu()
+        elif ev.key == pygame.K_s and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+            self._do_save()
         elif ev.key == pygame.K_b:
             self._build_menu_open = not self._build_menu_open
             self._build_selected_id = None
@@ -438,21 +467,42 @@ class GameView:
             else:
                 self._log_scroll = min(len(self.s.log) - 1, self._log_scroll + 1)
 
+    def _do_save(self) -> None:
+        """Save game to the default slot if a saves directory is configured."""
+        if self._saves_dir and self.game.station:
+            slot = Path(self._saves_dir) / AUTOSAVE_FILENAME
+            try:
+                self.game.save_game(slot)
+                self._save_msg = "Saved  \u2713"
+                self._save_msg_timer = 2.5
+            except Exception as exc:
+                self._save_msg = f"Save failed: {exc}"
+                self._save_msg_timer = 3.0
+
+    def _do_save_and_menu(self) -> None:
+        """Save the game (if auto-save is enabled) and signal a return to the main menu."""
+        if self._auto_save:
+            self._do_save()
+        self._return_signal = "menu"
+
     def _on_click(self, pos: tuple[int, int]) -> None:
-        # Speed buttons
-        for speed, rect in self._speed_btn_rects().items():
-            if rect.collidepoint(pos):
-                self._speed = speed
-                return
+        # Save button
+        if self._save_btn_rect().collidepoint(pos):
+            self._do_save()
+            return
+
+        # Menu button
+        if self._menu_btn_rect().collidepoint(pos):
+            self._do_save_and_menu()
+            return
 
         # Build menu toggle button
-        btn_rect = self._build_btn_rect()
-        if btn_rect.collidepoint(pos):
+        if self._build_btn_rect().collidepoint(pos):
             self._build_menu_open = not self._build_menu_open
             self._build_selected_id = None
             return
 
-        # Build menu item clicks
+        # Build menu item clicks (must check before speed buttons to consume clicks inside panel)
         if self._build_menu_open:
             for item in self._build_menu_item_rects():
                 if item["rect"].collidepoint(pos):
@@ -461,19 +511,23 @@ class GameView:
                         if (self.game.building_system and
                                 self.game.building_system.can_afford(
                                     item["id"], self.s)):
-                            self.game.building_system.place_order(
-                                item["id"], self.s)
+                            self.game.building_system.place_order(item["id"], self.s)
                             self._build_menu_open = False
                             self._build_selected_id = None
                     else:
                         self._build_selected_id = item["id"]
                     return
             # Click outside menu → close
-            menu_rect = self._build_menu_rect()
-            if not menu_rect.collidepoint(pos):
+            if not self._build_menu_rect().collidepoint(pos):
                 self._build_menu_open = False
                 self._build_selected_id = None
             return
+
+        # Speed buttons
+        for speed, rect in self._speed_btn_rects().items():
+            if rect.collidepoint(pos):
+                self._speed = speed
+                return
 
         # Event buttons
         for btn in self._event_btns:
@@ -509,15 +563,19 @@ class GameView:
             4: pygame.Rect(bx + (bw+gap)*3,   by, bw, bh),
         }
 
+    def _save_btn_rect(self) -> pygame.Rect:
+        return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 338, 7, 70, 28)
+
+    def _menu_btn_rect(self) -> pygame.Rect:
+        return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 414, 7, 70, 28)
+
     def _build_btn_rect(self) -> pygame.Rect:
-        """Rect for the 'BUILD' toggle button in the top bar."""
-        bx = T.SCREEN_W - T.SIDEBAR_W - 260 - 80
-        return pygame.Rect(bx, 7, 70, 28)
+        """Rect for the BUILD toggle button — sits to the left of SAVE/MENU."""
+        return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 496, 7, 76, 28)
 
     def _build_menu_rect(self) -> pygame.Rect:
         """Rect for the floating build menu panel."""
-        return pygame.Rect(T.FLOOR_X + 10,
-                           T.FLOOR_Y + 10,
+        return pygame.Rect(T.FLOOR_X + 10, T.FLOOR_Y + 10,
                            460, T.FLOOR_H - 20)
 
     def _build_menu_item_rects(self) -> list[dict]:
@@ -1019,12 +1077,8 @@ class GameView:
         time_str = time_system.time_label(self.s)
         D.text(self.screen, self.fonts.md, time_str, (260, 14), T.TEXT_DIM)
 
-        # Pending event indicator
-        pending = [p for p in self._pending if not p.resolved]
-        if pending:
-            D.text(self.screen, self.fonts.md,
-                   f"!  EVENT WAITING — game paused",
-                   (450, 14), T.WARN)
+        # Pending event notification button (pulsing)
+        self._render_event_notification()
 
         # Speed buttons
         speed_labels = {0: "PAUSE", 1: "x1", 2: "x2", 4: "x4"}
@@ -1038,18 +1092,87 @@ class GameView:
                    rect.center,
                    T.BG if is_active else T.TEXT, "center")
 
+        # Save button
+        save_rect = self._save_btn_rect()
+        mx, my = pygame.mouse.get_pos()
+        save_hov = save_rect.collidepoint(mx, my)
+        save_bg  = T.ACCENT_WARM if save_hov else T.PANEL_EDGE
+        pygame.draw.rect(self.screen, save_bg, save_rect, border_radius=4)
+        pygame.draw.rect(self.screen, T.ACCENT_WARM, save_rect, 1, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "SAVE",
+               save_rect.center, T.BG if save_hov else T.TEXT, "center")
+
+        # Menu button
+        menu_rect = self._menu_btn_rect()
+        menu_hov  = menu_rect.collidepoint(mx, my)
+        menu_bg   = T.ACCENT if menu_hov else T.PANEL_EDGE
+        pygame.draw.rect(self.screen, menu_bg, menu_rect, border_radius=4)
+        pygame.draw.rect(self.screen, T.ACCENT, menu_rect, 1, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "MENU",
+               menu_rect.center, T.BG if menu_hov else T.TEXT, "center")
+
         # Build menu toggle button
         brect = self._build_btn_rect()
         b_active = self._build_menu_open
-        b_bg = T.BUILD_MENU_EDGE if b_active else T.PANEL_EDGE
+        b_hov = brect.collidepoint(mx, my)
+        b_bg = T.BUILD_MENU_EDGE if b_active else (T.PANEL_EDGE if not b_hov else (30, 60, 120))
         pygame.draw.rect(self.screen, b_bg, brect, border_radius=4)
         pygame.draw.rect(self.screen, T.BUILD_MENU_EDGE, brect, 1, border_radius=4)
         D.text(self.screen, self.fonts.sm, "BUILD [B]",
                brect.center, T.TEXT_BRIGHT if b_active else T.TEXT, "center")
 
+        # Save feedback message
+        if self._save_msg:
+            D.text(self.screen, self.fonts.sm, self._save_msg,
+                   (save_rect.left, save_rect.bottom + 2), T.OK)
+
         # Tick counter
         D.text(self.screen, self.fonts.sm, f"Tick {self.s.tick:04d}",
                (T.SCREEN_W - T.SIDEBAR_W - 8, 14), T.TEXT_DIM, "topright")
+
+    def _render_event_notification(self) -> None:
+        """Pulsing notification button in the top bar when an event is available."""
+        pending = [p for p in self._pending if not p.resolved]
+        if not pending:
+            return
+
+        p = pending[0]
+        is_hostile = p.definition.hostile
+        base_color = T.DANGER if is_hostile else T.WARN
+
+        t = pygame.time.get_ticks() / 1000.0
+        pulse = abs(math.sin(t * (3.0 if is_hostile else 2.0)))
+
+        # Position the button so it never overlaps the speed buttons on the right.
+        _MAX_NOTIFICATION_W = 310
+        btn_x = 440
+        btn_y = 7
+        btn_h = 29
+        padding = 8
+        speed_rects = list(self._speed_btn_rects().values())
+        if speed_rects:
+            speed_left = min(r.left for r in speed_rects)
+            btn_w = min(_MAX_NOTIFICATION_W, speed_left - btn_x - padding)
+        else:
+            btn_w = _MAX_NOTIFICATION_W
+        if btn_w <= 0:
+            return
+        btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        # Pulsing translucent background
+        bg_alpha = int(50 + 90 * pulse)
+        bg_surf = pygame.Surface((btn_rect.width, btn_rect.height), pygame.SRCALPHA)
+        bg_surf.fill((*base_color, bg_alpha))
+        self.screen.blit(bg_surf, btn_rect.topleft)
+
+        # Pulsing border (thickens at peak)
+        border_w = 1 + int(2 * pulse)
+        pygame.draw.rect(self.screen, base_color, btn_rect, border_w, border_radius=4)
+
+        # Label — event title truncated, with count if multiple queued
+        count_str = f"  (+{len(pending) - 1})" if len(pending) > 1 else ""
+        label = f"!  {p.definition.title[:30]}{count_str}"
+        D.text(self.screen, self.fonts.md, label, btn_rect.center, T.TEXT_BRIGHT, "center")
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
 
@@ -1253,7 +1376,7 @@ class GameView:
     # ── Build menu overlay ────────────────────────────────────────────────────
 
     def _render_build_menu(self) -> None:
-        """Render the full-height build menu panel over the floor plan."""
+        """Render the floating build menu panel over the floor plan."""
         rect = self._build_menu_rect()
 
         # Translucent background
@@ -1270,7 +1393,7 @@ class GameView:
         D.text(self.screen, self.fonts.hd, "BUILD MENU", (x, y), T.BUILD_SELECTED)
         y += 34
         D.text(self.screen, self.fonts.sm,
-               "Click once to select  ·  Click again to place order  ·  ESC to close",
+               "Click once to select  ·  Click again to place order  ·  ESC/B to close",
                (x, y), T.TEXT_DIM)
         y += 16
         pygame.draw.line(self.screen, T.BUILD_MENU_EDGE,
@@ -1305,9 +1428,7 @@ class GameView:
                    (ir.right - 8, ir.y + 6), T.TEXT_DIM, "topright")
 
             # Cost line
-            cost_str = "  ".join(
-                f"{int(v)} {r}" for r, v in defn.cost.items()
-            )
+            cost_str = "  ".join(f"{int(v)} {r}" for r, v in defn.cost.items())
             D.text(self.screen, self.fonts.sm, f"Cost: {cost_str}",
                    (ir.x + 8, ir.y + 24),
                    T.TEXT if can else T.BUILD_UNAVAILABLE)
