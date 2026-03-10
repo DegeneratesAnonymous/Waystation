@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -38,6 +39,9 @@ if TYPE_CHECKING:
     from waystation.game import Game
     from waystation.models.instances import ModuleInstance, NPCInstance
 
+
+# ── Constants ──────────────────────────────────────────────────────────────────
+AUTOSAVE_FILENAME = "autosave.json"
 
 # ── Fonts ──────────────────────────────────────────────────────────────────────
 
@@ -188,9 +192,12 @@ class NebulaField:
 
 class GameView:
 
-    def __init__(self, game: "Game") -> None:
+    def __init__(self, game: "Game", saves_dir: "Path | None" = None,
+                 auto_save: bool = True) -> None:
         self.game = game
         self.s    = game.station
+        self._saves_dir = saves_dir
+        self._auto_save = auto_save
 
         pygame.init()
         self.screen = pygame.display.set_mode((T.SCREEN_W, T.SCREEN_H))
@@ -228,6 +235,13 @@ class GameView:
         # Stars and space background
         self._stars  = StarField(game.seed)
         self._nebula = NebulaField(game.seed)
+
+        # Return signal: "menu" when user exits back to the main menu
+        self._return_signal: str | None = None
+
+        # Save feedback message (shown briefly after saving)
+        self._save_msg: str = ""
+        self._save_msg_timer: float = 0.0
 
         self._rebuild_layout()
         self._sync_dots()
@@ -351,20 +365,23 @@ class GameView:
     _BODY_DARKEN     = 45   # how much darker the body is vs. class colour
     _HEAD_HIGHLIGHT  = 90   # brightness added to the head highlight
 
-    def run(self) -> None:
+    def run(self) -> str:
+        """Run the game loop; returns 'menu' or 'quit' when the player exits."""
         while True:
             dt = self.clock.tick(60) / 1000.0
 
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
-                    pygame.quit()
-                    return
+                    return "quit"
                 elif ev.type == pygame.KEYDOWN:
                     self._on_key(ev)
                 elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     self._on_click(ev.pos)
                 elif ev.type == pygame.MOUSEMOTION:
                     self._on_hover(ev.pos)
+
+            if self._return_signal:
+                return self._return_signal
 
             self._update(dt)
             self._render()
@@ -385,6 +402,12 @@ class GameView:
         # Animate dots
         for dot in self._dots.values():
             dot.update(dt)
+
+        # Save message timer
+        if self._save_msg_timer > 0:
+            self._save_msg_timer -= dt
+            if self._save_msg_timer <= 0:
+                self._save_msg = ""
 
     def _do_tick(self) -> None:
         self.game._tick()
@@ -409,13 +432,43 @@ class GameView:
         elif ev.key == pygame.K_4:
             self._speed = 4
         elif ev.key in (pygame.K_q, pygame.K_ESCAPE):
-            pygame.event.post(pygame.event.Event(pygame.QUIT))
+            self._do_save_and_menu()
+        elif ev.key == pygame.K_s and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+            self._do_save()
         elif ev.key == pygame.K_UP:
             self._log_scroll = max(0, self._log_scroll - 1)
         elif ev.key == pygame.K_DOWN:
             self._log_scroll = min(len(self.s.log) - 1, self._log_scroll + 1)
 
+    def _do_save(self) -> None:
+        """Save game to the default slot if a saves directory is configured."""
+        if self._saves_dir and self.game.station:
+            slot = Path(self._saves_dir) / AUTOSAVE_FILENAME
+            try:
+                self.game.save_game(slot)
+                self._save_msg = "Saved  \u2713"
+                self._save_msg_timer = 2.5
+            except Exception as exc:
+                self._save_msg = f"Save failed: {exc}"
+                self._save_msg_timer = 3.0
+
+    def _do_save_and_menu(self) -> None:
+        """Save the game (if auto-save is enabled) and signal a return to the main menu."""
+        if self._auto_save:
+            self._do_save()
+        self._return_signal = "menu"
+
     def _on_click(self, pos: tuple[int, int]) -> None:
+        # Save button
+        if self._save_btn_rect().collidepoint(pos):
+            self._do_save()
+            return
+
+        # Menu button
+        if self._menu_btn_rect().collidepoint(pos):
+            self._do_save_and_menu()
+            return
+
         # Speed buttons
         for speed, rect in self._speed_btn_rects().items():
             if rect.collidepoint(pos):
@@ -455,6 +508,12 @@ class GameView:
             2: pygame.Rect(bx + (bw+gap)*2,   by, bw, bh),
             4: pygame.Rect(bx + (bw+gap)*3,   by, bw, bh),
         }
+
+    def _save_btn_rect(self) -> pygame.Rect:
+        return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 338, 7, 70, 28)
+
+    def _menu_btn_rect(self) -> pygame.Rect:
+        return pygame.Rect(T.SCREEN_W - T.SIDEBAR_W - 414, 7, 70, 28)
 
     def _build_event_buttons(self) -> None:
         self._event_btns = []
@@ -950,6 +1009,30 @@ class GameView:
             D.text(self.screen, self.fonts.sm, speed_labels[speed],
                    rect.center,
                    T.BG if is_active else T.TEXT, "center")
+
+        # Save button
+        save_rect = self._save_btn_rect()
+        mx, my = pygame.mouse.get_pos()
+        save_hov = save_rect.collidepoint(mx, my)
+        save_bg  = T.ACCENT_WARM if save_hov else T.PANEL_EDGE
+        pygame.draw.rect(self.screen, save_bg, save_rect, border_radius=4)
+        pygame.draw.rect(self.screen, T.ACCENT_WARM, save_rect, 1, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "SAVE",
+               save_rect.center, T.BG if save_hov else T.TEXT, "center")
+
+        # Menu button
+        menu_rect = self._menu_btn_rect()
+        menu_hov  = menu_rect.collidepoint(mx, my)
+        menu_bg   = T.ACCENT if menu_hov else T.PANEL_EDGE
+        pygame.draw.rect(self.screen, menu_bg, menu_rect, border_radius=4)
+        pygame.draw.rect(self.screen, T.ACCENT, menu_rect, 1, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "MENU",
+               menu_rect.center, T.BG if menu_hov else T.TEXT, "center")
+
+        # Save feedback message
+        if self._save_msg:
+            D.text(self.screen, self.fonts.sm, self._save_msg,
+                   (save_rect.left, save_rect.bottom + 2), T.OK)
 
         # Tick counter
         D.text(self.screen, self.fonts.sm, f"Tick {self.s.tick:04d}",
