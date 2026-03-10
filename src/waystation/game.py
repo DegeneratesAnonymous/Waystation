@@ -208,14 +208,20 @@ class Game:
         self.resource_system = ResourceSystem(self.registry)
         self.event_system    = EventSystem(self.registry)
         self.faction_system  = FactionSystem(self.registry)
+        self.combat_system   = CombatSystem()
+        self.trade_system    = TradeSystem(self.registry)
         self.visitor_system  = VisitorSystem(
-            self.registry, self.npc_system, self.event_system
+            self.registry, self.npc_system, self.event_system,
+            trade_system=self.trade_system,
         )
         self.job_system = JobSystem(self.job_registry)
         self.building_system = BuildingSystem(self.registry)
 
         self.event_system.register_effect_handler(
             "spawn_npc", self._effect_spawn_npc
+        )
+        self.event_system.register_effect_handler(
+            "resolve_boarding", self._effect_resolve_boarding
         )
 
         # Restore inter-faction relationship data from definitions

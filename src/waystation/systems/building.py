@@ -39,9 +39,6 @@ log = logging.getLogger(__name__)
 # per-tick transfer = min(_HAUL_RATE_PER_TICK, npc.inventory_capacity, ...)
 _HAUL_RATE_PER_TICK = 5.0
 
-# Base construction progress per tick (scaled by engineer repair skill)
-_BASE_BUILD_RATE = 0.02
-
 # Floating-point tolerance for "has this resource been fully delivered?"
 _RESOURCE_EPSILON = 0.01
 
@@ -200,7 +197,14 @@ class BuildingSystem:
         # Scale by repair skill — range 0.5× to 1.5×
         repair_skill = engineer.skills.get("repair", 5)
         scale = 0.5 + repair_skill / 10.0
-        order.progress = min(1.0, order.progress + _BASE_BUILD_RATE * scale)
+
+        # Derive increment from the buildable's build_time_ticks so that a
+        # skilled engineer finishes faster and a slow one takes longer, but the
+        # baseline always reflects the per-buildable design intent.
+        defn = self.registry.buildables.get(order.buildable_id)
+        build_time = defn.build_time_ticks if defn is not None else 50
+        increment = (1.0 / build_time) * scale
+        order.progress = min(1.0, order.progress + increment)
 
         if order.progress >= 1.0:
             self._complete_order(order, engineer, station)
