@@ -191,3 +191,24 @@
   need_effects:
     rest: -0.04
     social: 0.08
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED SOCIAL JOB
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: job.social_time
+  display_name: Social Break
+  schema_version: "1"
+  phase: any
+  allowed_classes:
+    - class.security
+    - class.engineering
+    - class.operations
+  preferred_module_category: hab
+  fallback_module_category: utility
+  duration_ticks: 3
+  skill_used: null
+  resource_effects: {}
+  need_effects:
+    social: 0.20         # significant social restoration
+    rest: -0.02          # mild fatigue

@@ -353,16 +353,12 @@
         - type: crew_count_above
           value: 1
       outcomes:
-        - type: remove_resource
-          target: parts
-          value: 20
-        - type: clear_tag
-          target: boarding_alert
+        - type: resolve_boarding
+          target: boarding
+          value: combat
         - type: modify_rep
           target: faction.raider_clans
           value: -10
-        - type: log_message
-          value: "Boarding party repelled after a brutal corridor fight. Two crew injured. The breach pod is slag."
     - id: fallback
       label: "Seal bulkheads — contain the breach, protect the core"
       conditions: []
@@ -478,3 +474,465 @@
           value: -5
         - type: log_message
           value: "They accept the refusal professionally and request standard resupply instead."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NEW DEPTH EVENTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+- id: event.equipment_malfunction
+  category: station
+  schema_version: "1"
+  title: "Equipment Malfunction"
+  description: >
+    Alarms blare in the engineering bay. A critical relay has shorted out —
+    the affected module is running at reduced capacity and will degrade further
+    without immediate intervention.
+  weight: 0.7
+  cooldown: 12
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: tick_above
+      value: 3
+  choices:
+    - id: emergency_fix
+      label: "Emergency repair — pull parts from storage"
+      conditions:
+        - type: resource_above
+          target: parts
+          value: 15
+      outcomes:
+        - type: remove_resource
+          target: parts
+          value: 15
+        - type: log_message
+          value: "Engineering crew patches the relay. Module back to partial capacity."
+    - id: bypass
+      label: "Bypass the relay — reduced efficiency but stable"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "Relay bypassed. Power draw up, but the station stays functional."
+    - id: ignore
+      label: "Log it and deal with it later"
+      conditions: []
+      outcomes:
+        - type: remove_resource
+          target: parts
+          value: 5
+        - type: log_message
+          value: "The problem festers. A secondary failure compounds the damage overnight."
+
+- id: event.contraband_found
+  category: incident
+  schema_version: "1"
+  title: "Contraband Discovered"
+  description: >
+    Security has found a concealed cargo pod aboard a docked ship — packed with
+    unlicensed pharmaceuticals and what looks like classified Imperial hardware.
+    The ship's crew is being held for questioning.
+  weight: 0.0
+  cooldown: 20
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions: []
+  choices:
+    - id: confiscate
+      label: "Confiscate the cargo — report to Imperial Remnant"
+      conditions: []
+      outcomes:
+        - type: add_resource
+          target: parts
+          value: 20
+        - type: modify_rep
+          target: faction.imperial_remnant
+          value: 8
+        - type: modify_rep
+          target: faction.merchant_league
+          value: -5
+        - type: log_message
+          value: "Contraband seized. Imperial Remnant acknowledges the cooperation. The crew is released but rattled."
+    - id: keep_quiet
+      label: "Look the other way — confiscate quietly, say nothing"
+      conditions: []
+      outcomes:
+        - type: add_resource
+          target: parts
+          value: 30
+        - type: add_resource
+          target: credits
+          value: 50
+        - type: log_message
+          value: "Cargo disappears into your stores. The ship leaves. Nothing officially happened."
+    - id: release
+      label: "Release the crew — insufficient evidence"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.merchant_league
+          value: 5
+        - type: log_message
+          value: "You let them go. They don't forget the courtesy. Word gets around."
+
+- id: event.diplomatic_overture
+  category: faction
+  schema_version: "1"
+  title: "Diplomatic Overture"
+  description: >
+    A Merchant League attaché requests a private meeting. They propose a
+    standing trade agreement: preferential docking rates in exchange for
+    quarterly supply shipments. The offer is written in credits.
+  weight: 0.4
+  cooldown: 60
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: faction_rep_above
+      target: faction.merchant_league
+      value: -10
+    - type: tick_above
+      value: 20
+  choices:
+    - id: accept
+      label: "Accept the agreement — good for business"
+      conditions: []
+      outcomes:
+        - type: add_resource
+          target: credits
+          value: 200
+        - type: modify_rep
+          target: faction.merchant_league
+          value: 15
+        - type: set_tag
+          target: active_trading
+        - type: log_message
+          value: "Agreement signed. The League's freight lanes now include your waystation."
+    - id: negotiate
+      label: "Counter-offer — better terms or no deal"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 50
+      outcomes:
+        - type: add_resource
+          target: credits
+          value: 100
+        - type: modify_rep
+          target: faction.merchant_league
+          value: 5
+        - type: log_message
+          value: "They push back. You push harder. A compromise is reached — slightly in your favour."
+    - id: decline
+      label: "Decline — you prefer independence"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.merchant_league
+          value: -5
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: 8
+        - type: log_message
+          value: "The attaché nods stiffly and leaves. The Collective hears you turned down the League."
+
+- id: event.black_market_contact
+  category: arrival
+  schema_version: "1"
+  title: "Black Market Contact"
+  description: >
+    An unmarked vessel hails on a scrambled frequency. They claim to have a
+    hold full of off-manifest goods — no questions asked, credits only,
+    one-time offer before they move on. The signal is encrypted but the accent
+    sounds Raider Clans.
+  weight: 0.3
+  cooldown: 35
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: tick_above
+      value: 10
+  choices:
+    - id: buy
+      label: "Buy the cargo — risky but could be lucrative"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 150
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 150
+        - type: add_resource
+          target: parts
+          value: 40
+        - type: add_resource
+          target: food
+          value: 30
+        - type: modify_rep
+          target: faction.raider_clans
+          value: 3
+        - type: modify_rep
+          target: faction.imperial_remnant
+          value: -8
+        - type: log_message
+          value: "Goods loaded quickly in the dark. Parts and rations are good quality. No labels, though."
+    - id: report
+      label: "Report the contact to Imperial authorities"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.imperial_remnant
+          value: 12
+        - type: modify_rep
+          target: faction.raider_clans
+          value: -8
+        - type: log_message
+          value: "Imperial Remnant patrol notified. The vessel scatters before they arrive — but they note your loyalty."
+    - id: ignore
+      label: "Ignore the signal — not worth the risk"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "The signal goes silent. The ship moves on. You wonder what was in that hold."
+
+- id: event.disease_vector
+  category: incident
+  schema_version: "1"
+  title: "Disease Vector Detected"
+  description: >
+    Medical bay is reporting a cluster of identical symptoms across three crew
+    and two visitors — fever, joint pain, disorientation. The ship that brought
+    them in was from a sector flagged for a respiratory outbreak.
+  weight: 0.3
+  cooldown: 40
+  required_tags: []
+  excluded_tags:
+    - quarantine_active
+  trigger_conditions:
+    - type: visitor_count_above
+      value: 0
+    - type: tick_above
+      value: 15
+  choices:
+    - id: quarantine
+      label: "Declare quarantine — isolate affected areas immediately"
+      conditions: []
+      outcomes:
+        - type: set_tag
+          target: quarantine_active
+        - type: remove_resource
+          target: food
+          value: 20
+        - type: log_message
+          value: "Medical bay sealed. Visitor lounge locked down. The station goes quiet and anxious."
+    - id: treat
+      label: "Treat symptoms — keep it quiet, manage the risk"
+      conditions:
+        - type: resource_above
+          target: parts
+          value: 10
+      outcomes:
+        - type: remove_resource
+          target: parts
+          value: 10
+        - type: log_message
+          value: "Medical supplies requisitioned. Crew quietly treated. So far it's contained."
+    - id: ignore
+      label: "Blame something else — don't spook the visitors"
+      conditions: []
+      outcomes:
+        - type: remove_resource
+          target: food
+          value: 10
+        - type: log_message
+          value: "Official story: bad rations. Unofficially, the sick bay fills up two days later."
+
+- id: event.raider_tribute_demand
+  category: faction
+  schema_version: "1"
+  title: "Tribute Demand"
+  description: >
+    A Raider Clans broadcast on open frequencies: quarterly tribute expected
+    or the next convoy through this sector will be theirs. They've done it
+    before. The demand is specific — credits and food.
+  weight: 0.4
+  cooldown: 40
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: faction_rep_above
+      target: faction.raider_clans
+      value: -80
+    - type: tick_above
+      value: 25
+  choices:
+    - id: pay
+      label: "Pay the tribute — buy peace for now"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 100
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 100
+        - type: remove_resource
+          target: food
+          value: 30
+        - type: modify_rep
+          target: faction.raider_clans
+          value: 10
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: -5
+        - type: log_message
+          value: "Tribute paid. Raiders acknowledge receipt. The sector stays quiet — for now."
+    - id: refuse
+      label: "Refuse — you don't negotiate with raiders"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.raider_clans
+          value: -15
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: 8
+        - type: set_tag
+          target: dangerous_region
+        - type: log_message
+          value: "You broadcast refusal. Raiders mark the station. Expect company."
+    - id: counter
+      label: "Counter-offer — half tribute, escort corridor exclusion"
+      conditions:
+        - type: resource_above
+          target: credits
+          value: 50
+      outcomes:
+        - type: remove_resource
+          target: credits
+          value: 50
+        - type: modify_rep
+          target: faction.raider_clans
+          value: 3
+        - type: log_message
+          value: "Negotiations via proxy. They accept reduced payment with bad grace. Uneasy peace."
+
+- id: event.collective_aid_request
+  category: faction
+  schema_version: "1"
+  title: "Collective Aid Request"
+  description: >
+    The Frontier Collective has broadcast a regional distress call — a
+    border station is under siege and needs an emergency supply run.
+    They're asking every independent station in the sector to contribute.
+  weight: 0.35
+  cooldown: 50
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: tick_above
+      value: 20
+  choices:
+    - id: contribute_full
+      label: "Contribute generously — send food and parts"
+      conditions:
+        - type: resource_above
+          target: food
+          value: 60
+        - type: resource_above
+          target: parts
+          value: 20
+      outcomes:
+        - type: remove_resource
+          target: food
+          value: 50
+        - type: remove_resource
+          target: parts
+          value: 15
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: 20
+        - type: modify_rep
+          target: faction.refugee_fleets
+          value: 10
+        - type: log_message
+          value: "Relief supplies dispatched. The Collective broadcasts your station's name as a friend."
+    - id: contribute_token
+      label: "Send a token contribution — you have your own needs"
+      conditions:
+        - type: resource_above
+          target: food
+          value: 20
+      outcomes:
+        - type: remove_resource
+          target: food
+          value: 15
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: 6
+        - type: log_message
+          value: "A small convoy departs. Not much, but it's something. The Collective acknowledges."
+    - id: decline
+      label: "Decline — you can't spare anything"
+      conditions: []
+      outcomes:
+        - type: modify_rep
+          target: faction.frontier_collective
+          value: -8
+        - type: log_message
+          value: "No response from your station. The silence is noted."
+
+- id: event.skills_breakthrough
+  category: station
+  schema_version: "1"
+  title: "Crew Skills Breakthrough"
+  description: >
+    Your engineering lead has cracked a long-standing problem in the life
+    support subsystem. The fix improves efficiency station-wide — but
+    implementing it will take resources and focused work time.
+  weight: 0.3
+  cooldown: 45
+  required_tags: []
+  excluded_tags: []
+  trigger_conditions:
+    - type: crew_count_above
+      value: 3
+    - type: tick_above
+      value: 30
+  choices:
+    - id: implement
+      label: "Implement the fix — commit time and parts"
+      conditions:
+        - type: resource_above
+          target: parts
+          value: 20
+      outcomes:
+        - type: remove_resource
+          target: parts
+          value: 20
+        - type: add_resource
+          target: power
+          value: 30
+        - type: add_resource
+          target: oxygen
+          value: 25
+        - type: log_message
+          value: "The fix goes in over three shifts. Instruments improve across the board. Crew morale up."
+    - id: document
+      label: "Document it thoroughly — share with the Archive Order"
+      conditions: []
+      outcomes:
+        - type: add_resource
+          target: credits
+          value: 80
+        - type: modify_rep
+          target: faction.archive_order
+          value: 12
+        - type: log_message
+          value: "Technical report transmitted. Archive Order responds with a generous honorarium."
+    - id: ignore
+      label: "Log it for later — no bandwidth right now"
+      conditions: []
+      outcomes:
+        - type: log_message
+          value: "The breakthrough sits in a log file. Maybe next week."
