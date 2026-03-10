@@ -252,6 +252,43 @@ class ShipInstance:
 
 
 # ---------------------------------------------------------------------------
+# Cargo Hold Settings (per-module inventory configuration)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CargoHoldSettings:
+    """
+    Player-configurable settings for a cargo hold module.
+
+    allowed_types: item types this hold may accept (empty list = allow everything)
+    reserved_by_type: fraction of capacity reserved per item type (0.0–1.0)
+    priority: higher priority holds are filled first
+    """
+    allowed_types: list[str] = field(default_factory=list)
+    reserved_by_type: dict[str, float] = field(default_factory=dict)
+    priority: int = 0
+
+    def allows_type(self, item_type: str) -> bool:
+        """Return True if this hold accepts the given item type."""
+        return not self.allowed_types or item_type in self.allowed_types
+
+    def to_dict(self) -> dict:
+        return {
+            "allowed_types":    list(self.allowed_types),
+            "reserved_by_type": dict(self.reserved_by_type),
+            "priority":         self.priority,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "CargoHoldSettings":
+        return cls(
+            allowed_types=list(d.get("allowed_types", [])),
+            reserved_by_type=dict(d.get("reserved_by_type", {})),
+            priority=int(d.get("priority", 0)),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Module Instance (station room)
 # ---------------------------------------------------------------------------
 
@@ -265,6 +302,11 @@ class ModuleInstance:
     docked_ship: str | None = None                        # ship uid (for dock modules)
     active: bool = True
     damage: float = 0.0                                   # 0.0 = fine, 1.0 = destroyed
+
+    # Inventory: item_id -> quantity stored in this module
+    inventory: dict[str, int] = field(default_factory=dict)
+    # Cargo hold configuration (None if this module is not a cargo hold)
+    cargo_settings: CargoHoldSettings | None = None
 
     @classmethod
     def create(cls, definition_id: str, display_name: str, category: str) -> "ModuleInstance":
@@ -291,10 +333,13 @@ class ModuleInstance:
             "docked_ship":  self.docked_ship,
             "active":       self.active,
             "damage":       self.damage,
+            "inventory":    dict(self.inventory),
+            "cargo_settings": self.cargo_settings.to_dict() if self.cargo_settings else None,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "ModuleInstance":
+        cs_raw = d.get("cargo_settings")
         return cls(
             uid=d["uid"],
             definition_id=d["definition_id"],
@@ -304,6 +349,8 @@ class ModuleInstance:
             docked_ship=d.get("docked_ship"),
             active=d.get("active", True),
             damage=d.get("damage", 0.0),
+            inventory=d.get("inventory", {}),
+            cargo_settings=CargoHoldSettings.from_dict(cs_raw) if cs_raw else None,
         )
 
 

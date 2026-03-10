@@ -24,6 +24,7 @@ from waystation.systems.visitors import VisitorSystem
 from waystation.systems.jobs import JobSystem, JobRegistry
 from waystation.systems.combat import CombatSystem
 from waystation.systems.trade import TradeSystem
+from waystation.systems.inventory import InventorySystem
 from waystation.systems import time_system
 
 log = logging.getLogger(__name__)
@@ -109,6 +110,7 @@ class Game:
         self.job_system: JobSystem | None = None
         self.combat_system: CombatSystem | None = None
         self.trade_system: TradeSystem | None = None
+        self.inventory_system: InventorySystem | None = None
 
         self._running = False
         self._pending_events: list[PendingEvent] = []
@@ -144,6 +146,7 @@ class Game:
         self.faction_system  = FactionSystem(self.registry)
         self.combat_system   = CombatSystem()
         self.trade_system    = TradeSystem(self.registry)
+        self.inventory_system = InventorySystem(self.registry)
         self.visitor_system  = VisitorSystem(
             self.registry, self.npc_system, self.event_system,
             trade_system=self.trade_system,
@@ -166,6 +169,9 @@ class Game:
 
         # Spawn starter crew
         self._spawn_starter_crew()
+
+        # Seed starter inventory
+        self._seed_starter_inventory()
 
         print(f"\n{_c(Fore.CYAN, 'Station online:')} {self.station.name}")
         print(f"Crew: {len(self.station.get_crew())} | "
@@ -201,17 +207,24 @@ class Game:
         self.station = StationState.from_dict(data["station"])
 
         # Re-create all runtime systems (they are stateless relative to station)
-        self.npc_system      = NPCSystem(self.registry)
-        self.resource_system = ResourceSystem(self.registry)
-        self.event_system    = EventSystem(self.registry)
-        self.faction_system  = FactionSystem(self.registry)
-        self.visitor_system  = VisitorSystem(
-            self.registry, self.npc_system, self.event_system
+        self.npc_system       = NPCSystem(self.registry)
+        self.resource_system  = ResourceSystem(self.registry)
+        self.event_system     = EventSystem(self.registry)
+        self.faction_system   = FactionSystem(self.registry)
+        self.combat_system    = CombatSystem()
+        self.trade_system     = TradeSystem(self.registry)
+        self.inventory_system = InventorySystem(self.registry)
+        self.visitor_system   = VisitorSystem(
+            self.registry, self.npc_system, self.event_system,
+            trade_system=self.trade_system,
         )
         self.job_system = JobSystem(self.job_registry)
 
         self.event_system.register_effect_handler(
             "spawn_npc", self._effect_spawn_npc
+        )
+        self.event_system.register_effect_handler(
+            "resolve_boarding", self._effect_resolve_boarding
         )
 
         # Restore inter-faction relationship data from definitions
@@ -272,6 +285,32 @@ class Game:
             else:
                 log.warning("Could not spawn starter crew member from '%s'", template_id)
 
+    def _seed_starter_inventory(self) -> None:
+        """Populate the starter storage hold with a basic starting inventory."""
+        assert self.station is not None
+        assert self.inventory_system is not None
+
+        # Find the storage hold module
+        storage_uid = next(
+            (uid for uid, mod in self.station.modules.items()
+             if mod.definition_id == "module.storage_hold"),
+            None,
+        )
+        if storage_uid is None:
+            return
+
+        starter_items = [
+            ("item.ration_pack",    30),
+            ("item.steel_plate",    10),
+            ("item.circuit_board",   5),
+            ("item.pressure_seal",  10),
+            ("item.med_compounds",   5),
+            ("item.ammunition_basic", 20),
+        ]
+        for item_id, qty in starter_items:
+            if item_id in self.registry.items:
+                self.inventory_system.add_item(self.station, storage_uid, item_id, qty)
+
     # ------------------------------------------------------------------
     # Effect handlers (registered into EventSystem)
     # ------------------------------------------------------------------
@@ -330,6 +369,7 @@ class Game:
         self.npc_system.tick(self.station)
         self.faction_system.tick(self.station)
         self.visitor_system.tick(self.station)
+        self.inventory_system.tick(self.station)
 
         new_events = self.event_system.tick(self.station)
         self._pending_events.extend(new_events)

@@ -40,6 +40,7 @@ MODULE_FLOOR = {
     "hab":        ( 55,  32,  20),
     "production": ( 22,  50,  22),
     "security":   ( 60,  18,  18),
+    "cargo":      ( 42,  38,  20),
 }
 MODULE_WALL = {
     "utility":    ( 50,  90, 160),
@@ -47,6 +48,7 @@ MODULE_WALL = {
     "hab":        (130,  75,  45),
     "production": ( 55, 130,  55),
     "security":   (140,  40,  40),
+    "cargo":      (160, 130,  50),
 }
 MODULE_LABEL = {
     "utility":    ( 80, 140, 220),
@@ -54,6 +56,7 @@ MODULE_LABEL = {
     "hab":        (190, 110,  70),
     "production": ( 80, 190,  80),
     "security":   (200,  70,  70),
+    "cargo":      (220, 180,  70),
 }
 
 # ── NPC colours ───────────────────────────────────────────────────────────────
@@ -111,6 +114,7 @@ FLOOR_LAYOUT: dict[str, tuple[int, int, int, int]] = {
     "module.security_post":  (3, 1, 1, 1),
     "module.hydroponics":    (0, 2, 1, 1),
     "module.visitor_lounge": (1, 2, 2, 1),
+    "module.cargo_hold":     (3, 2, 1, 1),
 }
 
 # ── Font sizes ────────────────────────────────────────────────────────────────

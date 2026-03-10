@@ -728,7 +728,23 @@ class GameView:
             D.text(self.screen, self.fonts.sm, f"DMG {mod.damage:.0%}",
                    (rect.right - 8, rect.y + 7), T.DANGER, "topright")
 
-        # Resource delta summary (bottom of tile)
+        # Cargo capacity badge (shown on cargo holds)
+        if self.game.inventory_system:
+            defn = self.game.registry.modules.get(mod.definition_id)
+            if defn and defn.cargo_capacity > 0:
+                used = self.game.inventory_system.get_capacity_used(mod)
+                cap  = defn.cargo_capacity
+                pct  = used / cap if cap > 0 else 0.0
+                cap_c = (T.DANGER if pct >= 0.95 else
+                         T.WARN   if pct >= 0.75 else T.OK)
+                cap_str = f"{used:.0f}/{cap}"
+                D.text(self.screen, self.fonts.sm, cap_str,
+                       (rect.right - 8, rect.y + 7), cap_c, "topright")
+                # Capacity bar across bottom of room
+                bar_rect = pygame.Rect(rect.x + 4, rect.bottom - 8, rect.width - 8, 4)
+                D.hbar(self.screen, bar_rect, used, cap, cap_c)
+
+        # Resource delta summary (bottom of tile, above capacity bar if present)
         defn = self.game.registry.modules.get(mod.definition_id)
         if defn and defn.resource_effects:
             fx_str = "  ".join(
@@ -801,6 +817,13 @@ class GameView:
             pygame.draw.rect(surf, color, pygame.Rect(cx - 8, cy - 7, 16, 14), 1)
             pygame.draw.line(surf, color, (cx - 8, cy), (cx + 8, cy), 1)
             pygame.draw.line(surf, color, (cx, cy - 7), (cx, cy), 1)
+
+        elif "cargo" in mid:
+            # Stacked crates icon (two boxes)
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 9, cy - 2, 10, 9), 1)
+            pygame.draw.rect(surf, color, pygame.Rect(cx - 1, cy - 8, 10, 9), 1)
+            pygame.draw.line(surf, color, (cx - 9, cy + 2), (cx + 1, cy + 2), 1)
+            pygame.draw.line(surf, color, (cx + 4, cy - 8), (cx + 4, cy + 1), 1)
 
         elif "lounge" in mid or "visitor" in mid:
             # Two small person silhouettes
@@ -1196,8 +1219,115 @@ class GameView:
         pending = [p for p in self._pending if not p.resolved]
         if pending:
             self._render_event_card(pending[0], rect)
+        elif self._selected_mod and self._is_cargo_hold(self._selected_mod):
+            self._render_cargo_panel(self._selected_mod, rect)
         else:
             self._render_log_feed(rect)
+
+    def _is_cargo_hold(self, module_uid: str) -> bool:
+        """Return True if the module is a cargo hold (has cargo_capacity > 0)."""
+        mod = self.s.modules.get(module_uid)
+        if mod is None:
+            return False
+        defn = self.game.registry.modules.get(mod.definition_id)
+        return defn is not None and defn.cargo_capacity > 0
+
+    def _render_cargo_panel(self, module_uid: str, rect: pygame.Rect) -> None:
+        """Render the cargo hold detail panel in the log area."""
+        mod  = self.s.modules.get(module_uid)
+        if mod is None:
+            return
+        defn = self.game.registry.modules.get(mod.definition_id)
+        inv_sys = self.game.inventory_system
+
+        x  = rect.x + 12
+        y  = rect.y + 8
+        rw = rect.width - 24
+
+        cap_total = defn.cargo_capacity if defn else 0
+        cap_used  = inv_sys.get_capacity_used(mod) if inv_sys else 0.0
+        pct       = cap_used / cap_total if cap_total > 0 else 0.0
+
+        # Header
+        header = f"CARGO  —  {mod.display_name}"
+        D.text(self.screen, self.fonts.lg, header, (x, y), T.ACCENT_WARM)
+
+        # Settings info
+        settings_label = "Allow: ALL"
+        if mod.cargo_settings and mod.cargo_settings.allowed_types:
+            allowed = mod.cargo_settings.allowed_types
+            if allowed == ["__none__"]:
+                settings_label = "Allow: NONE"
+            else:
+                settings_label = "Allow: " + ", ".join(allowed)
+        D.text(self.screen, self.fonts.sm, settings_label,
+               (x + rw, y + 4), T.TEXT_DIM, "topright")
+        y += 22
+
+        # Capacity bar
+        cap_c = (T.DANGER if pct >= 0.95 else T.WARN if pct >= 0.75 else T.OK)
+        bar_rect = pygame.Rect(x, y, rw, 6)
+        D.hbar(self.screen, bar_rect, cap_used, cap_total, cap_c)
+        y += 9
+        D.text(self.screen, self.fonts.sm,
+               f"Capacity:  {cap_used:.0f} / {cap_total}  ({pct:.0%} full)",
+               (x, y), cap_c)
+        y += 18
+
+        if not mod.inventory:
+            D.text(self.screen, self.fonts.sm, "(empty)", (x, y), T.TEXT_DIM)
+            return
+
+        # Column headers
+        D.text(self.screen, self.fonts.sm, "ITEM", (x, y), T.TEXT_DIM)
+        D.text(self.screen, self.fonts.sm, "TYPE", (x + 200, y), T.TEXT_DIM)
+        D.text(self.screen, self.fonts.sm, "QTY", (x + 340, y), T.TEXT_DIM)
+        D.text(self.screen, self.fonts.sm, "VALUE", (x + 400, y), T.TEXT_DIM)
+        D.text(self.screen, self.fonts.sm, "MASS", (x + 480, y), T.TEXT_DIM)
+        y += 14
+
+        pygame.draw.line(self.screen, T.PANEL_EDGE, (x, y), (x + rw, y), 1)
+        y += 4
+
+        # Item rows — sort by item_type then display_name
+        items = sorted(
+            mod.inventory.items(),
+            key=lambda kv: (
+                (self.game.registry.items[kv[0]].item_type
+                 if kv[0] in self.game.registry.items else ""),
+                (self.game.registry.items[kv[0]].display_name
+                 if kv[0] in self.game.registry.items else kv[0]),
+            )
+        )
+
+        for item_id, qty in items:
+            if y > rect.bottom - 16:
+                D.text(self.screen, self.fonts.sm, "…", (x, y), T.TEXT_DIM)
+                break
+            item_defn = self.game.registry.items.get(item_id)
+            name   = item_defn.display_name if item_defn else item_id
+            itype  = item_defn.item_type    if item_defn else "?"
+            weight = item_defn.weight       if item_defn else 1.0
+            value  = item_defn.value        if item_defn else 0.0
+            legal  = item_defn.legal        if item_defn else True
+
+            # Colour by legality and perishability
+            if not legal:
+                name_c = T.DANGER
+            elif item_defn and item_defn.perishable_ticks > 0:
+                name_c = T.ACCENT_WARM
+            else:
+                name_c = T.TEXT
+
+            type_c = T.TEXT_DIM
+            D.text(self.screen, self.fonts.sm, name[:26], (x, y), name_c)
+            D.text(self.screen, self.fonts.sm, itype[:14], (x + 200, y), type_c)
+            D.text(self.screen, self.fonts.sm, str(qty), (x + 340, y), T.TEXT)
+            D.text(self.screen, self.fonts.sm, f"{value * qty:.0f}c",
+                   (x + 400, y), T.ACCENT_WARM)
+            D.text(self.screen, self.fonts.sm, f"{weight * qty:.1f}",
+                   (x + 480, y), T.TEXT_DIM)
+            y += 14
 
     def _render_event_card(self, p: PendingEvent, rect: pygame.Rect) -> None:
         ev = p.definition
