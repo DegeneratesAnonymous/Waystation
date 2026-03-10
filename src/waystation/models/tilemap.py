@@ -19,6 +19,11 @@ def _new_uid() -> str:
     return str(uuid.uuid4())[:8]
 
 
+# Cardinal direction helpers used by TileMap
+_OPPOSITE:  dict[str, str]            = {"N": "S", "S": "N", "E": "W", "W": "E"}
+_DIR_DELTA: dict[str, tuple[int, int]] = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
+
+
 # ---------------------------------------------------------------------------
 # TileCell — a single cell on the tile grid
 # ---------------------------------------------------------------------------
@@ -37,12 +42,20 @@ class TileCell:
         True means there is a wall segment on that edge of this floor tile.
         Walls are only meaningful on floor tiles.
 
+    doors dict: "N" | "S" | "E" | "W" -> bool
+        True means there is a door opening on that edge.  A door is a passable
+        gap in a wall segment — only meaningful when the corresponding wall is
+        also True.
+
     room_uid — uid of the RoomInstance that has claimed this tile, or None.
     """
     col: int
     row: int
     tile_type: str = "empty"           # "empty" | "floor" | "wall"
     walls: dict[str, bool] = field(default_factory=lambda: {
+        "N": False, "S": False, "E": False, "W": False,
+    })
+    doors: dict[str, bool] = field(default_factory=lambda: {
         "N": False, "S": False, "E": False, "W": False,
     })
     room_uid: str | None = None
@@ -53,19 +66,22 @@ class TileCell:
             "row":       self.row,
             "tile_type": self.tile_type,
             "walls":     dict(self.walls),
+            "doors":     dict(self.doors),
             "room_uid":  self.room_uid,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "TileCell":
-        default_walls = {"N": False, "S": False, "E": False, "W": False}
         stored_walls = d.get("walls", {})
         walls = {k: bool(stored_walls.get(k, False)) for k in ("N", "S", "E", "W")}
+        stored_doors = d.get("doors", {})
+        doors = {k: bool(stored_doors.get(k, False)) for k in ("N", "S", "E", "W")}
         return cls(
             col=int(d["col"]),
             row=int(d["row"]),
             tile_type=d.get("tile_type", "empty"),
             walls=walls,
+            doors=doors,
             room_uid=d.get("room_uid"),
         )
 
@@ -85,12 +101,24 @@ class RoomInstance:
     tile_positions — ordered list of (col, row) tuples that make up this room.
     module_uid     — uid of the backing ModuleInstance in StationState.modules,
                      or None if the room type has no module backing.
+
+    Atmosphere tracking (updated each tick by the room simulation):
+        atmosphere  — 0.0 (vacuum) to 1.0 (fully breathable); default 1.0 for
+                      newly pressurised rooms.
+        temperature — degrees Celsius; default 20.0 °C (comfortable).
+        beauty      — 0.0 (bare / ugly) to 100.0 (beautifully decorated);
+                      affects crew mood and visitor impressions.
     """
     uid: str
     name: str
     room_type_id: str | None = None
     tile_positions: list[tuple[int, int]] = field(default_factory=list)
     module_uid: str | None = None
+
+    # Room environment
+    atmosphere:  float = 1.0    # 0.0 = vacuum → 1.0 = fully breathable
+    temperature: float = 20.0   # °C
+    beauty:      float = 0.0    # 0–100
 
     @classmethod
     def create(cls, name: str, tile_positions: list[tuple[int, int]]) -> "RoomInstance":
@@ -103,6 +131,35 @@ class RoomInstance:
     def tile_count(self) -> int:
         return len(self.tile_positions)
 
+    def atmosphere_label(self) -> str:
+        if self.atmosphere >= 0.95:
+            return "Breathable"
+        if self.atmosphere >= 0.5:
+            return "Thin"
+        if self.atmosphere > 0.0:
+            return "Hazardous"
+        return "Vacuum"
+
+    def temperature_label(self) -> str:
+        if self.temperature < -10:
+            return "Freezing"
+        if self.temperature < 10:
+            return "Cold"
+        if self.temperature <= 30:
+            return "Comfortable"
+        if self.temperature <= 45:
+            return "Hot"
+        return "Dangerous"
+
+    def beauty_label(self) -> str:
+        if self.beauty >= 80:
+            return "Luxurious"
+        if self.beauty >= 50:
+            return "Pleasant"
+        if self.beauty >= 20:
+            return "Adequate"
+        return "Bare"
+
     def to_dict(self) -> dict:
         return {
             "uid":            self.uid,
@@ -110,6 +167,9 @@ class RoomInstance:
             "room_type_id":   self.room_type_id,
             "tile_positions": [list(pos) for pos in self.tile_positions],
             "module_uid":     self.module_uid,
+            "atmosphere":     self.atmosphere,
+            "temperature":    self.temperature,
+            "beauty":         self.beauty,
         }
 
     @classmethod
@@ -120,6 +180,9 @@ class RoomInstance:
             room_type_id=d.get("room_type_id"),
             tile_positions=[tuple(pos) for pos in d.get("tile_positions", [])],
             module_uid=d.get("module_uid"),
+            atmosphere=float(d.get("atmosphere", 1.0)),
+            temperature=float(d.get("temperature", 20.0)),
+            beauty=float(d.get("beauty", 0.0)),
         )
 
 
@@ -200,10 +263,50 @@ class TileMap:
             cell.walls[side] = True
 
     def remove_wall_segment(self, col: int, row: int, side: str) -> None:
-        """Remove a wall segment from the given side of a floor tile."""
+        """Remove a wall segment from the given side of a floor tile.
+        Also removes any door on that side, since a door requires a wall to exist in."""
         cell = self.cells.get((col, row))
         if cell and cell.tile_type == "floor":
             cell.walls[side] = False
+            cell.doors[side] = False
+
+    # ── Door management ──────────────────────────────────────────────────
+
+    def toggle_door(self, col: int, row: int, side: str) -> None:
+        """
+        Toggle a door on the given wall edge of a floor tile.
+
+        If the wall segment does not yet exist, it is auto-created first.
+        The door state is mirrored on the neighbour tile's opposing side so
+        both sides of the wall are consistent.
+        """
+        cell = self.cells.get((col, row))
+        if cell is None or cell.tile_type != "floor":
+            return
+        # Ensure wall exists
+        if not cell.walls.get(side, False):
+            cell.walls[side] = True
+        # Toggle door
+        current = cell.doors.get(side, False)
+        cell.doors[side] = not current
+        # Mirror on neighbour
+        dc, dr = _DIR_DELTA[side]
+        nb = self.cells.get((col + dc, row + dr))
+        if nb and nb.tile_type == "floor":
+            opp = _OPPOSITE[side]
+            if not nb.walls.get(opp, False):
+                nb.walls[opp] = True
+            nb.doors[opp] = not current
+
+    def remove_door(self, col: int, row: int, side: str) -> None:
+        """Remove a door from a wall edge (wall remains)."""
+        cell = self.cells.get((col, row))
+        if cell and cell.tile_type == "floor":
+            cell.doors[side] = False
+            dc, dr = _DIR_DELTA[side]
+            nb = self.cells.get((col + dc, row + dr))
+            if nb and nb.tile_type == "floor":
+                nb.doors[_OPPOSITE[side]] = False
 
     # ── Room management ──────────────────────────────────────────────────
 
@@ -238,7 +341,12 @@ class TileMap:
                 cell.room_uid = None
 
     def get_connected_floor(self, col: int, row: int) -> list[tuple[int, int]]:
-        """Flood-fill from (col, row) across floor tiles not blocked by walls."""
+        """
+        Flood-fill from (col, row) across floor tiles, respecting walls and doors.
+
+        A wall blocks passage unless that wall edge has a door (a door is a
+        passable opening in an otherwise solid wall).
+        """
         start = (col, row)
         if start not in self.cells or self.cells[start].tile_type != "floor":
             return []
@@ -253,19 +361,66 @@ class TileMap:
             cell = self.cells.get(cur)
             if cell is None or cell.tile_type != "floor":
                 continue
-            # Try each cardinal direction, respecting walls
+            # Try each cardinal direction, respecting walls (but doors are passable)
             for dc, dr, side, _opp in (
                 (0, -1, "N", "S"), (0, 1, "S", "N"),
                 (1,  0, "E", "W"), (-1, 0, "W", "E"),
             ):
-                if cell.walls.get(side, False):
-                    continue  # wall blocks passage
+                has_wall = cell.walls.get(side, False)
+                has_door = cell.doors.get(side, False)
+                if has_wall and not has_door:
+                    continue  # solid wall with no door blocks passage
                 npos = (cc + dc, cr + dr)
                 if npos not in visited:
                     nb = self.cells.get(npos)
                     if nb and nb.tile_type == "floor":
                         queue.append(npos)
         return list(visited)
+
+    def is_region_connected_to_station(self, region: list[tuple[int, int]]) -> bool:
+        """
+        Return True if the region physically touches any other floor tile on the
+        map via tile adjacency (N/S/E/W neighbour), regardless of walls.
+
+        Returns True if there are no other floor tiles (first region placed).
+        """
+        region_set = set(region)
+        outside_floor = {
+            pos for pos, c in self.cells.items()
+            if c.tile_type == "floor" and pos not in region_set
+        }
+        if not outside_floor:
+            return True  # nothing else exists yet — first placement is always OK
+        for col, row in region:
+            for dc, dr in ((0, -1), (0, 1), (1, 0), (-1, 0)):
+                if (col + dc, row + dr) in outside_floor:
+                    return True
+        return False
+
+    def is_fully_connected(self) -> bool:
+        """
+        Return True if all floor tiles form a single tile-adjacent connected
+        component (ignoring wall segments — pure spatial connectivity).
+
+        Used to display an "island detected" warning in the build toolbar.
+        """
+        floor_tiles = {pos for pos, c in self.cells.items() if c.tile_type == "floor"}
+        if len(floor_tiles) <= 1:
+            return True
+        start = next(iter(floor_tiles))
+        visited: set[tuple[int, int]] = set()
+        queue = [start]
+        while queue:
+            cur = queue.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
+            col, row = cur
+            for dc, dr in ((0, -1), (0, 1), (1, 0), (-1, 0)):
+                npos = (col + dc, row + dr)
+                if npos in floor_tiles and npos not in visited:
+                    queue.append(npos)
+        return visited == floor_tiles
 
     # ── Internal helpers ─────────────────────────────────────────────────
 

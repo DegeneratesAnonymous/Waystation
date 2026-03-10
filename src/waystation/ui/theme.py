@@ -167,3 +167,4 @@ BUILD_BTN_ACTIVE  = (50, 100, 200)
 BUILD_BTN_HOVER   = (35,  55, 100)
 BUILD_ASSIGN_OK   = ( 40, 180,  90)
 BUILD_ASSIGN_FAIL = (180,  60,  40)
+BUILD_DOOR        = (255, 200,  60)   # door opening rendered on wall edge

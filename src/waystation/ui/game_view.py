@@ -669,10 +669,11 @@ class GameView:
         elif self._build_tool == "erase":
             tm.erase(col, row)
         elif self._build_tool == "wall_add":
-            # Add wall segment on nearest edge based on position within tile
             tm.add_wall_segment(col, row, self._build_wall_side)
         elif self._build_tool == "wall_remove":
             tm.remove_wall_segment(col, row, self._build_wall_side)
+        elif self._build_tool == "door":
+            tm.toggle_door(col, row, self._build_wall_side)
 
     # ── Build mode — toolbar buttons ──────────────────────────────────────────
 
@@ -681,6 +682,7 @@ class GameView:
         ("wall_tile",   "WALL TILE"),
         ("wall_add",    "ADD WALL EDGE"),
         ("wall_remove", "DEL WALL EDGE"),
+        ("door",        "DOOR"),
         ("erase",       "ERASE"),
         ("assign",      "ASSIGN AREA"),
     ]
@@ -723,8 +725,8 @@ class GameView:
                     self._build_tool = tool_id
                     self._assign_popup = False
                 return True
-        # Wall side selector
-        if self._build_tool in ("wall_add", "wall_remove"):
+        # Wall/door side selector (shown for wall_add, wall_remove, door tools)
+        if self._build_tool in ("wall_add", "wall_remove", "door"):
             for side, rect in self._build_wall_side_rects():
                 if rect.collidepoint(pos):
                     self._build_wall_side = side
@@ -831,6 +833,15 @@ class GameView:
             self._build_msg_timer = 3.0
             return
 
+        # Connectivity check — no island rooms
+        tm = self.s.tile_map
+        if not tm.is_region_connected_to_station(region):
+            self._build_msg = (
+                "Cannot assign: Room is isolated — connect it to the station first."
+            )
+            self._build_msg_timer = 4.0
+            return
+
         # Consume resources
         for res, amount in rt.resource_requirements.items():
             self.s.modify_resource(res, -amount)
@@ -932,30 +943,39 @@ class GameView:
                 base = room_color if not alt else tuple(max(0, c - 8) for c in room_color)
                 pygame.draw.rect(self.screen, base, rect)
 
-                # Draw wall segments (as thick lines on tile edges)
-                wc = T.BUILD_WALL_LINE
-                tw, th = T.TILE_W, T.TILE_H
-                if cell.walls.get("N"):
-                    pygame.draw.line(self.screen, wc,
-                                     (rect.x, rect.y), (rect.right - 1, rect.y), 2)
-                if cell.walls.get("S"):
-                    pygame.draw.line(self.screen, wc,
-                                     (rect.x, rect.bottom - 1),
-                                     (rect.right - 1, rect.bottom - 1), 2)
-                if cell.walls.get("W"):
-                    pygame.draw.line(self.screen, wc,
-                                     (rect.x, rect.y), (rect.x, rect.bottom - 1), 2)
-                if cell.walls.get("E"):
-                    pygame.draw.line(self.screen, wc,
-                                     (rect.right - 1, rect.y),
-                                     (rect.right - 1, rect.bottom - 1), 2)
+                # Draw wall segments (thick lines on tile edges); doors = coloured gap
+                wc  = T.BUILD_WALL_LINE
+                door_color = T.BUILD_DOOR
+                for side, (x1, y1, x2, y2) in {
+                    "N": (rect.x,        rect.y,          rect.right - 1,  rect.y),
+                    "S": (rect.x,        rect.bottom - 1, rect.right - 1,  rect.bottom - 1),
+                    "W": (rect.x,        rect.y,          rect.x,          rect.bottom - 1),
+                    "E": (rect.right - 1, rect.y,          rect.right - 1,  rect.bottom - 1),
+                }.items():
+                    if not cell.walls.get(side, False):
+                        continue
+                    if cell.doors.get(side, False):
+                        # Door: draw two short wall stubs with a coloured gap in centre
+                        mid_x = (x1 + x2) // 2
+                        mid_y = (y1 + y2) // 2
+                        gap = 5  # pixels either side of centre
+                        if side in ("N", "S"):
+                            pygame.draw.line(self.screen, wc, (x1, y1), (mid_x - gap, y1), 2)
+                            pygame.draw.line(self.screen, wc, (mid_x + gap, y1), (x2, y1), 2)
+                            pygame.draw.line(self.screen, door_color, (mid_x - gap, y1), (mid_x + gap, y1), 2)
+                        else:
+                            pygame.draw.line(self.screen, wc, (x1, y1), (x1, mid_y - gap), 2)
+                            pygame.draw.line(self.screen, wc, (x1, mid_y + gap), (x1, y2), 2)
+                            pygame.draw.line(self.screen, door_color, (x1, mid_y - gap), (x1, mid_y + gap), 2)
+                    else:
+                        pygame.draw.line(self.screen, wc, (x1, y1), (x2, y2), 2)
 
             elif cell.tile_type == "wall":
                 pygame.draw.rect(self.screen, T.BUILD_WALL_LINE, rect)
                 pygame.draw.rect(self.screen, tuple(min(255, c + 30) for c in T.BUILD_WALL_LINE),
                                  rect, 1)
 
-        # Room name labels
+        # Room name labels + atmosphere stats
         for room in tm.rooms.values():
             if not room.tile_positions:
                 continue
@@ -963,14 +983,22 @@ class GameView:
             avg_r = sum(p[1] for p in room.tile_positions) // len(room.tile_positions)
             label_x = T.FLOOR_X + avg_c * T.TILE_W + T.TILE_W // 2
             label_y = T.FLOOR_Y + avg_r * T.TILE_H + T.TILE_H // 2
-            # Only draw if it fits in floor area
-            if (T.FLOOR_X <= label_x < T.FLOOR_X + T.FLOOR_W and
+            if not (T.FLOOR_X <= label_x < T.FLOOR_X + T.FLOOR_W and
                     T.FLOOR_Y <= label_y < T.FLOOR_Y + T.FLOOR_H):
-                rt = (self.game.registry.room_types.get(room.room_type_id)
-                      if room.room_type_id else None)
-                label = rt.display_name if rt else room.name
-                D.text(self.screen, self.fonts.sm, label,
-                       (label_x, label_y), T.TEXT_BRIGHT, "center")
+                continue
+            rt = (self.game.registry.room_types.get(room.room_type_id)
+                  if room.room_type_id else None)
+            label = rt.display_name if rt else room.name
+            D.text(self.screen, self.fonts.sm, label,
+                   (label_x, label_y - 8), T.TEXT_BRIGHT, "center")
+            # Atmosphere / temperature / beauty micro-stats
+            atm_c = (T.OK if room.atmosphere >= 0.95 else
+                     T.WARN if room.atmosphere >= 0.5 else T.DANGER)
+            stats = (f"{room.atmosphere:.0%} atm  "
+                     f"{room.temperature:.0f}°C  "
+                     f"✦{room.beauty:.0f}")
+            D.text(self.screen, self.fonts.sm, stats,
+                   (label_x, label_y + 4), atm_c, "center")
 
         # Draw assign-region highlight
         if self._assign_region:
@@ -1074,10 +1102,11 @@ class GameView:
             D.text(self.screen, self.fonts.sm, label, rect.center,
                    T.TEXT_BRIGHT if active else T.TEXT, "center")
 
-        # Wall side selector
-        if self._build_tool in ("wall_add", "wall_remove"):
+        # Wall/door side selector (for wall_add, wall_remove, door tools)
+        if self._build_tool in ("wall_add", "wall_remove", "door"):
             log_y = T.SCREEN_H - T.LOG_H
-            D.text(self.screen, self.fonts.sm, "Edge:",
+            side_label = "Door edge:" if self._build_tool == "door" else "Edge:"
+            D.text(self.screen, self.fonts.sm, side_label,
                    (T.FLOOR_X + 8, log_y + 50), T.TEXT_DIM)
             for side, rect in self._build_wall_side_rects():
                 active = (self._build_wall_side == side)
@@ -1087,13 +1116,16 @@ class GameView:
                 D.text(self.screen, self.fonts.sm, side, rect.center,
                        T.TEXT_BRIGHT, "center")
 
-        # Tile count / assignment hint
+        # Tile count / connectivity status
         tm = self.s.tile_map
         floor_count = sum(1 for c in tm.cells.values() if c.tile_type == "floor")
         room_count  = len(tm.rooms)
-        hint = f"  Floor tiles: {floor_count}  |  Rooms defined: {room_count}"
+        connected   = tm.is_fully_connected()
+        conn_label  = "" if connected or floor_count < 2 else "  ⚠ ISLAND DETECTED"
+        conn_color  = T.TEXT_DIM if connected else T.DANGER
+        hint = f"  Floor tiles: {floor_count}  |  Rooms defined: {room_count}{conn_label}"
         D.text(self.screen, self.fonts.sm, hint,
-               (T.FLOOR_X + 8, T.SCREEN_H - 22), T.TEXT_DIM)
+               (T.FLOOR_X + 8, T.SCREEN_H - 22), conn_color)
 
         # Keyboard hints
         D.text(self.screen, self.fonts.sm, "B / ESC = exit build mode",
