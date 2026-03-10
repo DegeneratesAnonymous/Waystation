@@ -193,9 +193,7 @@ class InventorySystem:
 
     def allow_nothing(self, station: "StationState", module_uid: str) -> None:
         """Block all item types (hold acts as locked/restricted)."""
-        from waystation.models.templates import ItemDefinition
-        # Setting an empty list of impossible types effectively blocks everything
-        # We flag this with a sentinel value list
+        # Setting a sentinel value list blocks all items
         self.set_allowed_types(station, module_uid, ["__none__"])
 
     def set_reserved(self, station: "StationState", module_uid: str,
