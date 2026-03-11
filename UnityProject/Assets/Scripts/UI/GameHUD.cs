@@ -9,6 +9,7 @@
 // so the legacy IMGUI stats box is suppressed.
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Demo;
@@ -333,17 +334,23 @@ namespace Waystation.UI
         {
             var s = _gm.Station;
             var inv = _gm.Inventory.GetTotalInventory(s);
+            var holds = _gm.Inventory.GetCargoHolds(s);
+            var itemTypes = GetItemTypes();
             var (capUsed, capTotal) = _gm.Inventory.GetStationCapacity(s);
 
             // Estimate content height for the scroll view's inner rect
-            float innerH = 24f + 22f                     // Wealth header + credits
+            float holdBlockH     = holds.Count * (96f + itemTypes.Count * 44f);
+            float inventoryListH = Mathf.Max(40f, inv.Count * 20f);
+            float innerH = 24f + 22f                      // Wealth header + credits
                          + 16f                            // divider gap
                          + 24f + 5 * 22f                 // Resources header + 5 bars
                          + 16f                            // divider
-                         + 24f + 28f                      // Inventory header + search
-                         + Mathf.Max(40f, inv.Count * 20f) + 14f
+                         + 24f + holdBlockH              // Station Inventory + cargo holds
+                         + 22f + 24f                     // Inventory contents header + search
+                         + inventoryListH + 14f
                          + 16f                            // divider
                          + 24f + s.modules.Count * 24f;  // Modules
+            innerH = Mathf.Max(h, innerH);
 
             _stationScroll = GUI.BeginScrollView(area, _stationScroll,
                              new Rect(0, 0, w, Mathf.Max(h, innerH)));
@@ -364,7 +371,11 @@ namespace Waystation.UI
             Divider(w, ref y);
 
             // ── Station Inventory ─────────────────────────────────────────────
-            Section($"Cargo Inventory  ({capUsed:F0} / {capTotal} units)", w, ref y);
+            Section($"Station Inventory  ({capUsed:F0} / {capTotal} units)", w, ref y);
+            DrawCargoHolds(holds, itemTypes, s, w, ref y);
+
+            GUI.Label(new Rect(0, y, w, 18f), "Inventory Contents", _sSub);
+            y += 20f;
 
             // Search field
             GUI.Label(new Rect(0, y + 2f, 36f, 17f), "Find:", _sSub);
@@ -375,7 +386,7 @@ namespace Waystation.UI
             string filter = _inventorySearch.Trim();
             int    shown  = 0;
 
-            foreach (var kv in inv)
+            foreach (var kv in inv.OrderBy(kv => ItemDisplayName(kv.Key)))
             {
                 string id      = kv.Key;
                 string display = ItemDisplayName(id);
@@ -505,6 +516,172 @@ namespace Waystation.UI
             GUI.Label(new Rect(bx + bw + 4f, y, w - bx - bw - 4f, 18f),
                       value.ToString("F0"), _sSub);
             y += 22f;
+        }
+
+        private void DrawCargoHolds(List<ModuleInstance> holds, List<string> itemTypes,
+                                    StationState station, float w, ref float y)
+        {
+            if (holds.Count == 0)
+            {
+                GUI.Label(new Rect(0, y, w, 18f),
+                          "No cargo holds built yet. Add storage modules to expand capacity.", _sSub);
+                y += 22f;
+                Divider(w, ref y);
+                return;
+            }
+
+            var ordered = holds
+                .OrderByDescending(h => h.cargoSettings != null ? h.cargoSettings.priority : 0)
+                .ThenBy(h => h.displayName)
+                .ToList();
+
+            foreach (var hold in ordered)
+            {
+                EnsureCargoSettings(hold);
+
+                float used  = _gm.Inventory.GetCapacityUsed(hold);
+                int   total = _gm.Inventory.GetCapacityTotal(hold);
+                float pct   = total > 0 ? Mathf.Clamp01(used / total) : 0f;
+
+                GUI.Label(new Rect(0, y, w * 0.58f, 18f), hold.displayName, _sLabel);
+                GUI.Label(new Rect(w * 0.60f, y, w * 0.20f, 18f),
+                          $"Cap {used:F0}/{total}", _sSub);
+
+                GUI.Label(new Rect(w * 0.82f, y, 50f, 18f), "Priority", _sSub);
+                if (GUI.Button(new Rect(w * 0.82f + 50f, y, 18f, 18f), "-", _sBtnSmall))
+                    AdjustPriority(hold, -1);
+                GUI.Label(new Rect(w * 0.82f + 70f, y, 20f, 18f),
+                          $"{hold.cargoSettings.priority}", _sSub);
+                if (GUI.Button(new Rect(w * 0.82f + 92f, y, 18f, 18f), "+", _sBtnSmall))
+                    AdjustPriority(hold, 1);
+                y += 20f;
+
+                float barW = w - 56f;
+                DrawSolid(new Rect(0, y + 4f, barW, 10f), ColBarBg);
+                Color capCol = pct > 0.85f ? ColBarCrit : pct > 0.65f ? ColBarWarn : ColBarFill;
+                DrawSolid(new Rect(0, y + 4f, barW * pct, 10f), capCol);
+                GUI.Label(new Rect(barW + 6f, y, 50f, 18f), $"{pct * 100f:0}%", _sSub);
+                y += 22f;
+
+                if (GUI.Button(new Rect(0, y, 82f, 20f), "Allow All", _sBtnSmall))
+                    _gm.Inventory.AllowEverything(station, hold.uid);
+                if (GUI.Button(new Rect(86f, y, 82f, 20f), "Allow None", _sBtnSmall))
+                    _gm.Inventory.AllowNothing(station, hold.uid);
+                y += 24f;
+
+                if (itemTypes.Count > 0)
+                {
+                    GUI.Label(new Rect(0, y, w, 18f), "Allowed item types", _sSub);
+                    y += 18f;
+
+                    float x = 0f;
+                    foreach (var type in itemTypes)
+                    {
+                        bool allowed = IsTypeAllowed(hold, type);
+                        Rect r = new Rect(x, y, 92f, 20f);
+                        if (PillButton(r, type, allowed))
+                            ToggleAllowedType(hold, type, itemTypes, station);
+                        x += 96f;
+                        if (x + 92f > w) { x = 0f; y += 22f; }
+                    }
+                    y += 24f;
+                }
+
+                if (itemTypes.Count > 0)
+                {
+                    GUI.Label(new Rect(0, y, w, 18f), "Reserve capacity by type", _sSub);
+                    y += 18f;
+
+                    foreach (var type in itemTypes)
+                    {
+                        float reserved = GetReserved(hold, type);
+                        GUI.Label(new Rect(0, y, w * 0.32f, 18f), type, _sSub);
+                        float sliderX = w * 0.34f;
+                        float sliderW = w * 0.46f;
+                        float newVal = GUI.HorizontalSlider(new Rect(sliderX, y + 5f, sliderW, 10f),
+                                                             reserved, 0f, 1f);
+                        if (Mathf.Abs(newVal - reserved) > 0.001f)
+                            _gm.Inventory.SetReserved(station, hold.uid, type, newVal);
+                        GUI.Label(new Rect(sliderX + sliderW + 6f, y, w - sliderX - sliderW - 6f, 18f),
+                                  $"{newVal * 100f:0}%", _sSub);
+                        y += 22f;
+                    }
+                }
+
+                Divider(w, ref y);
+            }
+        }
+
+        private List<string> GetItemTypes()
+        {
+            if (_gm?.Registry?.Items == null) return new List<string>();
+            var set = new HashSet<string>();
+            foreach (var defn in _gm.Registry.Items.Values)
+                if (!string.IsNullOrEmpty(defn.itemType))
+                    set.Add(defn.itemType);
+            var list = set.ToList();
+            list.Sort();
+            return list;
+        }
+
+        private void EnsureCargoSettings(ModuleInstance mod)
+        {
+            if (mod.cargoSettings == null) mod.cargoSettings = new CargoHoldSettings();
+            mod.cargoSettings.allowedTypes ??= new List<string>();
+            mod.cargoSettings.reservedByType ??= new Dictionary<string, float>();
+        }
+
+        private bool IsTypeAllowed(ModuleInstance mod, string itemType)
+        {
+            if (mod.cargoSettings == null || mod.cargoSettings.allowedTypes == null) return true;
+            if (mod.cargoSettings.allowedTypes.Contains("__none__")) return false;
+            if (mod.cargoSettings.allowedTypes.Count == 0) return true;
+            return mod.cargoSettings.allowedTypes.Contains(itemType);
+        }
+
+        private void ToggleAllowedType(ModuleInstance mod, string itemType,
+                                       List<string> allTypes, StationState station)
+        {
+            EnsureCargoSettings(mod);
+            bool wasBlocked = mod.cargoSettings.allowedTypes.Contains("__none__");
+            mod.cargoSettings.allowedTypes.Remove("__none__");
+
+            var working = wasBlocked
+                ? new HashSet<string>()
+                : (mod.cargoSettings.allowedTypes.Count == 0
+                    ? new HashSet<string>(allTypes)
+                    : new HashSet<string>(mod.cargoSettings.allowedTypes));
+
+            if (working.Contains(itemType)) working.Remove(itemType);
+            else working.Add(itemType);
+
+            if (working.Count == 0) _gm.Inventory.AllowNothing(station, mod.uid);
+            else if (working.Count == allTypes.Count) _gm.Inventory.AllowEverything(station, mod.uid);
+            else _gm.Inventory.SetAllowedTypes(station, mod.uid, working.ToList());
+        }
+
+        private float GetReserved(ModuleInstance mod, string itemType)
+        {
+            if (mod.cargoSettings?.reservedByType != null &&
+                mod.cargoSettings.reservedByType.TryGetValue(itemType, out float v))
+                return v;
+            return 0f;
+        }
+
+        private void AdjustPriority(ModuleInstance mod, int delta)
+        {
+            EnsureCargoSettings(mod);
+            int next = Mathf.Clamp(mod.cargoSettings.priority + delta, -5, 10);
+            mod.cargoSettings.priority = next;
+        }
+
+        private bool PillButton(Rect r, string label, bool on)
+        {
+            var prev = GUI.color;
+            if (on) GUI.color = ColTabHl;
+            bool clicked = GUI.Button(r, label, _sBtnSmall);
+            GUI.color = prev;
+            return clicked;
         }
 
         // ── Utilities ─────────────────────────────────────────────────────────

@@ -166,10 +166,15 @@ namespace Waystation.Systems
         public void AllowEverything(StationState station, string moduleUid)
             => SetAllowedTypes(station, moduleUid, new List<string>());
 
+        public void AllowNothing(StationState station, string moduleUid)
+            => SetAllowedTypes(station, moduleUid, new List<string> { "__none__" });
+
         public void SetReserved(StationState station, string moduleUid, string itemType, float fraction)
         {
             if (!station.modules.TryGetValue(moduleUid, out var module)) return;
             if (module.cargoSettings == null) module.cargoSettings = new CargoHoldSettings();
+            if (module.cargoSettings.reservedByType == null)
+                module.cargoSettings.reservedByType = new Dictionary<string, float>();
             fraction = Mathf.Clamp01(fraction);
             if (fraction == 0f) module.cargoSettings.reservedByType.Remove(itemType);
             else                module.cargoSettings.reservedByType[itemType] = fraction;
