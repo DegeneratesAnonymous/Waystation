@@ -9,6 +9,7 @@
 // so the legacy IMGUI stats box is suppressed.
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Demo;
@@ -60,6 +61,7 @@ namespace Waystation.UI
         private Vector2 _crewScroll;
         private Vector2 _stationScroll;
         private string  _inventorySearch = "";
+        private Dictionary<string, bool> _cargoFoldouts = new Dictionary<string, bool>();
 
         // ── Styles (built once on first OnGUI) ────────────────────────────────
         private Texture2D _white;
@@ -332,16 +334,16 @@ namespace Waystation.UI
         private void DrawStation(Rect area, float w, float h)
         {
             var s = _gm.Station;
-            var inv = _gm.Inventory.GetTotalInventory(s);
             var (capUsed, capTotal) = _gm.Inventory.GetStationCapacity(s);
+            var cargoHolds = _gm.Inventory.GetCargoHolds(s);
 
             // Estimate content height for the scroll view's inner rect
             float innerH = 24f + 22f                     // Wealth header + credits
                          + 16f                            // divider gap
                          + 24f + 5 * 22f                 // Resources header + 5 bars
                          + 16f                            // divider
-                         + 24f + 28f                      // Inventory header + search
-                         + Mathf.Max(40f, inv.Count * 20f) + 14f
+                         + 24f                            // Inventory header
+                         + cargoHolds.Count * 200f        // Estimate per cargo hold (expandable)
                          + 16f                            // divider
                          + 24f + s.modules.Count * 24f;  // Modules
 
@@ -366,37 +368,20 @@ namespace Waystation.UI
             // ── Station Inventory ─────────────────────────────────────────────
             Section($"Cargo Inventory  ({capUsed:F0} / {capTotal} units)", w, ref y);
 
-            // Search field
-            GUI.Label(new Rect(0, y + 2f, 36f, 17f), "Find:", _sSub);
-            _inventorySearch = GUI.TextField(new Rect(40f, y + 1f, w - 40f, 18f),
-                                             _inventorySearch, _sTextField);
-            y += 24f;
-
-            string filter = _inventorySearch.Trim();
-            int    shown  = 0;
-
-            foreach (var kv in inv)
+            if (cargoHolds.Count == 0)
             {
-                string id      = kv.Key;
-                string display = ItemDisplayName(id);
-
-                if (filter.Length > 0 &&
-                    id.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0 &&
-                    display.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0)
-                    continue;
-
-                GUI.Label(new Rect(0,       y, w * 0.72f, 18f), display, _sSub);
-                GUI.Label(new Rect(w * 0.74f, y, w * 0.26f, 18f), $"×{kv.Value}", _sSub);
-                y += 20f;
-                shown++;
-            }
-
-            if (shown == 0)
-            {
-                GUI.Label(new Rect(0, y, w, 18f),
-                    filter.Length > 0 ? "No matching items." : "Cargo holds are empty.", _sSub);
+                GUI.Label(new Rect(0, y, w, 18f), "No cargo holds built yet.", _sSub);
                 y += 20f;
             }
+            else
+            {
+                // Show each cargo hold as a collapsible section
+                foreach (var hold in cargoHolds)
+                {
+                    DrawCargoHold(hold, w, ref y);
+                }
+            }
+
             Divider(w, ref y);
 
             // ── Module Status ─────────────────────────────────────────────────
@@ -419,6 +404,133 @@ namespace Waystation.UI
             }
 
             GUI.EndScrollView();
+        }
+
+        // ── Cargo Hold Detail ─────────────────────────────────────────────────
+        private void DrawCargoHold(ModuleInstance hold, float w, ref float y)
+        {
+            // Initialize foldout state if needed
+            if (!_cargoFoldouts.ContainsKey(hold.uid))
+                _cargoFoldouts[hold.uid] = false;
+
+            int capTotal = _gm.Inventory.GetCapacityTotal(hold);
+            float capUsed = _gm.Inventory.GetCapacityUsed(hold);
+            float pct = capTotal > 0 ? capUsed / capTotal : 0f;
+
+            // Header with foldout triangle and capacity bar
+            string triangle = _cargoFoldouts[hold.uid] ? "▼" : "▶";
+            string headerText = $"{triangle}  {hold.displayName}  —  {capUsed:F0} / {capTotal}";
+
+            // Clickable header
+            Rect headerRect = new Rect(0, y, w, 18f);
+            if (GUI.Button(headerRect, headerText, _sLabel))
+                _cargoFoldouts[hold.uid] = !_cargoFoldouts[hold.uid];
+
+            y += 20f;
+
+            // Capacity bar
+            DrawSolid(new Rect(4f, y, w - 8f, 6f), ColBarBg);
+            Color capColor = pct >= 0.95f ? ColBarCrit : pct >= 0.75f ? ColBarWarn : ColBarFill;
+            DrawSolid(new Rect(4f, y, (w - 8f) * pct, 6f), capColor);
+            y += 10f;
+
+            // Settings info (if configured)
+            if (hold.cargoSettings != null && hold.cargoSettings.allowedTypes != null && hold.cargoSettings.allowedTypes.Count > 0)
+            {
+                string allowText = "Allow: " + string.Join(", ", hold.cargoSettings.allowedTypes);
+                var prevColor = GUI.color;
+                GUI.color = new Color(0.62f, 0.70f, 0.84f, 0.8f);
+                GUI.Label(new Rect(4f, y, w - 8f, 14f), allowText, _sSub);
+                GUI.color = prevColor;
+                y += 16f;
+            }
+
+            // If expanded, show item details
+            if (_cargoFoldouts[hold.uid])
+            {
+                if (hold.inventory.Count == 0)
+                {
+                    GUI.Label(new Rect(8f, y, w - 16f, 16f), "(empty)", _sSub);
+                    y += 18f;
+                }
+                else
+                {
+                    // Column headers
+                    DrawSolid(new Rect(8f, y, w - 16f, 14f), new Color(0.07f, 0.09f, 0.15f, 0.7f));
+                    GUI.Label(new Rect(12f, y + 1f, 90f, 12f), "ITEM", _sSub);
+                    GUI.Label(new Rect(104f, y + 1f, 60f, 12f), "TYPE", _sSub);
+                    GUI.Label(new Rect(166f, y + 1f, 40f, 12f), "QTY", _sSub);
+                    GUI.Label(new Rect(208f, y + 1f, 50f, 12f), "VALUE", _sSub);
+                    GUI.Label(new Rect(260f, y + 1f, 40f, 12f), "MASS", _sSub);
+                    y += 16f;
+
+                    // Sort items by type then name
+                    var sortedItems = hold.inventory.ToList();
+                    sortedItems.Sort((a, b) =>
+                    {
+                        var aDefn = _gm.Registry.Items.TryGetValue(a.Key, out var ad) ? ad : null;
+                        var bDefn = _gm.Registry.Items.TryGetValue(b.Key, out var bd) ? bd : null;
+
+                        string aType = aDefn?.itemType ?? "";
+                        string bType = bDefn?.itemType ?? "";
+                        int typeComp = aType.CompareTo(bType);
+                        if (typeComp != 0) return typeComp;
+
+                        string aName = aDefn?.displayName ?? a.Key;
+                        string bName = bDefn?.displayName ?? b.Key;
+                        return aName.CompareTo(bName);
+                    });
+
+                    // Item rows
+                    foreach (var kv in sortedItems)
+                    {
+                        string itemId = kv.Key;
+                        int qty = kv.Value;
+
+                        var itemDefn = _gm.Registry.Items.TryGetValue(itemId, out var defn) ? defn : null;
+                        string name = itemDefn?.displayName ?? itemId;
+                        string itype = itemDefn?.itemType ?? "?";
+                        float weight = itemDefn?.weight ?? 1f;
+                        float value = itemDefn?.value ?? 0f;
+                        bool legal = itemDefn?.legal ?? true;
+                        bool perishable = itemDefn != null && itemDefn.perishableTicks > 0;
+
+                        // Color by legality and perishability
+                        Color nameColor;
+                        if (!legal)
+                            nameColor = ColBarCrit;  // Red for illegal
+                        else if (perishable)
+                            nameColor = ColBarWarn;  // Yellow/orange for perishable
+                        else
+                            nameColor = new Color(0.85f, 0.92f, 1.00f);
+
+                        // Truncate long names
+                        if (name.Length > 13)
+                            name = name.Substring(0, 12) + "…";
+                        if (itype.Length > 8)
+                            itype = itype.Substring(0, 7) + "…";
+
+                        var prevColor = GUI.color;
+                        GUI.color = nameColor;
+                        GUI.Label(new Rect(12f, y, 90f, 14f), name, _sSub);
+                        GUI.color = prevColor;
+
+                        GUI.Label(new Rect(104f, y, 60f, 14f), itype, _sSub);
+                        GUI.Label(new Rect(166f, y, 40f, 14f), qty.ToString(), _sSub);
+
+                        prevColor = GUI.color;
+                        GUI.color = ColAccent;
+                        GUI.Label(new Rect(208f, y, 50f, 14f), $"{value * qty:F0}c", _sSub);
+                        GUI.color = prevColor;
+
+                        GUI.Label(new Rect(260f, y, 40f, 14f), $"{weight * qty:F1}", _sSub);
+
+                        y += 15f;
+                    }
+                }
+            }
+
+            y += 6f;  // Spacing between cargo holds
         }
 
         // ── Away Mission tab ──────────────────────────────────────────────────
