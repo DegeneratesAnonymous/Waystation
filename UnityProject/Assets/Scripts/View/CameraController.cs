@@ -47,7 +47,6 @@ namespace Waystation.View
                 _cam.orthographicSize * (1f - scroll * ZoomSpeed * 10f),
                 ZoomMin, ZoomMax);
 
-            float ratio = newSize / _cam.orthographicSize;
             _cam.orthographicSize = newSize;
 
             // Shift camera so world point under cursor stays fixed
@@ -66,10 +65,11 @@ namespace Waystation.View
 
             if (!Input.GetMouseButton(1)) return;
 
-            // Convert pixel delta to world units
+            // Convert pixel delta to world units, accounting for aspect ratio
             Vector3 delta      = Input.mousePosition - _panOriginScreen;
-            float   worldScale = _cam.orthographicSize * 2f / Screen.height;
-            Vector3 worldDelta = new Vector3(delta.x, delta.y, 0f) * worldScale;
+            float   scaleX     = _cam.orthographicSize * 2f * _cam.aspect / Screen.width;
+            float   scaleY     = _cam.orthographicSize * 2f / Screen.height;
+            Vector3 worldDelta = new Vector3(delta.x * scaleX, delta.y * scaleY, 0f);
 
             _cam.transform.position = _panOriginWorld - worldDelta;
         }

@@ -80,7 +80,6 @@ namespace Waystation.UI
         // ── Lifecycle ─────────────────────────────────────────────────────────
         private void Start()
         {
-            DemoBootstrap.HideOverlay = true;
             StartCoroutine(WaitForGame());
         }
 
@@ -92,6 +91,10 @@ namespace Waystation.UI
                    !GameManager.Instance.IsLoaded ||
                    GameManager.Instance.Station == null)
                 yield return null;
+
+            // Suppress the legacy overlay only when we are in a scene with a
+            // GameManager (i.e., not in the main menu or other non-game scenes).
+            DemoBootstrap.HideOverlay = true;
 
             _gm    = GameManager.Instance;
             _ready = true;
@@ -369,7 +372,7 @@ namespace Waystation.UI
                                              _inventorySearch, _sTextField);
             y += 24f;
 
-            string filter = _inventorySearch.Trim().ToLower();
+            string filter = _inventorySearch.Trim();
             int    shown  = 0;
 
             foreach (var kv in inv)
@@ -378,8 +381,8 @@ namespace Waystation.UI
                 string display = ItemDisplayName(id);
 
                 if (filter.Length > 0 &&
-                    !id.ToLower().Contains(filter) &&
-                    !display.ToLower().Contains(filter))
+                    id.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                    display.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
 
                 GUI.Label(new Rect(0,       y, w * 0.72f, 18f), display, _sSub);

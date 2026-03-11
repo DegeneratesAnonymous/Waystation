@@ -57,8 +57,10 @@ namespace Waystation.View
         // ── Lifecycle ─────────────────────────────────────────────────────────
         private void Start()
         {
-            _starSprite  = MakeStarSprite();
-            _shootSprite = MakeShootSprite();
+            // Generate shared sprites only once; reuse across scene reloads to
+            // avoid leaking textures and wasting startup time.
+            if (_starSprite  == null) _starSprite  = MakeStarSprite();
+            if (_shootSprite == null) _shootSprite = MakeShootSprite();
 
             var rng  = new System.Random(7331);
             var root = new GameObject("Stars");
@@ -138,7 +140,7 @@ namespace Waystation.View
         // ── Shooting star ─────────────────────────────────────────────────────
         private void SpawnShootingStar(float t)
         {
-            // Direction: any angle, weighted so they tend to travel downward/diagonal
+            // Direction: uniformly random angle (any direction)
             float angleDeg = Random.Range(0f, 360f);
             float angleRad = angleDeg * Mathf.Deg2Rad;
             float speed    = Random.Range(ShootMinSpeed, ShootMaxSpeed);
