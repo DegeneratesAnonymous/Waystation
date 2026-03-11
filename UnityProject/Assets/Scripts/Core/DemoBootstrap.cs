@@ -22,6 +22,8 @@ namespace Waystation.Demo
             go.AddComponent<DemoBootstrap>();
         }
 
+        public static bool HideOverlay { get; set; }
+
         private const string StationName = "Frontier Waystation";
         private const int    Seed        = 42;
         private const int    MaxLog      = 18;
@@ -78,6 +80,8 @@ namespace Waystation.Demo
 
         private void OnGUI()
         {
+            if (HideOverlay) return;
+
             if (_gm == null)
             {
                 GUI.Label(new Rect(10, 10, 400, 24), "[DemoBootstrap] Waiting for GameManager...");
