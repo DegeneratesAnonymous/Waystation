@@ -61,6 +61,13 @@ namespace Waystation.UI
         private Vector2 _stationScroll;
         private string  _inventorySearch = "";
 
+        // Station Inventory state
+        private string  _selectedHoldUid = "";  // uid of the hold whose settings panel is open
+
+        // All recognised item type names (used by the filter checkboxes)
+        private static readonly string[] ItemTypes =
+            { "Material", "Equipment", "Biological", "Valuables", "Waste" };
+
         // ── Styles (built once on first OnGUI) ────────────────────────────────
         private Texture2D _white;
         private GUIStyle  _sTabOff, _sTabOn;
@@ -331,19 +338,31 @@ namespace Waystation.UI
         // ── Station tab ───────────────────────────────────────────────────────
         private void DrawStation(Rect area, float w, float h)
         {
-            var s = _gm.Station;
-            var inv = _gm.Inventory.GetTotalInventory(s);
+            var s     = _gm.Station;
+            var holds = _gm.Inventory.GetCargoHolds(s);
             var (capUsed, capTotal) = _gm.Inventory.GetStationCapacity(s);
 
-            // Estimate content height for the scroll view's inner rect
-            float innerH = 24f + 22f                     // Wealth header + credits
-                         + 16f                            // divider gap
-                         + 24f + 5 * 22f                 // Resources header + 5 bars
-                         + 16f                            // divider
-                         + 24f + 28f                      // Inventory header + search
-                         + Mathf.Max(40f, inv.Count * 20f) + 14f
-                         + 16f                            // divider
-                         + 24f + s.modules.Count * 24f;  // Modules
+            // Dynamic content height estimate
+            float holdRows  = 0f;
+            foreach (var hold in holds)
+            {
+                holdRows += 52f;  // header row + capacity bar + items-header row
+                int itemCount = hold.inventory.Count;
+                holdRows += Mathf.Max(18f, itemCount * 18f);
+                if (_selectedHoldUid == hold.uid)
+                    holdRows += 28f + ItemTypes.Length * 22f + ItemTypes.Length * 28f + 36f;  // settings panel
+                holdRows += 8f;   // bottom gap between holds
+            }
+            if (holds.Count == 0) holdRows = 22f;
+
+            float innerH = 24f + 22f               // Wealth header + credits
+                         + 16f                      // divider
+                         + 24f + 5 * 22f           // Resources header + 5 bars
+                         + 16f                      // divider
+                         + 24f + 28f               // Station Inventory header + search
+                         + holdRows + 14f           // per-hold rows
+                         + 16f                      // divider
+                         + 24f + s.modules.Count * 24f;  // Module Status
 
             _stationScroll = GUI.BeginScrollView(area, _stationScroll,
                              new Rect(0, 0, w, Mathf.Max(h, innerH)));
@@ -364,7 +383,19 @@ namespace Waystation.UI
             Divider(w, ref y);
 
             // ── Station Inventory ─────────────────────────────────────────────
-            Section($"Cargo Inventory  ({capUsed:F0} / {capTotal} units)", w, ref y);
+            Section($"Station Inventory  ({capUsed:F0} / {capTotal} units)", w, ref y);
+
+            // Overall capacity bar
+            if (capTotal > 0)
+            {
+                float pct = Mathf.Clamp01(capUsed / capTotal);
+                DrawSolid(new Rect(0, y + 3f, w, 10f), ColBarBg);
+                Color fc = pct < 0.75f ? ColBarFill : pct < 0.90f ? ColBarWarn : ColBarCrit;
+                DrawSolid(new Rect(0, y + 3f, w * pct, 10f), fc);
+                GUI.Label(new Rect(w * 0.78f, y, w * 0.22f, 16f),
+                          $"{pct * 100f:F0}%", _sSub);
+                y += 18f;
+            }
 
             // Search field
             GUI.Label(new Rect(0, y + 2f, 36f, 17f), "Find:", _sSub);
@@ -373,30 +404,19 @@ namespace Waystation.UI
             y += 24f;
 
             string filter = _inventorySearch.Trim();
-            int    shown  = 0;
 
-            foreach (var kv in inv)
+            if (holds.Count == 0)
             {
-                string id      = kv.Key;
-                string display = ItemDisplayName(id);
-
-                if (filter.Length > 0 &&
-                    id.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0 &&
-                    display.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0)
-                    continue;
-
-                GUI.Label(new Rect(0,       y, w * 0.72f, 18f), display, _sSub);
-                GUI.Label(new Rect(w * 0.74f, y, w * 0.26f, 18f), $"×{kv.Value}", _sSub);
-                y += 20f;
-                shown++;
+                GUI.Label(new Rect(0, y, w, 18f), "No cargo holds built.", _sSub);
+                y += 22f;
             }
 
-            if (shown == 0)
+            // Per-hold rows
+            foreach (var hold in holds)
             {
-                GUI.Label(new Rect(0, y, w, 18f),
-                    filter.Length > 0 ? "No matching items." : "Cargo holds are empty.", _sSub);
-                y += 20f;
+                DrawCargoHoldRow(hold, w, ref y, filter, s);
             }
+
             Divider(w, ref y);
 
             // ── Module Status ─────────────────────────────────────────────────
@@ -419,6 +439,180 @@ namespace Waystation.UI
             }
 
             GUI.EndScrollView();
+        }
+
+        // ── Per-hold row ──────────────────────────────────────────────────────
+        private void DrawCargoHoldRow(ModuleInstance hold, float w, ref float y,
+                                      string filter, StationState s)
+        {
+            float usedW  = _gm.Inventory.GetCapacityUsed(hold);
+            float totalW = _gm.Inventory.GetCapacityTotal(hold);
+            bool  isSel  = _selectedHoldUid == hold.uid;
+
+            // ── Hold header line ──────────────────────────────────────────────
+            GUI.Label(new Rect(0, y, w * 0.60f, 18f), hold.displayName, _sLabel);
+
+            // Configure / Close toggle button
+            string cfgLabel = isSel ? "▲ Close" : "⚙ Config";
+            if (GUI.Button(new Rect(w * 0.62f, y, w * 0.38f, 17f), cfgLabel, _sBtnSmall))
+                _selectedHoldUid = isSel ? "" : hold.uid;
+            y += 20f;
+
+            // ── Capacity bar ──────────────────────────────────────────────────
+            {
+                string capLabel = totalW > 0 ? $"{usedW:F0} / {totalW} units" : "No capacity";
+                GUI.Label(new Rect(0, y, w * 0.50f, 14f), capLabel, _sSub);
+
+                if (totalW > 0)
+                {
+                    float pct = Mathf.Clamp01(usedW / totalW);
+                    float bx  = w * 0.52f, bw = w * 0.48f;
+                    DrawSolid(new Rect(bx, y + 2f, bw, 8f), ColBarBg);
+                    Color fc = pct < 0.75f ? ColBarFill : pct < 0.90f ? ColBarWarn : ColBarCrit;
+                    DrawSolid(new Rect(bx, y + 2f, bw * pct, 8f), fc);
+                }
+                y += 16f;
+            }
+
+            // ── Filter type badges ────────────────────────────────────────────
+            if (hold.cargoSettings != null && hold.cargoSettings.allowedTypes.Count > 0)
+            {
+                string badgeText;
+                if (hold.cargoSettings.allowedTypes.Count == 1 &&
+                    hold.cargoSettings.allowedTypes[0] == CargoHoldSettings.AllowNoneSentinel)
+                    badgeText = "Filter: (nothing allowed)";
+                else
+                    badgeText = "Filter: " + string.Join(", ", hold.cargoSettings.allowedTypes);
+                GUI.Label(new Rect(0, y, w, 14f), badgeText, _sSub);
+                y += 16f;
+            }
+
+            // ── Items in this hold ────────────────────────────────────────────
+            int shownItems = 0;
+            foreach (var kv in hold.inventory)
+            {
+                string id      = kv.Key;
+                string display = ItemDisplayName(id);
+
+                if (filter.Length > 0 &&
+                    id.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                    display.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                GUI.Label(new Rect(8f,  y, w * 0.68f, 16f), display, _sSub);
+                GUI.Label(new Rect(w * 0.72f, y, w * 0.28f, 16f), $"×{kv.Value}", _sSub);
+                y += 18f;
+                shownItems++;
+            }
+            if (shownItems == 0)
+            {
+                if (hold.inventory.Count == 0)
+                {
+                    GUI.Label(new Rect(8f, y, w, 14f), "Empty", _sSub);
+                    y += 16f;
+                }
+                else if (filter.Length > 0)
+                {
+                    GUI.Label(new Rect(8f, y, w, 14f), "No matching items.", _sSub);
+                    y += 16f;
+                }
+            }
+
+            // ── Settings panel (shown when selected) ──────────────────────────
+            if (isSel)
+                DrawCargoHoldSettings(hold, w, ref y, s);
+
+            // Divider between holds
+            DrawSolid(new Rect(0, y, w, 1f), ColDivider);
+            y += 8f;
+        }
+
+        // ── Cargo Hold Settings Panel ─────────────────────────────────────────
+        private void DrawCargoHoldSettings(ModuleInstance hold, float w, ref float y,
+                                           StationState s)
+        {
+            // Ensure settings object exists
+            if (hold.cargoSettings == null)
+                hold.cargoSettings = new CargoHoldSettings();
+
+            DrawSolid(new Rect(0, y, w, 1f), ColDivider);
+            y += 8f;
+
+            // ── Quick actions ─────────────────────────────────────────────────
+            GUI.Label(new Rect(0, y, w, 16f), "Quick Actions", _sLabel);
+            y += 20f;
+
+            if (GUI.Button(new Rect(0, y, w * 0.48f, 22f), "Allow Everything", _sBtnSmall))
+                _gm.Inventory.AllowEverything(s, hold.uid);
+            if (GUI.Button(new Rect(w * 0.52f, y, w * 0.48f, 22f), "Allow Nothing", _sBtnSmall))
+                _gm.Inventory.AllowNothing(s, hold.uid);
+            y += 28f;
+
+            // ── Type filter checkboxes ────────────────────────────────────────
+            GUI.Label(new Rect(0, y, w, 16f), "Allowed Item Types", _sLabel);
+            y += 20f;
+
+            bool allowAll = hold.cargoSettings.allowedTypes.Count == 0;
+            // "allowAll" is also false when set to [AllowNoneSentinel] (allow nothing)
+            bool allowNone = hold.cargoSettings.allowedTypes.Count == 1 &&
+                             hold.cargoSettings.allowedTypes[0] == CargoHoldSettings.AllowNoneSentinel;
+            GUI.Label(new Rect(0, y, w * 0.78f, 16f), "No restrictions (allow all types)", _sSub);
+            bool newAllowAll = GUI.Toggle(new Rect(w * 0.82f, y, 16f, 16f), allowAll, "");
+            if (newAllowAll != allowAll)
+            {
+                if (newAllowAll)
+                    _gm.Inventory.AllowEverything(s, hold.uid);
+                else
+                    _gm.Inventory.SetAllowedTypes(s, hold.uid,
+                        new System.Collections.Generic.List<string>(ItemTypes));
+            }
+            y += 20f;
+
+            foreach (var type in ItemTypes)
+            {
+                bool wasAllowed = allowAll || (!allowNone && hold.cargoSettings.allowedTypes.Contains(type));
+                GUI.Label(new Rect(8f, y, w * 0.78f, 16f), type, _sSub);
+                bool nowAllowed = GUI.Toggle(new Rect(w * 0.82f, y, 16f, 16f), wasAllowed, "");
+                if (nowAllowed != wasAllowed && !allowAll)
+                {
+                    // If previously "allow nothing", start from a clean list
+                    var current = allowNone
+                        ? new System.Collections.Generic.List<string>()
+                        : new System.Collections.Generic.List<string>(hold.cargoSettings.allowedTypes);
+                    // allowedTypes is a whitelist: present = allowed, absent = blocked
+                    if (nowAllowed) { if (!current.Contains(type)) current.Add(type); }
+                    else            { current.Remove(type); }
+                    _gm.Inventory.SetAllowedTypes(s, hold.uid, current);
+                }
+                y += 20f;
+            }
+
+            // ── Reserved capacity sliders ─────────────────────────────────────
+            GUI.Label(new Rect(0, y, w, 16f), "Reserved Capacity by Type", _sLabel);
+            y += 20f;
+
+            foreach (var type in ItemTypes)
+            {
+                hold.cargoSettings.reservedByType.TryGetValue(type, out float current);
+                GUI.Label(new Rect(8f, y, w * 0.34f, 16f), type, _sSub);
+                float newVal = GUI.HorizontalSlider(
+                    new Rect(w * 0.36f, y + 4f, w * 0.48f, 10f), current, 0f, 1f);
+                if (!Mathf.Approximately(newVal, current))
+                    _gm.Inventory.SetReserved(s, hold.uid, type, newVal);
+                GUI.Label(new Rect(w * 0.86f, y, w * 0.14f, 16f),
+                          $"{newVal * 100f:F0}%", _sSub);
+                y += 22f;
+            }
+
+            // ── Priority ──────────────────────────────────────────────────────
+            const int MaxPriority = 10;
+            GUI.Label(new Rect(0, y, w * 0.50f, 16f),
+                      $"Priority: {hold.cargoSettings.priority}", _sSub);
+            if (GUI.Button(new Rect(w * 0.52f, y, w * 0.22f, 17f), "▲", _sBtnSmall))
+                hold.cargoSettings.priority = Mathf.Min(MaxPriority, hold.cargoSettings.priority + 1);
+            if (GUI.Button(new Rect(w * 0.76f, y, w * 0.22f, 17f), "▼", _sBtnSmall))
+                hold.cargoSettings.priority = Mathf.Max(0, hold.cargoSettings.priority - 1);
+            y += 24f;
         }
 
         // ── Away Mission tab ──────────────────────────────────────────────────
