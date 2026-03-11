@@ -54,17 +54,16 @@ namespace MiniJSON
                 var table = new Dictionary<string, object>();
                 while (true)
                 {
-                    switch (NextToken)
-                    {
-                        case TOKEN.NONE:       return null;
-                        case TOKEN.CURLY_CLOSE:return table;
-                        default:
-                            string key = ParseString();
-                            if (NextToken != TOKEN.COLON) return null;
-                            json.Read();
-                            table[key] = Parse();
-                            break;
-                    }
+                    EatWhitespace();
+                    if (json.Peek() == -1) return null;
+                    char c = (char)json.Peek();
+                    if (c == '}') { json.Read(); return table; }
+                    if (c == ',') { json.Read(); continue; }
+                    string key = ParseString();
+                    EatWhitespace();
+                    if (json.Peek() != ':') return null;
+                    json.Read(); // consume ':'
+                    table[key] = Parse();
                 }
             }
 
@@ -73,14 +72,12 @@ namespace MiniJSON
                 var array = new List<object>();
                 while (true)
                 {
-                    switch (NextToken)
-                    {
-                        case TOKEN.NONE:         return null;
-                        case TOKEN.SQUARED_CLOSE:return array;
-                        default:
-                            array.Add(Parse());
-                            break;
-                    }
+                    EatWhitespace();
+                    if (json.Peek() == -1) return null;
+                    char c = (char)json.Peek();
+                    if (c == ']') { json.Read(); return array; }
+                    if (c == ',') { json.Read(); continue; }
+                    array.Add(Parse());
                 }
             }
 
@@ -167,9 +164,9 @@ namespace MiniJSON
                     if (json.Peek() == -1) return TOKEN.NONE;
                     switch ((char)json.Peek())
                     {
-                        case '{': return TOKEN.CURLY_OPEN;
+                        case '{': json.Read(); return TOKEN.CURLY_OPEN;
                         case '}': json.Read(); return TOKEN.CURLY_CLOSE;
-                        case '[': return TOKEN.SQUARED_OPEN;
+                        case '[': json.Read(); return TOKEN.SQUARED_OPEN;
                         case ']': json.Read(); return TOKEN.SQUARED_CLOSE;
                         case ',': json.Read(); return TOKEN.COMMA;
                         case '"': return TOKEN.STRING;

@@ -147,7 +147,7 @@ namespace Waystation.Systems
         private readonly ContentRegistry   _registry;
         private readonly EffectResolver    _resolver;
         private readonly ConditionEvaluator _evaluator;
-        private readonly string            _difficulty;
+        private string                     _difficulty;
 
         // Pending events awaiting player interaction
         private readonly List<PendingEvent>              _pending       = new List<PendingEvent>();

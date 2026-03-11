@@ -76,7 +76,7 @@ namespace Waystation.Core
 
         private void Start()
         {
-            Registry = ContentRegistry.Instance ?? FindObjectOfType<ContentRegistry>();
+            Registry = ContentRegistry.Instance ?? FindAnyObjectByType<ContentRegistry>();
             if (Registry == null)
             {
                 var go = new GameObject("ContentRegistry");
