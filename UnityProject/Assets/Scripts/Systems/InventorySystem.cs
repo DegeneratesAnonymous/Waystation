@@ -166,6 +166,9 @@ namespace Waystation.Systems
         public void AllowEverything(StationState station, string moduleUid)
             => SetAllowedTypes(station, moduleUid, new List<string>());
 
+        public void AllowNothing(StationState station, string moduleUid)
+            => SetAllowedTypes(station, moduleUid, new List<string> { "__none__" });
+
         public void SetReserved(StationState station, string moduleUid, string itemType, float fraction)
         {
             if (!station.modules.TryGetValue(moduleUid, out var module)) return;
