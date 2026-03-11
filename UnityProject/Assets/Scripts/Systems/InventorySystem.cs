@@ -167,7 +167,7 @@ namespace Waystation.Systems
             => SetAllowedTypes(station, moduleUid, new List<string>());
 
         public void AllowNothing(StationState station, string moduleUid)
-            => SetAllowedTypes(station, moduleUid, new List<string> { "__none__" });
+            => SetAllowedTypes(station, moduleUid, new List<string> { CargoHoldSettings.AllowNoneSentinel });
 
         public void SetReserved(StationState station, string moduleUid, string itemType, float fraction)
         {

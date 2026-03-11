@@ -479,7 +479,7 @@ namespace Waystation.UI
             {
                 string badgeText;
                 if (hold.cargoSettings.allowedTypes.Count == 1 &&
-                    hold.cargoSettings.allowedTypes[0] == "__none__")
+                    hold.cargoSettings.allowedTypes[0] == CargoHoldSettings.AllowNoneSentinel)
                     badgeText = "Filter: (nothing allowed)";
                 else
                     badgeText = "Filter: " + string.Join(", ", hold.cargoSettings.allowedTypes);
@@ -504,10 +504,18 @@ namespace Waystation.UI
                 y += 18f;
                 shownItems++;
             }
-            if (shownItems == 0 && hold.inventory.Count == 0)
+            if (shownItems == 0)
             {
-                GUI.Label(new Rect(8f, y, w, 14f), "Empty", _sSub);
-                y += 16f;
+                if (hold.inventory.Count == 0)
+                {
+                    GUI.Label(new Rect(8f, y, w, 14f), "Empty", _sSub);
+                    y += 16f;
+                }
+                else if (filter.Length > 0)
+                {
+                    GUI.Label(new Rect(8f, y, w, 14f), "No matching items.", _sSub);
+                    y += 16f;
+                }
             }
 
             // ── Settings panel (shown when selected) ──────────────────────────
@@ -545,9 +553,9 @@ namespace Waystation.UI
             y += 20f;
 
             bool allowAll = hold.cargoSettings.allowedTypes.Count == 0;
-            // "allowAll" is also false when set to ["__none__"] (allow nothing)
+            // "allowAll" is also false when set to [AllowNoneSentinel] (allow nothing)
             bool allowNone = hold.cargoSettings.allowedTypes.Count == 1 &&
-                             hold.cargoSettings.allowedTypes[0] == "__none__";
+                             hold.cargoSettings.allowedTypes[0] == CargoHoldSettings.AllowNoneSentinel;
             GUI.Label(new Rect(0, y, w * 0.78f, 16f), "No restrictions (allow all types)", _sSub);
             bool newAllowAll = GUI.Toggle(new Rect(w * 0.82f, y, 16f, 16f), allowAll, "");
             if (newAllowAll != allowAll)
@@ -592,7 +600,7 @@ namespace Waystation.UI
                 if (!Mathf.Approximately(newVal, current))
                     _gm.Inventory.SetReserved(s, hold.uid, type, newVal);
                 GUI.Label(new Rect(w * 0.86f, y, w * 0.14f, 16f),
-                          $"{current * 100f:F0}%", _sSub);
+                          $"{newVal * 100f:F0}%", _sSub);
                 y += 22f;
             }
 

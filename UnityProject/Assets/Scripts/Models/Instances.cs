@@ -175,6 +175,13 @@ namespace Waystation.Models
     [Serializable]
     public class CargoHoldSettings
     {
+        /// <summary>
+        /// Sentinel value used in allowedTypes to represent "allow nothing".
+        /// An empty allowedTypes list means allow everything; a list containing
+        /// only this token blocks all item types.
+        /// </summary>
+        public const string AllowNoneSentinel = "__none__";
+
         public List<string>              allowedTypes    = new List<string>();
         public Dictionary<string, float> reservedByType = new Dictionary<string, float>();
         public int                       priority        = 0;
