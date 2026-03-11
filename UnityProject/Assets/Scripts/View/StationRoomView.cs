@@ -46,9 +46,16 @@ namespace Waystation.View
 
         // ── Runtime state ─────────────────────────────────────────────────────
         private GameManager       _gm;
-        private List<GameObject>  _dots    = new List<GameObject>();
-        private List<NPCInstance> _crew    = new List<NPCInstance>();
+        private List<GameObject>  _dots        = new List<GameObject>();
+        private List<NPCInstance> _crew        = new List<NPCInstance>();
+        private string[]          _crewLabels  = new string[0];
         private bool              _ready;
+
+        // ── Cached GUI style ──────────────────────────────────────────────────
+        private GUIStyle _labelStyle;
+
+        // ── Shared dot sprite (generated once, reused across rebuilds) ────────
+        private static Sprite _dotSprite;
 
         // ── Auto-install ──────────────────────────────────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -61,9 +68,36 @@ namespace Waystation.View
         // ── Lifecycle ─────────────────────────────────────────────────────────
         private void Start()
         {
+            // Defer initialization until a GameManager is present so that
+            // we don't reconfigure Camera.main / build a room in non-game scenes
+            // (e.g., main menu) that lack a GameManager.
+            StartCoroutine(InitializeWhenReady());
+        }
+
+        private IEnumerator InitializeWhenReady()
+        {
+            // Wait until a GameManager exists AND has a fully loaded station.
+            // DemoBootstrap creates a GameManager at BeforeSceneLoad time, so
+            // checking for the GM alone is not sufficient — we must also wait
+            // for IsLoaded + Station before touching Camera.main or building
+            // room objects, so that non-game scenes (e.g. main menu) remain
+            // untouched.
+            while (true)
+            {
+                _gm = FindAnyObjectByType<GameManager>();
+                if (_gm != null && _gm.IsLoaded && _gm.Station != null) break;
+                yield return null;
+            }
+
+            // Component may have been destroyed/disabled while waiting.
+            if (!this || !isActiveAndEnabled) yield break;
+
             SetupCamera();
             BuildRoom();
-            StartCoroutine(WaitForGame());
+
+            _gm.OnTick += OnTick;
+            SpawnCrewDots();
+            _ready = true;
         }
 
         private void OnDestroy()
@@ -118,20 +152,6 @@ namespace Waystation.View
             }
         }
 
-        // ── Wait for station data ─────────────────────────────────────────────
-        private IEnumerator WaitForGame()
-        {
-            while (GameManager.Instance == null ||
-                   !GameManager.Instance.IsLoaded ||
-                   GameManager.Instance.Station == null)
-                yield return null;
-
-            _gm = GameManager.Instance;
-            _gm.OnTick += OnTick;
-            SpawnCrewDots();
-            _ready = true;
-        }
-
         // ── Crew dots ─────────────────────────────────────────────────────────
         private void SpawnCrewDots()
         {
@@ -142,12 +162,19 @@ namespace Waystation.View
             if (_gm?.Station == null) return;
 
             var crewList = _gm.Station.GetCrew();
-            var dotSpr   = MakeCircle(Color.white);      // tinted per NPC
+
+            // Generate the shared sprite once and cache it for all rebuilds.
+            if (_dotSprite == null) _dotSprite = MakeCircle(Color.white);
+
+            _crewLabels = new string[crewList.Count];
 
             for (int i = 0; i < crewList.Count; i++)
             {
                 var npc  = crewList[i];
                 _crew.Add(npc);
+
+                // Pre-build the label string so OnGUI() reuses it without allocating each frame.
+                _crewLabels[i] = $"{npc.name}\n<size=9>{ClassLabel(npc.classId)}</size>";
 
                 Vector2Int slot = i < CrewSlots.Length
                     ? CrewSlots[i]
@@ -159,7 +186,8 @@ namespace Waystation.View
                 go.transform.position = new Vector3(slot.x, slot.y, -0.2f);
 
                 var sr = go.AddComponent<SpriteRenderer>();
-                sr.sprite       = MakeCircle(col);
+                sr.sprite       = _dotSprite;
+                sr.color        = col;
                 sr.sortingOrder = 5;
 
                 _dots.Add(go);
@@ -177,14 +205,19 @@ namespace Waystation.View
         {
             if (!_ready || Camera.main == null) return;
 
-            var style = new GUIStyle(GUI.skin.label)
+            // Lazy-initialise once so we don't allocate a new GUIStyle each frame.
+            if (_labelStyle == null)
             {
-                fontSize  = 11,
-                alignment = TextAnchor.MiddleCenter,
-                normal    = { textColor = Color.white }
-            };
+                _labelStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize  = 11,
+                    alignment = TextAnchor.MiddleCenter,
+                    richText  = true,
+                    normal    = { textColor = Color.white },
+                };
+            }
 
-            for (int i = 0; i < _dots.Count && i < _crew.Count; i++)
+            for (int i = 0; i < _dots.Count && i < _crew.Count && i < _crewLabels.Length; i++)
             {
                 if (!_dots[i]) continue;
 
@@ -196,9 +229,8 @@ namespace Waystation.View
                 float gx = sp.x - 65f;
                 float gy = Screen.height - sp.y - 10f;
 
-                string label = $"{_crew[i].name}\n<size=9>{ClassLabel(_crew[i].classId)}</size>";
-                style.richText = true;
-                GUI.Label(new Rect(gx, gy, 130f, 32f), label, style);
+                // Use pre-built label string — no per-frame allocation.
+                GUI.Label(new Rect(gx, gy, 130f, 32f), _crewLabels[i], _labelStyle);
             }
         }
 
