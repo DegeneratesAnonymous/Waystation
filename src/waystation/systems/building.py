@@ -44,6 +44,11 @@ _DEFAULT_BUILD_TIME_TICKS: int = 50
 #: Job ID used while an engineer is actively hauling or constructing.
 _BUILD_JOB_ID: str = "job.build"
 
+#: How many ticks to set job_timer to when locking an engineer onto a build
+#: job.  BuildingSystem refreshes this every tick it holds the engineer,
+#: giving JobSystem a window before it tries to reassign them.
+_BUILD_JOB_TIMER_TICKS: int = 5
+
 #: Engineer class ID used for idle-engineer detection.
 _ENGINEER_CLASS: str = "class.engineering"
 
@@ -83,6 +88,17 @@ class BuildingSystem:
         if defn is None:
             log.error("Unknown buildable '%s'", buildable_id)
             return None
+
+        # Enforce required_tags: all tags must be active on the station
+        if defn.required_tags:
+            missing = [t for t in defn.required_tags if not station.has_tag(t)]
+            if missing:
+                log.warning(
+                    "place_foundation: buildable '%s' requires tags %s "
+                    "(missing: %s)",
+                    buildable_id, list(defn.required_tags), missing,
+                )
+                return None
 
         foundation = FoundationInstance.create(
             buildable_id=buildable_id,
@@ -142,6 +158,9 @@ class BuildingSystem:
 
         * Foundations in **awaiting_haul** have materials gathered.
         * Foundations in **constructing** have their progress advanced.
+
+        Each engineer NPC is only assigned to one foundation per tick so that
+        multiple parallel foundations don't steal the same worker.
         """
         pending = [
             f for f in station.foundations.values()
@@ -150,39 +169,47 @@ class BuildingSystem:
         if not pending:
             return
 
-        idle_engineers = self._find_idle_engineers(station)
+        # Track which engineer UIDs have been used this tick.  An engineer
+        # already assigned to this foundation is still eligible to continue
+        # working on it; other foundations may not claim them.
+        used_engineer_uids: set[str] = set()
+        idle_jobs = {None, "job.rest", "job.eat", _BUILD_JOB_ID}
 
         for foundation in pending:
             defn = self.registry.buildables.get(foundation.buildable_id)
             if defn is None:
                 continue
+
+            assigned_uid = foundation.assigned_npc_uid
+            # Build a per-foundation pool that excludes engineers claimed by
+            # *other* foundations this tick.
+            idle_engineers = [
+                npc
+                for npc in station.npcs.values()
+                if (
+                    npc.is_crew()
+                    and npc.class_id == _ENGINEER_CLASS
+                    and (npc.owner_id is None or npc.owner_id == "player")
+                    and npc.current_job_id in idle_jobs
+                    and (
+                        npc.uid not in used_engineer_uids
+                        or (assigned_uid is not None and npc.uid == assigned_uid)
+                    )
+                )
+            ]
+
             if foundation.status == "awaiting_haul":
                 self._tick_awaiting_haul(foundation, defn, station, idle_engineers)
             elif foundation.status == "constructing":
                 self._tick_constructing(foundation, defn, station, idle_engineers)
 
+            # After processing, mark the engineer (if any) as used for this tick.
+            if foundation.assigned_npc_uid is not None:
+                used_engineer_uids.add(foundation.assigned_npc_uid)
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
-
-    def _find_idle_engineers(
-        self, station: "StationState"
-    ) -> list["NPCInstance"]:
-        """
-        Return player-owned Engineer crew who are available for build tasks
-        (idle, resting, eating, or already on a build job for this foundation).
-        """
-        idle_jobs = {None, "job.rest", "job.eat", _BUILD_JOB_ID}
-        return [
-            npc
-            for npc in station.npcs.values()
-            if (
-                npc.is_crew()
-                and npc.class_id == _ENGINEER_CLASS
-                and (npc.owner_id is None or npc.owner_id == "player")
-                and npc.current_job_id in idle_jobs
-            )
-        ]
 
     def _tick_awaiting_haul(
         self,
@@ -245,6 +272,10 @@ class BuildingSystem:
                 f"{eng.name} hauls materials for {defn.display_name}."
             )
 
+        # Keep the assigned engineer's job timer topped up so JobSystem
+        # does not reassign them before materials are fully gathered.
+        self._refresh_engineer_timer(foundation, idle_engineers, station)
+
         if foundation.materials_complete(required):
             foundation.status = "constructing"
 
@@ -268,8 +299,10 @@ class BuildingSystem:
         if assigned is None:
             return  # Nobody to build — wait
 
-        # Mark the engineer as actively building
+        # Mark the engineer as actively building; refresh timer each tick so
+        # JobSystem does not reassign them before construction finishes.
         assigned.current_job_id = _BUILD_JOB_ID
+        self._refresh_engineer_timer(foundation, idle_engineers, station)
 
         # Progress rate: 1 / build_time_ticks, scaled by engineer skill
         build_time = defn.build_time_ticks if defn.build_time_ticks > 0 else _DEFAULT_BUILD_TIME_TICKS
@@ -281,6 +314,26 @@ class BuildingSystem:
 
         if foundation.build_progress >= 1.0:
             self._complete_foundation(foundation, defn, station, assigned)
+
+    def _refresh_engineer_timer(
+        self,
+        foundation: "FoundationInstance",
+        idle_engineers: list["NPCInstance"],
+        station: "StationState",
+    ) -> None:
+        """
+        Set ``job_timer = _BUILD_JOB_TIMER_TICKS`` on the engineer assigned to
+        *foundation* (if found in *idle_engineers*).  Called every tick while a
+        foundation is active so JobSystem does not reassign the worker.
+        """
+        if not foundation.assigned_npc_uid:
+            return
+        eng = next(
+            (n for n in idle_engineers if n.uid == foundation.assigned_npc_uid),
+            None,
+        )
+        if eng is not None:
+            eng.job_timer = _BUILD_JOB_TIMER_TICKS
 
     def _complete_foundation(
         self,

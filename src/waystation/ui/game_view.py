@@ -724,7 +724,7 @@ class GameView:
         ("door",        "DOOR"),
         ("erase",       "ERASE"),
         ("assign",      "ASSIGN AREA"),
-        ("place",       "PLACE [B]"),
+        ("place",       "PLACE"),
     ]
     _WALL_SIDES = ["N", "E", "S", "W"]
 
@@ -970,9 +970,12 @@ class GameView:
             self._place_popup = False
             return
 
-        # Buildable rows
+        # Buildable rows — only show items whose required_tags are all active
         buildables = sorted(
-            self.game.registry.buildables.values(),
+            (
+                b for b in self.game.registry.buildables.values()
+                if all(self.s.has_tag(t) for t in b.required_tags)
+            ),
             key=lambda b: b.display_name,
         )
         visible = buildables[self._place_scroll: self._place_scroll + 7]
@@ -1033,7 +1036,10 @@ class GameView:
         y += 4
 
         buildables = sorted(
-            self.game.registry.buildables.values(),
+            (
+                b for b in self.game.registry.buildables.values()
+                if all(self.s.has_tag(t) for t in b.required_tags)
+            ),
             key=lambda b: b.display_name,
         )
         visible = buildables[self._place_scroll: self._place_scroll + 7]

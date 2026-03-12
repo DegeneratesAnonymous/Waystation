@@ -251,8 +251,9 @@ class NPCSystem:
         if npc.needs.get("thirst", 1.0) < 0.2 and random.random() < 0.1:
             station.log_event(f"{npc.name} is severely dehydrated.")
 
-        # Idle wandering: move to a random oxygenated room periodically
-        if npc.is_crew() and not npc.job_module_uid and random.random() < 0.05:
+        # Idle wandering: move to a random oxygenated room periodically.
+        # Only trigger for crew with no active job assignment (excludes builders).
+        if npc.is_crew() and not npc.job_module_uid and not npc.current_job_id and random.random() < 0.05:
             self._wander_to_oxygenated_room(npc, station)
 
     # ------------------------------------------------------------------
@@ -286,8 +287,12 @@ class NPCSystem:
             return
 
         room = random.choice(pool)
-        # Update location to the room uid so the visual dot follows
+        # Update location to the room uid and job_module_uid to the room's
+        # backing module (if any) so the visual dot follows correctly.
         npc.location = room.uid
+        module_uid = getattr(room, "module_uid", None)
+        if module_uid is not None:
+            npc.job_module_uid = module_uid
 
     def _try_advance_skill(self, npc: NPCInstance) -> None:
         """Accumulate XP for the job's primary skill; advance when threshold reached."""
