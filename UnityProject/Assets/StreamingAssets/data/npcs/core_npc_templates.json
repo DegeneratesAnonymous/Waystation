@@ -4,9 +4,11 @@
     "base_class": "class.engineering",
     "allowed_subclasses": ["class.engineering"],
     "skill_ranges": {
-      "repair":    [3, 8],
-      "technical": [3, 7],
-      "combat":    [1, 3]
+      "engineering": [3, 7],
+      "electrical":  [2, 5],
+      "repair":      [3, 8],
+      "technical":   [3, 7],
+      "combat":      [1, 3]
     },
     "trait_pool": ["methodical", "resilient", "curious", "anxious"],
     "name_pool": [],
@@ -30,15 +32,16 @@
     "schema_version": "1"
   },
   {
-    "id": "npc.operations",
-    "base_class": "class.operations",
-    "allowed_subclasses": ["class.operations"],
+    "id": "npc.scientist",
+    "base_class": "class.sciences",
+    "allowed_subclasses": ["class.sciences"],
     "skill_ranges": {
-      "coordination": [3, 7],
-      "negotiation":  [2, 7],
-      "logistics":    [3, 7]
+      "research":    [3, 8],
+      "medical":     [2, 6],
+      "analysis":    [3, 7],
+      "chemistry":   [2, 5]
     },
-    "trait_pool": ["organised", "optimistic", "pragmatic"],
+    "trait_pool": ["curious", "methodical", "eccentric", "pragmatic", "anxious"],
     "name_pool": [],
     "equipment_pool": [],
     "spawn_rules": {},

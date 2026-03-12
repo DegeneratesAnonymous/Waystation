@@ -171,7 +171,7 @@ namespace Waystation.Core
 
         private void SetupStartingCrew()
         {
-            string[] startingTemplates = { "npc.engineer", "npc.security_officer", "npc.operations" };
+            string[] startingTemplates = { "npc.engineer", "npc.security_officer", "npc.scientist" };
             foreach (var tmpl in startingTemplates)
             {
                 if (!Registry.Npcs.ContainsKey(tmpl)) continue;

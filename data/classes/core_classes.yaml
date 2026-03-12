@@ -39,22 +39,21 @@
     - job.life_support
     - job.fabrication
 
-- id: class.operations
-  display_name: Operations
+- id: class.sciences
+  display_name: Sciences
   schema_version: "1"
   description: >
-    Manages logistics, docking coordination, resource allocation, and
-    crew scheduling. Operations staff are generalists who keep the
-    station running as a system.
+    Research, medicine, and xenobiology specialist. The Sciences officer
+    drives discovery, tends to crew health, and analyses anomalies that
+    the frontier keeps throwing at the station.
   modifiers:
-    logistics: 1.4
-    coordination: 1.3
-    negotiation: 1.1
+    research: 1.5
+    medical: 1.4
+    analysis: 1.3
   allowed_jobs:
-    - job.dock_control
-    - job.resource_management
-    - job.crew_scheduling
-    - job.trade_coordination
+    - job.research
+    - job.medical_bay
+    - job.specimen_analysis
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Subclasses

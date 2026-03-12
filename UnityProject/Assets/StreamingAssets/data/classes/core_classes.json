@@ -16,11 +16,11 @@
     "schema_version": "1"
   },
   {
-    "id": "class.operations",
-    "display_name": "Operations Officer",
-    "description": "Station administration, logistics, and visitor management.",
-    "modifiers": { "coordination": 1.4, "negotiation": 1.2, "logistics": 1.3 },
-    "allowed_jobs": ["job.dock_control", "job.visitor_intake", "job.resource_management"],
+    "id": "class.sciences",
+    "display_name": "Sciences Officer",
+    "description": "Research, medicine, and analysis specialist. Drives discovery and keeps the crew alive.",
+    "modifiers": { "research": 1.5, "medical": 1.4, "analysis": 1.3 },
+    "allowed_jobs": ["job.research", "job.medical_bay", "job.specimen_analysis"],
     "schema_version": "1"
   },
   {

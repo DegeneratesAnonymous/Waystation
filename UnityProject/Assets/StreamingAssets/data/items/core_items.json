@@ -87,5 +87,41 @@
     "quality": "fine",
     "tags": ["luxury", "trade"],
     "schema_version": "1"
+  },
+  {
+    "id": "item.steel_plate",
+    "display_name": "Steel Plate",
+    "item_type": "Material",
+    "subtype": "Components",
+    "description": "Prefabricated steel panels used in structural construction.",
+    "weight": 3.0,
+    "stack_size": 100,
+    "value": 8.0,
+    "tags": ["bulk", "industrial", "construction"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.wiring",
+    "display_name": "Wiring",
+    "item_type": "Material",
+    "subtype": "Components",
+    "description": "Bundled electrical cable for power distribution and systems integration.",
+    "weight": 0.8,
+    "stack_size": 200,
+    "value": 6.0,
+    "tags": ["industrial", "construction", "electrical"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.parts",
+    "display_name": "Parts",
+    "item_type": "Material",
+    "subtype": "Components",
+    "description": "Assorted mechanical and electronic components for fabrication.",
+    "weight": 1.2,
+    "stack_size": 150,
+    "value": 12.0,
+    "tags": ["industrial", "construction"],
+    "schema_version": "1"
   }
 ]
