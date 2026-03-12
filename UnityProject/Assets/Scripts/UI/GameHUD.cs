@@ -117,6 +117,45 @@ namespace Waystation.UI
             IsMouseOverDrawer = Input.mousePosition.x >=
                                 Screen.width - TabW - DrawerW * _drawerT;
 
+            // ── Deconstruct mode ──────────────────────────────────────────────
+            if (_deconstructMode && _ghostBuildableId == null)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                {
+                    _deconstructMode = false;
+                    _isDragging      = false;
+                    _dragLine.Clear();
+                    _dragBlocked.Clear();
+                    return;
+                }
+                var dcam = Camera.main;
+                if (dcam != null)
+                {
+                    Vector3 dworld = dcam.ScreenToWorldPoint(Input.mousePosition);
+                    _ghostTileCol = Mathf.RoundToInt(dworld.x);
+                    _ghostTileRow = Mathf.RoundToInt(dworld.y);
+                }
+
+                if (Input.GetMouseButtonDown(0) && !IsMouseOverDrawer)
+                {
+                    _isDragging   = true;
+                    _dragRect     = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                    _dragStartCol = _ghostTileCol;
+                    _dragStartRow = _ghostTileRow;
+                }
+                if (_isDragging)
+                    RebuildDeconDragLine();
+                if (Input.GetMouseButtonUp(0) && _isDragging)
+                {
+                    foreach (var (col, row) in _dragLine)
+                        DeconstructTile(col, row);
+                    _isDragging = false;
+                    _dragLine.Clear();
+                    _dragBlocked.Clear();
+                }
+                return;
+            }
+
             // ── Ghost placement ───────────────────────────────────────────────
             if (_ghostBuildableId == null) return;
 
@@ -230,6 +269,41 @@ namespace Waystation.UI
                                       : new Color(0.55f, 0.70f, 0.90f, 0.55f);
 
                         DrawTileOverlay(overlayCam, f.tileCol, f.tileRow, fill, edge);
+                    }
+                }
+            }
+
+            // ── Deconstruct mode overlays ─────────────────────────────────────
+            if (_deconstructMode && _white != null && _gm?.Station != null)
+            {
+                var dCam = Camera.main;
+                if (dCam != null)
+                {
+                    if (_isDragging && _dragLine.Count > 0)
+                    {
+                        // Show drag-selection tiles
+                        foreach (var (col, row) in _dragLine)
+                        {
+                            bool hasTarget = !_dragBlocked.Contains((col, row));
+                            Color fill = hasTarget ? new Color(1f, 0.20f, 0.15f, 0.55f)
+                                                   : new Color(0.5f, 0.5f, 0.5f, 0.15f);
+                            Color edge = hasTarget ? new Color(1f, 0.45f, 0.35f, 0.95f)
+                                                   : new Color(0.6f, 0.6f, 0.6f, 0.35f);
+                            DrawTileOverlay(dCam, col, row, fill, edge);
+                        }
+                    }
+                    else
+                    {
+                        // Idle — dim-red all foundations + bright hover
+                        foreach (var kv in _gm.Station.foundations)
+                        {
+                            DrawTileOverlay(dCam, kv.Value.tileCol, kv.Value.tileRow,
+                                new Color(1f, 0.22f, 0.18f, 0.28f),
+                                new Color(1f, 0.40f, 0.35f, 0.80f));
+                        }
+                        DrawTileOverlay(dCam, _ghostTileCol, _ghostTileRow,
+                            new Color(1f, 0.50f, 0.40f, 0.45f),
+                            new Color(1f, 0.65f, 0.55f, 0.95f));
                     }
                 }
             }
@@ -348,7 +422,9 @@ namespace Waystation.UI
         private Vector2 _buildScroll;
         private int     _buildNextCol = 0;
         private int     _buildNextRow = 0;
-        private string  _buildInfoOpen = "";   // buildable id whose info panel is expanded
+        private string  _buildInfoOpen   = "";   // buildable id whose info panel is expanded
+        private bool    _deconstructMode = false; // deconstruct-mode: click tile to cancel/demolish
+        private bool    _showBuildQueue  = false; // toggle inline build-queue panel
 
         // ── Ghost placement ───────────────────────────────────────────────────
         private string _ghostBuildableId = null;
@@ -374,27 +450,95 @@ namespace Waystation.UI
             var catalog = _gm.Registry.Buildables;
             var active  = s.foundations;
 
-            // Reserve 16 px for the vertical scrollbar so right-anchored
-            // elements are never clipped when the bar is visible.
             float cw = w - 16f;
 
-            // Estimate inner height for scroll
-            float innerH = 24f;
+            // ── Toolbar strip ────────────────────────────────────────────────
+            const float TBH = 30f;
+            DrawSolid(new Rect(area.x, area.y, w, TBH), new Color(0.05f, 0.07f, 0.12f, 0.9f));
+            Color tbPrev = GUI.color;
+            GUI.color = _deconstructMode ? new Color(0.9f, 0.3f, 0.3f) : new Color(0.6f, 0.6f, 0.7f);
+            if (GUI.Button(new Rect(area.x + 4f, area.y + 4f, 110f, 22f), "\u26CF Deconstruct", _sBtnSmall))
+                _deconstructMode = !_deconstructMode;
+            GUI.color = _showBuildQueue ? new Color(0.4f, 0.7f, 0.9f) : new Color(0.6f, 0.6f, 0.7f);
+            if (GUI.Button(new Rect(area.x + 120f, area.y + 4f, 110f, 22f),
+                           $"\u2261 Queue ({active.Count})", _sBtnSmall))
+                _showBuildQueue = !_showBuildQueue;
+            GUI.color = tbPrev;
+
+            float tbH = TBH;
+            if (_deconstructMode)
+            {
+                DrawSolid(new Rect(area.x, area.y + TBH, w, 18f), new Color(0.4f, 0.1f, 0.1f, 0.5f));
+                GUI.color = new Color(1f, 0.6f, 0.6f);
+                GUI.Label(new Rect(area.x + 6f, area.y + TBH + 2f, w - 12f, 14f),
+                          "Click a tile to deconstruct it.  RMB / Esc to cancel.", _sSub);
+                GUI.color = tbPrev;
+                tbH += 18f;
+            }
+
+            // ── Group catalogue by category ───────────────────────────────────
+            var byCategory = new SortedDictionary<string, List<BuildableDefinition>>();
             foreach (var kv in catalog)
             {
-                innerH += 90f;   // base card height
-                if (_buildInfoOpen == kv.Key)
-                    innerH += 18f + 18f + kv.Value.requiredMaterials.Count * 18f
-                                       + kv.Value.requiredSkills.Count  * 18f
-                                       + kv.Value.requiredTags.Count    * 18f
-                                       + 8f;  // info panel
+                string cat = string.IsNullOrEmpty(kv.Value.category) ? "other" : kv.Value.category;
+                if (!byCategory.ContainsKey(cat))
+                    byCategory[cat] = new List<BuildableDefinition>();
+                byCategory[cat].Add(kv.Value);
             }
-            innerH += 16f;  // divider
-            innerH += 24f + (active.Count == 0 ? 20f : active.Count * 72f);
 
-            _buildScroll = GUI.BeginScrollView(area, _buildScroll,
-                           new Rect(0, 0, cw, Mathf.Max(h, innerH)));
+            // ── Estimate scroll content height ────────────────────────────────
+            float innerH = 8f;
+            if (_showBuildQueue)
+            {
+                innerH += 24f;
+                innerH += active.Count == 0 ? 20f : active.Count * 72f;
+                innerH += 10f;
+            }
+            innerH += 24f;
+            foreach (var catGroup in byCategory)
+            {
+                innerH += 24f;
+                foreach (var defn in catGroup.Value)
+                {
+                    innerH += 90f;
+                    if (_buildInfoOpen == defn.id)
+                    {
+                        float ht = 16f;
+                        if (!string.IsNullOrEmpty(defn.description))
+                            ht += _sSub.CalcHeight(new GUIContent(defn.description), cw - 12f) + 14f;
+                        ht += 22f + (defn.requiredMaterials.Count == 0 ? 18f
+                                     : defn.requiredMaterials.Count * 18f);
+                        ht += 22f + (defn.requiredSkills.Count == 0 ? 18f
+                                     : defn.requiredSkills.Count * 18f);
+                        if (defn.requiredTags.Count > 0)
+                            ht += 22f + defn.requiredTags.Count * 18f;
+                        ht += 12f;
+                        innerH += ht;
+                    }
+                }
+            }
+
+            Rect scrollArea = new Rect(area.x, area.y + tbH, w, h - tbH);
+            _buildScroll = GUI.BeginScrollView(scrollArea, _buildScroll,
+                           new Rect(0, 0, cw, Mathf.Max(h - tbH, innerH)));
             float y = 0f;
+
+            // ── Build Queue (optional) ────────────────────────────────────────
+            if (_showBuildQueue)
+            {
+                Section($"Build Queue ({active.Count})", cw, ref y);
+                if (active.Count == 0)
+                {
+                    GUI.Label(new Rect(0, y, cw, 18f), "No foundations placed yet.", _sSub);
+                    y += 20f;
+                }
+                else
+                {
+                    foreach (var kv in active)
+                        DrawFoundationRow(kv.Value, cw, ref y, s);
+                }
+                Divider(cw, ref y);
+            }
 
             // ── Catalogue ────────────────────────────────────────────────────
             Section("Catalogue", cw, ref y);
@@ -405,214 +549,224 @@ namespace Waystation.UI
                 y += 20f;
             }
 
-            foreach (var kv in catalog)
+            foreach (var catGroup in byCategory)
             {
-                var    defn     = kv.Value;
-                bool   canPlace = _gm.Building.CanPlace(s, defn.id, out string reason);
-                bool   infoOpen = _buildInfoOpen == defn.id;
-                float  alpha    = canPlace ? 1f : 0.45f;
-                Color  prevCol  = GUI.color;
-                GUI.color = new Color(1f, 1f, 1f, alpha);
+                DrawSolid(new Rect(0, y, cw, 20f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
+                GUI.Label(new Rect(4f, y + 3f, cw - 8f, 14f), CategoryDisplayName(catGroup.Key), _sSub);
+                y += 22f;
 
-                // Card background (84 px tall)
-                DrawSolid(new Rect(0, y, cw, 84f),
-                    new Color(0.07f, 0.09f, 0.15f, canPlace ? 0.6f : 0.4f));
-
-                // Row 1 — name (left) + Info toggle (right; full alpha always)
-                GUI.Label(new Rect(4f, y + 4f, cw - 56f, 18f), defn.displayName, _sLabel);
-                GUI.color = prevCol;
-                if (GUI.Button(new Rect(cw - 52f, y + 4f, 48f, 18f),
-                               infoOpen ? "▲ Info" : "▼ Info", _sBtnSmall))
-                    _buildInfoOpen = infoOpen ? "" : defn.id;
-                GUI.color = new Color(1f, 1f, 1f, alpha);
-
-                // Row 2 — category + build time
-                GUI.Label(new Rect(4f, y + 26f, cw * 0.60f, 14f),
-                          $"{defn.category}  ·  {defn.buildTimeTicks} ticks", _sSub);
-
-                // Row 3 — required materials
-                if (defn.requiredMaterials.Count > 0)
-                {
-                    var sb = new System.Text.StringBuilder();
-                    foreach (var m in defn.requiredMaterials)
-                        sb.Append($"{ItemDisplayName(m.Key)} ×{m.Value}  ");
-                    GUI.Label(new Rect(4f, y + 42f, cw - 8f, 14f), sb.ToString(), _sSub);
-                }
-                else
-                {
-                    GUI.Label(new Rect(4f, y + 42f, cw - 8f, 14f), "No materials required.", _sSub);
-                }
-
-                // Row 4 — blocked reason (left) + Place button (right), same baseline
-                if (!canPlace && reason != null)
-                {
-                    GUI.color = new Color(1f, 0.55f, 0.2f, alpha);
-                    GUI.Label(new Rect(4f, y + 61f, cw * 0.55f, 18f), $"✕ {reason}", _sSub);
-                    GUI.color = new Color(1f, 1f, 1f, alpha);
-                }
-                GUI.enabled = canPlace;
-                if (GUI.Button(new Rect(cw * 0.57f, y + 59f, cw * 0.43f, 22f), "+ Place", _sBtnSmall))
-                {
-                    _ghostBuildableId = defn.id;
-                    _ghostRotation    = 0;
-                    _active           = Tab.None;
-                }
-                GUI.enabled = true;
-                GUI.color   = prevCol;
-
-                y += 90f;
-
-                // ── Inline info panel ─────────────────────────────────────────
-                if (infoOpen)
-                {
-                    DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
-                    DrawSolid(new Rect(0, y + 1f, cw, 1000f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
-
-                    float iy = y + 8f;
-
-                    // Description — height calculated to fit wrapped text
-                    if (!string.IsNullOrEmpty(defn.description))
-                    {
-                        float descH = _sSub.CalcHeight(new GUIContent(defn.description), cw - 12f);
-                        GUI.Label(new Rect(6f, iy, cw - 12f, descH), defn.description, _sSub);
-                        iy += descH + 8f;
-                        DrawSolid(new Rect(6f, iy, cw - 12f, 1f), new Color(1f, 1f, 1f, 0.05f));
-                        iy += 6f;
-                    }
-
-                    // Materials
-                    GUI.Label(new Rect(6f, iy, cw - 12f, 16f), "Required Materials", _sLabel);
-                    iy += 18f;
-                    if (defn.requiredMaterials.Count == 0)
-                    {
-                        GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
-                        iy += 16f;
-                    }
-                    else
-                    {
-                        foreach (var m in defn.requiredMaterials)
-                        {
-                            GUI.Label(new Rect(14f, iy, cw - 20f, 14f),
-                                      $"• {ItemDisplayName(m.Key)}  ×{m.Value}", _sSub);
-                            iy += 16f;
-                        }
-                    }
-
-                    iy += 4f;
-
-                    // Skills
-                    GUI.Label(new Rect(6f, iy, cw - 12f, 16f), "Skills Required", _sLabel);
-                    iy += 18f;
-                    if (defn.requiredSkills.Count == 0)
-                    {
-                        GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
-                        iy += 16f;
-                    }
-                    else
-                    {
-                        foreach (var sk in defn.requiredSkills)
-                        {
-                            // Check if any crew meets this skill
-                            bool met = false;
-                            foreach (var npc in s.GetCrew())
-                                if (npc.skills.TryGetValue(sk.Key, out int lvl) && lvl >= sk.Value)
-                                { met = true; break; }
-
-                            string tick = met ? "✓" : "✕";
-                            Color skillCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
-                            var pc = GUI.color;
-                            GUI.color = skillCol;
-                            GUI.Label(new Rect(14f, iy, 18f, 14f), tick, _sSub);
-                            GUI.color = prevCol;
-                            GUI.Label(new Rect(32f, iy, cw - 38f, 14f),
-                                      $"{sk.Key}  (level {sk.Value}+)", _sSub);
-                            iy += 16f;
-                        }
-                    }
-
-                    // Station tags
-                    if (defn.requiredTags.Count > 0)
-                    {
-                        iy += 4f;
-                        GUI.Label(new Rect(6f, iy, cw - 12f, 16f), "Station Requirements", _sLabel);
-                        iy += 18f;
-                        foreach (var tag in defn.requiredTags)
-                        {
-                            bool met = s.HasTag(tag);
-                            Color tagCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
-                            var pc = GUI.color;
-                            GUI.color = tagCol;
-                            GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "✓" : "✕", _sSub);
-                            GUI.color = prevCol;
-                            GUI.Label(new Rect(32f, iy, cw - 38f, 14f), tag, _sSub);
-                            iy += 16f;
-                        }
-                    }
-
-                    iy += 8f;
-                    DrawSolid(new Rect(0, iy, cw, 1f), ColDivider);
-                    y = iy + 4f;
-                }
-            }
-
-            Divider(cw, ref y);
-
-            // ── Active Builds ────────────────────────────────────────────────
-            Section($"Active Builds ({active.Count})", cw, ref y);
-
-            if (active.Count == 0)
-            {
-                GUI.Label(new Rect(0, y, cw, 18f), "No foundations placed yet.", _sSub);
-                y += 20f;
-            }
-
-            foreach (var kv in active)
-            {
-                var  f       = kv.Value;
-                bool hasDefn = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
-                string fname = hasDefn ? fDefn.displayName : f.buildableId;
-
-                DrawSolid(new Rect(0, y, cw, 64f), new Color(0.07f, 0.09f, 0.15f, 0.6f));
-
-                GUI.Label(new Rect(4f, y + 2f, cw * 0.65f, 18f), fname, _sLabel);
-
-                string statusLabel = f.status switch
-                {
-                    "awaiting_haul" => "Awaiting materials",
-                    "constructing"  => $"Building  {f.buildProgress * 100f:F0}%",
-                    "complete"      => "Complete",
-                    _               => f.status
-                };
-                GUI.Label(new Rect(4f, y + 20f, cw - 8f, 14f), statusLabel, _sSub);
-
-                if (f.status == "constructing" || f.status == "awaiting_haul")
-                {
-                    float pct = f.status == "constructing" ? f.buildProgress : 0f;
-                    DrawSolid(new Rect(4f, y + 36f, cw - 8f, 6f), new Color(0.15f, 0.15f, 0.2f));
-                    DrawSolid(new Rect(4f, y + 36f, (cw - 8f) * pct, 6f), ColBarFill);
-                }
-
-                if (f.status == "awaiting_haul" && hasDefn && fDefn.requiredMaterials.Count > 0)
-                {
-                    var sb = new System.Text.StringBuilder();
-                    foreach (var m in fDefn.requiredMaterials)
-                    {
-                        int have = f.hauledMaterials.ContainsKey(m.Key) ? f.hauledMaterials[m.Key] : 0;
-                        sb.Append($"{ItemDisplayName(m.Key)} {have}/{m.Value}  ");
-                    }
-                    GUI.Label(new Rect(4f, y + 44f, cw - 8f, 14f), sb.ToString(), _sSub);
-                }
-
-                if (f.status != "complete")
-                {
-                    if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), "Cancel", _sBtnDanger))
-                        _gm.Building.CancelFoundation(s, f.uid, refund: true);
-                }
-
-                y += 70f;
+                foreach (var defn in catGroup.Value)
+                    DrawCatalogCard(defn, cw, ref y, s);
             }
 
             GUI.EndScrollView();
+        }
+
+        private void DrawFoundationRow(FoundationInstance f, float cw, ref float y, StationState s)
+        {
+            bool   hasDefn = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
+            string fname   = hasDefn ? fDefn.displayName : f.buildableId;
+
+            DrawSolid(new Rect(0, y, cw, 64f), new Color(0.07f, 0.09f, 0.15f, 0.6f));
+            GUI.Label(new Rect(4f, y + 2f, cw * 0.65f, 18f), fname, _sLabel);
+
+            string statusLabel = f.status switch
+            {
+                "awaiting_haul" => "Awaiting materials",
+                "constructing"  => $"Building  {f.buildProgress * 100f:F0}%",
+                "complete"      => "Complete",
+                _               => f.status
+            };
+            GUI.Label(new Rect(4f, y + 20f, cw - 8f, 14f), statusLabel, _sSub);
+
+            if (f.status == "constructing" || f.status == "awaiting_haul")
+            {
+                float pct = f.status == "constructing" ? f.buildProgress : 0f;
+                DrawSolid(new Rect(4f, y + 36f, cw - 8f, 6f),  new Color(0.15f, 0.15f, 0.2f));
+                DrawSolid(new Rect(4f, y + 36f, (cw - 8f) * pct, 6f), ColBarFill);
+            }
+
+            if (f.status == "awaiting_haul" && hasDefn && fDefn.requiredMaterials.Count > 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var m in fDefn.requiredMaterials)
+                {
+                    int have = f.hauledMaterials.ContainsKey(m.Key) ? f.hauledMaterials[m.Key] : 0;
+                    sb.Append($"{ItemDisplayName(m.Key)} {have}/{m.Value}  ");
+                }
+                GUI.Label(new Rect(4f, y + 44f, cw - 8f, 14f), sb.ToString(), _sSub);
+            }
+
+            if (f.status != "complete")
+            {
+                if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), "Cancel", _sBtnDanger))
+                    _gm.Building.CancelFoundation(s, f.uid, refund: true);
+            }
+
+            y += 70f;
+        }
+
+        private void DrawCatalogCard(BuildableDefinition defn, float cw, ref float y, StationState s)
+        {
+            bool   canPlace = _gm.Building.CanPlace(s, defn.id, out string reason);
+            bool   infoOpen = _buildInfoOpen == defn.id;
+            float  alpha    = canPlace ? 1f : 0.45f;
+            Color  prevCol  = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+
+            DrawSolid(new Rect(0, y, cw, 84f),
+                new Color(0.07f, 0.09f, 0.15f, canPlace ? 0.6f : 0.4f));
+
+            GUI.Label(new Rect(4f, y + 4f, cw - 56f, 18f), defn.displayName, _sLabel);
+            GUI.color = prevCol;
+            if (GUI.Button(new Rect(cw - 52f, y + 4f, 48f, 18f),
+                           infoOpen ? "\u25b2 Info" : "\u25bc Info", _sBtnSmall))
+                _buildInfoOpen = infoOpen ? "" : defn.id;
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+
+            GUI.Label(new Rect(4f, y + 26f, cw * 0.60f, 14f),
+                      $"{defn.category}  \u00b7  {defn.buildTimeTicks} ticks", _sSub);
+
+            if (defn.requiredMaterials.Count > 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var m in defn.requiredMaterials)
+                    sb.Append($"{ItemDisplayName(m.Key)} \u00d7{m.Value}  ");
+                GUI.Label(new Rect(4f, y + 42f, cw - 8f, 14f), sb.ToString(), _sSub);
+            }
+            else
+            {
+                GUI.Label(new Rect(4f, y + 42f, cw - 8f, 14f), "No materials required.", _sSub);
+            }
+
+            if (!canPlace && reason != null)
+            {
+                GUI.color = new Color(1f, 0.55f, 0.2f, alpha);
+                GUI.Label(new Rect(4f, y + 61f, cw * 0.55f, 18f), $"\u2715 {reason}", _sSub);
+                GUI.color = new Color(1f, 1f, 1f, alpha);
+            }
+            GUI.enabled = canPlace;
+            if (GUI.Button(new Rect(cw * 0.57f, y + 59f, cw * 0.43f, 22f), "+ Place", _sBtnSmall))
+            {
+                _ghostBuildableId = defn.id;
+                _ghostRotation    = 0;
+                _active           = Tab.None;
+            }
+            GUI.enabled = true;
+            GUI.color   = prevCol;
+
+            y += 90f;
+
+            if (infoOpen)
+            {
+                DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
+                DrawSolid(new Rect(0, y + 1f, cw, 1000f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
+
+                float iy = y + 8f;
+
+                if (!string.IsNullOrEmpty(defn.description))
+                {
+                    float descH = _sSub.CalcHeight(new GUIContent(defn.description), cw - 12f);
+                    GUI.Label(new Rect(6f, iy, cw - 12f, descH), defn.description, _sSub);
+                    iy += descH + 8f;
+                    DrawSolid(new Rect(6f, iy, cw - 12f, 1f), new Color(1f, 1f, 1f, 0.05f));
+                    iy += 6f;
+                }
+
+                GUI.Label(new Rect(6f, iy, cw - 12f, 18f), "Required Materials", _sLabel);
+                iy += 22f;
+                if (defn.requiredMaterials.Count == 0)
+                {
+                    GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
+                    iy += 18f;
+                }
+                else
+                {
+                    foreach (var m in defn.requiredMaterials)
+                    {
+                        GUI.Label(new Rect(14f, iy, cw - 20f, 14f),
+                                  $"\u2022 {ItemDisplayName(m.Key)}  \u00d7{m.Value}", _sSub);
+                        iy += 18f;
+                    }
+                }
+
+                iy += 4f;
+
+                GUI.Label(new Rect(6f, iy, cw - 12f, 18f), "Skills Required", _sLabel);
+                iy += 22f;
+                if (defn.requiredSkills.Count == 0)
+                {
+                    GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
+                    iy += 18f;
+                }
+                else
+                {
+                    foreach (var sk in defn.requiredSkills)
+                    {
+                        bool met = false;
+                        foreach (var npc in s.GetCrew())
+                            if (npc.skills.TryGetValue(sk.Key, out int lvl) && lvl >= sk.Value)
+                            { met = true; break; }
+
+                        Color skillCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
+                        var pc = GUI.color;
+                        GUI.color = skillCol;
+                        GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "\u2713" : "\u2715", _sSub);
+                        GUI.color = prevCol;
+                        GUI.Label(new Rect(32f, iy, cw - 38f, 14f),
+                                  $"{sk.Key}  (level {sk.Value}+)", _sSub);
+                        iy += 18f;
+                    }
+                }
+
+                if (defn.requiredTags.Count > 0)
+                {
+                    iy += 4f;
+                    GUI.Label(new Rect(6f, iy, cw - 12f, 18f), "Station Requirements", _sLabel);
+                    iy += 22f;
+                    foreach (var tag in defn.requiredTags)
+                    {
+                        bool met = s.HasTag(tag);
+                        Color tagCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
+                        var pc = GUI.color;
+                        GUI.color = tagCol;
+                        GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "\u2713" : "\u2715", _sSub);
+                        GUI.color = prevCol;
+                        GUI.Label(new Rect(32f, iy, cw - 38f, 14f), tag, _sSub);
+                        iy += 18f;
+                    }
+                }
+
+                iy += 8f;
+                DrawSolid(new Rect(0, iy, cw, 1f), ColDivider);
+                y = iy + 4f;
+            }
+        }
+
+        private static string CategoryDisplayName(string cat) => cat switch
+        {
+            "structure" => "\u2500\u2500 Structure \u2500\u2500",
+            "object"    => "\u2500\u2500 Objects \u2500\u2500",
+            _           => $"\u2500\u2500 {char.ToUpper(cat[0]) + cat.Substring(1)} \u2500\u2500"
+        };
+
+        private void DeconstructTile(int col, int row)
+        {
+            var s        = _gm.Station;
+            var toRemove = new List<string>();
+            foreach (var kv in s.foundations)
+            {
+                var f = kv.Value;
+                if (f.tileCol == col && f.tileRow == row)
+                {
+                    if (f.status == "complete")
+                        toRemove.Add(f.uid);
+                    else
+                        _gm.Building.CancelFoundation(s, f.uid, refund: true);
+                }
+            }
+            foreach (var uid in toRemove)
+                s.foundations.Remove(uid);
         }
 
         // ── Crew tab ──────────────────────────────────────────────────────────
@@ -1139,6 +1293,22 @@ namespace Waystation.UI
             {
                 _dragLine.Add(tile);
                 if (IsTileOccupied(tile.col, tile.row))
+                    _dragBlocked.Add((tile.col, tile.row));
+            }
+        }
+
+        // Deconstruct-mode drag: "blocked" = tile with no foundation (nothing to demolish).
+        private void RebuildDeconDragLine()
+        {
+            _dragLine.Clear();
+            _dragBlocked.Clear();
+            var tiles = _dragRect
+                ? RectTiles(_dragStartCol, _dragStartRow, _ghostTileCol, _ghostTileRow)
+                : BresenhamLine(_dragStartCol, _dragStartRow, _ghostTileCol, _ghostTileRow);
+            foreach (var tile in tiles)
+            {
+                _dragLine.Add(tile);
+                if (!IsTileOccupied(tile.col, tile.row))
                     _dragBlocked.Add((tile.col, tile.row));
             }
         }
