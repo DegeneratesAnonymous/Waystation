@@ -401,7 +401,7 @@ class FoundationInstance:
         Return 0.0–1.0 functionality based on current health.
 
         100–75 % HP  → 1.0 (full function)
-        75–50 % HP   → linearly degraded; 1 % worse per % below 75 %
+        75–50 % HP   → linearly degraded from 1.0 to 0.0
         <50 % HP     → 0.0 (non-functional; still draws power if applicable)
         0 % HP       → 0.0 (destroyed)
         """

@@ -1062,11 +1062,12 @@ class GameView:
 
             # Row line 2: Material cost
             if defn.required_materials:
-                mats = "Needs: " + ", ".join(
-                    f"{qty}× {self.game.registry.items[iid].display_name
-                               if iid in self.game.registry.items else iid}"
-                    for iid, qty in defn.required_materials.items()
-                )
+                mat_parts = []
+                for iid, qty in defn.required_materials.items():
+                    item_name = (self.game.registry.items[iid].display_name
+                                 if iid in self.game.registry.items else iid)
+                    mat_parts.append(f"{qty}× {item_name}")
+                mats = "Needs: " + ", ".join(mat_parts)
             else:
                 mats = "No materials required"
             D.text(self.screen, self.fonts.sm, mats[:52],
@@ -1074,10 +1075,9 @@ class GameView:
 
         # Scroll hint
         if len(buildables) > 7:
-            hint = (f"↑↓ scroll  "
-                    f"{self._place_scroll + 1}–"
-                    f"{min(self._place_scroll + 7, len(buildables))}/"
-                    f"{len(buildables)}")
+            lo = self._place_scroll + 1
+            hi = min(self._place_scroll + 7, len(buildables))
+            hint = f"↑↓ scroll  {lo}–{hi}/{len(buildables)}"
             D.text(self.screen, self.fonts.sm, hint,
                    (popup.x + 8, popup.bottom - 20), T.TEXT_DIM)
 

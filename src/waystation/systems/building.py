@@ -119,9 +119,9 @@ class BuildingSystem:
         # Refund any materials already hauled
         if refund and defn is not None:
             for item_id, qty in foundation.hauled_materials.items():
-                # Return to first available cargo hold
+                # Return to first available module that can store inventory
                 for mod in station.modules.values():
-                    if mod.cargo_settings is None and mod.inventory is not None:
+                    if mod.inventory is not None:
                         mod.inventory[item_id] = mod.inventory.get(item_id, 0) + qty
                         break
 
