@@ -73,6 +73,8 @@ namespace Waystation.View
             public int            col, row;
             public int            frameIdx; // 0 = closed, 4 = fully open
             public float          timer;
+            // Shadow SpriteRenderers on this door tile (sortOrder 3). Shown only when closed.
+            public readonly List<SpriteRenderer> shadows = new List<SpriteRenderer>();
         }
         private readonly List<DoorEntry> _doorEntries = new List<DoorEntry>();
         // Floor variant cache: (col,row) → 0..4 assigned during BuildRoom / RebuildFoundationTiles
@@ -147,6 +149,9 @@ namespace Waystation.View
                     else if (!npcNear && e.frameIdx > 0) e.frameIdx--;
                 }
                 e.sr.sprite = e.frames[e.frameIdx];
+                // Hide door shadows while the door is opening/open
+                bool closed = e.frameIdx == 0;
+                foreach (var sh in e.shadows) if (sh) sh.enabled = closed;
             }
         }
 
@@ -186,11 +191,13 @@ namespace Waystation.View
                     // Door H — south-wall door connects interior (north) to outside
                     Sprite[] frames = TileAtlas.GetDoorHFrames();
                     var doorGO = PlaceTile(root.transform, c, r, frames[0], 0f, sortOrder: 2);
-                    _doorEntries.Add(new DoorEntry
+                    var dEntry = new DoorEntry
                     {
                         sr = doorGO.GetComponent<SpriteRenderer>(),
                         frames = frames, col = c, row = r
-                    });
+                    };
+                    AddShadowsForDoor(c, r, root.transform, dEntry);
+                    _doorEntries.Add(dEntry);
                 }
                 else if (isInterior)
                 {
@@ -210,6 +217,17 @@ namespace Waystation.View
             for (int c = IntMinC; c <= IntMaxC; c++)
             for (int r = IntMinR; r <= IntMaxR; r++)
                 AddShadowsForFloor(c, r, root.transform);
+
+            // Shadow overlays (sortOrder 1) on wall tiles adjacent to interior floor
+            bool doorCol = true; // set per cell below
+            for (int c = 0; c < RoomCols; c++)
+            for (int r = 0; r < RoomRows; r++)
+            {
+                bool isWallTile = c == 0 || c == RoomCols - 1 || r == 0 || r == RoomRows - 1;
+                bool isDoorTile = r == 0 && c == RoomCols / 2;
+                if (isWallTile && !isDoorTile)
+                    AddShadowsForWall(c, r, root.transform);
+            }
         }
 
         // ── Foundation tile rendering ─────────────────────────────────────────
@@ -264,6 +282,10 @@ namespace Waystation.View
                         TileAtlas.GetWall(PickWallVariant(f.tileCol, f.tileRow)), 0f,
                         sortOrder: 0);
                     _foundTiles[kv.Key] = go;
+
+                    var shadowList = new List<GameObject>();
+                    AddShadowsForWall(f.tileCol, f.tileRow, _foundRoot.transform, shadowList);
+                    if (shadowList.Count > 0) _foundExtras[kv.Key] = shadowList;
                 }
                 else if (isDoor)
                 {
@@ -278,11 +300,13 @@ namespace Waystation.View
                     // Door sprite on top
                     var doorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         frames[0], 0f, sortOrder: 2);
-                    _doorEntries.Add(new DoorEntry
+                    var fEntry = new DoorEntry
                     {
                         sr = doorGO.GetComponent<SpriteRenderer>(),
                         frames = frames, col = f.tileCol, row = f.tileRow
-                    });
+                    };
+                    AddShadowsForDoor(f.tileCol, f.tileRow, _foundRoot.transform, fEntry);
+                    _doorEntries.Add(fEntry);
 
                     _foundTiles[kv.Key]  = doorGO;
                     _foundExtras[kv.Key] = new List<GameObject> { floorGO };
@@ -318,6 +342,37 @@ namespace Waystation.View
         {
             int h = unchecked(col * 104729 ^ row * 7919);
             return ((h % 5) + 5) % 5;
+        }
+
+        // Add shadow overlays on a WALL tile at edges that face a floor tile.
+        private void AddShadowsForWall(int col, int row, Transform parent,
+            List<GameObject> collector = null)
+        {
+            if (IsFloorTile(col,     row + 1)) AddShadowOverlay(col, row, TileAtlas.SHADOW_TOP,    parent, collector);
+            if (IsFloorTile(col,     row - 1)) AddShadowOverlay(col, row, TileAtlas.SHADOW_BOTTOM, parent, collector);
+            if (IsFloorTile(col + 1, row    )) AddShadowOverlay(col, row, TileAtlas.SHADOW_RIGHT,  parent, collector);
+            if (IsFloorTile(col - 1, row    )) AddShadowOverlay(col, row, TileAtlas.SHADOW_LEFT,   parent, collector);
+        }
+
+        // Add shadow overlays on a DOOR tile at edges that face non-floor tiles.
+        // Shadows go at sortOrder 3 (above door panels) and are tracked in entry.shadows
+        // so they can be toggled off when the door opens.
+        private void AddShadowsForDoor(int col, int row, Transform parent, DoorEntry entry)
+        {
+            int[]          edges = { TileAtlas.SHADOW_TOP, TileAtlas.SHADOW_BOTTOM,
+                                     TileAtlas.SHADOW_RIGHT, TileAtlas.SHADOW_LEFT };
+            (int dc, int dr)[] dirs = { (0, 1), (0, -1), (1, 0), (-1, 0) };
+            for (int i = 0; i < 4; i++)
+            {
+                if (IsFloorTile(col + dirs[i].dc, row + dirs[i].dr)) continue;
+                var go  = new GameObject($"DoorShadow{edges[i]}_{col},{row}");
+                go.transform.SetParent(parent);
+                go.transform.localPosition = new Vector3(col, row, 0f);
+                var sr  = go.AddComponent<SpriteRenderer>();
+                sr.sprite       = TileAtlas.GetShadow(edges[i]);
+                sr.sortingOrder = 3; // above door panels (2)
+                entry.shadows.Add(sr);
+            }
         }
 
         // Add shadow overlay GOs for a floor tile based on non-floor adjacency.
