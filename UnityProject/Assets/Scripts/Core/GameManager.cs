@@ -50,6 +50,7 @@ namespace Waystation.Core
         public EventSystem       Events         { get; private set; }
         public InventorySystem   Inventory      { get; private set; }
         public VisitorSystem     Visitors       { get; private set; }
+        public BuildingSystem    Building       { get; private set; }
 
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
@@ -118,6 +119,7 @@ namespace Waystation.Core
             Events    = new EventSystem(Registry, difficulty);
             Inventory = new InventorySystem(Registry);
             Visitors  = new VisitorSystem(Registry, Npcs, Events, Trade);
+            Building  = new BuildingSystem(Registry);
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -203,6 +205,7 @@ namespace Waystation.Core
             Factions.Tick(Station);
             Inventory.Tick(Station);
             Visitors.Tick(Station);
+            Building.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);

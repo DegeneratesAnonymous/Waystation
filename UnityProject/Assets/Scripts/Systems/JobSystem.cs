@@ -22,7 +22,7 @@ namespace Waystation.Systems
             new Dictionary<string, List<string>>
         {
             { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection" } },
-            { "class.engineering", new List<string> { "job.module_maintenance", "job.power_management", "job.life_support" } },
+            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support" } },
             { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management" } }
         };
 

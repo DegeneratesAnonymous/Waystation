@@ -228,6 +228,80 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Foundation Instance — a partially-built construction site placed by the
+    // player and completed by an Engineer NPC.
+    // Status lifecycle: "awaiting_haul" → "constructing" → "complete"
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class FoundationInstance
+    {
+        public string uid;
+        public string buildableId;
+
+        // Tile-grid position (column, row)
+        public int tileCol;
+        public int tileRow;
+
+        // "awaiting_haul" | "constructing" | "complete"
+        public string status = "awaiting_haul";
+
+        // Materials already moved to the build site: item_id → qty
+        public Dictionary<string, int> hauledMaterials = new Dictionary<string, int>();
+
+        // 0.0 → 1.0; reaches 1.0 when construction is done
+        public float buildProgress = 0f;
+
+        // Health model (applied once complete)
+        public int   maxHealth = 100;
+        public int   health    = 100;
+        public float quality   = 1.0f;
+
+        // uid of the Engineer NPC currently assigned here, or null
+        public string assignedNpcUid;
+
+        /// <summary>
+        /// Functionality based on current HP:
+        ///   100–75 %  →  1.0  (full)
+        ///   75–50 %   →  linearly degraded (1% worse per 1% HP below 75)
+        ///   &lt; 50 %    →  0.0  (non-functional)
+        /// </summary>
+        public float Functionality()
+        {
+            if (maxHealth == 0) return 0f;
+            float pct = (float)health / maxHealth;
+            if (pct >= 0.75f) return 1.0f;
+            if (pct >= 0.50f) return (pct - 0.50f) / 0.25f;
+            return 0f;
+        }
+
+        public bool MaterialsComplete(Dictionary<string, int> required)
+        {
+            foreach (var kv in required)
+            {
+                int have = hauledMaterials.ContainsKey(kv.Key) ? hauledMaterials[kv.Key] : 0;
+                if (have < kv.Value) return false;
+            }
+            return true;
+        }
+
+        public static FoundationInstance Create(string buildableId, int col, int row,
+                                                 int maxHealth = 100, float quality = 1.0f)
+        {
+            return new FoundationInstance
+            {
+                uid         = Guid.NewGuid().ToString("N")[..8],
+                buildableId = buildableId,
+                tileCol     = col,
+                tileRow     = row,
+                maxHealth   = maxHealth,
+                health      = maxHealth,
+                quality     = quality,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Station State
     // -------------------------------------------------------------------------
 
@@ -263,6 +337,9 @@ namespace Waystation.Models
 
         // Active trade offers keyed by ship uid
         public Dictionary<string, object> tradeOffers    = new Dictionary<string, object>();
+
+        // Active build foundations keyed by uid
+        public Dictionary<string, FoundationInstance> foundations = new Dictionary<string, FoundationInstance>();
 
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();

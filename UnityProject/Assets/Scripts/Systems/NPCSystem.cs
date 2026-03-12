@@ -159,6 +159,35 @@ namespace Waystation.Systems
             if (npc.needs.ContainsKey("rest") && npc.needs["rest"] < 0.1f &&
                 UnityEngine.Random.value < 0.1f)
                 station.LogEvent($"{npc.name} is exhausted.");
+
+            // Idle wandering: move to a random oxygenated module periodically.
+            // Only trigger for crew with no active job assignment; active builders
+            // (currentJobId == "job.build") must not be relocated.
+            if (npc.IsCrew() && string.IsNullOrEmpty(npc.jobModuleUid) &&
+                string.IsNullOrEmpty(npc.currentJobId) &&
+                UnityEngine.Random.value < 0.05f)
+            {
+                WanderToActiveModule(npc, station);
+            }
+        }
+
+        /// <summary>
+        /// Move an idle crew NPC to a random active module so the visual dot
+        /// wanders.  Prefers modules with "utility" or "commons" category, which
+        /// are most likely to be pressurised and occupied areas.
+        /// </summary>
+        private static void WanderToActiveModule(NPCInstance npc, StationState station)
+        {
+            var candidates = new List<ModuleInstance>();
+            foreach (var mod in station.modules.Values)
+                if (mod.active && mod.category != "dock")
+                    candidates.Add(mod);
+
+            if (candidates.Count == 0) return;
+
+            var chosen = candidates[UnityEngine.Random.Range(0, candidates.Count)];
+            npc.location     = chosen.definitionId;
+            npc.jobModuleUid = chosen.uid;
         }
 
         private void TryAdvanceSkill(NPCInstance npc)
