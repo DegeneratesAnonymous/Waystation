@@ -213,3 +213,22 @@
   need_effects:
     recreation: 0.20    # significant recreation restoration
     sleep: -0.02        # mild fatigue
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILDING / CONSTRUCTION
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: job.build
+  display_name: Construction
+  schema_version: "1"
+  phase: day
+  allowed_classes:
+    - class.engineering
+  preferred_module_category: utility
+  fallback_module_category: utility
+  duration_ticks: 1     # building system controls actual progress per tick
+  skill_used: technical
+  resource_effects: {}
+  need_effects:
+    sleep: -0.03        # physically demanding
+    recreation: -0.01

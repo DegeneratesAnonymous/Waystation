@@ -264,7 +264,7 @@ class GameView:
 
         # ── Build mode state ──────────────────────────────────────────────
         self._build_mode: bool = False
-        # Current tool: "floor" | "wall_add" | "wall_remove" | "erase" | "assign"
+        # Current tool: "floor" | "wall_add" | "wall_remove" | "erase" | "assign" | "place"
         self._build_tool: str = "floor"
         # Mouse drag tracking (None when not dragging)
         self._build_drag_start: tuple[int, int] | None = None
@@ -281,6 +281,10 @@ class GameView:
         # Build-mode message (feedback)
         self._build_msg: str = ""
         self._build_msg_timer: float = 0.0
+        # Place-buildable popup state
+        self._place_popup: bool = False
+        self._place_scroll: int = 0
+        self._place_selected: str | None = None  # buildable_id chosen from popup
 
         self._rebuild_layout()
         self._sync_dots()
@@ -483,7 +487,9 @@ class GameView:
     def _on_key(self, ev: pygame.event.Event) -> None:
         if self._build_mode:
             if ev.key == pygame.K_ESCAPE:
-                if self._assign_popup:
+                if self._place_popup:
+                    self._place_popup = False
+                elif self._assign_popup:
                     self._assign_popup = False
                 else:
                     self._build_mode = False
@@ -499,6 +505,15 @@ class GameView:
                     self._assign_scroll = min(
                         max(0, len(self.game.registry.room_types) - 7),
                         self._assign_scroll + 1,
+                    )
+            # Allow scroll in place popup
+            elif self._place_popup:
+                if ev.key == pygame.K_UP:
+                    self._place_scroll = max(0, self._place_scroll - 1)
+                elif ev.key == pygame.K_DOWN:
+                    self._place_scroll = min(
+                        max(0, len(self.game.registry.buildables) - 7),
+                        self._place_scroll + 1,
                     )
             return  # consume all other keys in build mode
 
@@ -637,6 +652,10 @@ class GameView:
         # Check toolbar buttons first (in the log panel area)
         if self._handle_build_toolbar_click(pos):
             return
+        # If place popup is open, check if a buildable was clicked
+        if self._place_popup:
+            self._handle_place_popup_click(pos)
+            return
         # If assign popup is open, check if a room type was clicked
         if self._assign_popup:
             self._handle_assign_popup_click(pos)
@@ -669,12 +688,14 @@ class GameView:
         """Handle a full click (down + up on same tile) in build mode."""
         if self._handle_build_toolbar_click(pos):
             return
-        if self._assign_popup:
+        if self._place_popup:
+            self._handle_place_popup_click(pos)
+        elif self._assign_popup:
             self._handle_assign_popup_click(pos)
 
     def _apply_build_tool(self, tile: tuple[int, int]) -> None:
         """Apply the current build tool to (col, row)."""
-        if self._assign_popup:
+        if self._assign_popup or self._place_popup:
             return  # Don't paint while popup is open
         col, row = tile
         tm = self.s.tile_map
@@ -690,6 +711,8 @@ class GameView:
             tm.remove_wall_segment(col, row, self._build_wall_side)
         elif self._build_tool == "door":
             tm.toggle_door(col, row, self._build_wall_side)
+        elif self._build_tool == "place" and self._place_selected:
+            self._do_place_foundation(tile)
 
     # ── Build mode — toolbar buttons ──────────────────────────────────────────
 
@@ -701,6 +724,7 @@ class GameView:
         ("door",        "DOOR"),
         ("erase",       "ERASE"),
         ("assign",      "ASSIGN AREA"),
+        ("place",       "PLACE [B]"),
     ]
     _WALL_SIDES = ["N", "E", "S", "W"]
 
@@ -737,9 +761,14 @@ class GameView:
             if rect.collidepoint(pos):
                 if tool_id == "assign":
                     self._start_assign_flow(pos)
+                elif tool_id == "place":
+                    self._build_tool = "place"
+                    self._place_popup = True
+                    self._assign_popup = False
                 else:
                     self._build_tool = tool_id
                     self._assign_popup = False
+                    self._place_popup = False
                 return True
         # Wall/door side selector (shown for wall_add, wall_remove, door tools)
         if self._build_tool in ("wall_add", "wall_remove", "door"):
@@ -915,7 +944,190 @@ class GameView:
         self._build_msg_timer = 2.5
         self.s.log_event(f"Build: {tm.rooms[room_uid].name} designated as {rt.display_name}.")
 
-    # ── Build mode — rendering ─────────────────────────────────────────────────
+    # ── Build mode — place buildable popup ────────────────────────────────────
+
+    def _place_popup_rect(self) -> pygame.Rect:
+        """Return the pygame.Rect for the place-buildable popup panel."""
+        pw, ph = 480, 300
+        cx = T.FLOOR_X + (T.FLOOR_W - pw) // 2
+        cy = T.FLOOR_Y + (T.FLOOR_H - ph) // 2
+        return pygame.Rect(cx, cy, pw, ph)
+
+    def _handle_place_popup_click(self, pos: tuple[int, int]) -> None:
+        """Handle click inside the place-buildable selection popup."""
+        popup_rect = self._place_popup_rect()
+        if not popup_rect.collidepoint(pos):
+            # Click outside popup on the tile grid → place selected buildable
+            if self._place_selected:
+                tile = self._pixel_to_tile(pos)
+                if tile:
+                    self._do_place_foundation(tile)
+            return
+
+        # Close button (top-right "X")
+        close_rect = pygame.Rect(popup_rect.right - 26, popup_rect.y + 4, 22, 22)
+        if close_rect.collidepoint(pos):
+            self._place_popup = False
+            return
+
+        # Buildable rows
+        buildables = sorted(
+            self.game.registry.buildables.values(),
+            key=lambda b: b.display_name,
+        )
+        visible = buildables[self._place_scroll: self._place_scroll + 7]
+        item_h = 42
+        content_y = popup_rect.y + 38
+        for i, defn in enumerate(visible):
+            row_rect = pygame.Rect(
+                popup_rect.x + 4, content_y + i * item_h,
+                popup_rect.width - 8, item_h - 2,
+            )
+            if row_rect.collidepoint(pos):
+                self._place_selected = defn.id
+                self._place_popup = False
+                self._build_msg = (
+                    f"Selected: {defn.display_name} — click a tile to place"
+                )
+                self._build_msg_timer = 4.0
+                return
+
+    def _do_place_foundation(self, tile: tuple[int, int]) -> None:
+        """Place a foundation at the given tile using the selected buildable."""
+        if not self._place_selected:
+            return
+        building_sys = self.game.building_system
+        if building_sys is None:
+            return
+        # Check if there's already a foundation on this tile
+        for f in self.s.foundations.values():
+            if f.tile_position == tile and f.status != "complete":
+                self._build_msg = "A foundation already exists here."
+                self._build_msg_timer = 2.5
+                return
+        building_sys.place_foundation(self.s, self._place_selected, tile)
+        defn = self.game.registry.buildables.get(self._place_selected)
+        name = defn.display_name if defn else self._place_selected
+        self._build_msg = f"Foundation placed: {name} at {tile}"
+        self._build_msg_timer = 2.5
+
+    def _render_place_popup(self) -> None:
+        """Render the buildable selection popup over the build grid."""
+        popup = self._place_popup_rect()
+        D.rect_rounded(self.screen, T.PANEL_BG, popup, 8)
+        D.rect_outline(self.screen, T.ACCENT_WARM, popup, 2, 8)
+
+        x = popup.x + 10
+        y = popup.y + 8
+        D.text(self.screen, self.fonts.md, "SELECT ITEM TO BUILD",
+               (x, y), T.ACCENT_WARM)
+
+        # Close button
+        close_r = pygame.Rect(popup.right - 26, popup.y + 4, 22, 22)
+        pygame.draw.rect(self.screen, T.DANGER, close_r, border_radius=4)
+        D.text(self.screen, self.fonts.sm, "✕", close_r.center, T.TEXT_BRIGHT, "center")
+
+        y += 26
+        pygame.draw.line(self.screen, T.PANEL_EDGE,
+                         (popup.x + 4, y), (popup.right - 4, y))
+        y += 4
+
+        buildables = sorted(
+            self.game.registry.buildables.values(),
+            key=lambda b: b.display_name,
+        )
+        visible = buildables[self._place_scroll: self._place_scroll + 7]
+        item_h = 42
+
+        mx, my = pygame.mouse.get_pos()
+        for i, defn in enumerate(visible):
+            row_rect = pygame.Rect(popup.x + 4, y + i * item_h,
+                                   popup.width - 8, item_h - 2)
+            is_hover    = row_rect.collidepoint(mx, my)
+            is_selected = (defn.id == self._place_selected)
+            bg = (T.BUILD_BTN_ACTIVE if is_selected
+                  else T.BUILD_BTN_HOVER if is_hover
+                  else T.BUILD_BTN_BG)
+            pygame.draw.rect(self.screen, bg, row_rect, border_radius=3)
+
+            # Row line 1: Name + category + build time
+            cat_label  = f"[{defn.category}]"
+            time_label = f"⏱{defn.build_time_ticks}t  sz:{defn.size}"
+            D.text(self.screen, self.fonts.sm, defn.display_name[:20],
+                   (row_rect.x + 6, row_rect.y + 6), T.TEXT_BRIGHT)
+            D.text(self.screen, self.fonts.sm, cat_label,
+                   (row_rect.x + 158, row_rect.y + 6), T.TEXT_DIM)
+            D.text(self.screen, self.fonts.sm, time_label,
+                   (row_rect.right - 90, row_rect.y + 6), T.ACCENT)
+
+            # Row line 2: Material cost
+            if defn.required_materials:
+                mats = "Needs: " + ", ".join(
+                    f"{qty}× {self.game.registry.items[iid].display_name
+                               if iid in self.game.registry.items else iid}"
+                    for iid, qty in defn.required_materials.items()
+                )
+            else:
+                mats = "No materials required"
+            D.text(self.screen, self.fonts.sm, mats[:52],
+                   (row_rect.x + 6, row_rect.y + 22), T.TEXT_DIM)
+
+        # Scroll hint
+        if len(buildables) > 7:
+            hint = (f"↑↓ scroll  "
+                    f"{self._place_scroll + 1}–"
+                    f"{min(self._place_scroll + 7, len(buildables))}/"
+                    f"{len(buildables)}")
+            D.text(self.screen, self.fonts.sm, hint,
+                   (popup.x + 8, popup.bottom - 20), T.TEXT_DIM)
+
+        # Hint: show selected item or instruction
+        if self._place_selected:
+            sel_defn = self.game.registry.buildables.get(self._place_selected)
+            if sel_defn:
+                D.text(self.screen, self.fonts.sm,
+                       f"✓ {sel_defn.display_name} — close popup, then click a tile to place",
+                       (popup.x + 8, popup.bottom - 36), T.OK)
+        else:
+            D.text(self.screen, self.fonts.sm,
+                   "Click a row to select an item, then click a tile to place it.",
+                   (popup.x + 8, popup.bottom - 36), T.TEXT_DIM)
+
+    def _render_foundations(self) -> None:
+        """Render active foundation markers on the tile grid."""
+        for foundation in self.s.foundations.values():
+            if foundation.status == "complete":
+                continue
+            col, row = foundation.tile_position
+            rect = self._tile_rect(col, row)
+            defn = self.game.registry.buildables.get(foundation.buildable_id)
+
+            # Draw dashed outline for the foundation
+            dash_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+            if foundation.status == "awaiting_haul":
+                # Orange outline — waiting for materials
+                outline_c = (255, 160, 40, 180)
+            else:
+                # Green outline — actively being built
+                outline_c = (60, 220, 100, 180)
+            dash_surf.fill((0, 0, 0, 0))
+            pygame.draw.rect(dash_surf, outline_c,
+                             (0, 0, rect.width, rect.height), 2)
+            self.screen.blit(dash_surf, rect.topleft)
+
+            # Progress bar (shown when constructing)
+            if foundation.status == "constructing" and foundation.build_progress > 0:
+                bar_h = 4
+                bar_w = int(rect.width * foundation.build_progress)
+                pygame.draw.rect(self.screen, (60, 220, 100),
+                                 (rect.x, rect.bottom - bar_h, bar_w, bar_h))
+
+            # Label
+            label = defn.display_name[:8] if defn else foundation.buildable_id[:8]
+            D.text(self.screen, self.fonts.sm, label,
+                   rect.center, T.TEXT_BRIGHT, "center")
+
+
 
     def _render_build_mode(self) -> None:
         """Render the tile grid in build mode (replaces the normal floor plan)."""
@@ -1028,8 +1240,11 @@ class GameView:
                 self.screen.blit(hl_surf, r.topleft)
                 pygame.draw.rect(self.screen, (80, 140, 255), r, 1)
 
+        # Draw foundation markers
+        self._render_foundations()
+
         # Draw hover highlight
-        if self._build_hover and not self._assign_popup:
+        if self._build_hover and not self._assign_popup and not self._place_popup:
             h = self._build_hover
             if 0 <= h[0] < T.TILE_COLS and 0 <= h[1] < T.TILE_ROWS:
                 r = self._tile_rect(*h)
@@ -1037,6 +1252,8 @@ class GameView:
                     hl_c = (*T.BUILD_ERASE, 80)
                 elif self._build_tool == "assign":
                     hl_c = (80, 140, 255, 80)
+                elif self._build_tool == "place" and self._place_selected:
+                    hl_c = (255, 160, 40, 80)
                 else:
                     hl_c = (*T.BUILD_HOVER, 80)
                 hl_surf = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
@@ -1046,6 +1263,10 @@ class GameView:
         # Assign popup overlay
         if self._assign_popup:
             self._render_assign_popup()
+
+        # Place buildable popup overlay
+        if self._place_popup:
+            self._render_place_popup()
 
     def _render_assign_popup(self) -> None:
         """Render the room-type assignment popup over the build grid."""
