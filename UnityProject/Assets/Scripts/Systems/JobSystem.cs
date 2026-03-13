@@ -1,6 +1,7 @@
 // Job System — NPC maintenance and work loops.
 // Every crew member has a job during day phase; they rest at night.
 // Events can interrupt the current job temporarily.
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -22,9 +23,13 @@ namespace Waystation.Systems
             new Dictionary<string, List<string>>
         {
             { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection" } },
-            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support" } },
-            { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management" } }
+            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support", "job.haul", "job.refine", "job.craft" } },
+            { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul" } }
         };
+
+        // Category priority for wander fallback: lower index = preferred
+        private static readonly string[] WanderCategoryPriority =
+            { "hab", "utility", "production", "security", "cargo", "dock" };
 
         public JobSystem(ContentRegistry registry) => _registry = registry;
 
@@ -83,14 +88,69 @@ namespace Waystation.Systems
 
             if (isDay && ClassDayJobs.TryGetValue(npc.classId, out var candidates))
             {
+                // Respect per-NPC work assignments if set
+                List<string> allowed = null;
+                if (station.workAssignments.TryGetValue(npc.uid, out var assigned) &&
+                    assigned != null && assigned.Count > 0)
+                {
+                    allowed = new List<string>();
+                    foreach (var j in candidates)
+                        if (assigned.Contains(j)) allowed.Add(j);
+                    if (allowed.Count == 0) allowed = null; // no overlap → use all
+                }
+
+                var pool = allowed ?? candidates;
                 var available = new List<string>();
-                foreach (var j in candidates)
+                foreach (var j in pool)
                     if (_registry.Jobs.ContainsKey(j)) available.Add(j);
+
                 if (available.Count > 0)
+                {
                     jobId = available[UnityEngine.Random.Range(0, available.Count)];
+                    SetJob(npc, jobId, station);
+                    // If no suitable module was found, fall back to wandering
+                    if (npc.jobModuleUid == null)
+                        SetWander(npc, station);
+                    return;
+                }
             }
 
-            SetJob(npc, jobId, station);
+            // Night, no class match, or all candidates missing — rest or wander
+            if (isDay)
+                SetWander(npc, station);
+            else
+                SetJob(npc, jobId, station);
+        }
+
+        private void SetWander(NPCInstance npc, StationState station)
+        {
+            // Find the most "comfortable" active module for the NPC to idle in.
+            // Preference order mirrors beauty: hab > utility > production > etc.
+            ModuleInstance best = null;
+            int            bestPriority = int.MaxValue;
+
+            foreach (var mod in station.modules.Values)
+            {
+                if (!mod.active) continue;
+                int priority = Array.IndexOf(WanderCategoryPriority, mod.category);
+                if (priority < 0) priority = WanderCategoryPriority.Length;
+                if (priority < bestPriority) { bestPriority = priority; best = mod; }
+            }
+
+            if (best != null)
+            {
+                npc.currentJobId = "job.wander";
+                npc.jobModuleUid = best.uid;
+                npc.jobTimer     = 2;
+                npc.location     = best.definitionId;
+            }
+            else
+            {
+                // No modules at all — just rest in place
+                npc.currentJobId = RestJob;
+                npc.jobModuleUid = null;
+                npc.jobTimer     = 4;
+            }
         }
 
         private void SetJob(NPCInstance npc, string jobId, StationState station)
