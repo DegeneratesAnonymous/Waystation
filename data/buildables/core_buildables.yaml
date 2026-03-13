@@ -76,3 +76,74 @@
   build_quality: standard
   size: 1
   max_health: 80
+
+- id: buildable.workbench
+  display_name: Workbench
+  category: object
+  schema_version: "1"
+  description: >
+    A sturdy multi-purpose workbench for crafting and refining. Counts toward
+    a room's workbench limit (max 3 per room). Workbenches gain a 5% speed
+    bonus when the room meets all its requirements.
+  build_time_ticks: 12
+  required_materials:
+    item.steel_plate: 3
+  build_quality: standard
+  size: 1
+  max_health: 120
+  is_workbench: true
+  beauty_score: 2
+  schema_version: "1"
+
+- id: buildable.refinery_bench
+  display_name: Refinery Bench
+  category: object
+  schema_version: "1"
+  description: >
+    Specialist workbench for refining raw ore and ice into usable materials.
+    Counts toward the room workbench limit.
+  build_time_ticks: 18
+  required_materials:
+    item.steel_plate: 4
+    item.circuit_board: 1
+  build_quality: standard
+  size: 1
+  max_health: 140
+  is_workbench: true
+  beauty_score: 0
+  schema_version: "1"
+
+- id: buildable.decorative_panel
+  display_name: Decorative Panel
+  category: object
+  schema_version: "1"
+  description: >
+    A polished aesthetic panel that adds beauty to a room, improving crew
+    mood and visitor impressions.
+  build_time_ticks: 8
+  required_materials:
+    item.steel_plate: 1
+  build_quality: standard
+  size: 1
+  max_health: 60
+  is_workbench: false
+  beauty_score: 10
+  schema_version: "1"
+
+- id: buildable.wall_art
+  display_name: Wall Art
+  category: object
+  schema_version: "1"
+  description: >
+    A large decorative art installation. Significantly improves room beauty
+    and crew morale.
+  build_time_ticks: 10
+  required_materials:
+    item.steel_plate: 1
+    item.credit_chit: 2
+  build_quality: standard
+  size: 1
+  max_health: 50
+  is_workbench: false
+  beauty_score: 20
+  schema_version: "1"

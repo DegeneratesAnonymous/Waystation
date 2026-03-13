@@ -371,6 +371,14 @@ class BuildingSystem:
         foundation.status = "complete"
         foundation.build_progress = 1.0
 
+        # Apply beauty score to the room containing this tile (if any)
+        if defn.beauty_score != 0:
+            cell = tm.cells.get((col, row))
+            if cell and cell.room_uid:
+                room = tm.rooms.get(cell.room_uid)
+                if room is not None:
+                    room.beauty = max(0.0, min(100.0, room.beauty + defn.beauty_score))
+
         # Release the engineer
         if npc is not None:
             npc.current_job_id = None

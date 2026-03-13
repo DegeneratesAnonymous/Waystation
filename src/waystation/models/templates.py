@@ -345,6 +345,8 @@ class BuildableDefinition:
     size: int = 1                      # tiles consumed (1 = single tile)
     max_health: int = 100              # starting health of the finished item
     required_tags: tuple[str, ...] = ()  # station must have ALL of these
+    beauty_score: int = 0              # beauty points contributed to the room (0 = none)
+    is_workbench: bool = False         # True → counts toward room workbench limit
     schema_version: str = "1"
 
     @classmethod
@@ -362,6 +364,8 @@ class BuildableDefinition:
             size=int(raw.get("size", 1)),
             max_health=int(raw.get("max_health", 100)),
             required_tags=tuple(raw.get("required_tags", [])),
+            beauty_score=int(raw.get("beauty_score", 0)),
+            is_workbench=bool(raw.get("is_workbench", False)),
             schema_version=str(raw.get("schema_version", "1")),
         )
 
@@ -388,6 +392,10 @@ class RoomTypeDefinition:
     resource_requirements: dict[str, float] = field(default_factory=dict)  # resource -> amount
     benefits: tuple[str, ...] = ()
     services: tuple[str, ...] = ()
+    min_beauty: int = 0             # minimum room beauty score required for bonus
+    max_workbenches: int = 3        # maximum workbenches allowed in this room type
+    workbench_speed_bonus: float = 0.05  # speed bonus (0.05 = 5%) when all requirements met
+    is_custom: bool = False         # True for player-created room types
     schema_version: str = "1"
 
     @classmethod
@@ -405,6 +413,10 @@ class RoomTypeDefinition:
             resource_requirements={k: float(v) for k, v in res_raw.items()},
             benefits=tuple(raw.get("benefits", [])),
             services=tuple(raw.get("services", [])),
+            min_beauty=int(raw.get("min_beauty", 0)),
+            max_workbenches=int(raw.get("max_workbenches", 3)),
+            workbench_speed_bonus=float(raw.get("workbench_speed_bonus", 0.05)),
+            is_custom=bool(raw.get("is_custom", False)),
             schema_version=str(raw.get("schema_version", "1")),
         )
 

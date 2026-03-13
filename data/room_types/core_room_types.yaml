@@ -352,3 +352,48 @@
   services:
     - visitor_services
     - social
+
+- id: room.hangar
+  display_name: Hangar
+  description: A pressurised landing and unloading bay designed to receive shuttles and freight from passing ships. Goods delivered here are staged for crew to haul to storage.
+  category: dock
+  min_tiles: 8
+  module_id: null
+  component_requirements:
+    item.steel_plate: 6
+    item.pressure_seal: 4
+  resource_requirements:
+    parts: 30
+    credits: 400
+  min_beauty: 0
+  max_workbenches: 0
+  benefits:
+    - Receives shuttle deliveries from passing trade ships
+    - Crew haul goods from here to designated storage
+    - Required for trade-ship shuttle transactions
+  services:
+    - hangar
+    - cargo_handling
+
+- id: room.workshop
+  display_name: Workshop
+  description: A dedicated crafting and refining space equipped with workbenches. Crew can craft items and refine raw materials here. Workbenches gain a 5% speed bonus when the room is fully set up.
+  category: production
+  min_tiles: 6
+  module_id: null
+  component_requirements:
+    item.circuit_board: 2
+    item.steel_plate: 3
+  resource_requirements:
+    parts: 20
+    credits: 300
+  min_beauty: 0
+  max_workbenches: 3
+  workbench_speed_bonus: 0.05
+  benefits:
+    - Supports up to 3 workbenches
+    - Workbenches gain 5% speed bonus when room is fully equipped
+    - Enables job.craft and job.refine
+  services:
+    - crafting
+    - refining
