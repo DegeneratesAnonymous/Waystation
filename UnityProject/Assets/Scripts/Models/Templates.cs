@@ -479,4 +479,50 @@ namespace Waystation.Models
             return new Dictionary<string, object>();
         }
     }
+
+    // -------------------------------------------------------------------------
+    // BuildableDefinition — static data for a placeable construction item.
+    // Loaded from data/buildables/*.json by ContentRegistry.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class BuildableDefinition
+    {
+        public string id;
+        public string displayName;
+        public string category          = "object";   // "structure" | "object"
+        public int    buildTimeTicks    = 50;
+        public float  buildQuality      = 1.0f;
+        public int    size              = 1;
+        public int    maxHealth         = 100;
+
+        // item_id → quantity required before construction can begin
+        public Dictionary<string, int> requiredMaterials = new Dictionary<string, int>();
+
+        // Station tags that must be active before this buildable can be placed
+        public List<string> requiredTags = new List<string>();
+
+        public static BuildableDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var b = new BuildableDefinition
+            {
+                id           = raw.GetString("id"),
+                displayName  = raw.GetString("display_name", raw.GetString("id")),
+                category     = raw.GetString("category", "object"),
+                buildTimeTicks = raw.GetInt("build_time_ticks", 50),
+                buildQuality = raw.GetFloat("build_quality", 1.0f),
+                size         = raw.GetInt("size", 1),
+                maxHealth    = raw.GetInt("max_health", 100),
+            };
+            foreach (var tag in raw.GetStringList("required_tags"))
+                b.requiredTags.Add(tag);
+            if (raw.ContainsKey("required_materials") &&
+                raw["required_materials"] is Dictionary<string, object> mats)
+            {
+                foreach (var kv in mats)
+                    b.requiredMaterials[kv.Key] = Convert.ToInt32(kv.Value);
+            }
+            return b;
+        }
+    }
 }

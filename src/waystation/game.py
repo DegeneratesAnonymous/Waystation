@@ -25,6 +25,7 @@ from waystation.systems.jobs import JobSystem, JobRegistry
 from waystation.systems.combat import CombatSystem
 from waystation.systems.trade import TradeSystem
 from waystation.systems.inventory import InventorySystem
+from waystation.systems.building import BuildingSystem
 from waystation.systems import time_system
 
 log = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ class Game:
         self.combat_system: CombatSystem | None = None
         self.trade_system: TradeSystem | None = None
         self.inventory_system: InventorySystem | None = None
+        self.building_system: BuildingSystem | None = None
 
         self._running = False
         self._pending_events: list[PendingEvent] = []
@@ -147,6 +149,7 @@ class Game:
         self.combat_system   = CombatSystem()
         self.trade_system    = TradeSystem(self.registry)
         self.inventory_system = InventorySystem(self.registry)
+        self.building_system  = BuildingSystem(self.registry)
         self.visitor_system  = VisitorSystem(
             self.registry, self.npc_system, self.event_system,
             trade_system=self.trade_system,
@@ -214,6 +217,7 @@ class Game:
         self.combat_system    = CombatSystem()
         self.trade_system     = TradeSystem(self.registry)
         self.inventory_system = InventorySystem(self.registry)
+        self.building_system  = BuildingSystem(self.registry)
         self.visitor_system   = VisitorSystem(
             self.registry, self.npc_system, self.event_system,
             trade_system=self.trade_system,
@@ -303,7 +307,7 @@ class Game:
         starter_items = [
             ("item.ration_pack",    30),
             ("item.food_ration",    20),
-            ("item.steel_plate",    10),
+            ("item.steel_plate",    50),  # enough for several structure buildables
             ("item.circuit_board",   5),
             ("item.pressure_seal",  10),
             ("item.med_compounds",   5),
@@ -374,6 +378,7 @@ class Game:
         self.faction_system.tick(self.station)
         self.visitor_system.tick(self.station)
         self.inventory_system.tick(self.station)
+        self.building_system.tick(self.station)
 
         new_events = self.event_system.tick(self.station)
         self._pending_events.extend(new_events)

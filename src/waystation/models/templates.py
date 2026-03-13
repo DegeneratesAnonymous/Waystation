@@ -324,6 +324,49 @@ class ItemDefinition:
 
 
 # ---------------------------------------------------------------------------
+# Buildable Definition
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BuildableDefinition:
+    """
+    Static definition for a buildable item — placed as a Foundation on the
+    tile map and constructed by Engineer NPCs.
+
+    Loaded from /data/buildables/*.yaml or a mod's buildables folder.
+    """
+    id: str
+    display_name: str
+    category: str = "object"           # "structure" | "object"
+    description: str = ""
+    build_time_ticks: int = 50         # ticks required for construction
+    required_materials: dict[str, int] = field(default_factory=dict)  # item_id -> qty
+    build_quality: str = "standard"    # default quality of the finished build
+    size: int = 1                      # tiles consumed (1 = single tile)
+    max_health: int = 100              # starting health of the finished item
+    required_tags: tuple[str, ...] = ()  # station must have ALL of these
+    schema_version: str = "1"
+
+    @classmethod
+    def from_raw(cls, raw: dict) -> "BuildableDefinition":
+        return cls(
+            id=raw["id"],
+            display_name=raw.get("display_name", raw["id"]),
+            category=raw.get("category", "object"),
+            description=raw.get("description", ""),
+            build_time_ticks=int(raw.get("build_time_ticks", 50)),
+            required_materials={
+                k: int(v) for k, v in raw.get("required_materials", {}).items()
+            },
+            build_quality=raw.get("build_quality", "standard"),
+            size=int(raw.get("size", 1)),
+            max_health=int(raw.get("max_health", 100)),
+            required_tags=tuple(raw.get("required_tags", [])),
+            schema_version=str(raw.get("schema_version", "1")),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Room Type Definition (user-designatable area type)
 # ---------------------------------------------------------------------------
 

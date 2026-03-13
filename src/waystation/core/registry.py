@@ -30,6 +30,7 @@ from waystation.models.templates import (
     ModuleDefinition,
     ItemDefinition,
     RoomTypeDefinition,
+    BuildableDefinition,
 )
 
 log = logging.getLogger(__name__)
@@ -95,14 +96,15 @@ class ContentRegistry:
     """
 
     REQUIRED_FIELDS: dict[str, list[str]] = {
-        "events":     ["id", "category", "title"],
-        "npcs":       ["id", "base_class"],
-        "ships":      ["id", "role"],
-        "classes":    ["id"],
-        "factions":   ["id", "display_name"],
-        "modules":    ["id", "display_name"],
-        "items":      ["id", "display_name", "item_type"],
-        "room_types": ["id", "display_name"],
+        "events":      ["id", "category", "title"],
+        "npcs":        ["id", "base_class"],
+        "ships":       ["id", "role"],
+        "classes":     ["id"],
+        "factions":    ["id", "display_name"],
+        "modules":     ["id", "display_name"],
+        "items":       ["id", "display_name", "item_type"],
+        "room_types":  ["id", "display_name"],
+        "buildables":  ["id", "display_name"],
     }
 
     def __init__(self) -> None:
@@ -114,6 +116,7 @@ class ContentRegistry:
         self.modules:    dict[str, ModuleDefinition]    = {}
         self.items:      dict[str, ItemDefinition]      = {}
         self.room_types: dict[str, RoomTypeDefinition]  = {}
+        self.buildables: dict[str, BuildableDefinition] = {}
 
         self._errors: list[str] = []
         self._loaded_mods: list[str] = []
@@ -126,21 +129,22 @@ class ContentRegistry:
     def load_core(self, data_root: Path) -> None:
         """Load all core content from the /data directory."""
         log.info("Loading core content from %s", data_root)
-        self._load_content_folder(data_root / "events",     "events")
-        self._load_content_folder(data_root / "npcs",       "npcs")
-        self._load_content_folder(data_root / "ships",      "ships")
-        self._load_content_folder(data_root / "classes",    "classes")
-        self._load_content_folder(data_root / "factions",   "factions")
-        self._load_content_folder(data_root / "modules",    "modules")
-        self._load_content_folder(data_root / "items",      "items")
-        self._load_content_folder(data_root / "room_types", "room_types")
+        self._load_content_folder(data_root / "events",      "events")
+        self._load_content_folder(data_root / "npcs",        "npcs")
+        self._load_content_folder(data_root / "ships",       "ships")
+        self._load_content_folder(data_root / "classes",     "classes")
+        self._load_content_folder(data_root / "factions",    "factions")
+        self._load_content_folder(data_root / "modules",     "modules")
+        self._load_content_folder(data_root / "items",       "items")
+        self._load_content_folder(data_root / "room_types",  "room_types")
+        self._load_content_folder(data_root / "buildables",  "buildables")
         self._loaded = True
         log.info(
             "Core load complete — events:%d npcs:%d ships:%d classes:%d factions:%d "
-            "modules:%d items:%d room_types:%d",
+            "modules:%d items:%d room_types:%d buildables:%d",
             len(self.events), len(self.npcs), len(self.ships),
             len(self.classes), len(self.factions), len(self.modules),
-            len(self.items), len(self.room_types),
+            len(self.items), len(self.room_types), len(self.buildables),
         )
 
     def load_mods(self, mods_root: Path) -> None:
@@ -171,6 +175,7 @@ class ContentRegistry:
             f"  modules:    {len(self.modules)}",
             f"  items:      {len(self.items)}",
             f"  room_types: {len(self.room_types)}",
+            f"  buildables: {len(self.buildables)}",
         ]
         if self._loaded_mods:
             lines.append(f"  mods: {', '.join(self._loaded_mods)}")
@@ -197,7 +202,7 @@ class ContentRegistry:
     def _load_mod_folder(self, mod_folder: Path, mod_id: str) -> None:
         for content_type in (
             "events", "npcs", "ships", "classes", "factions",
-            "modules", "items", "room_types",
+            "modules", "items", "room_types", "buildables",
         ):
             folder = mod_folder / content_type
             records = _load_folder(folder)
@@ -239,6 +244,8 @@ class ContentRegistry:
                 self.items[record_id] = ItemDefinition.from_raw(raw)
             elif content_type == "room_types":
                 self.room_types[record_id] = RoomTypeDefinition.from_raw(raw)
+            elif content_type == "buildables":
+                self.buildables[record_id] = BuildableDefinition.from_raw(raw)
         except Exception as e:
             self._error(source, content_type, record_id, str(e))
 

@@ -113,7 +113,7 @@ _SLEEP_CRITICAL = 0.20
 # Class → preferred day-phase jobs (in priority order)
 _CLASS_DAY_JOBS: dict[str, list[str]] = {
     "class.security":    ["job.guard_post", "job.patrol", "job.contraband_inspection"],
-    "class.engineering": ["job.module_maintenance", "job.power_management", "job.life_support"],
+    "class.engineering": ["job.build", "job.module_maintenance", "job.power_management", "job.life_support"],
     "class.operations":  ["job.dock_control", "job.visitor_intake", "job.resource_management"],
 }
 

@@ -13,14 +13,15 @@ namespace Waystation.Core
     public class ContentRegistry : MonoBehaviour
     {
         // ── Public content tables ────────────────────────────────────────────
-        public Dictionary<string, EventDefinition>  Events   { get; private set; } = new Dictionary<string, EventDefinition>();
-        public Dictionary<string, NPCTemplate>      Npcs     { get; private set; } = new Dictionary<string, NPCTemplate>();
-        public Dictionary<string, ShipTemplate>     Ships    { get; private set; } = new Dictionary<string, ShipTemplate>();
-        public Dictionary<string, ClassDefinition>  Classes  { get; private set; } = new Dictionary<string, ClassDefinition>();
-        public Dictionary<string, FactionDefinition>Factions { get; private set; } = new Dictionary<string, FactionDefinition>();
-        public Dictionary<string, ModuleDefinition> Modules  { get; private set; } = new Dictionary<string, ModuleDefinition>();
-        public Dictionary<string, ItemDefinition>   Items    { get; private set; } = new Dictionary<string, ItemDefinition>();
-        public Dictionary<string, JobDefinition>    Jobs     { get; private set; } = new Dictionary<string, JobDefinition>();
+        public Dictionary<string, EventDefinition>  Events     { get; private set; } = new Dictionary<string, EventDefinition>();
+        public Dictionary<string, NPCTemplate>      Npcs       { get; private set; } = new Dictionary<string, NPCTemplate>();
+        public Dictionary<string, ShipTemplate>     Ships      { get; private set; } = new Dictionary<string, ShipTemplate>();
+        public Dictionary<string, ClassDefinition>  Classes    { get; private set; } = new Dictionary<string, ClassDefinition>();
+        public Dictionary<string, FactionDefinition>Factions   { get; private set; } = new Dictionary<string, FactionDefinition>();
+        public Dictionary<string, ModuleDefinition> Modules    { get; private set; } = new Dictionary<string, ModuleDefinition>();
+        public Dictionary<string, ItemDefinition>   Items      { get; private set; } = new Dictionary<string, ItemDefinition>();
+        public Dictionary<string, JobDefinition>    Jobs       { get; private set; } = new Dictionary<string, JobDefinition>();
+        public Dictionary<string, BuildableDefinition> Buildables { get; private set; } = new Dictionary<string, BuildableDefinition>();
 
         public bool   IsLoaded  { get; private set; }
         public int    ErrorCount => _errors.Count;
@@ -43,18 +44,20 @@ namespace Waystation.Core
         public IEnumerator LoadCoreAsync()
         {
             string dataRoot = Path.Combine(Application.streamingAssetsPath, "data");
-            yield return StartCoroutine(LoadFolder(dataRoot, "events",   LoadEvent));
-            yield return StartCoroutine(LoadFolder(dataRoot, "npcs",     LoadNpc));
-            yield return StartCoroutine(LoadFolder(dataRoot, "ships",    LoadShip));
-            yield return StartCoroutine(LoadFolder(dataRoot, "classes",  LoadClass));
-            yield return StartCoroutine(LoadFolder(dataRoot, "factions", LoadFaction));
-            yield return StartCoroutine(LoadFolder(dataRoot, "modules",  LoadModule));
-            yield return StartCoroutine(LoadFolder(dataRoot, "items",    LoadItem));
-            yield return StartCoroutine(LoadFolder(dataRoot, "jobs",     LoadJob));
+            yield return StartCoroutine(LoadFolder(dataRoot, "events",     LoadEvent));
+            yield return StartCoroutine(LoadFolder(dataRoot, "npcs",       LoadNpc));
+            yield return StartCoroutine(LoadFolder(dataRoot, "ships",      LoadShip));
+            yield return StartCoroutine(LoadFolder(dataRoot, "classes",    LoadClass));
+            yield return StartCoroutine(LoadFolder(dataRoot, "factions",   LoadFaction));
+            yield return StartCoroutine(LoadFolder(dataRoot, "modules",    LoadModule));
+            yield return StartCoroutine(LoadFolder(dataRoot, "items",      LoadItem));
+            yield return StartCoroutine(LoadFolder(dataRoot, "jobs",       LoadJob));
+            yield return StartCoroutine(LoadFolder(dataRoot, "buildables", LoadBuildable));
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
                       $"ships:{Ships.Count} classes:{Classes.Count} factions:{Factions.Count} " +
-                      $"modules:{Modules.Count} items:{Items.Count} jobs:{Jobs.Count}");
+                      $"modules:{Modules.Count} items:{Items.Count} jobs:{Jobs.Count} " +
+                      $"buildables:{Buildables.Count}");
         }
 
         // ── Folder loader ────────────────────────────────────────────────────
@@ -97,15 +100,16 @@ namespace Waystation.Core
         private void LoadClass  (Dictionary<string, object> d) => Classes [d.GetString("id")] = ClassDefinition  .FromDict(d);
         private void LoadFaction(Dictionary<string, object> d) => Factions[d.GetString("id")] = FactionDefinition.FromDict(d);
         private void LoadModule (Dictionary<string, object> d) => Modules [d.GetString("id")] = ModuleDefinition .FromDict(d);
-        private void LoadItem   (Dictionary<string, object> d) => Items   [d.GetString("id")] = ItemDefinition   .FromDict(d);
-        private void LoadJob    (Dictionary<string, object> d) => Jobs    [d.GetString("id")] = JobDefinition    .FromDict(d);
+        private void LoadItem     (Dictionary<string, object> d) => Items     [d.GetString("id")] = ItemDefinition     .FromDict(d);
+        private void LoadJob      (Dictionary<string, object> d) => Jobs      [d.GetString("id")] = JobDefinition      .FromDict(d);
+        private void LoadBuildable(Dictionary<string, object> d) => Buildables[d.GetString("id")] = BuildableDefinition.FromDict(d);
 
         // ── Diagnostics ──────────────────────────────────────────────────────
 
         public string Summary() =>
             $"events:{Events.Count} npcs:{Npcs.Count} ships:{Ships.Count} " +
             $"classes:{Classes.Count} factions:{Factions.Count} modules:{Modules.Count} " +
-            $"items:{Items.Count} jobs:{Jobs.Count}" +
+            $"items:{Items.Count} jobs:{Jobs.Count} buildables:{Buildables.Count}" +
             (_errors.Count > 0 ? $" | errors:{_errors.Count}" : "");
 
         public IReadOnlyList<string> Errors() => _errors;

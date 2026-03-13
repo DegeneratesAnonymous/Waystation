@@ -344,6 +344,107 @@ class ShipInstance:
 
 
 # ---------------------------------------------------------------------------
+# Foundation Instance (placed-but-not-yet-built item)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class FoundationInstance:
+    """
+    A buildable item that has been placed on the tile map but not yet
+    constructed.  Engineer NPCs haul the required materials then stand at
+    the site for the designated build time.
+
+    status transitions:
+        "awaiting_haul"  → materials are being gathered
+        "constructing"   → all materials present; NPC is building
+        "complete"       → construction finished
+        "cancelled"      → player cancelled before completion
+    """
+    uid: str
+    buildable_id: str
+    tile_position: tuple[int, int]          # (col, row) on the tile map
+
+    status: str = "awaiting_haul"
+    hauled_materials: dict[str, int] = field(default_factory=dict)  # item_id -> qty hauled
+    build_progress: float = 0.0             # 0.0 → 1.0
+
+    health: int = 100
+    max_health: int = 100
+    quality: str = "standard"
+
+    assigned_npc_uid: str | None = None     # NPC currently working on this
+
+    @classmethod
+    def create(cls,
+               buildable_id: str,
+               tile_position: tuple[int, int],
+               max_health: int = 100,
+               quality: str = "standard") -> "FoundationInstance":
+        return cls(
+            uid=_new_uid(),
+            buildable_id=buildable_id,
+            tile_position=tile_position,
+            max_health=max_health,
+            health=max_health,
+            quality=quality,
+        )
+
+    def materials_complete(self, required: dict[str, int]) -> bool:
+        """Return True if all required materials have been hauled to site."""
+        for item_id, qty in required.items():
+            if self.hauled_materials.get(item_id, 0) < qty:
+                return False
+        return True
+
+    def functionality(self) -> float:
+        """
+        Return 0.0–1.0 functionality based on current health.
+
+        100–75 % HP  → 1.0 (full function)
+        75–50 % HP   → linearly degraded from 1.0 to 0.0
+        <50 % HP     → 0.0 (non-functional; still draws power if applicable)
+        0 % HP       → 0.0 (destroyed)
+        """
+        hp_frac = self.health / self.max_health if self.max_health > 0 else 0.0
+        if hp_frac >= 0.75:
+            return 1.0
+        if hp_frac >= 0.50:
+            # Scale linearly from 1.0 at 75 % to 0.0 at 50 %
+            return (hp_frac - 0.50) / 0.25
+        return 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "uid":              self.uid,
+            "buildable_id":     self.buildable_id,
+            "tile_position":    list(self.tile_position),
+            "status":           self.status,
+            "hauled_materials": dict(self.hauled_materials),
+            "build_progress":   self.build_progress,
+            "health":           self.health,
+            "max_health":       self.max_health,
+            "quality":          self.quality,
+            "assigned_npc_uid": self.assigned_npc_uid,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "FoundationInstance":
+        tp = d.get("tile_position", [0, 0])
+        return cls(
+            uid=d["uid"],
+            buildable_id=d["buildable_id"],
+            tile_position=(int(tp[0]), int(tp[1])),
+            status=d.get("status", "awaiting_haul"),
+            hauled_materials=d.get("hauled_materials", {}),
+            build_progress=float(d.get("build_progress", 0.0)),
+            health=int(d.get("health", 100)),
+            max_health=int(d.get("max_health", 100)),
+            quality=d.get("quality", "standard"),
+            assigned_npc_uid=d.get("assigned_npc_uid"),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Cargo Hold Settings (per-module inventory configuration)
 # ---------------------------------------------------------------------------
 
@@ -513,6 +614,9 @@ class StationState:
     # Tile map — the spatial floor-plan built in build mode
     tile_map: TileMap = field(default_factory=TileMap)
 
+    # Active build foundations keyed by uid
+    foundations: dict[str, "FoundationInstance"] = field(default_factory=dict)
+
     def add_npc(self, npc: NPCInstance) -> None:
         self.npcs[npc.uid] = npc
 
@@ -590,6 +694,7 @@ class StationState:
             "event_cooldowns":    dict(self.event_cooldowns),
             "log":                list(self.log),
             "tile_map":           self.tile_map.to_dict(),
+            "foundations":        {uid: f.to_dict() for uid, f in self.foundations.items()},
         }
 
     @classmethod
@@ -611,4 +716,8 @@ class StationState:
         obj.log                = d.get("log", [])
         tile_map_data          = d.get("tile_map")
         obj.tile_map           = TileMap.from_dict(tile_map_data) if tile_map_data else TileMap()
+        obj.foundations        = {
+            uid: FoundationInstance.from_dict(v)
+            for uid, v in d.get("foundations", {}).items()
+        }
         return obj
