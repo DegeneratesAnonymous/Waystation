@@ -490,6 +490,7 @@ namespace Waystation.Models
     {
         public string id;
         public string displayName;
+        public string description       = "";
         public string category          = "object";   // "structure" | "object"
         public int    buildTimeTicks    = 50;
         public float  buildQuality      = 1.0f;
@@ -502,17 +503,21 @@ namespace Waystation.Models
         // Station tags that must be active before this buildable can be placed
         public List<string> requiredTags = new List<string>();
 
+        // skill_id → minimum level required (e.g. "engineering" → 2)
+        public Dictionary<string, int> requiredSkills = new Dictionary<string, int>();
+
         public static BuildableDefinition FromDict(Dictionary<string, object> raw)
         {
             var b = new BuildableDefinition
             {
-                id           = raw.GetString("id"),
-                displayName  = raw.GetString("display_name", raw.GetString("id")),
-                category     = raw.GetString("category", "object"),
+                id             = raw.GetString("id"),
+                displayName    = raw.GetString("display_name", raw.GetString("id")),
+                description    = raw.GetString("description", ""),
+                category       = raw.GetString("category", "object"),
                 buildTimeTicks = raw.GetInt("build_time_ticks", 50),
-                buildQuality = raw.GetFloat("build_quality", 1.0f),
-                size         = raw.GetInt("size", 1),
-                maxHealth    = raw.GetInt("max_health", 100),
+                buildQuality   = raw.GetFloat("build_quality", 1.0f),
+                size           = raw.GetInt("size", 1),
+                maxHealth      = raw.GetInt("max_health", 100),
             };
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);
@@ -521,6 +526,12 @@ namespace Waystation.Models
             {
                 foreach (var kv in mats)
                     b.requiredMaterials[kv.Key] = Convert.ToInt32(kv.Value);
+            }
+            if (raw.ContainsKey("required_skills") &&
+                raw["required_skills"] is Dictionary<string, object> skills)
+            {
+                foreach (var kv in skills)
+                    b.requiredSkills[kv.Key] = Convert.ToInt32(kv.Value);
             }
             return b;
         }

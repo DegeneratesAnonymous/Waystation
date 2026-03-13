@@ -1,6 +1,7 @@
 // CameraController — scroll-wheel zoom and right-click drag-to-pan for the
 // orthographic station camera. Self-installs via RuntimeInitializeOnLoadMethod.
 using UnityEngine;
+using Waystation.UI;
 
 namespace Waystation.View
 {
@@ -37,6 +38,7 @@ namespace Waystation.View
         // ── Zoom ──────────────────────────────────────────────────────────────
         private void HandleZoom()
         {
+            if (GameHUD.IsMouseOverDrawer) return;
             float scroll = Input.GetAxis("Mouse ScrollWheel");
             if (Mathf.Abs(scroll) < 0.001f) return;
 
@@ -57,6 +59,7 @@ namespace Waystation.View
         // ── Pan ───────────────────────────────────────────────────────────────
         private void HandlePan()
         {
+            if (GameHUD.IsMouseOverDrawer) return;
             if (Input.GetMouseButtonDown(1))
             {
                 _panOriginScreen = Input.mousePosition;

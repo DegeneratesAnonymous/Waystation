@@ -107,11 +107,105 @@ namespace Waystation.UI
             _ready = true;
         }
 
-        // ── Update — drawer animation ─────────────────────────────────────────
+        // ── Update — drawer animation + ghost input ───────────────────────────
         private void Update()
         {
             float target = _active != Tab.None ? 1f : 0f;
             _drawerT = Mathf.Lerp(_drawerT, target, Time.deltaTime * AnimK);
+
+            // Suppress map scroll/pan while the mouse is over the HUD panel
+            IsMouseOverDrawer = Input.mousePosition.x >=
+                                Screen.width - TabW - DrawerW * _drawerT;
+
+            // ── Deconstruct mode ──────────────────────────────────────────────
+            if (_deconstructMode && _ghostBuildableId == null)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+                {
+                    _deconstructMode = false;
+                    _isDragging      = false;
+                    _dragLine.Clear();
+                    _dragBlocked.Clear();
+                    return;
+                }
+                var dcam = Camera.main;
+                if (dcam != null)
+                {
+                    Vector3 dworld = dcam.ScreenToWorldPoint(Input.mousePosition);
+                    _ghostTileCol = Mathf.RoundToInt(dworld.x);
+                    _ghostTileRow = Mathf.RoundToInt(dworld.y);
+                }
+
+                if (Input.GetMouseButtonDown(0) && !IsMouseOverDrawer)
+                {
+                    _isDragging   = true;
+                    _dragRect     = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                    _dragStartCol = _ghostTileCol;
+                    _dragStartRow = _ghostTileRow;
+                }
+                if (_isDragging)
+                    RebuildDeconDragLine();
+                if (Input.GetMouseButtonUp(0) && _isDragging)
+                {
+                    foreach (var (col, row) in _dragLine)
+                        DeconstructTile(col, row);
+                    _isDragging = false;
+                    _dragLine.Clear();
+                    _dragBlocked.Clear();
+                }
+                return;
+            }
+
+            // ── Ghost placement ───────────────────────────────────────────────
+            if (_ghostBuildableId == null) return;
+
+            if (Input.GetKeyDown(KeyCode.Q)) _ghostRotation = (_ghostRotation + 270) % 360;
+            if (Input.GetKeyDown(KeyCode.E)) _ghostRotation = (_ghostRotation +  90) % 360;
+
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+            {
+                _ghostBuildableId = null;
+                _isDragging = false;
+                _dragLine.Clear();
+                _dragBlocked.Clear();
+                return;
+            }
+
+            // Always track cursor tile
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 world = cam.ScreenToWorldPoint(Input.mousePosition);
+                _ghostTileCol = Mathf.RoundToInt(world.x);
+                _ghostTileRow = Mathf.RoundToInt(world.y);
+            }
+
+            // Begin drag on mouse-down (hold Shift for rectangle fill)
+            if (Input.GetMouseButtonDown(0) && !IsMouseOverDrawer && _gm?.Station != null)
+            {
+                _isDragging   = true;
+                _dragRect     = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                _dragStartCol = _ghostTileCol;
+                _dragStartRow = _ghostTileRow;
+            }
+
+            // Rebuild the preview line every frame while dragging
+            if (_isDragging)
+                RebuildDragLine();
+
+            // Commit on mouse-up: place all valid tiles, then keep ghost active
+            if (Input.GetMouseButtonUp(0) && _isDragging)
+            {
+                foreach (var (col, row) in _dragLine)
+                {
+                    if (!_dragBlocked.Contains((col, row)))
+                        _gm.Building.PlaceFoundation(
+                            _gm.Station, _ghostBuildableId, col, row);
+                }
+                _isDragging = false;
+                _dragLine.Clear();
+                _dragBlocked.Clear();
+            }
         }
 
         // ── OnGUI ─────────────────────────────────────────────────────────────
@@ -150,6 +244,123 @@ namespace Waystation.UI
                 Rect   pr = new Rect(tx + 5f, sh - 54f, TabW - 10f, 40f);
                 if (GUI.Button(pr, pl, _sTabOff))
                     _gm.IsPaused = !_gm.IsPaused;
+            }
+
+            // ── Foundation tile overlays (placed but incomplete) ─────────────
+            if (_white != null && _gm?.Station != null)
+            {
+                var overlayCam = Camera.main;
+                if (overlayCam != null)
+                {
+                    foreach (var kv in _gm.Station.foundations)
+                    {
+                        var f = kv.Value;
+                        if (f.status == "complete") continue;
+
+                        // Yellow if any materials arrived OR actively constructing;
+                        // pale blue-grey if still waiting for the first haul.
+                        bool hasResources = f.hauledMaterials.Count > 0 ||
+                                            f.status == "constructing";
+                        Color fill  = hasResources
+                                      ? new Color(1.00f, 0.85f, 0.10f, 0.28f)
+                                      : new Color(0.55f, 0.65f, 0.80f, 0.18f);
+                        Color edge  = hasResources
+                                      ? new Color(1.00f, 0.90f, 0.20f, 0.75f)
+                                      : new Color(0.55f, 0.70f, 0.90f, 0.55f);
+
+                        DrawTileOverlay(overlayCam, f.tileCol, f.tileRow, fill, edge);
+                    }
+                }
+            }
+
+            // ── Deconstruct mode overlays ─────────────────────────────────────
+            if (_deconstructMode && _white != null && _gm?.Station != null)
+            {
+                var dCam = Camera.main;
+                if (dCam != null)
+                {
+                    if (_isDragging && _dragLine.Count > 0)
+                    {
+                        // Show drag-selection tiles
+                        foreach (var (col, row) in _dragLine)
+                        {
+                            bool hasTarget = !_dragBlocked.Contains((col, row));
+                            Color fill = hasTarget ? new Color(1f, 0.20f, 0.15f, 0.55f)
+                                                   : new Color(0.5f, 0.5f, 0.5f, 0.15f);
+                            Color edge = hasTarget ? new Color(1f, 0.45f, 0.35f, 0.95f)
+                                                   : new Color(0.6f, 0.6f, 0.6f, 0.35f);
+                            DrawTileOverlay(dCam, col, row, fill, edge);
+                        }
+                    }
+                    else
+                    {
+                        // Idle — dim-red all foundations + bright hover
+                        foreach (var kv in _gm.Station.foundations)
+                        {
+                            DrawTileOverlay(dCam, kv.Value.tileCol, kv.Value.tileRow,
+                                new Color(1f, 0.22f, 0.18f, 0.28f),
+                                new Color(1f, 0.40f, 0.35f, 0.80f));
+                        }
+                        DrawTileOverlay(dCam, _ghostTileCol, _ghostTileRow,
+                            new Color(1f, 0.50f, 0.40f, 0.45f),
+                            new Color(1f, 0.65f, 0.55f, 0.95f));
+                    }
+                }
+            }
+
+            // ── Cursor ghost overlay ──────────────────────────────────────────
+            if (_ghostBuildableId != null && _white != null)
+            {
+                var ghostCam = Camera.main;
+                if (ghostCam != null)
+                {
+                    if (_isDragging && _dragLine.Count > 0)
+                    {
+                        // Draw every tile in the drag line
+                        foreach (var (col, row) in _dragLine)
+                        {
+                            bool blocked = _dragBlocked.Contains((col, row));
+                            Color fill = blocked
+                                ? new Color(1.00f, 0.30f, 0.20f, 0.38f)
+                                : new Color(0.35f, 0.75f, 1.00f, 0.38f);
+                            Color edge = blocked
+                                ? new Color(1.00f, 0.50f, 0.35f, 0.85f)
+                                : new Color(0.50f, 0.88f, 1.00f, 0.80f);
+                            DrawTileOverlay(ghostCam, col, row, fill, edge);
+                        }
+                    }
+                    else
+                    {
+                        // Single cursor tile
+                        Color fill = new Color(0.35f, 0.75f, 1.00f, 0.38f);
+                        Color edge = new Color(0.50f, 0.88f, 1.00f, 0.80f);
+                        DrawTileOverlay(ghostCam, _ghostTileCol, _ghostTileRow, fill, edge);
+                    }
+
+                    // Label anchored to the cursor tile
+                    Vector3 sp     = ghostCam.WorldToScreenPoint(new Vector3(_ghostTileCol, _ghostTileRow, 0f));
+                    Vector3 spNext = ghostCam.WorldToScreenPoint(new Vector3(_ghostTileCol + 1, _ghostTileRow, 0f));
+                    float   pxSize = Mathf.Abs(spNext.x - sp.x);
+                    float   guiX   = sp.x - pxSize * 0.5f;
+                    float   guiY   = Screen.height - sp.y - pxSize * 0.5f;
+
+                    string bName = (_gm?.Registry?.Buildables != null &&
+                                    _gm.Registry.Buildables.TryGetValue(_ghostBuildableId, out var gd))
+                                   ? gd.displayName : _ghostBuildableId;
+
+                    string hint;
+                    if (_isDragging)
+                    {
+                        int valid = _dragLine.Count - _dragBlocked.Count;
+                        string shape = _dragRect ? "rect" : "line";
+                        hint = $"{bName}  ·  {valid} tile{(valid == 1 ? "" : "s")} ({shape})  ·  release to place";
+                    }
+                    else
+                    {
+                        hint = $"{bName}  {_ghostRotation}°  ·  Q ↺  E ↻  drag=line  Shift+drag=rect  ·  RMB cancel";
+                    }
+                    GUI.Label(new Rect(guiX - 80f, guiY - 22f, 350f, 18f), hint, _sSub);
+                }
             }
         }
 
@@ -208,15 +419,354 @@ namespace Waystation.UI
         }
 
         // ── Build tab ─────────────────────────────────────────────────────────
+        private Vector2 _buildScroll;
+        private int     _buildNextCol = 0;
+        private int     _buildNextRow = 0;
+        private string  _buildInfoOpen   = "";   // buildable id whose info panel is expanded
+        private bool    _deconstructMode = false; // deconstruct-mode: click tile to cancel/demolish
+        private bool    _showBuildQueue  = false; // toggle inline build-queue panel
+
+        // ── Ghost placement ───────────────────────────────────────────────────
+        private string _ghostBuildableId = null;
+        private int    _ghostRotation    = 0;    // 0 / 90 / 180 / 270
+        private int    _ghostTileCol     = 0;
+        private int    _ghostTileRow     = 0;
+
+        // Drag-to-place state
+        private bool   _isDragging    = false;
+        private bool   _dragRect      = false;   // true = fill rectangle, false = line
+        private int    _dragStartCol  = 0;
+        private int    _dragStartRow  = 0;
+        private readonly System.Collections.Generic.List<(int col, int row)>    _dragLine    = new System.Collections.Generic.List<(int col, int row)>();
+        private readonly System.Collections.Generic.HashSet<(int col, int row)> _dragBlocked = new System.Collections.Generic.HashSet<(int col, int row)>();
+
+        // True when cursor is over the HUD — used by CameraController to block map scroll/pan
+        public static bool IsMouseOverDrawer { get; private set; }
+
         private void DrawBuild(Rect area, float w, float h)
         {
-            float y = area.y;
+            if (_gm?.Station == null) return;
+            var s       = _gm.Station;
+            var catalog = _gm.Registry.Buildables;
+            var active  = s.foundations;
 
-            GUI.Label(new Rect(area.x, y, w, 20f), "Expand Your Station", _sLabel);
-            y += 28f;
-            GUI.Label(new Rect(area.x, y, w, 80f),
-                "Place new rooms, corridors, and modules to grow Frontier Waystation.\n\n" +
-                "Build tools are coming in the next update.", _sSub);
+            float cw = w - 16f;
+
+            // ── Toolbar strip ────────────────────────────────────────────────
+            const float TBH = 30f;
+            DrawSolid(new Rect(area.x, area.y, w, TBH), new Color(0.05f, 0.07f, 0.12f, 0.9f));
+            Color tbPrev = GUI.color;
+            GUI.color = _deconstructMode ? new Color(0.9f, 0.3f, 0.3f) : new Color(0.6f, 0.6f, 0.7f);
+            if (GUI.Button(new Rect(area.x + 4f, area.y + 4f, 110f, 22f), "\u26CF Deconstruct", _sBtnSmall))
+                _deconstructMode = !_deconstructMode;
+            GUI.color = _showBuildQueue ? new Color(0.4f, 0.7f, 0.9f) : new Color(0.6f, 0.6f, 0.7f);
+            if (GUI.Button(new Rect(area.x + 120f, area.y + 4f, 110f, 22f),
+                           $"\u2261 Queue ({active.Count})", _sBtnSmall))
+                _showBuildQueue = !_showBuildQueue;
+            GUI.color = tbPrev;
+
+            float tbH = TBH;
+            if (_deconstructMode)
+            {
+                DrawSolid(new Rect(area.x, area.y + TBH, w, 18f), new Color(0.4f, 0.1f, 0.1f, 0.5f));
+                GUI.color = new Color(1f, 0.6f, 0.6f);
+                GUI.Label(new Rect(area.x + 6f, area.y + TBH + 2f, w - 12f, 14f),
+                          "Click a tile to deconstruct it.  RMB / Esc to cancel.", _sSub);
+                GUI.color = tbPrev;
+                tbH += 18f;
+            }
+
+            // ── Group catalogue by category ───────────────────────────────────
+            var byCategory = new SortedDictionary<string, List<BuildableDefinition>>();
+            foreach (var kv in catalog)
+            {
+                string cat = string.IsNullOrEmpty(kv.Value.category) ? "other" : kv.Value.category;
+                if (!byCategory.ContainsKey(cat))
+                    byCategory[cat] = new List<BuildableDefinition>();
+                byCategory[cat].Add(kv.Value);
+            }
+
+            // ── Estimate scroll content height ────────────────────────────────
+            float innerH = 8f;
+            if (_showBuildQueue)
+            {
+                innerH += 24f;
+                innerH += active.Count == 0 ? 20f : active.Count * 72f;
+                innerH += 10f;
+            }
+            innerH += 24f;
+            foreach (var catGroup in byCategory)
+            {
+                innerH += 24f;
+                foreach (var defn in catGroup.Value)
+                {
+                    innerH += 90f;
+                    if (_buildInfoOpen == defn.id)
+                    {
+                        float ht = 16f;
+                        if (!string.IsNullOrEmpty(defn.description))
+                            ht += _sSub.CalcHeight(new GUIContent(defn.description), cw - 12f) + 14f;
+                        ht += 22f + (defn.requiredMaterials.Count == 0 ? 18f
+                                     : defn.requiredMaterials.Count * 18f);
+                        ht += 22f + (defn.requiredSkills.Count == 0 ? 18f
+                                     : defn.requiredSkills.Count * 18f);
+                        if (defn.requiredTags.Count > 0)
+                            ht += 22f + defn.requiredTags.Count * 18f;
+                        ht += 12f;
+                        innerH += ht;
+                    }
+                }
+            }
+
+            Rect scrollArea = new Rect(area.x, area.y + tbH, w, h - tbH);
+            _buildScroll = GUI.BeginScrollView(scrollArea, _buildScroll,
+                           new Rect(0, 0, cw, Mathf.Max(h - tbH, innerH)));
+            float y = 0f;
+
+            // ── Build Queue (optional) ────────────────────────────────────────
+            if (_showBuildQueue)
+            {
+                Section($"Build Queue ({active.Count})", cw, ref y);
+                if (active.Count == 0)
+                {
+                    GUI.Label(new Rect(0, y, cw, 18f), "No foundations placed yet.", _sSub);
+                    y += 20f;
+                }
+                else
+                {
+                    foreach (var kv in active)
+                        DrawFoundationRow(kv.Value, cw, ref y, s);
+                }
+                Divider(cw, ref y);
+            }
+
+            // ── Catalogue ────────────────────────────────────────────────────
+            Section("Catalogue", cw, ref y);
+
+            if (catalog.Count == 0)
+            {
+                GUI.Label(new Rect(0, y, cw, 18f), "No buildables loaded.", _sSub);
+                y += 20f;
+            }
+
+            foreach (var catGroup in byCategory)
+            {
+                DrawSolid(new Rect(0, y, cw, 20f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
+                GUI.Label(new Rect(4f, y + 3f, cw - 8f, 14f), CategoryDisplayName(catGroup.Key), _sSub);
+                y += 22f;
+
+                foreach (var defn in catGroup.Value)
+                    DrawCatalogCard(defn, cw, ref y, s);
+            }
+
+            GUI.EndScrollView();
+        }
+
+        private void DrawFoundationRow(FoundationInstance f, float cw, ref float y, StationState s)
+        {
+            bool   hasDefn = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
+            string fname   = hasDefn ? fDefn.displayName : f.buildableId;
+
+            DrawSolid(new Rect(0, y, cw, 64f), new Color(0.07f, 0.09f, 0.15f, 0.6f));
+            GUI.Label(new Rect(4f, y + 2f, cw * 0.65f, 18f), fname, _sLabel);
+
+            string statusLabel = f.status switch
+            {
+                "awaiting_haul" => "Awaiting materials",
+                "constructing"  => $"Building  {f.buildProgress * 100f:F0}%",
+                "complete"      => "Complete",
+                _               => f.status
+            };
+            GUI.Label(new Rect(4f, y + 20f, cw - 8f, 14f), statusLabel, _sSub);
+
+            if (f.status == "constructing" || f.status == "awaiting_haul")
+            {
+                float pct = f.status == "constructing" ? f.buildProgress : 0f;
+                DrawSolid(new Rect(4f, y + 36f, cw - 8f, 6f),  new Color(0.15f, 0.15f, 0.2f));
+                DrawSolid(new Rect(4f, y + 36f, (cw - 8f) * pct, 6f), ColBarFill);
+            }
+
+            if (f.status == "awaiting_haul" && hasDefn && fDefn.requiredMaterials.Count > 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var m in fDefn.requiredMaterials)
+                {
+                    int have = f.hauledMaterials.ContainsKey(m.Key) ? f.hauledMaterials[m.Key] : 0;
+                    sb.Append($"{ItemDisplayName(m.Key)} {have}/{m.Value}  ");
+                }
+                GUI.Label(new Rect(4f, y + 44f, cw - 8f, 14f), sb.ToString(), _sSub);
+            }
+
+            if (f.status != "complete")
+            {
+                if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), "Cancel", _sBtnDanger))
+                    _gm.Building.CancelFoundation(s, f.uid, refund: true);
+            }
+
+            y += 70f;
+        }
+
+        private void DrawCatalogCard(BuildableDefinition defn, float cw, ref float y, StationState s)
+        {
+            bool   canPlace = _gm.Building.CanPlace(s, defn.id, out string reason);
+            bool   infoOpen = _buildInfoOpen == defn.id;
+            float  alpha    = canPlace ? 1f : 0.45f;
+            Color  prevCol  = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+
+            DrawSolid(new Rect(0, y, cw, 84f),
+                new Color(0.07f, 0.09f, 0.15f, canPlace ? 0.6f : 0.4f));
+
+            GUI.Label(new Rect(4f, y + 4f, cw - 56f, 18f), defn.displayName, _sLabel);
+            GUI.color = prevCol;
+            if (GUI.Button(new Rect(cw - 52f, y + 4f, 48f, 18f),
+                           infoOpen ? "\u25b2 Info" : "\u25bc Info", _sBtnSmall))
+                _buildInfoOpen = infoOpen ? "" : defn.id;
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+
+            GUI.Label(new Rect(4f, y + 26f, cw * 0.60f, 14f),
+                      $"{defn.category}  \u00b7  {defn.buildTimeTicks} ticks", _sSub);
+
+            if (defn.requiredMaterials.Count > 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var m in defn.requiredMaterials)
+                    sb.Append($"{ItemDisplayName(m.Key)} \u00d7{m.Value}  ");
+                GUI.Label(new Rect(4f, y + 42f, cw - 8f, 14f), sb.ToString(), _sSub);
+            }
+            else
+            {
+                GUI.Label(new Rect(4f, y + 42f, cw - 8f, 14f), "No materials required.", _sSub);
+            }
+
+            if (!canPlace && reason != null)
+            {
+                GUI.color = new Color(1f, 0.55f, 0.2f, alpha);
+                GUI.Label(new Rect(4f, y + 61f, cw * 0.55f, 18f), $"\u2715 {reason}", _sSub);
+                GUI.color = new Color(1f, 1f, 1f, alpha);
+            }
+            GUI.enabled = canPlace;
+            if (GUI.Button(new Rect(cw * 0.57f, y + 59f, cw * 0.43f, 22f), "+ Place", _sBtnSmall))
+            {
+                _ghostBuildableId = defn.id;
+                _ghostRotation    = 0;
+                _active           = Tab.None;
+            }
+            GUI.enabled = true;
+            GUI.color   = prevCol;
+
+            y += 90f;
+
+            if (infoOpen)
+            {
+                DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
+                DrawSolid(new Rect(0, y + 1f, cw, 1000f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
+
+                float iy = y + 8f;
+
+                if (!string.IsNullOrEmpty(defn.description))
+                {
+                    float descH = _sSub.CalcHeight(new GUIContent(defn.description), cw - 12f);
+                    GUI.Label(new Rect(6f, iy, cw - 12f, descH), defn.description, _sSub);
+                    iy += descH + 8f;
+                    DrawSolid(new Rect(6f, iy, cw - 12f, 1f), new Color(1f, 1f, 1f, 0.05f));
+                    iy += 6f;
+                }
+
+                GUI.Label(new Rect(6f, iy, cw - 12f, 18f), "Required Materials", _sLabel);
+                iy += 22f;
+                if (defn.requiredMaterials.Count == 0)
+                {
+                    GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
+                    iy += 18f;
+                }
+                else
+                {
+                    foreach (var m in defn.requiredMaterials)
+                    {
+                        GUI.Label(new Rect(14f, iy, cw - 20f, 14f),
+                                  $"\u2022 {ItemDisplayName(m.Key)}  \u00d7{m.Value}", _sSub);
+                        iy += 18f;
+                    }
+                }
+
+                iy += 4f;
+
+                GUI.Label(new Rect(6f, iy, cw - 12f, 18f), "Skills Required", _sLabel);
+                iy += 22f;
+                if (defn.requiredSkills.Count == 0)
+                {
+                    GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
+                    iy += 18f;
+                }
+                else
+                {
+                    foreach (var sk in defn.requiredSkills)
+                    {
+                        bool met = false;
+                        foreach (var npc in s.GetCrew())
+                            if (npc.skills.TryGetValue(sk.Key, out int lvl) && lvl >= sk.Value)
+                            { met = true; break; }
+
+                        Color skillCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
+                        var pc = GUI.color;
+                        GUI.color = skillCol;
+                        GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "\u2713" : "\u2715", _sSub);
+                        GUI.color = prevCol;
+                        GUI.Label(new Rect(32f, iy, cw - 38f, 14f),
+                                  $"{sk.Key}  (level {sk.Value}+)", _sSub);
+                        iy += 18f;
+                    }
+                }
+
+                if (defn.requiredTags.Count > 0)
+                {
+                    iy += 4f;
+                    GUI.Label(new Rect(6f, iy, cw - 12f, 18f), "Station Requirements", _sLabel);
+                    iy += 22f;
+                    foreach (var tag in defn.requiredTags)
+                    {
+                        bool met = s.HasTag(tag);
+                        Color tagCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
+                        var pc = GUI.color;
+                        GUI.color = tagCol;
+                        GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "\u2713" : "\u2715", _sSub);
+                        GUI.color = prevCol;
+                        GUI.Label(new Rect(32f, iy, cw - 38f, 14f), tag, _sSub);
+                        iy += 18f;
+                    }
+                }
+
+                iy += 8f;
+                DrawSolid(new Rect(0, iy, cw, 1f), ColDivider);
+                y = iy + 4f;
+            }
+        }
+
+        private static string CategoryDisplayName(string cat) => cat switch
+        {
+            "structure" => "\u2500\u2500 Structure \u2500\u2500",
+            "object"    => "\u2500\u2500 Objects \u2500\u2500",
+            _           => $"\u2500\u2500 {char.ToUpper(cat[0]) + cat.Substring(1)} \u2500\u2500"
+        };
+
+        private void DeconstructTile(int col, int row)
+        {
+            var s        = _gm.Station;
+            var toRemove = new List<string>();
+            foreach (var kv in s.foundations)
+            {
+                var f = kv.Value;
+                if (f.tileCol == col && f.tileRow == row)
+                {
+                    if (f.status == "complete")
+                        toRemove.Add(f.uid);
+                    else
+                        _gm.Building.CancelFoundation(s, f.uid, refund: true);
+                }
+            }
+            foreach (var uid in toRemove)
+                s.foundations.Remove(uid);
         }
 
         // ── Crew tab ──────────────────────────────────────────────────────────
@@ -709,10 +1259,17 @@ namespace Waystation.UI
                 _gm.Registry.Items.TryGetValue(itemId, out var defn))
                 return defn.displayName;
 
-            // Fallback: humanise the id ("food_ration" → "Food Ration")
-            string humanised = itemId.Replace("_", " ").Replace(".", " ");
+            // Fallback: strip namespace prefix then title-case ("item.steel_plate" → "Steel Plate")
+            string seg = itemId;
+            int lastDot = seg.LastIndexOf('.');
+            if (lastDot >= 0) seg = seg.Substring(lastDot + 1);
+            string humanised = seg.Replace("_", " ").Trim();
             if (humanised.Length == 0) return itemId;
-            return char.ToUpper(humanised[0]) + humanised.Substring(1);
+            var words = humanised.Split(' ');
+            for (int i = 0; i < words.Length; i++)
+                if (words[i].Length > 0)
+                    words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1);
+            return string.Join(" ", words);
         }
 
         private void DrawSolid(Rect r, Color c)
@@ -721,6 +1278,97 @@ namespace Waystation.UI
             var prev  = GUI.color;
             GUI.color = c;
             GUI.DrawTexture(r, _white);
+            GUI.color = prev;
+        }
+
+        // ── Drag-line helpers ─────────────────────────────────────────────────
+        private void RebuildDragLine()
+        {
+            _dragLine.Clear();
+            _dragBlocked.Clear();
+            var tiles = _dragRect
+                ? RectTiles(_dragStartCol, _dragStartRow, _ghostTileCol, _ghostTileRow)
+                : BresenhamLine(_dragStartCol, _dragStartRow, _ghostTileCol, _ghostTileRow);
+            foreach (var tile in tiles)
+            {
+                _dragLine.Add(tile);
+                if (IsTileOccupied(tile.col, tile.row))
+                    _dragBlocked.Add((tile.col, tile.row));
+            }
+        }
+
+        // Deconstruct-mode drag: "blocked" = tile with no foundation (nothing to demolish).
+        private void RebuildDeconDragLine()
+        {
+            _dragLine.Clear();
+            _dragBlocked.Clear();
+            var tiles = _dragRect
+                ? RectTiles(_dragStartCol, _dragStartRow, _ghostTileCol, _ghostTileRow)
+                : BresenhamLine(_dragStartCol, _dragStartRow, _ghostTileCol, _ghostTileRow);
+            foreach (var tile in tiles)
+            {
+                _dragLine.Add(tile);
+                if (!IsTileOccupied(tile.col, tile.row))
+                    _dragBlocked.Add((tile.col, tile.row));
+            }
+        }
+
+        private static System.Collections.Generic.List<(int col, int row)> RectTiles(
+            int x0, int y0, int x1, int y1)
+        {
+            var list = new System.Collections.Generic.List<(int, int)>();
+            int cMin = Mathf.Min(x0, x1), cMax = Mathf.Max(x0, x1);
+            int rMin = Mathf.Min(y0, y1), rMax = Mathf.Max(y0, y1);
+            for (int r = rMin; r <= rMax; r++)
+                for (int c = cMin; c <= cMax; c++)
+                    list.Add((c, r));
+            return list;
+        }
+
+        private bool IsTileOccupied(int col, int row)
+        {
+            if (_gm?.Station == null) return false;
+            foreach (var f in _gm.Station.foundations.Values)
+                if (f.tileCol == col && f.tileRow == row) return true;
+            return false;
+        }
+
+        private static List<(int col, int row)> BresenhamLine(int x0, int y0, int x1, int y1)
+        {
+            var line = new List<(int, int)>();
+            int dx = Mathf.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+            int dy = -Mathf.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy;
+            for (;;)
+            {
+                line.Add((x0, y0));
+                if (x0 == x1 && y0 == y1) break;
+                int e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+            return line;
+        }
+
+        private void DrawTileOverlay(Camera cam, int col, int row, Color fill, Color outline)
+        {
+            if (_white == null) return;
+            Vector3 world  = new Vector3(col, row, 0f);
+            Vector3 sp     = cam.WorldToScreenPoint(world);
+            Vector3 spNext = cam.WorldToScreenPoint(world + Vector3.right);
+            float   px     = Mathf.Abs(spNext.x - sp.x);
+            float   gx     = sp.x    - px * 0.5f;
+            float   gy     = Screen.height - sp.y - px * 0.5f;
+            float   b      = Mathf.Max(2f, px * 0.03f);   // border width, min 2px
+
+            var prev = GUI.color;
+            GUI.color = fill;
+            GUI.DrawTexture(new Rect(gx, gy, px, px), _white);
+            GUI.color = outline;
+            GUI.DrawTexture(new Rect(gx,          gy,          px, b),  _white);
+            GUI.DrawTexture(new Rect(gx,          gy + px - b, px, b),  _white);
+            GUI.DrawTexture(new Rect(gx,          gy,          b,  px), _white);
+            GUI.DrawTexture(new Rect(gx + px - b, gy,          b,  px), _white);
             GUI.color = prev;
         }
 

@@ -125,6 +125,54 @@ namespace Waystation.Systems
             return true;
         }
 
+        /// <summary>
+        /// Check whether a buildable can be placed on the station right now.
+        /// Validates required_tags and required_skills (at least one crew member
+        /// must meet every skill requirement).
+        /// Returns false and populates <paramref name="reason"/> when blocked.
+        /// </summary>
+        public bool CanPlace(StationState station, string buildableId, out string reason)
+        {
+            if (!_registry.Buildables.TryGetValue(buildableId, out var defn))
+            {
+                reason = "Unknown buildable.";
+                return false;
+            }
+
+            // Check required station tags
+            foreach (var tag in defn.requiredTags)
+            {
+                if (!station.HasTag(tag))
+                {
+                    reason = $"Station missing tag: {tag}";
+                    return false;
+                }
+            }
+
+            // Check required crew skills — for each skill, at least one crew
+            // member must have a skill level ≥ the required level.
+            foreach (var req in defn.requiredSkills)
+            {
+                bool met = false;
+                foreach (var npc in station.GetCrew())
+                {
+                    if (npc.skills.TryGetValue(req.Key, out int lvl) && lvl >= req.Value)
+                    {
+                        met = true;
+                        break;
+                    }
+                }
+                if (!met)
+                {
+                    reason = $"Need crew with {req.Key} ≥ {req.Value}";
+                    return false;
+                }
+            }
+
+            reason = null;
+            return true;
+        }
+
         // ── Tick ─────────────────────────────────────────────────────────────
 
         /// <summary>
