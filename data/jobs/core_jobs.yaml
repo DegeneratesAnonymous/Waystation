@@ -232,3 +232,74 @@
   need_effects:
     sleep: -0.03        # physically demanding
     recreation: -0.01
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED WORK JOBS (available to any class based on department assignment)
+# ─────────────────────────────────────────────────────────────────────────────
+
+- id: job.haul
+  display_name: Hauling
+  schema_version: "1"
+  phase: day
+  allowed_classes:
+    - class.security
+    - class.engineering
+    - class.operations
+  preferred_module_category: cargo
+  fallback_module_category: utility
+  duration_ticks: 3
+  skill_used: null
+  resource_effects: {}
+  need_effects:
+    sleep: -0.04
+    recreation: -0.02
+
+- id: job.refine
+  display_name: Refining
+  schema_version: "1"
+  phase: day
+  allowed_classes:
+    - class.engineering
+    - class.operations
+  preferred_module_category: production
+  fallback_module_category: utility
+  duration_ticks: 5
+  skill_used: technical
+  resource_effects: {}
+  need_effects:
+    sleep: -0.05
+    recreation: -0.01
+
+- id: job.craft
+  display_name: Crafting
+  schema_version: "1"
+  phase: day
+  allowed_classes:
+    - class.engineering
+    - class.operations
+  preferred_module_category: production
+  fallback_module_category: utility
+  duration_ticks: 6
+  skill_used: technical
+  resource_effects:
+    parts: 0.5
+  need_effects:
+    sleep: -0.04
+    recreation: 0.01
+
+- id: job.wander
+  display_name: Wandering
+  schema_version: "1"
+  phase: any
+  allowed_classes:
+    - class.security
+    - class.engineering
+    - class.operations
+  preferred_module_category: hab
+  fallback_module_category: utility
+  duration_ticks: 2
+  skill_used: null
+  resource_effects: {}
+  need_effects:
+    recreation: 0.05
+    sleep: -0.01

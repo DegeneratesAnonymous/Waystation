@@ -26,6 +26,7 @@ from waystation.systems.combat import CombatSystem
 from waystation.systems.trade import TradeSystem
 from waystation.systems.inventory import InventorySystem
 from waystation.systems.building import BuildingSystem
+from waystation.systems.comms import CommsSystem
 from waystation.systems import time_system
 
 log = logging.getLogger(__name__)
@@ -113,6 +114,7 @@ class Game:
         self.trade_system: TradeSystem | None = None
         self.inventory_system: InventorySystem | None = None
         self.building_system: BuildingSystem | None = None
+        self.comms_system: CommsSystem | None = None
 
         self._running = False
         self._pending_events: list[PendingEvent] = []
@@ -150,6 +152,7 @@ class Game:
         self.trade_system    = TradeSystem(self.registry)
         self.inventory_system = InventorySystem(self.registry)
         self.building_system  = BuildingSystem(self.registry)
+        self.comms_system     = CommsSystem()
         self.visitor_system  = VisitorSystem(
             self.registry, self.npc_system, self.event_system,
             trade_system=self.trade_system,
@@ -175,6 +178,11 @@ class Game:
 
         # Seed starter inventory
         self._seed_starter_inventory()
+
+        # Initialize default departments if none set
+        if not self.station.departments:
+            from waystation.models.instances import Department, _DEFAULT_DEPARTMENTS
+            self.station.departments = [Department.from_dict(d) for d in _DEFAULT_DEPARTMENTS]
 
         print(f"\n{_c(Fore.CYAN, 'Station online:')} {self.station.name}")
         print(f"Crew: {len(self.station.get_crew())} | "
@@ -218,6 +226,7 @@ class Game:
         self.trade_system     = TradeSystem(self.registry)
         self.inventory_system = InventorySystem(self.registry)
         self.building_system  = BuildingSystem(self.registry)
+        self.comms_system     = CommsSystem()
         self.visitor_system   = VisitorSystem(
             self.registry, self.npc_system, self.event_system,
             trade_system=self.trade_system,
@@ -233,6 +242,11 @@ class Game:
 
         # Restore inter-faction relationship data from definitions
         self.faction_system.initialize(self.station)
+
+        # Initialize default departments if none saved
+        if not self.station.departments:
+            from waystation.models.instances import Department, _DEFAULT_DEPARTMENTS
+            self.station.departments = [Department.from_dict(dep) for dep in _DEFAULT_DEPARTMENTS]
 
         log.info("Game loaded from %s (tick %d)", save_path, self.station.tick)
         print(f"\n{_c(Fore.CYAN, 'Station restored:')} {self.station.name}  "
@@ -379,6 +393,8 @@ class Game:
         self.visitor_system.tick(self.station)
         self.inventory_system.tick(self.station)
         self.building_system.tick(self.station)
+        if self.comms_system:
+            self.comms_system.tick(self.station)
 
         new_events = self.event_system.tick(self.station)
         self._pending_events.extend(new_events)

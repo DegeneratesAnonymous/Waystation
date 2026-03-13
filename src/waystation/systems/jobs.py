@@ -113,8 +113,10 @@ _SLEEP_CRITICAL = 0.20
 # Class → preferred day-phase jobs (in priority order)
 _CLASS_DAY_JOBS: dict[str, list[str]] = {
     "class.security":    ["job.guard_post", "job.patrol", "job.contraband_inspection"],
-    "class.engineering": ["job.build", "job.module_maintenance", "job.power_management", "job.life_support"],
-    "class.operations":  ["job.dock_control", "job.visitor_intake", "job.resource_management"],
+    "class.engineering": ["job.build", "job.module_maintenance", "job.power_management",
+                          "job.life_support", "job.haul", "job.refine", "job.craft"],
+    "class.operations":  ["job.dock_control", "job.visitor_intake", "job.resource_management",
+                          "job.haul"],
 }
 
 
@@ -171,14 +173,42 @@ class JobSystem:
             candidates = _CLASS_DAY_JOBS.get(npc.class_id, [])
             # Filter to jobs that exist in registry
             candidates = [j for j in candidates if j in self.jobs.jobs]
+
+            # Respect work assignments if set
+            work_assign = getattr(station, 'work_assignments', {}).get(npc.uid)
+            if work_assign:
+                candidates = [j for j in candidates if j in work_assign] or candidates
+
             if candidates:
                 job_id = random.choice(candidates)
+                self._set_job(npc, job_id, station)
+                # If module not found, wander instead
+                if npc.job_module_uid is None:
+                    self._set_wander(npc, station)
             else:
-                job_id = _REST_JOB
+                self._set_wander(npc, station)
         else:
-            job_id = _REST_JOB
+            self._set_job(npc, _REST_JOB, station)
 
-        self._set_job(npc, job_id, station)
+    def _set_wander(self, npc: "NPCInstance", station: "StationState") -> None:
+        """Assign wander job — NPC roams in pressurized rooms, preferring hab."""
+        candidates = [m for m in station.modules.values()
+                      if m.active and m.owner_id in (None, "player")]
+
+        def _category_priority(m):
+            return {"hab": 0, "utility": 1}.get(m.category, 2)
+        candidates.sort(key=_category_priority)
+        mod = candidates[0] if candidates else None
+
+        if mod:
+            npc.current_job_id = "job.wander"
+            npc.job_module_uid = mod.uid
+            npc.job_timer      = 2
+            npc.location       = mod.definition_id
+        else:
+            npc.current_job_id = _REST_JOB
+            npc.job_module_uid = None
+            npc.job_timer      = 4
 
     def _set_job(self, npc: "NPCInstance", job_id: str,
                  station: "StationState") -> None:

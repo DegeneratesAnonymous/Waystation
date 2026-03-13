@@ -41,6 +41,16 @@ _NPC_DEFAULT_NEEDS: dict[str, float] = {
     "safety":      1.0,
 }
 
+_DEFAULT_DEPARTMENTS: list[dict] = [
+    {"uid": "dept.engineering", "name": "Engineering",
+     "allowed_jobs": ["job.build", "job.module_maintenance", "job.power_management",
+                      "job.life_support", "job.haul", "job.refine", "job.craft"]},
+    {"uid": "dept.sciences",    "name": "Sciences",
+     "allowed_jobs": ["job.refine", "job.craft", "job.resource_management"]},
+    {"uid": "dept.security",    "name": "Security",
+     "allowed_jobs": ["job.guard_post", "job.patrol", "job.contraband_inspection"]},
+]
+
 @dataclass
 class NPCInstance:
     uid: str
@@ -445,6 +455,86 @@ class FoundationInstance:
 
 
 # ---------------------------------------------------------------------------
+# Comm Message
+# ---------------------------------------------------------------------------
+
+_MAX_MESSAGE_HISTORY = 100
+
+@dataclass
+class CommMessage:
+    """A communication message received by the station."""
+    uid: str
+    subject: str
+    body: str
+    sender_name: str           # e.g. ship name
+    sender_type: str           # "trade_ship", "faction", "system"
+    ship_uid: str | None = None  # uid of passing ship if applicable
+    read: bool = False
+    tick: int = 0
+    response_options: list[dict] = field(default_factory=list)
+    # e.g. [{"label": "Sure, let's trade", "action": "accept_trade"},
+    #        {"label": "No thank you",      "action": "decline"},
+    #        {"label": "Come back later",   "action": "later"}]
+    replied: str | None = None  # action key of chosen reply, or None
+
+    def to_dict(self) -> dict:
+        return {
+            "uid":              self.uid,
+            "subject":          self.subject,
+            "body":             self.body,
+            "sender_name":      self.sender_name,
+            "sender_type":      self.sender_type,
+            "ship_uid":         self.ship_uid,
+            "read":             self.read,
+            "tick":             self.tick,
+            "response_options": list(self.response_options),
+            "replied":          self.replied,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "CommMessage":
+        return cls(
+            uid=d["uid"],
+            subject=d["subject"],
+            body=d["body"],
+            sender_name=d["sender_name"],
+            sender_type=d.get("sender_type", "system"),
+            ship_uid=d.get("ship_uid"),
+            read=d.get("read", False),
+            tick=d.get("tick", 0),
+            response_options=d.get("response_options", []),
+            replied=d.get("replied"),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Department
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Department:
+    """A crew department grouping jobs and crew members."""
+    uid: str
+    name: str
+    allowed_jobs: list[str] = field(default_factory=list)  # job ids
+
+    def to_dict(self) -> dict:
+        return {
+            "uid":          self.uid,
+            "name":         self.name,
+            "allowed_jobs": list(self.allowed_jobs),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Department":
+        return cls(
+            uid=d["uid"],
+            name=d["name"],
+            allowed_jobs=d.get("allowed_jobs", []),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Cargo Hold Settings (per-module inventory configuration)
 # ---------------------------------------------------------------------------
 
@@ -617,6 +707,18 @@ class StationState:
     # Active build foundations keyed by uid
     foundations: dict[str, "FoundationInstance"] = field(default_factory=dict)
 
+    # Communications inbox
+    messages: list["CommMessage"] = field(default_factory=list)
+
+    # Work assignments: npc_uid -> list of enabled job_ids (empty = all jobs allowed)
+    work_assignments: dict[str, list[str]] = field(default_factory=dict)
+
+    # Crew departments
+    departments: list["Department"] = field(default_factory=list)
+
+    # Room type assignments: room_id (string key) -> room_type_id
+    room_assignments: dict[str, str] = field(default_factory=dict)
+
     def add_npc(self, npc: NPCInstance) -> None:
         self.npcs[npc.uid] = npc
 
@@ -680,6 +782,14 @@ class StationState:
         self.faction_reputation[faction_id] = max(-100.0, min(100.0, current + delta))
         return self.faction_reputation[faction_id]
 
+    def add_message(self, msg: "CommMessage") -> None:
+        self.messages.insert(0, msg)
+        if len(self.messages) > _MAX_MESSAGE_HISTORY:
+            self.messages = self.messages[:_MAX_MESSAGE_HISTORY]
+
+    def unread_message_count(self) -> int:
+        return sum(1 for m in self.messages if not m.read)
+
     def to_dict(self) -> dict:
         return {
             "name":               self.name,
@@ -695,6 +805,10 @@ class StationState:
             "log":                list(self.log),
             "tile_map":           self.tile_map.to_dict(),
             "foundations":        {uid: f.to_dict() for uid, f in self.foundations.items()},
+            "messages":           [m.to_dict() for m in self.messages],
+            "work_assignments":   dict(self.work_assignments),
+            "departments":        [dep.to_dict() for dep in self.departments],
+            "room_assignments":   dict(self.room_assignments),
         }
 
     @classmethod
@@ -720,4 +834,10 @@ class StationState:
             uid: FoundationInstance.from_dict(v)
             for uid, v in d.get("foundations", {}).items()
         }
+        obj.messages         = [CommMessage.from_dict(m) for m in d.get("messages", [])]
+        obj.work_assignments = d.get("work_assignments", {})
+        obj.departments      = [Department.from_dict(dep) for dep in d.get("departments", [])]
+        if not obj.departments:
+            obj.departments  = [Department.from_dict(dep) for dep in _DEFAULT_DEPARTMENTS]
+        obj.room_assignments = d.get("room_assignments", {})
         return obj
