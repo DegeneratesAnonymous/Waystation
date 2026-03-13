@@ -24,24 +24,34 @@ namespace Waystation.Models
         public int    tick     = 0;
         public string replied  = null; // action key chosen, null if not yet replied
 
+        // Tick at which this message auto-expires if still unread/unreplied.
+        // -1 means no expiry (used for quest messages). Trade messages are given
+        // expiresAtTick = tick + 24 (1 in-game day) at creation time.
+        public int expiresAtTick = -1;
+
         // Response options: each entry has "label" and "action" keys, plus
         // payload fields (e.g. "iceQty", "icePrice") set by CommsSystem.
         public List<Dictionary<string, object>> responseOptions =
             new List<Dictionary<string, object>>();
 
+        public bool IsExpired(int currentTick)
+            => expiresAtTick >= 0 && currentTick >= expiresAtTick && replied == null;
+
         public static CommMessage Create(string subject, string body,
                                          string senderName, string senderType,
-                                         string shipUid, int tick)
+                                         string shipUid, int tick,
+                                         int expiresAtTick = -1)
         {
             return new CommMessage
             {
-                uid        = Guid.NewGuid().ToString("N")[..8],
-                subject    = subject,
-                body       = body,
-                senderName = senderName,
-                senderType = senderType,
-                shipUid    = shipUid,
-                tick       = tick
+                uid          = Guid.NewGuid().ToString("N")[..8],
+                subject      = subject,
+                body         = body,
+                senderName   = senderName,
+                senderType   = senderType,
+                shipUid      = shipUid,
+                tick         = tick,
+                expiresAtTick = expiresAtTick
             };
         }
     }

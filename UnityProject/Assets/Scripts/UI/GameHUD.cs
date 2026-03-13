@@ -1154,7 +1154,29 @@ namespace Waystation.UI
                 }
                 string subj = msg.subject.Length > 18 ? msg.subject[..15] + "…" : msg.subject;
                 GUI.Label(new Rect(10f, ly + 3f,  ListW - 24f, 14f), subj,          _sSub);
-                GUI.Label(new Rect(10f, ly + 20f, ListW - 24f, 14f), msg.senderName, _sSub);
+
+                // Show expiry countdown or sender name
+                string rowSub;
+                if (msg.expiresAtTick >= 0 && msg.replied == null && _gm?.Station != null)
+                {
+                    int ticksLeft = msg.expiresAtTick - _gm.Station.tick;
+                    if (ticksLeft <= 0)
+                        rowSub = "Expired";
+                    else if (ticksLeft <= 6)
+                        rowSub = $"Expires in {ticksLeft}t";
+                    else
+                        rowSub = msg.senderName;
+                }
+                else rowSub = msg.senderName;
+
+                // Colour the sub-line red when expiry is close (<= 6 ticks)
+                bool expiring = msg.expiresAtTick >= 0 && msg.replied == null &&
+                                _gm?.Station != null &&
+                                (msg.expiresAtTick - _gm.Station.tick) <= 6;
+                var prevSub = GUI.color;
+                if (expiring) GUI.color = ColBarCrit;
+                GUI.Label(new Rect(10f, ly + 20f, ListW - 24f, 14f), rowSub, _sSub);
+                GUI.color = prevSub;
 
                 if (GUI.Button(new Rect(0, ly, ListW - 14f, ListRowH - 3f), "", GUIStyle.none))
                 {
@@ -1194,6 +1216,21 @@ namespace Waystation.UI
                 GUI.Label(new Rect(detX + 4f, dy, dw, 16f),
                           $"From: {sel_msg.senderName}  ·  T{sel_msg.tick:D4}", _sSub);
                 dy += 20f;
+
+                // Expiry warning (only for unreplied messages with a finite TTL)
+                if (sel_msg.expiresAtTick >= 0 && sel_msg.replied == null)
+                {
+                    int ticksLeft = sel_msg.expiresAtTick - s.tick;
+                    string expiryStr = ticksLeft > 0
+                        ? $"⏱ Expires in {ticksLeft} tick{(ticksLeft == 1 ? "" : "s")} (~{ticksLeft / 24f:F1} day{(ticksLeft / 24f == 1.0f ? "" : "s")})"
+                        : "⏱ Expired — no longer actionable";
+                    var prev = GUI.color;
+                    GUI.color = ticksLeft <= 6 ? ColBarCrit : ColBarWarn;
+                    GUI.Label(new Rect(detX + 4f, dy, dw, 16f), expiryStr, _sSub);
+                    GUI.color = prev;
+                    dy += 18f;
+                }
+
                 DrawSolid(new Rect(detX + 4f, dy, dw, 1f), ColDivider);
                 dy += 8f;
 

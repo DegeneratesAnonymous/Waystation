@@ -42,9 +42,40 @@ namespace Waystation.Systems
 
         public void Tick(StationState station)
         {
+            PruneExpiredMessages(station);
+
             if (station.tick - _lastCheckTick < PassingShipCheckInterval) return;
             _lastCheckTick = station.tick;
             CheckPassingShips(station);
+        }
+
+        // ── Expiry ────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Remove messages that have passed their expiry tick and have not been
+        /// replied to. Also cleans up any transient passing-by ship associated
+        /// with the expired message.
+        /// </summary>
+        private void PruneExpiredMessages(StationState station)
+        {
+            // Iterate backwards so we can remove by index safely
+            for (int i = station.messages.Count - 1; i >= 0; i--)
+            {
+                var msg = station.messages[i];
+                if (!msg.IsExpired(station.tick)) continue;
+
+                // Remove the associated transient ship if it's still passing by
+                if (!string.IsNullOrEmpty(msg.shipUid) &&
+                    station.ships.TryGetValue(msg.shipUid, out var ship) &&
+                    ship.behaviorTags.Contains("passing_by"))
+                {
+                    station.RemoveShip(msg.shipUid);
+                }
+
+                station.messages.RemoveAt(i);
+                station.LogEvent($"Transmission from {msg.senderName} expired without reply.");
+                Debug.Log($"[CommsSystem] Expired message '{msg.subject}' removed.");
+            }
         }
 
         // ── Arrival generation ────────────────────────────────────────────────
@@ -75,12 +106,13 @@ namespace Waystation.Systems
                 $"If interested, we can dispatch a shuttle immediately.";
 
             var msg = CommMessage.Create(
-                subject:    $"Trade offer — Ice ×{iceQty} from {shipName}",
-                body:       body,
-                senderName: shipName,
-                senderType: "trade_ship",
-                shipUid:    ship.uid,
-                tick:       station.tick);
+                subject:      $"Trade offer — Ice ×{iceQty} from {shipName}",
+                body:         body,
+                senderName:   shipName,
+                senderType:   "trade_ship",
+                shipUid:      ship.uid,
+                tick:         station.tick,
+                expiresAtTick: station.tick + TicksPerDay);  // expires after 1 in-game day
 
             msg.responseOptions.Add(new Dictionary<string, object>
             {
