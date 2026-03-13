@@ -1,12 +1,13 @@
 // GameHUD — right-side taskbar with animated slide-out drawer.
 //
-// Taskbar: 68 px vertical strip flush to the right edge.
+// Taskbar: 68 px vertical strip flush to right edge.
 // Drawer:  320 px panel that slides out to the left of the taskbar.
 //
-// Tabs: Build · Crew · Station · Away Mission · Settings
+// Tabs: Build · Crew · Station · Comms · Away Mission · Settings
 //
 // Self-installs via RuntimeInitializeOnLoadMethod; sets DemoBootstrap.HideOverlay
 // so the legacy IMGUI stats box is suppressed.
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -40,13 +41,14 @@ namespace Waystation.UI
         private static readonly Color ColSummaryBg = new Color(0.07f, 0.09f, 0.15f, 0.85f);
 
         // ── Tab enum ──────────────────────────────────────────────────────────
-        private enum Tab { None, Build, Crew, Station, AwayMission, Settings }
+        private enum Tab { None, Build, Crew, Station, Comms, AwayMission, Settings }
 
         private static readonly (Tab tab, string label)[] Tabs =
         {
             (Tab.Build,       "Build"),
             (Tab.Crew,        "Crew"),
             (Tab.Station,     "Station"),
+            (Tab.Comms,       "Comms"),
             (Tab.AwayMission, "Away"),
             (Tab.Settings,    "Settings"),
         };
@@ -67,6 +69,35 @@ namespace Waystation.UI
         // All recognised item type names (used by the filter checkboxes)
         private static readonly string[] ItemTypes =
             { "Material", "Equipment", "Biological", "Valuables", "Waste" };
+
+        // ── Comms panel state ─────────────────────────────────────────────────
+        private enum CommsTab { Unread, Read, All }
+        private CommsTab _commsTab       = CommsTab.Unread;
+        private string   _selectedMsgUid = "";
+        private Vector2  _commsListScroll;
+        private Vector2  _commsBodyScroll;
+
+        // ── Crew / Work sub-panel state ───────────────────────────────────────
+        private enum CrewSubPanel { Roster, Work, Departments }
+        private CrewSubPanel _crewSub = CrewSubPanel.Roster;
+        private Vector2      _workScroll;
+        private Vector2      _deptScroll;
+        // Rename flow: uid of department being renamed, text buffer
+        private string _renamingDeptUid  = "";
+        private string _renameDeptBuffer = "";
+
+        // Job columns shown in Work Assignment grid
+        private static readonly (string id, string label)[] WorkJobCols =
+        {
+            ("job.haul",                "Haul"),
+            ("job.refine",              "Refine"),
+            ("job.craft",               "Craft"),
+            ("job.guard_post",          "Guard"),
+            ("job.patrol",              "Patrol"),
+            ("job.build",               "Build"),
+            ("job.module_maintenance",  "Maint."),
+            ("job.resource_management", "ResMgmt"),
+        };
 
         // ── Styles (built once on first OnGUI) ────────────────────────────────
         private Texture2D _white;
@@ -370,13 +401,26 @@ namespace Waystation.UI
             bool on = _active == tab;
             Rect r  = new Rect(x + 5f, y, TabW - 10f, 54f);
 
+            // Flash the Comms button when there are unread messages
+            string displayLabel = label;
+            if (tab == Tab.Comms && _ready && _gm?.Station != null)
+            {
+                int unread = _gm.Station.UnreadMessageCount();
+                if (unread > 0)
+                {
+                    // Flash by toggling the dot character on a half-second cycle
+                    bool flash = (Time.realtimeSinceStartup % 1.0f) < 0.5f;
+                    displayLabel = flash ? $"Comms\n● {unread}" : $"Comms\n○ {unread}";
+                }
+            }
+
             if (on)
             {
                 DrawSolid(new Rect(x,      y, 3f,         54f), ColAccent);
                 DrawSolid(new Rect(x + 3f, y, TabW - 3f,  54f), ColTabHl);
             }
 
-            if (GUI.Button(r, label, on ? _sTabOn : _sTabOff))
+            if (GUI.Button(r, displayLabel, on ? _sTabOn : _sTabOff))
                 _active = on ? Tab.None : tab;
 
             y += 58f;
@@ -390,6 +434,7 @@ namespace Waystation.UI
                 Tab.Build       => "Build",
                 Tab.Crew        => "Crew",
                 Tab.Station     => "Station",
+                Tab.Comms       => "Comms",
                 Tab.AwayMission => "Away Mission",
                 Tab.Settings    => "Settings",
                 _               => "",
@@ -413,6 +458,7 @@ namespace Waystation.UI
                 case Tab.Build:       DrawBuild(area, cw, contentH);       break;
                 case Tab.Crew:        DrawCrew(area, cw, contentH);        break;
                 case Tab.Station:     DrawStation(area, cw, contentH);     break;
+                case Tab.Comms:       DrawComms(area, cw, contentH);       break;
                 case Tab.AwayMission: DrawAwayMission(area, cw, contentH); break;
                 case Tab.Settings:    DrawSettings(area, cw, contentH);    break;
             }
@@ -773,16 +819,43 @@ namespace Waystation.UI
         private void DrawCrew(Rect area, float w, float h)
         {
             if (_gm?.Station == null) return;
+
+            // ── Sub-panel selector ────────────────────────────────────────────
+            const float SubTabH = 28f;
+            float subY = area.y;
+            float subBw = (w - 8f) / 3f;
+
+            if (GUI.Button(new Rect(area.x,            subY, subBw, SubTabH),
+                           "Roster",      _crewSub == CrewSubPanel.Roster      ? _sTabOn : _sTabOff))
+                _crewSub = CrewSubPanel.Roster;
+            if (GUI.Button(new Rect(area.x + subBw + 4f, subY, subBw, SubTabH),
+                           "Work",        _crewSub == CrewSubPanel.Work        ? _sTabOn : _sTabOff))
+                _crewSub = CrewSubPanel.Work;
+            if (GUI.Button(new Rect(area.x + (subBw + 4f) * 2f, subY, subBw, SubTabH),
+                           "Departments", _crewSub == CrewSubPanel.Departments ? _sTabOn : _sTabOff))
+                _crewSub = CrewSubPanel.Departments;
+
+            Rect subArea = new Rect(area.x, area.y + SubTabH + 6f, w, h - SubTabH - 6f);
+            float subH   = h - SubTabH - 6f;
+
+            switch (_crewSub)
+            {
+                case CrewSubPanel.Roster:      DrawCrewRoster(subArea, w, subH);  break;
+                case CrewSubPanel.Work:        DrawCrewWork(subArea, w, subH);    break;
+                case CrewSubPanel.Departments: DrawDepartments(subArea, w, subH); break;
+            }
+        }
+
+        private void DrawCrewRoster(Rect area, float w, float h)
+        {
             var crew = _gm.Station.GetCrew();
 
-            // ── Summary strip (fixed above scroll) ────────────────────────────
+            // ── Summary strip ─────────────────────────────────────────────────
             const float SumH = 78f;
             DrawSolid(new Rect(area.x, area.y, w, SumH), ColSummaryBg);
 
-            float avgMood    = 0f;
-            int   sickCount  = 0;
-            int   injCount   = 0;
-
+            float avgMood  = 0f;
+            int   sickCount = 0, injCount = 0;
             foreach (var n in crew)
             {
                 avgMood += n.mood;
@@ -790,26 +863,19 @@ namespace Waystation.UI
                 if (n.injuries > 0)                injCount++;
             }
             if (crew.Count > 0) avgMood /= crew.Count;
-
-            float happinessPct = (avgMood + 1f) * 50f;   // -1..1 → 0..100
+            float happinessPct = (avgMood + 1f) * 50f;
 
             float sy = area.y + 7f;
-
-            // Row 1 — headline stats
             GUI.Label(new Rect(area.x + 8f, sy, w - 8f, 16f),
                 $"Crew: {crew.Count}   Happiness: {happinessPct:F0}%   Sick: {sickCount}   Injured: {injCount}",
                 _sSub);
             sy += 20f;
-
-            // Row 2 — happiness bar
             float bw = w - 16f;
             DrawSolid(new Rect(area.x + 8f, sy, bw, 8f), ColBarBg);
             Color hc = happinessPct >= 60f ? ColBarGreen
                      : happinessPct >= 35f ? ColBarWarn : ColBarCrit;
             DrawSolid(new Rect(area.x + 8f, sy, bw * (happinessPct / 100f), 8f), hc);
             sy += 14f;
-
-            // Row 3 — health summary
             string healthLine = (sickCount == 0 && injCount == 0)
                 ? "All crew healthy"
                 : $"{sickCount} sick · {injCount} injured  —  check Medical Bay";
@@ -820,54 +886,199 @@ namespace Waystation.UI
             float listTop  = area.y + SumH + 6f;
             float listH    = h - SumH - 6f;
             float innerH   = Mathf.Max(listH, crew.Count * RowH);
-            Rect  listArea = new Rect(area.x, listTop, w, listH);
-
-            _crewScroll = GUI.BeginScrollView(listArea, _crewScroll,
-                          new Rect(0, 0, w - 14f, innerH));
-
+            _crewScroll = GUI.BeginScrollView(new Rect(area.x, listTop, w, listH),
+                          _crewScroll, new Rect(0, 0, w - 14f, innerH));
             float y = 0f;
             foreach (var npc in crew)
             {
-                string cls  = (npc.classId ?? "").Replace("class.", "");
-                string job  = _gm.Jobs.GetJobLabel(npc);
-
-                // Name row
-                GUI.Label(new Rect(0,       y,       w * 0.60f, 20f), npc.name,         _sLabel);
-                GUI.Label(new Rect(w * 0.62f, y,     w * 0.38f, 18f), npc.MoodLabel(),  _sSub);
-
-                // Class row
+                string cls = (npc.classId ?? "").Replace("class.", "");
+                string job = _gm.Jobs.GetJobLabel(npc);
+                GUI.Label(new Rect(0,        y,       w * 0.60f, 20f), npc.name,        _sLabel);
+                GUI.Label(new Rect(w * 0.62f, y,      w * 0.38f, 18f), npc.MoodLabel(), _sSub);
                 GUI.Label(new Rect(0, y + 20f, w, 16f), cls, _sSub);
-
-                // Job row + Reassign button
                 GUI.Label(new Rect(0,        y + 38f, w * 0.66f, 16f), $"Job: {job}",   _sSub);
                 if (GUI.Button(new Rect(w * 0.68f, y + 36f, w * 0.32f, 18f),
                                "Reassign", _sBtnSmall))
                     _gm.Jobs.InterruptNpc(npc);
-
-                // Need bars
                 NeedBar("Hunger", GetNeed(npc, "hunger"), w, y + 58f);
                 NeedBar("Rest",   GetNeed(npc, "rest"),   w, y + 74f);
-
-                // Status tags / injuries
                 if (npc.statusTags.Count > 0 || npc.injuries > 0)
                 {
                     string tags = string.Join(", ", npc.statusTags);
                     if (npc.injuries > 0)
-                        tags += (tags.Length > 0 ? ", " : "") + $"{npc.injuries} injur{(npc.injuries == 1 ? "y" : "ies")}";
-
-                    var prev  = GUI.color;
-                    GUI.color = ColBarWarn;
+                        tags += (tags.Length > 0 ? ", " : "") +
+                                $"{npc.injuries} injur{(npc.injuries == 1 ? "y" : "ies")}";
+                    var prev = GUI.color; GUI.color = ColBarWarn;
                     GUI.Label(new Rect(0, y + 91f, w - 14f, 14f), tags, _sSub);
                     GUI.color = prev;
                 }
-
                 DrawSolid(new Rect(0, y + RowH - 4f, w - 14f, 1f), ColDivider);
                 y += RowH;
             }
-
             if (crew.Count == 0)
                 GUI.Label(new Rect(0, 0, w - 14f, 20f), "No crew assigned.", _sSub);
+            GUI.EndScrollView();
+        }
 
+        // ── Work Assignment grid ──────────────────────────────────────────────
+        private void DrawCrewWork(Rect area, float w, float h)
+        {
+            var s    = _gm.Station;
+            var crew = s.GetCrew();
+
+            GUI.Label(new Rect(area.x, area.y, w, 18f),
+                "Toggle cells to allow/restrict jobs per crew member.", _sSub);
+
+            const float HeaderH = 38f;
+            const float RowH    = 26f;
+            const float NameW   = 80f;
+            float colW = (w - NameW - 14f) / WorkJobCols.Length;
+
+            // Header row
+            float hx = area.x + NameW;
+            for (int ci = 0; ci < WorkJobCols.Length; ci++)
+            {
+                GUI.Label(new Rect(hx + ci * colW, area.y + 22f, colW, 16f),
+                          WorkJobCols[ci].label, _sSub);
+            }
+
+            float listTop = area.y + HeaderH;
+            float innerH  = Mathf.Max(h - HeaderH, crew.Count * RowH);
+            _workScroll = GUI.BeginScrollView(
+                new Rect(area.x, listTop, w, h - HeaderH),
+                _workScroll, new Rect(0, 0, w - 14f, innerH));
+
+            float y = 0f;
+            foreach (var npc in crew)
+            {
+                // Ensure entry exists
+                if (!s.workAssignments.ContainsKey(npc.uid))
+                    s.workAssignments[npc.uid] = new List<string>();
+                var allowed = s.workAssignments[npc.uid];
+
+                // NPC name
+                GUI.Label(new Rect(0, y + 5f, NameW - 4f, 16f),
+                          npc.name.Length > 9 ? npc.name[..9] : npc.name, _sSub);
+
+                for (int ci = 0; ci < WorkJobCols.Length; ci++)
+                {
+                    string jid     = WorkJobCols[ci].id;
+                    bool   enabled = allowed.Count == 0 || allowed.Contains(jid);
+                    Rect   cell    = new Rect(NameW + ci * colW, y + 3f, colW - 2f, RowH - 6f);
+
+                    var prev = GUI.color;
+                    GUI.color = enabled ? ColBarGreen : new Color(0.25f, 0.28f, 0.38f, 1f);
+                    if (GUI.Button(cell, enabled ? "✓" : "—", _sBtnSmall))
+                    {
+                        // Toggle
+                        if (allowed.Count == 0)
+                        {
+                            // Currently all allowed → restrict all except this one
+                            // becomes: add all *other* jobs
+                            foreach (var (id2, _) in WorkJobCols)
+                                if (id2 != jid && !allowed.Contains(id2))
+                                    allowed.Add(id2);
+                        }
+                        else if (allowed.Contains(jid))
+                        {
+                            allowed.Remove(jid);
+                            // If empty now, means all restricted — keep as-is (user
+                            // can re-enable). An NPC with no allowed jobs will wander.
+                        }
+                        else
+                        {
+                            allowed.Add(jid);
+                            // If every job is now allowed, clear for "all" shorthand
+                            bool allAllowed = true;
+                            foreach (var (id2, _) in WorkJobCols)
+                                if (!allowed.Contains(id2)) { allAllowed = false; break; }
+                            if (allAllowed) allowed.Clear();
+                        }
+                    }
+                    GUI.color = prev;
+                }
+
+                DrawSolid(new Rect(0, y + RowH - 2f, w - 14f, 1f), ColDivider);
+                y += RowH;
+            }
+            if (crew.Count == 0)
+                GUI.Label(new Rect(0, 0, w - 14f, 20f), "No crew to assign.", _sSub);
+            GUI.EndScrollView();
+        }
+
+        // ── Departments panel ─────────────────────────────────────────────────
+        private void DrawDepartments(Rect area, float w, float h)
+        {
+            var s    = _gm.Station;
+            var deps = s.departments;
+
+            GUI.Label(new Rect(area.x, area.y, w, 18f),
+                "Departments group crew and jobs. Rename or create custom ones.", _sSub);
+
+            // "+ New" button
+            if (GUI.Button(new Rect(area.x, area.y + 22f, w, 24f), "+ New Department", _sBtnWide))
+            {
+                var nd = Department.Create(
+                    $"dept.custom_{System.Guid.NewGuid().ToString("N")[..4]}",
+                    "New Department");
+                s.departments.Add(nd);
+                _renamingDeptUid  = nd.uid;
+                _renameDeptBuffer = nd.name;
+            }
+
+            float listTop = area.y + 52f;
+            const float RowH = 48f;
+            float innerH = Mathf.Max(h - 52f, deps.Count * RowH);
+            _deptScroll = GUI.BeginScrollView(
+                new Rect(area.x, listTop, w, h - 52f),
+                _deptScroll, new Rect(0, 0, w - 14f, innerH));
+
+            float y = 0f;
+            for (int di = 0; di < deps.Count; di++)
+            {
+                var dept = deps[di];
+                DrawSolid(new Rect(0, y, w - 14f, RowH - 4f),
+                          new Color(0.10f, 0.12f, 0.20f, 0.85f));
+
+                if (_renamingDeptUid == dept.uid)
+                {
+                    // Inline rename field
+                    _renameDeptBuffer = GUI.TextField(
+                        new Rect(4f, y + 6f, w - 80f, 20f),
+                        _renameDeptBuffer, 30, _sTextField);
+
+                    if (GUI.Button(new Rect(w - 72f, y + 6f, 34f, 20f), "OK", _sBtnSmall))
+                    {
+                        string trimmed = _renameDeptBuffer.Trim();
+                        if (trimmed.Length > 0) dept.name = trimmed;
+                        _renamingDeptUid = "";
+                    }
+                    if (GUI.Button(new Rect(w - 34f, y + 6f, 24f, 20f), "✕", _sBtnSmall))
+                        _renamingDeptUid = "";
+                }
+                else
+                {
+                    GUI.Label(new Rect(4f, y + 4f,  w * 0.6f, 18f), dept.name, _sLabel);
+
+                    // Rename button
+                    if (GUI.Button(new Rect(w * 0.65f, y + 4f, 46f, 18f), "Rename", _sBtnSmall))
+                    {
+                        _renamingDeptUid  = dept.uid;
+                        _renameDeptBuffer = dept.name;
+                    }
+
+                    // Jobs preview
+                    string preview = dept.allowedJobs.Count > 0
+                        ? string.Join(", ", dept.allowedJobs.ConvertAll(j => j.Replace("job.", "")))
+                        : "(all jobs)";
+                    if (preview.Length > 38) preview = preview[..35] + "…";
+                    GUI.Label(new Rect(4f, y + 26f, w - 8f, 14f), preview, _sSub);
+                }
+
+                y += RowH;
+            }
+            if (deps.Count == 0)
+                GUI.Label(new Rect(0, 0, w - 14f, 20f), "No departments defined.", _sSub);
             GUI.EndScrollView();
         }
 
@@ -885,7 +1096,149 @@ namespace Waystation.UI
                       Mathf.RoundToInt(value * 100f) + "%", _sSub);
         }
 
-        // ── Station tab ───────────────────────────────────────────────────────
+        // ── Comms tab ─────────────────────────────────────────────────────────
+        private void DrawComms(Rect area, float w, float h)
+        {
+            if (_gm?.Station == null) return;
+            var s = _gm.Station;
+
+            // ── Tab selector ──────────────────────────────────────────────────
+            const float TabH = 26f;
+            float tbw = (w - 8f) / 3f;
+            if (GUI.Button(new Rect(area.x,               area.y, tbw, TabH),
+                           "Unread", _commsTab == CommsTab.Unread ? _sTabOn : _sTabOff))
+            { _commsTab = CommsTab.Unread; _selectedMsgUid = ""; }
+            if (GUI.Button(new Rect(area.x + tbw + 4f,    area.y, tbw, TabH),
+                           "Read",   _commsTab == CommsTab.Read   ? _sTabOn : _sTabOff))
+            { _commsTab = CommsTab.Read; _selectedMsgUid = ""; }
+            if (GUI.Button(new Rect(area.x + (tbw + 4f)*2f, area.y, tbw, TabH),
+                           "All",    _commsTab == CommsTab.All    ? _sTabOn : _sTabOff))
+            { _commsTab = CommsTab.All; _selectedMsgUid = ""; }
+
+            // Filter messages
+            var msgs = new List<CommMessage>();
+            foreach (var m in s.messages)
+            {
+                bool include = _commsTab switch
+                {
+                    CommsTab.Unread => !m.read,
+                    CommsTab.Read   => m.read,
+                    _               => true
+                };
+                if (include) msgs.Add(m);
+            }
+
+            // ── Layout: list on left, detail on right ─────────────────────────
+            const float ListW = 140f;
+            float listTop  = area.y + TabH + 6f;
+            float listH    = h - TabH - 6f;
+            const float ListRowH = 40f;
+            float innerH = Mathf.Max(listH, msgs.Count * ListRowH);
+
+            _commsListScroll = GUI.BeginScrollView(
+                new Rect(area.x, listTop, ListW, listH),
+                _commsListScroll, new Rect(0, 0, ListW - 14f, innerH));
+
+            float ly = 0f;
+            foreach (var msg in msgs)
+            {
+                bool sel = _selectedMsgUid == msg.uid;
+                DrawSolid(new Rect(0, ly, ListW - 14f, ListRowH - 3f),
+                          sel ? ColTabHl : (msg.read ? new Color(0.09f, 0.10f, 0.16f, 0.9f)
+                                                     : new Color(0.12f, 0.15f, 0.25f, 0.95f)));
+                if (!msg.read)
+                {
+                    var prev = GUI.color; GUI.color = ColBarWarn;
+                    GUI.Label(new Rect(2f, ly + 2f, 8f, 8f), "●", _sSub);
+                    GUI.color = prev;
+                }
+                string subj = msg.subject.Length > 18 ? msg.subject[..15] + "…" : msg.subject;
+                GUI.Label(new Rect(10f, ly + 3f,  ListW - 24f, 14f), subj,          _sSub);
+                GUI.Label(new Rect(10f, ly + 20f, ListW - 24f, 14f), msg.senderName, _sSub);
+
+                if (GUI.Button(new Rect(0, ly, ListW - 14f, ListRowH - 3f), "", GUIStyle.none))
+                {
+                    _selectedMsgUid = msg.uid;
+                    msg.read = true;
+                }
+                DrawSolid(new Rect(0, ly + ListRowH - 4f, ListW - 14f, 1f), ColDivider);
+                ly += ListRowH;
+            }
+            if (msgs.Count == 0)
+                GUI.Label(new Rect(0, 0, ListW - 14f, 20f), "No messages.", _sSub);
+            GUI.EndScrollView();
+
+            // ── Detail pane ───────────────────────────────────────────────────
+            float detX = area.x + ListW + 6f;
+            float detW = w - ListW - 6f;
+            DrawSolid(new Rect(detX, listTop, 1f, listH), ColDivider);
+
+            CommMessage sel_msg = null;
+            foreach (var m in s.messages)
+                if (m.uid == _selectedMsgUid) { sel_msg = m; break; }
+
+            if (sel_msg == null && msgs.Count > 0)
+            {
+                sel_msg = msgs[0];
+                _selectedMsgUid = sel_msg.uid;
+                sel_msg.read = true;
+            }
+
+            if (sel_msg != null)
+            {
+                float dy = listTop;
+                float dw = detW - 8f;
+
+                GUI.Label(new Rect(detX + 4f, dy, dw, 20f), sel_msg.subject, _sLabel);
+                dy += 22f;
+                GUI.Label(new Rect(detX + 4f, dy, dw, 16f),
+                          $"From: {sel_msg.senderName}  ·  T{sel_msg.tick:D4}", _sSub);
+                dy += 20f;
+                DrawSolid(new Rect(detX + 4f, dy, dw, 1f), ColDivider);
+                dy += 8f;
+
+                // Body (scrollable)
+                float replyH   = sel_msg.replied == null ? sel_msg.responseOptions.Count * 30f + 8f : 24f;
+                float bodyH    = listH - (dy - listTop) - replyH - 10f;
+                float bodyInner = bodyH + 80f; // give some scroll room
+
+                _commsBodyScroll = GUI.BeginScrollView(
+                    new Rect(detX + 4f, dy, dw, bodyH),
+                    _commsBodyScroll, new Rect(0, 0, dw - 14f, bodyInner));
+                GUI.Label(new Rect(0, 0, dw - 14f, bodyInner), sel_msg.body, _sSub);
+                GUI.EndScrollView();
+
+                dy += bodyH + 6f;
+                DrawSolid(new Rect(detX + 4f, dy, dw, 1f), ColDivider);
+                dy += 6f;
+
+                // Reply buttons
+                if (sel_msg.replied == null)
+                {
+                    foreach (var opt in sel_msg.responseOptions)
+                    {
+                        string btnLabel = opt.ContainsKey("label") ? opt["label"].ToString() : "Reply";
+                        if (GUI.Button(new Rect(detX + 4f, dy, dw, 24f), btnLabel, _sBtnWide))
+                            _gm.Comms.ReplyToMessage(sel_msg, opt, s);
+                        dy += 28f;
+                    }
+                }
+                else
+                {
+                    var prev = GUI.color; GUI.color = new Color(0.5f, 0.55f, 0.65f, 1f);
+                    GUI.Label(new Rect(detX + 4f, dy, dw, 20f),
+                              $"Replied: {sel_msg.replied}", _sSub);
+                    GUI.color = prev;
+                }
+            }
+            else
+            {
+                GUI.Label(new Rect(detX + 4f, listTop + h * 0.4f, detW - 8f, 20f),
+                          "Select a message to read.", _sSub);
+            }
+        }
+
+
         private void DrawStation(Rect area, float w, float h)
         {
             var s     = _gm.Station;
