@@ -36,7 +36,8 @@ from waystation.ui import draw as D
 from waystation.systems import time_system
 from waystation.systems.events import PendingEvent
 from waystation.models.tilemap import TileMap, WALL_MAX_HP
-from waystation.models.instances import ModuleInstance
+from waystation.models.instances import ModuleInstance, Department
+import uuid
 
 if TYPE_CHECKING:
     from waystation.game import Game
@@ -696,9 +697,7 @@ class GameView:
                             break
                     return
             if getattr(self, '_dept_new_btn', None) and self._dept_new_btn.collidepoint(pos):
-                import uuid
                 new_dept_uid = "dept." + str(uuid.uuid4())[:8]
-                from waystation.models.instances import Department
                 new_dept = Department(uid=new_dept_uid, name="New Department",
                                       allowed_jobs=["job.haul"])
                 self.s.departments.append(new_dept)
