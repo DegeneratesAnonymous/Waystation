@@ -286,6 +286,41 @@ class GameView:
         self._place_scroll: int = 0
         self._place_selected: str | None = None  # buildable_id chosen from popup
 
+        # ── Overlay panels ────────────────────────────────────────────────
+        # None | "comms" | "work" | "departments"
+        self._active_panel: str | None = None
+
+        # Comms panel state
+        self._comms_tab: str = "unread"      # "unread" | "read" | "all"
+        self._comms_selected_uid: str | None = None
+        self._comms_scroll: int = 0
+        self._comms_reply_hovered: int | None = None
+
+        # Work panel state
+        self._work_scroll: int = 0
+
+        # Departments panel state
+        self._dept_scroll: int = 0
+        self._dept_renaming_uid: str | None = None   # uid being renamed
+        self._dept_rename_text: str = ""
+
+        # Rendered rect caches (set during render, used for click detection)
+        self._comms_btn_rect: pygame.Rect | None = None
+        self._work_btn_rect: pygame.Rect | None = None
+        self._comms_close_rect: pygame.Rect | None = None
+        self._comms_tab_rects: list = []
+        self._comms_msg_rects: list = []
+        self._comms_reply_rects: list = []
+        self._work_close_rect: pygame.Rect | None = None
+        self._work_dept_btn_rect: pygame.Rect | None = None
+        self._work_cell_rects: list = []
+        self._work_col_headers: list = []
+        self._dept_close_rect: pygame.Rect | None = None
+        self._dept_back_btn: pygame.Rect | None = None
+        self._dept_row_rects: list = []
+        self._dept_rename_rects: list = []
+        self._dept_new_btn: pygame.Rect | None = None
+
         self._rebuild_layout()
         self._sync_dots()
 
@@ -517,6 +552,42 @@ class GameView:
                     )
             return  # consume all other keys in build mode
 
+        # Department rename text input
+        if self._active_panel == "departments" and self._dept_renaming_uid:
+            if ev.key == pygame.K_RETURN:
+                new_name = self._dept_rename_text.strip()
+                if new_name:
+                    for dept in getattr(self.s, 'departments', []):
+                        if dept.uid == self._dept_renaming_uid:
+                            dept.name = new_name
+                            break
+                self._dept_renaming_uid = None
+                self._dept_rename_text = ""
+            elif ev.key == pygame.K_BACKSPACE:
+                self._dept_rename_text = self._dept_rename_text[:-1]
+            elif ev.unicode and ev.unicode.isprintable():
+                if len(self._dept_rename_text) < 30:
+                    self._dept_rename_text += ev.unicode
+            return
+
+        # Close overlay panels with Escape
+        if ev.key == pygame.K_ESCAPE and self._active_panel is not None:
+            if self._active_panel == "departments" and self._dept_renaming_uid:
+                self._dept_renaming_uid = None
+                self._dept_rename_text = ""
+            else:
+                self._active_panel = None
+            return
+
+        # Work panel scroll
+        if self._active_panel == "work":
+            crew_count = len(self.s.get_crew())
+            if ev.key == pygame.K_UP:
+                self._work_scroll = max(0, self._work_scroll - 1)
+            elif ev.key == pygame.K_DOWN:
+                self._work_scroll = min(max(0, crew_count - 12), self._work_scroll + 1)
+            return
+
         if ev.key in (pygame.K_p, pygame.K_SPACE):
             self._speed = 0 if self._speed != 0 else 1
         elif ev.key == pygame.K_1:
@@ -555,6 +626,87 @@ class GameView:
         self._return_signal = "menu"
 
     def _on_click(self, pos: tuple[int, int]) -> None:
+        # ── Overlay panels take priority when open ──────────────────────────
+        if self._active_panel == "comms":
+            if getattr(self, '_comms_close_rect', None) and self._comms_close_rect.collidepoint(pos):
+                self._active_panel = None
+                return
+            for tab_id, tab_rect in getattr(self, '_comms_tab_rects', []):
+                if tab_rect.collidepoint(pos):
+                    self._comms_tab = tab_id
+                    self._comms_scroll = 0
+                    self._comms_selected_uid = None
+                    return
+            for msg_uid, msg_rect in getattr(self, '_comms_msg_rects', []):
+                if msg_rect.collidepoint(pos):
+                    self._comms_selected_uid = msg_uid
+                    for m in getattr(self.s, 'messages', []):
+                        if m.uid == msg_uid:
+                            m.read = True
+                            break
+                    return
+            for idx, opt, btn_rect in getattr(self, '_comms_reply_rects', []):
+                if btn_rect.collidepoint(pos):
+                    action = opt.get("action", "")
+                    sel_msg = None
+                    for m in getattr(self.s, 'messages', []):
+                        if m.uid == self._comms_selected_uid:
+                            sel_msg = m
+                            break
+                    if sel_msg and self.game.comms_system:
+                        self.game.comms_system.reply_to_message(
+                            self.s, sel_msg, action, opt)
+                    return
+            return  # Block clicks through to game when panel is open
+
+        if self._active_panel == "work":
+            if getattr(self, '_work_close_rect', None) and self._work_close_rect.collidepoint(pos):
+                self._active_panel = None
+                return
+            if getattr(self, '_work_dept_btn_rect', None) and self._work_dept_btn_rect.collidepoint(pos):
+                self._active_panel = "departments"
+                return
+            work_assignments = getattr(self.s, 'work_assignments', {})
+            for npc_uid, jid, cell_rect in getattr(self, '_work_cell_rects', []):
+                if cell_rect.collidepoint(pos):
+                    current = list(work_assignments.get(npc_uid, []))
+                    if jid in current:
+                        current.remove(jid)
+                    else:
+                        current.append(jid)
+                    self.s.work_assignments[npc_uid] = current
+                    return
+            return
+
+        if self._active_panel == "departments":
+            if getattr(self, '_dept_close_rect', None) and self._dept_close_rect.collidepoint(pos):
+                self._active_panel = None
+                self._dept_renaming_uid = None
+                return
+            if getattr(self, '_dept_back_btn', None) and self._dept_back_btn.collidepoint(pos):
+                self._active_panel = "work"
+                self._dept_renaming_uid = None
+                return
+            for dept_uid, ren_rect in getattr(self, '_dept_rename_rects', []):
+                if ren_rect.collidepoint(pos):
+                    self._dept_renaming_uid = dept_uid
+                    for dept in getattr(self.s, 'departments', []):
+                        if dept.uid == dept_uid:
+                            self._dept_rename_text = dept.name
+                            break
+                    return
+            if getattr(self, '_dept_new_btn', None) and self._dept_new_btn.collidepoint(pos):
+                import uuid
+                new_dept_uid = "dept." + str(uuid.uuid4())[:8]
+                from waystation.models.instances import Department
+                new_dept = Department(uid=new_dept_uid, name="New Department",
+                                      allowed_jobs=["job.haul"])
+                self.s.departments.append(new_dept)
+                self._dept_renaming_uid = new_dept_uid
+                self._dept_rename_text = "New Department"
+                return
+            return
+
         # Top-bar buttons are always active
         # BUILD button
         if self._build_btn_rect().collidepoint(pos):
@@ -595,6 +747,14 @@ class GameView:
                 if rect.collidepoint(pos):
                     self._selected_mod = uid if self._selected_mod != uid else None
                     return
+            # Comms button
+            if getattr(self, '_comms_btn_rect', None) and self._comms_btn_rect.collidepoint(pos):
+                self._active_panel = None if self._active_panel == "comms" else "comms"
+                return
+            # Work button
+            if getattr(self, '_work_btn_rect', None) and self._work_btn_rect.collidepoint(pos):
+                self._active_panel = None if self._active_panel == "work" else "work"
+                return
         else:
             # Build mode click handling
             self._build_on_click(pos)
@@ -1424,6 +1584,14 @@ class GameView:
         else:
             self._render_build_toolbar()
 
+        # Overlay panels (drawn on top of everything)
+        if self._active_panel == "comms":
+            self._render_comms_panel()
+        elif self._active_panel == "work":
+            self._render_work_panel()
+        elif self._active_panel == "departments":
+            self._render_departments_panel()
+
     # ── Floor plan ────────────────────────────────────────────────────────────
 
     def _render_station_hull(self) -> None:
@@ -2026,7 +2194,15 @@ class GameView:
 
         # ── Crew + jobs ──
         D.text(self.screen, self.fonts.lg, "CREW", (x, y), T.ACCENT)
-        y += 20
+        # Work button
+        work_btn_rect = pygame.Rect(x + rw - 70, y - 2, 70, 20)
+        work_active = self._active_panel == "work"
+        D.rect_rounded(self.screen, T.BUILD_BTN_ACTIVE if work_active else T.BUILD_BTN_BG,
+                       work_btn_rect, 4)
+        D.rect_outline(self.screen, T.PANEL_EDGE, work_btn_rect, 1, 4)
+        D.text(self.screen, self.fonts.sm, "WORK", work_btn_rect.center, T.TEXT, "center")
+        self._work_btn_rect = work_btn_rect
+        y += 22
 
         for npc in self.s.get_crew()[:8]:
             dc = T.CLASS_COLOR.get(npc.class_id, T.TEXT)
@@ -2093,6 +2269,19 @@ class GameView:
                 D.text(self.screen, self.fonts.sm, f"[{tag}]", (x, y), T.WARN)
                 y += 13
 
+        # ── Comms button ──
+        y += 8
+        unread = getattr(self.s, 'unread_message_count', lambda: 0)()
+        comms_active = self._active_panel == "comms"
+        flash = bool(unread > 0 and int(pygame.time.get_ticks() / 400) % 2 == 0)
+        btn_col = T.WARN if flash else (T.BUILD_BTN_ACTIVE if comms_active else T.BUILD_BTN_BG)
+        comms_btn_rect = pygame.Rect(x, y, rw, 26)
+        D.rect_rounded(self.screen, btn_col, comms_btn_rect, 5)
+        D.rect_outline(self.screen, T.PANEL_EDGE, comms_btn_rect, 1, 5)
+        label = f"COMMS  [{unread} unread]" if unread else "COMMS"
+        D.text(self.screen, self.fonts.sm, label, comms_btn_rect.center, T.TEXT, "center")
+        self._comms_btn_rect = comms_btn_rect
+
     # ── Log / event panel ─────────────────────────────────────────────────────
 
     def _render_log_panel(self) -> None:
@@ -2109,6 +2298,309 @@ class GameView:
             self._render_cargo_panel(self._selected_mod, rect)
         else:
             self._render_log_feed(rect)
+
+    # ── Overlay panels ────────────────────────────────────────────────────────
+
+    def _render_comms_panel(self) -> None:
+        """Draw the communications inbox as a full-screen overlay drawer."""
+        overlay = pygame.Surface((T.SCREEN_W, T.SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, 0))
+
+        PW, PH = 820, 580
+        px = (T.SCREEN_W - PW) // 2
+        py = (T.SCREEN_H - PH) // 2
+        panel_rect = pygame.Rect(px, py, PW, PH)
+        D.panel(self.screen, panel_rect, 10)
+
+        D.text(self.screen, self.fonts.xl, "COMMUNICATIONS", (px + 16, py + 14), T.ACCENT)
+
+        close_rect = pygame.Rect(px + PW - 38, py + 10, 28, 28)
+        D.rect_rounded(self.screen, (80, 30, 30), close_rect, 4)
+        D.text(self.screen, self.fonts.md, "\u2715", close_rect.center, T.DANGER, "center")
+        self._comms_close_rect = close_rect
+
+        tabs = [("unread", "Unread"), ("read", "Read"), ("all", "All")]
+        tab_y = py + 50
+        tab_x = px + 16
+        self._comms_tab_rects = []
+        for tab_id, tab_label in tabs:
+            tw = 90
+            tab_rect = pygame.Rect(tab_x, tab_y, tw, 24)
+            active = self._comms_tab == tab_id
+            D.rect_rounded(self.screen,
+                           T.BUILD_BTN_ACTIVE if active else T.BUILD_BTN_BG,
+                           tab_rect, 4)
+            D.rect_outline(self.screen, T.PANEL_EDGE, tab_rect, 1, 4)
+            D.text(self.screen, self.fonts.sm, tab_label,
+                   tab_rect.center, T.TEXT if active else T.TEXT_DIM, "center")
+            self._comms_tab_rects.append((tab_id, tab_rect))
+            tab_x += tw + 6
+
+        LIST_W = 280
+        list_rect = pygame.Rect(px + 10, tab_y + 32, LIST_W, PH - 100)
+        D.rect_rounded(self.screen, T.FLOOR_BG, list_rect, 4)
+        D.rect_outline(self.screen, T.PANEL_EDGE, list_rect, 1, 4)
+
+        msgs = getattr(self.s, 'messages', [])
+        if self._comms_tab == "unread":
+            visible_msgs = [m for m in msgs if not m.read]
+        elif self._comms_tab == "read":
+            visible_msgs = [m for m in msgs if m.read]
+        else:
+            visible_msgs = list(msgs)
+
+        self._comms_msg_rects = []
+
+        my = list_rect.y + 6
+        max_visible = 12
+        start = self._comms_scroll
+        for i, msg in enumerate(visible_msgs[start:start + max_visible]):
+            item_rect = pygame.Rect(list_rect.x + 4, my, LIST_W - 8, 38)
+            is_selected = self._comms_selected_uid == msg.uid
+            is_unread = not msg.read
+            bg_col = T.BUILD_BTN_ACTIVE if is_selected else (
+                (30, 42, 72) if is_unread else T.BUILD_BTN_BG
+            )
+            D.rect_rounded(self.screen, bg_col, item_rect, 3)
+            if is_unread:
+                D.dot(self.screen, T.WARN, (item_rect.x + 10, item_rect.centery), 4)
+            subj = msg.subject[:28] if len(msg.subject) > 28 else msg.subject
+            D.text(self.screen, self.fonts.sm, subj,
+                   (item_rect.x + 20, item_rect.y + 6), T.TEXT_BRIGHT if is_unread else T.TEXT)
+            D.text(self.screen, self.fonts.sm, msg.sender_name[:22],
+                   (item_rect.x + 20, item_rect.y + 20), T.TEXT_DIM)
+            self._comms_msg_rects.append((msg.uid, item_rect))
+            my += 42
+
+        if not visible_msgs:
+            D.text(self.screen, self.fonts.sm, "No messages",
+                   (list_rect.centerx, list_rect.y + 30), T.TEXT_DIM, "midtop")
+
+        detail_x = px + LIST_W + 20
+        detail_w  = PW - LIST_W - 30
+        detail_rect = pygame.Rect(detail_x, tab_y + 32, detail_w, PH - 100)
+        D.rect_rounded(self.screen, T.FLOOR_BG, detail_rect, 4)
+        D.rect_outline(self.screen, T.PANEL_EDGE, detail_rect, 1, 4)
+
+        selected_msg = None
+        if self._comms_selected_uid:
+            for m in msgs:
+                if m.uid == self._comms_selected_uid:
+                    selected_msg = m
+                    break
+
+        if selected_msg is None and visible_msgs:
+            selected_msg = visible_msgs[0]
+            self._comms_selected_uid = selected_msg.uid
+
+        if selected_msg:
+            dy = detail_rect.y + 12
+            dx = detail_rect.x + 12
+            dw = detail_w - 24
+
+            D.text(self.screen, self.fonts.md, selected_msg.subject,
+                   (dx, dy), T.TEXT_BRIGHT)
+            dy += 22
+            D.text(self.screen, self.fonts.sm,
+                   f"From: {selected_msg.sender_name}",
+                   (dx, dy), T.ACCENT)
+            dy += 18
+            D.divider(self.screen, dx, dy, dx + dw, dy)
+            dy += 8
+
+            words = selected_msg.body.split()
+            line, lines = [], []
+            for w in words:
+                test = " ".join(line + [w])
+                if self.fonts.sm.size(test)[0] > dw:
+                    lines.append(" ".join(line))
+                    line = [w]
+                else:
+                    line.append(w)
+            if line:
+                lines.append(" ".join(line))
+
+            max_body_lines = 8
+            for ln in lines[:max_body_lines]:
+                D.text(self.screen, self.fonts.sm, ln, (dx, dy), T.TEXT)
+                dy += 16
+
+            if selected_msg.replied is None:
+                dy = detail_rect.bottom - 20 - len(selected_msg.response_options) * 36
+                D.divider(self.screen, dx, dy - 8, dx + dw, dy - 8)
+                self._comms_reply_rects = []
+                for idx, opt in enumerate(selected_msg.response_options):
+                    btn_rect = pygame.Rect(dx, dy, dw, 28)
+                    D.rect_rounded(self.screen, T.BUILD_BTN_BG, btn_rect, 5)
+                    D.rect_outline(self.screen, T.ACCENT, btn_rect, 1, 5)
+                    D.text(self.screen, self.fonts.sm, opt["label"],
+                           btn_rect.center, T.TEXT_BRIGHT, "center")
+                    self._comms_reply_rects.append((idx, opt, btn_rect))
+                    dy += 34
+            else:
+                dy = detail_rect.bottom - 40
+                D.text(self.screen, self.fonts.sm,
+                       f"Replied: {selected_msg.replied}",
+                       (dx, dy), T.TEXT_DIM)
+        else:
+            D.text(self.screen, self.fonts.sm, "Select a message to read",
+                   detail_rect.center, T.TEXT_DIM, "center")
+            self._comms_reply_rects = []
+
+    def _render_work_panel(self) -> None:
+        """Draw the crew work assignment panel."""
+        overlay = pygame.Surface((T.SCREEN_W, T.SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, 0))
+
+        PW, PH = 860, 560
+        px = (T.SCREEN_W - PW) // 2
+        py = (T.SCREEN_H - PH) // 2
+        panel_rect = pygame.Rect(px, py, PW, PH)
+        D.panel(self.screen, panel_rect, 10)
+
+        D.text(self.screen, self.fonts.xl, "WORK ASSIGNMENTS", (px + 16, py + 14), T.ACCENT)
+
+        dept_btn = pygame.Rect(px + PW - 180, py + 10, 140, 28)
+        D.rect_rounded(self.screen, T.BUILD_BTN_BG, dept_btn, 5)
+        D.rect_outline(self.screen, T.PANEL_EDGE, dept_btn, 1, 5)
+        D.text(self.screen, self.fonts.sm, "Departments", dept_btn.center, T.ACCENT, "center")
+        self._work_dept_btn_rect = dept_btn
+
+        close_rect = pygame.Rect(px + PW - 38, py + 10, 28, 28)
+        D.rect_rounded(self.screen, (80, 30, 30), close_rect, 4)
+        D.text(self.screen, self.fonts.md, "\u2715", close_rect.center, T.DANGER, "center")
+        self._work_close_rect = close_rect
+
+        JOB_IDS = [
+            ("job.haul",    "Haul"),
+            ("job.refine",  "Refine"),
+            ("job.craft",   "Craft"),
+            ("job.guard_post", "Guard"),
+            ("job.patrol",  "Patrol"),
+            ("job.build",   "Build"),
+            ("job.module_maintenance", "Maint."),
+            ("job.resource_management", "Res.Mgmt"),
+        ]
+
+        HEADER_Y = py + 54
+        NAME_W   = 140
+        COL_W    = 68
+        ROW_H    = 32
+        start_x  = px + 16
+
+        self._work_col_headers = []
+        for ci, (jid, jlabel) in enumerate(JOB_IDS):
+            hx = start_x + NAME_W + ci * COL_W
+            col_rect = pygame.Rect(hx, HEADER_Y, COL_W - 2, 24)
+            D.rect_rounded(self.screen, T.BUILD_BTN_BG, col_rect, 3)
+            D.text(self.screen, self.fonts.sm, jlabel,
+                   col_rect.center, T.ACCENT, "center")
+            self._work_col_headers.append((jid, col_rect))
+
+        crew = self.s.get_crew()
+        work_assignments = getattr(self.s, 'work_assignments', {})
+
+        ROW_Y = HEADER_Y + 28
+        self._work_cell_rects = []
+
+        for ri, npc in enumerate(crew[self._work_scroll:self._work_scroll + 12]):
+            ry = ROW_Y + ri * ROW_H
+            bg_col = (22, 30, 55) if ri % 2 == 0 else (18, 24, 44)
+            pygame.draw.rect(self.screen, bg_col,
+                             pygame.Rect(start_x, ry, PW - 32, ROW_H - 2))
+
+            dc = T.CLASS_COLOR.get(npc.class_id, T.TEXT)
+            D.dot(self.screen, dc, (start_x + 8, ry + ROW_H // 2), 5)
+            D.text(self.screen, self.fonts.sm, npc.name[:16],
+                   (start_x + 18, ry + (ROW_H - 12) // 2), T.TEXT)
+
+            npc_jobs = set(work_assignments.get(npc.uid, []))
+            for ci, (jid, _) in enumerate(JOB_IDS):
+                cx = start_x + NAME_W + ci * COL_W
+                cell_rect = pygame.Rect(cx + 4, ry + 4, COL_W - 10, ROW_H - 8)
+                enabled = len(npc_jobs) == 0 or jid in npc_jobs
+                col = T.OK if enabled else T.BUILD_BTN_BG
+                D.rect_rounded(self.screen, col, cell_rect, 3)
+                D.text(self.screen, self.fonts.sm,
+                       "\u2713" if enabled else "\u2014",
+                       cell_rect.center, T.TEXT_BRIGHT if enabled else T.TEXT_DIM, "center")
+                self._work_cell_rects.append((npc.uid, jid, cell_rect))
+
+        if len(crew) > 12:
+            D.text(self.screen, self.fonts.sm,
+                   f"\u2191\u2193 scroll  ({self._work_scroll + 1}-{min(self._work_scroll + 12, len(crew))}/{len(crew)})",
+                   (px + PW - 16, py + PH - 22), T.TEXT_DIM, "topright")
+
+    def _render_departments_panel(self) -> None:
+        """Draw the departments management panel."""
+        overlay = pygame.Surface((T.SCREEN_W, T.SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, 0))
+
+        PW, PH = 700, 520
+        px = (T.SCREEN_W - PW) // 2
+        py = (T.SCREEN_H - PH) // 2
+        panel_rect = pygame.Rect(px, py, PW, PH)
+        D.panel(self.screen, panel_rect, 10)
+
+        D.text(self.screen, self.fonts.xl, "DEPARTMENTS", (px + 16, py + 14), T.ACCENT)
+
+        close_rect = pygame.Rect(px + PW - 38, py + 10, 28, 28)
+        D.rect_rounded(self.screen, (80, 30, 30), close_rect, 4)
+        D.text(self.screen, self.fonts.md, "\u2715", close_rect.center, T.DANGER, "center")
+        self._dept_close_rect = close_rect
+
+        back_btn = pygame.Rect(px + PW - 180, py + 10, 130, 28)
+        D.rect_rounded(self.screen, T.BUILD_BTN_BG, back_btn, 5)
+        D.rect_outline(self.screen, T.PANEL_EDGE, back_btn, 1, 5)
+        D.text(self.screen, self.fonts.sm, "\u2190 Work", back_btn.center, T.TEXT, "center")
+        self._dept_back_btn = back_btn
+
+        departments = getattr(self.s, 'departments', [])
+
+        ROW_H = 44
+        dy = py + 56
+        self._dept_row_rects = []
+        self._dept_rename_rects = []
+
+        for dept in departments:
+            row_rect = pygame.Rect(px + 10, dy, PW - 20, ROW_H - 4)
+            bg_col = (35, 50, 90) if self._dept_renaming_uid == dept.uid else T.BUILD_BTN_BG
+            D.rect_rounded(self.screen, bg_col, row_rect, 5)
+            D.rect_outline(self.screen, T.PANEL_EDGE, row_rect, 1, 5)
+
+            if self._dept_renaming_uid == dept.uid:
+                D.text(self.screen, self.fonts.md,
+                       f"Name: {self._dept_rename_text}\u2587",
+                       (row_rect.x + 12, row_rect.y + 12), T.TEXT_BRIGHT)
+                D.text(self.screen, self.fonts.sm, "Enter to confirm  Esc to cancel",
+                       (row_rect.x + 12, row_rect.y + 28), T.TEXT_DIM)
+            else:
+                D.text(self.screen, self.fonts.lg, dept.name,
+                       (row_rect.x + 12, row_rect.y + 10), T.TEXT_BRIGHT)
+                jobs_preview = ", ".join(j.replace("job.", "") for j in dept.allowed_jobs[:5])
+                if len(dept.allowed_jobs) > 5:
+                    jobs_preview += f" +{len(dept.allowed_jobs)-5}"
+                D.text(self.screen, self.fonts.sm, jobs_preview,
+                       (row_rect.x + 12, row_rect.y + 28), T.TEXT_DIM)
+
+                ren_btn = pygame.Rect(row_rect.right - 82, row_rect.y + 10, 70, 24)
+                D.rect_rounded(self.screen, T.BUILD_BTN_BG, ren_btn, 4)
+                D.rect_outline(self.screen, T.PANEL_EDGE, ren_btn, 1, 4)
+                D.text(self.screen, self.fonts.sm, "Rename", ren_btn.center, T.TEXT, "center")
+                self._dept_rename_rects.append((dept.uid, ren_btn))
+
+            self._dept_row_rects.append((dept.uid, row_rect))
+            dy += ROW_H + 4
+
+        new_btn = pygame.Rect(px + 10, dy + 8, 180, 30)
+        D.rect_rounded(self.screen, T.BUILD_BTN_BG, new_btn, 5)
+        D.rect_outline(self.screen, T.OK, new_btn, 1, 5)
+        D.text(self.screen, self.fonts.sm, "+ New Department",
+               new_btn.center, T.OK, "center")
+        self._dept_new_btn = new_btn
 
     def _is_cargo_hold(self, module_uid: str) -> bool:
         """Return True if the module is a cargo hold (has cargo_capacity > 0)."""
