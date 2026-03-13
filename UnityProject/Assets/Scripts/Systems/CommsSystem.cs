@@ -88,7 +88,6 @@ namespace Waystation.Systems
             string shipName = $"{prefix} {TradeNames[UnityEngine.Random.Range(0, TradeNames.Length)]}";
             int    iceQty   = UnityEngine.Random.Range(IceQtyMin, IceQtyMax + 1);
             float  icePrice = Mathf.Round(UnityEngine.Random.Range(IcePriceMin, IcePriceMax) * 100f) / 100f;
-            string shipUid  = Guid.NewGuid().ToString("N")[..8];
 
             // Register a transient passing ship (status = "incoming", tagged as passing_by)
             var ship = ShipInstance.Create("ship.trade_vessel", shipName, "trader",
@@ -182,7 +181,9 @@ namespace Waystation.Systems
             }
 
             station.ModifyResource("credits", -total);
-            DeliverGoods(station, new Dictionary<string, int> { { "item.ice", iceQty } });
+            // Deliver ice as the canonical station resource so it is immediately
+            // visible in the resource bars and usable by all other systems.
+            station.ModifyResource("ice", iceQty);
 
             string shipUid = option.ContainsKey("shipUid") ? option["shipUid"].ToString() : msg.shipUid;
             if (shipUid != null) station.RemoveShip(shipUid);
@@ -206,38 +207,5 @@ namespace Waystation.Systems
             station.LogEvent($"Asked {msg.senderName} to come back later. They acknowledged.");
         }
 
-        // ── Delivery ──────────────────────────────────────────────────────────
-
-        private void DeliverGoods(StationState station, Dictionary<string, int> cargo)
-        {
-            // Find Hangar first, then any cargo module, then any module at all
-            ModuleInstance target = null;
-            foreach (var mod in station.modules.Values)
-                if (mod.category == "hangar") { target = mod; break; }
-            if (target == null)
-                foreach (var mod in station.modules.Values)
-                    if (mod.category == "cargo") { target = mod; break; }
-            if (target == null)
-                foreach (var mod in station.modules.Values)
-                    if (mod.active) { target = mod; break; }
-
-            if (target == null)
-            {
-                // Last resort: add directly to station resources
-                foreach (var kv in cargo)
-                    if (kv.Key == "item.ice") station.ModifyResource("ice", kv.Value);
-                station.LogEvent("Goods delivered directly to station stores (no cargo module found).");
-                return;
-            }
-
-            foreach (var kv in cargo)
-            {
-                int current = target.inventory.ContainsKey(kv.Key) ? target.inventory[kv.Key] : 0;
-                target.inventory[kv.Key] = current + kv.Value;
-            }
-
-            station.LogEvent(
-                $"Shuttle delivered goods to {target.displayName}. Crew will haul to storage.");
-        }
     }
 }

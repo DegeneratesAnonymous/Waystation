@@ -139,9 +139,12 @@ namespace Waystation.Systems
 
             if (best != null)
             {
+                // Use the job definition's duration so data changes take effect without code edits
+                int wanderDuration = _registry.Jobs.TryGetValue("job.wander", out var wanderJob)
+                    ? wanderJob.durationTicks : 2;
                 npc.currentJobId = "job.wander";
                 npc.jobModuleUid = best.uid;
-                npc.jobTimer     = 2;
+                npc.jobTimer     = wanderDuration;
                 npc.location     = best.definitionId;
             }
             else
