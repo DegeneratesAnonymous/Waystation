@@ -3,7 +3,7 @@
 // Every ~2 in-game days (48 ticks at 24 ticks/day) there is a 30% chance a
 // trade ship will pass by and send a transmission offering to sell Ice.  The
 // player can reply via the Comms tab in the HUD:
-//   "Sure, let's trade"   → credits deducted, ice delivered to Hangar/cargo
+//   "Sure, let's trade"   → credits deducted, ice delivered via station.ModifyResource("ice", qty)
 //   "No thank you"        → ship departs, no penalty
 //   "Come back later"     → ship departs with a polite acknowledgement
 using System;
@@ -89,10 +89,10 @@ namespace Waystation.Systems
             int    iceQty   = UnityEngine.Random.Range(IceQtyMin, IceQtyMax + 1);
             float  icePrice = Mathf.Round(UnityEngine.Random.Range(IcePriceMin, IcePriceMax) * 100f) / 100f;
 
-            // Register a transient passing ship (status = "incoming", tagged as passing_by)
-            var ship = ShipInstance.Create("ship.trade_vessel", shipName, "trader",
+            // Register a transient passing ship (status = "incoming", tagged as passing_by).
+            // Use ship.freighter — the lightest valid trader template in core_ships.json.
+            var ship = ShipInstance.Create("ship.freighter", shipName, "trader",
                                            "trade", factionId: null, threatLevel: 0);
-            ship.cargo["item.ice"] = iceQty;
             ship.behaviorTags.Add("passing_by");
             station.AddShip(ship);
 

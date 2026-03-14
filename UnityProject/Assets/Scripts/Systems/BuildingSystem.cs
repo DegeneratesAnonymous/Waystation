@@ -40,6 +40,12 @@ namespace Waystation.Systems
 
         private readonly ContentRegistry _registry;
 
+        /// <summary>
+        /// When true, foundations skip the haul phase and complete instantly
+        /// without consuming any materials.  Toggled via the in-game Dev Tools button.
+        /// </summary>
+        public static bool DevMode = false;
+
         public BuildingSystem(ContentRegistry registry) => _registry = registry;
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -51,7 +57,8 @@ namespace Waystation.Systems
         /// </summary>
         public FoundationInstance PlaceFoundation(StationState station,
                                                    string buildableId,
-                                                   int col, int row)
+                                                   int col, int row,
+                                                   int rotation = 0)
         {
             if (!_registry.Buildables.TryGetValue(buildableId, out var defn))
             {
@@ -73,7 +80,50 @@ namespace Waystation.Systems
             }
 
             var foundation = FoundationInstance.Create(buildableId, col, row,
-                                                        defn.maxHealth, defn.buildQuality);
+                                                        defn.maxHealth, defn.buildQuality,
+                                                        rotation, defn.cargoCapacity);
+            // ── Layer rules ──────────────────────────────────────────────────────
+            int targetLayer = defn.tileLayer;
+            int tileW       = defn.tileWidth;
+            int tileH       = defn.tileHeight;
+
+            // 1. Cancel or remove any same-layer foundation overlapping the new footprint.
+            //    Check the full footprint of each existing foundation (tileWidth × tileHeight)
+            //    against the full footprint of the new placement so multi-tile objects don't
+            //    slip through on non-origin tiles.
+            var conflictUids = new System.Collections.Generic.List<string>();
+            foreach (var existing in station.foundations.Values)
+            {
+                if (existing.tileLayer != targetLayer) continue;
+                // Two axis-aligned rectangles overlap when neither is fully outside the other.
+                bool overlaps =
+                    existing.tileCol < col + tileW && existing.tileCol + existing.tileWidth  > col &&
+                    existing.tileRow < row + tileH && existing.tileRow + existing.tileHeight > row;
+                if (overlaps) conflictUids.Add(existing.uid);
+            }
+            foreach (var uid in conflictUids)
+                if (!CancelFoundation(station, uid, refund: false))
+                    station.foundations.Remove(uid);
+
+            // 2. Auto-place floor (layer 1) beneath any object/structural placement (layer ≥ 2).
+            if (targetLayer >= 2 && _registry.Buildables.ContainsKey("buildable.floor"))
+            {
+                for (int dc = 0; dc < tileW; dc++)
+                for (int dr = 0; dr < tileH; dr++)
+                {
+                    int tc = col + dc, tr = row + dr;
+                    bool floorPresent = false;
+                    foreach (var f in station.foundations.Values)
+                        if (f.tileCol == tc && f.tileRow == tr && f.tileLayer == 1)
+                        { floorPresent = true; break; }
+                    if (!floorPresent)
+                        PlaceFoundation(station, "buildable.floor", tc, tr, 0);
+                }
+            }
+
+            foundation.tileLayer  = targetLayer;
+            foundation.tileWidth  = tileW;
+            foundation.tileHeight = tileH;
             station.foundations[foundation.uid] = foundation;
             station.LogEvent($"Foundation placed: {defn.displayName} at tile ({col},{row}).");
             Debug.Log($"[BuildingSystem] Foundation {foundation.uid} placed at ({col},{row}).");
@@ -234,6 +284,13 @@ namespace Waystation.Systems
         {
             var required = defn.requiredMaterials;
 
+            // Dev mode — skip haul entirely, jump straight to constructing.
+            if (DevMode)
+            {
+                foundation.status = "constructing";
+                return;
+            }
+
             // No materials needed — skip straight to constructing
             if (required == null || required.Count == 0)
             {
@@ -308,6 +365,14 @@ namespace Waystation.Systems
                                        StationState station,
                                        List<NPCInstance> idle)
         {
+            // Dev mode — complete instantly, no engineer needed.
+            if (DevMode)
+            {
+                foundation.buildProgress = 1f;
+                CompleteFoundation(foundation, defn, station, null);
+                return;
+            }
+
             // Ensure an engineer is assigned
             NPCInstance assigned = null;
             if (foundation.assignedNpcUid != null)

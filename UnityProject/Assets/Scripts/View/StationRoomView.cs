@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
+using Waystation.UI;
 
 namespace Waystation.View
 {
@@ -62,6 +63,19 @@ namespace Waystation.View
         private bool              _ready;
         private GUIStyle          _labelStyle;
         private static Sprite     _dotSprite;
+        private readonly Dictionary<int, Vector2Int> _dotTile   = new Dictionary<int, Vector2Int>();
+        private readonly Dictionary<int, Vector3>    _dotTarget = new Dictionary<int, Vector3>();
+        private const float DotMoveSpeed = 4f; // world units per second
+
+        // ── NPC selection & context menu ──────────────────────────────────────
+        private readonly HashSet<int> _selectedDots      = new HashSet<int>();
+        private bool    _isDragSelecting;
+        private Vector2 _dragSelStart;            // screen space
+        private Rect    _dragSelRect;
+        private bool    _showContextMenu;
+        private Vector2 _contextMenuScreen;
+        private int     _ctxTileCol, _ctxTileRow;
+        private GUIStyle _ctxBoxStyle, _ctxBtnStyle;
         // ── Door animation ────────────────────────────────────────────────────
         // Each door opens independently when an NPC is one tile away (Manhattan ≤ 1).
         private const float DoorFrameTime = 0.13f; // 130 ms per step — matches spec
@@ -75,17 +89,33 @@ namespace Waystation.View
             public float          timer;
             // Shadow SpriteRenderers on this door tile (sortOrder 3). Shown only when closed.
             public readonly List<SpriteRenderer> shadows = new List<SpriteRenderer>();
+            // Foundation tracking for status/damage refreshes (null = built-in starter door)
+            public string foundationUid;
+            public bool   isH;
+            public int    dmgLevel;    // 0=normal, 1=worn, 2=broken
+            public string doorStatus;  // last rendered door status ("powered"/"locked"/"unpowered")
         }
         private readonly List<DoorEntry> _doorEntries = new List<DoorEntry>();
         // Floor variant cache: (col,row) → 0..4 assigned during BuildRoom / RebuildFoundationTiles
         private readonly Dictionary<(int, int), int> _floorVariants
             = new Dictionary<(int, int), int>();
+        // Wall variant cache: (col,row) → 0..4; assignment is adjacency-constrained so
+        // no two touching walls share the same variant.
+        private readonly Dictionary<(int, int), int> _wallVariants
+            = new Dictionary<(int, int), int>();
 
         // Foundation tile GameObjects keyed by foundation uid
         private readonly Dictionary<string, GameObject>        _foundTiles   = new Dictionary<string, GameObject>();
-        // Extra per-foundation GOs: floor-under-door tiles and shadow overlays
+        // Extra per-foundation GOs: floor-under-door tiles (NOT shadows — those are in _shadowsAt)
         private readonly Dictionary<string, List<GameObject>> _foundExtras  = new Dictionary<string, List<GameObject>>();
         private GameObject _foundRoot;
+        private GameObject _roomRoot;
+        // Position-keyed wall-tile SpriteRenderers so RefreshTile can update their sprites.
+        private readonly Dictionary<(int,int), SpriteRenderer>    _tileAt    = new Dictionary<(int,int), SpriteRenderer>();
+        // All shadow GOs per grid position — destroyed and rebuilt when a neighbor changes.
+        private readonly Dictionary<(int,int), List<GameObject>>   _shadowsAt = new Dictionary<(int,int), List<GameObject>>();
+        // Foundation uid → (col,row) so we know the position when a foundation is removed.
+        private readonly Dictionary<string, (int,int)>             _foundPos  = new Dictionary<string, (int,int)>();
 
         // ── Auto-install ──────────────────────────────────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -124,7 +154,74 @@ namespace Waystation.View
 
         private void Update()
         {
-            if (!_ready || _doorEntries.Count == 0) return;
+            if (!_ready) return;
+
+            // ── Animate crew dots toward their movement targets ────────────────
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                if (!_dotTarget.TryGetValue(i, out Vector3 tgt)) continue;
+                Vector3 cur = _dots[i].transform.position;
+                if (Vector3.SqrMagnitude(cur - tgt) < 0.0004f)
+                {
+                    _dots[i].transform.position = tgt;
+                    _dotTarget.Remove(i);
+                }
+                else
+                {
+                    _dots[i].transform.position =
+                        Vector3.MoveTowards(cur, tgt, DotMoveSpeed * Time.deltaTime);
+                }
+            }
+
+            // ── NPC drag-selection ─────────────────────────────────────────────
+            bool hudBusy = GameHUD.IsMouseOverDrawer || GameHUD.InBuildMode;
+            if (!hudBusy)
+            {
+                if (Input.GetMouseButtonDown(0))
+                {
+                    _showContextMenu  = false;
+                    _isDragSelecting  = true;
+                    _dragSelStart     = Input.mousePosition;
+                    _dragSelRect      = new Rect();
+                }
+                if (_isDragSelecting && Input.GetMouseButton(0))
+                {
+                    Vector2 cur = Input.mousePosition;
+                    float x = Mathf.Min(cur.x, _dragSelStart.x);
+                    float y = Mathf.Min(Screen.height - cur.y, Screen.height - _dragSelStart.y);
+                    float w = Mathf.Abs(cur.x - _dragSelStart.x);
+                    float h = Mathf.Abs(cur.y - _dragSelStart.y);
+                    _dragSelRect = new Rect(x, y, w, h);
+                }
+                if (_isDragSelecting && Input.GetMouseButtonUp(0))
+                {
+                    _isDragSelecting = false;
+                    CommitDragSelection();
+                    _dragSelRect = new Rect();
+                }
+
+                if (Input.GetMouseButtonDown(1) && _selectedDots.Count > 0)
+                {
+                    var cam = Camera.main;
+                    if (cam != null)
+                    {
+                        Vector3 world = cam.ScreenToWorldPoint(Input.mousePosition);
+                        _ctxTileCol       = Mathf.RoundToInt(world.x);
+                        _ctxTileRow       = Mathf.RoundToInt(world.y);
+                        _contextMenuScreen = new Vector2(
+                            Input.mousePosition.x,
+                            Screen.height - Input.mousePosition.y);
+                        _showContextMenu  = true;
+                    }
+                }
+                else if (Input.GetMouseButtonDown(1))
+                {
+                    _showContextMenu = false;
+                }
+            }
+
+            // ── Door animation ────────────────────────────────────────────────
             for (int i = _doorEntries.Count - 1; i >= 0; i--)
             {
                 var e = _doorEntries[i];
@@ -148,10 +245,39 @@ namespace Waystation.View
                     if (npcNear  && e.frameIdx < 4) e.frameIdx++;
                     else if (!npcNear && e.frameIdx > 0) e.frameIdx--;
                 }
+                // Refresh frames if foundation health changed damage level
+                if (e.foundationUid != null && _gm?.Station?.foundations != null
+                    && _gm.Station.foundations.TryGetValue(e.foundationUid, out var fd))
+                {
+                    int newDmg = fd.health >= 75 ? 0 : fd.health >= 50 ? 1 : 2;
+                    string dStatus = fd.doorStatus ?? "powered";
+                    if (newDmg != e.dmgLevel || dStatus != e.doorStatus)
+                    {
+                        e.dmgLevel   = newDmg;
+                        e.doorStatus = dStatus;
+                        e.frames     = TileAtlas.GetDoorFrames(e.isH, dStatus, newDmg);
+                        e.frameIdx = Mathf.Clamp(e.frameIdx, 0, e.frames.Length - 1);
+                    }
+                }
+
                 e.sr.sprite = e.frames[e.frameIdx];
                 // Hide door shadows while the door is opening/open
                 bool closed = e.frameIdx == 0;
                 foreach (var sh in e.shadows) if (sh) sh.enabled = closed;
+            }
+
+            // ── Construction tinting — unbuilt foundations show blue ghost tint ─
+            if (_gm?.Station != null)
+            {
+                foreach (var kv in _gm.Station.foundations)
+                {
+                    if (!_foundTiles.TryGetValue(kv.Key, out var go) || !go) continue;
+                    var sr = go.GetComponent<SpriteRenderer>();
+                    if (sr == null) continue;
+                    sr.color = kv.Value.status == "complete"
+                        ? Color.white
+                        : new Color(0.45f, 0.80f, 1.00f, 0.55f);
+                }
             }
         }
 
@@ -173,7 +299,8 @@ namespace Waystation.View
         // ── Starter room construction ─────────────────────────────────────────
         private void BuildRoom()
         {
-            var root = new GameObject("Room");
+            _roomRoot  = new GameObject("Room");
+            var root   = _roomRoot;
             _foundRoot = new GameObject("Foundations");
 
             for (int c = 0; c < RoomCols; c++)
@@ -187,10 +314,10 @@ namespace Waystation.View
                 {
                     // Floor tile first (transparent gap reveals it)
                     PlaceTile(root.transform, c, r, TileAtlas.GetFloor(PickFloorVariant(c, r)),
-                        FloorRotation(c, r), sortOrder: 0);
+                        FloorRotation(c, r), sortOrder: 10);
                     // Door H — south-wall door connects interior (north) to outside
                     Sprite[] frames = TileAtlas.GetDoorHFrames();
-                    var doorGO = PlaceTile(root.transform, c, r, frames[0], 0f, sortOrder: 2);
+                    var doorGO = PlaceTile(root.transform, c, r, frames[0], 0f, sortOrder: 40);
                     var dEntry = new DoorEntry
                     {
                         sr = doorGO.GetComponent<SpriteRenderer>(),
@@ -204,29 +331,36 @@ namespace Waystation.View
                     int variant = PickFloorVariant(c, r);
                     _floorVariants[(c, r)] = variant;
                     PlaceTile(root.transform, c, r, TileAtlas.GetFloor(variant),
-                        FloorRotation(c, r), sortOrder: 0);
+                        FloorRotation(c, r), sortOrder: 10);
                 }
-                else // wall (corner, edge — all the same flat-top tile, no rotation)
+                else // wall (corner, edge — directional tile selected by position)
                 {
-                    PlaceTile(root.transform, c, r,
-                        TileAtlas.GetWall(PickWallVariant(c, r)), 0f, sortOrder: 0);
+                    var wallGO = PlaceTile(root.transform, c, r, GetWallSprite(c, r), 0f, sortOrder: 40);
+                    _tileAt[(c, r)] = wallGO.GetComponent<SpriteRenderer>();
                 }
             }
 
             // Shadow overlays (sortOrder 1) on every interior floor cell adjacent to a wall
             for (int c = IntMinC; c <= IntMaxC; c++)
             for (int r = IntMinR; r <= IntMaxR; r++)
-                AddShadowsForFloor(c, r, root.transform);
+            {
+                var sl = new List<GameObject>();
+                AddShadowsForFloor(c, r, root.transform, sl);
+                if (sl.Count > 0) _shadowsAt[(c, r)] = sl;
+            }
 
             // Shadow overlays (sortOrder 1) on wall tiles adjacent to interior floor
-            bool doorCol = true; // set per cell below
             for (int c = 0; c < RoomCols; c++)
             for (int r = 0; r < RoomRows; r++)
             {
                 bool isWallTile = c == 0 || c == RoomCols - 1 || r == 0 || r == RoomRows - 1;
                 bool isDoorTile = r == 0 && c == RoomCols / 2;
                 if (isWallTile && !isDoorTile)
-                    AddShadowsForWall(c, r, root.transform);
+                {
+                    var sl = new List<GameObject>();
+                    AddShadowsForWall(c, r, root.transform, sl);
+                    if (sl.Count > 0) _shadowsAt[(c, r)] = sl;
+                }
             }
         }
 
@@ -244,12 +378,27 @@ namespace Waystation.View
 
             foreach (var uid in dead)
             {
+                bool hasPos = _foundPos.TryGetValue(uid, out var pos);
                 if (_foundTiles[uid]) Destroy(_foundTiles[uid]);
                 _foundTiles.Remove(uid);
+                if (hasPos) { _tileAt.Remove(pos); _wallVariants.Remove(pos); }
+                _foundPos.Remove(uid);
+
                 if (_foundExtras.TryGetValue(uid, out var extras))
                 {
                     foreach (var e in extras) if (e) Destroy(e);
                     _foundExtras.Remove(uid);
+                }
+
+                // Destroy per-position shadows and refresh vacated cell's neighbors.
+                if (hasPos)
+                {
+                    if (_shadowsAt.TryGetValue(pos, out var deadSh))
+                    {
+                        foreach (var s in deadSh) if (s) Destroy(s);
+                        _shadowsAt.Remove(pos);
+                    }
+                    RefreshAdjacentTiles(pos.Item1, pos.Item2);
                 }
             }
 
@@ -269,41 +418,47 @@ namespace Waystation.View
                     _floorVariants[(f.tileCol, f.tileRow)] = variant;
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         TileAtlas.GetFloor(variant), FloorRotation(f.tileCol, f.tileRow),
-                        sortOrder: 0);
+                        sortOrder: 10);
                     _foundTiles[kv.Key] = go;
+                    _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
 
                     var shadowList = new List<GameObject>();
                     AddShadowsForFloor(f.tileCol, f.tileRow, _foundRoot.transform, shadowList);
-                    if (shadowList.Count > 0) _foundExtras[kv.Key] = shadowList;
+                    if (shadowList.Count > 0) _shadowsAt[(f.tileCol, f.tileRow)] = shadowList;
+                    RefreshAdjacentTiles(f.tileCol, f.tileRow);
                 }
                 else if (isWall)
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        TileAtlas.GetWall(PickWallVariant(f.tileCol, f.tileRow)), 0f,
-                        sortOrder: 0);
+                        GetWallSprite(f.tileCol, f.tileRow), 0f, sortOrder: 40);
                     _foundTiles[kv.Key] = go;
+                    _tileAt[(f.tileCol, f.tileRow)] = go.GetComponent<SpriteRenderer>();
+                    _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
 
                     var shadowList = new List<GameObject>();
                     AddShadowsForWall(f.tileCol, f.tileRow, _foundRoot.transform, shadowList);
-                    if (shadowList.Count > 0) _foundExtras[kv.Key] = shadowList;
+                    if (shadowList.Count > 0) _shadowsAt[(f.tileCol, f.tileRow)] = shadowList;
+                    RefreshAdjacentTiles(f.tileCol, f.tileRow);
                 }
                 else if (isDoor)
                 {
                     bool isH = ClassifyIsDoorH(f.tileCol, f.tileRow);
-                    Sprite[] frames = isH ? TileAtlas.GetDoorHFrames() : TileAtlas.GetDoorVFrames();
+                    string dStatus = f.doorStatus ?? "powered";
+                    Sprite[] frames = TileAtlas.GetDoorFrames(isH, dStatus, 0);
 
                     // Floor beneath door (transparent gap shows it)
                     var floorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         TileAtlas.GetFloor(PickFloorVariant(f.tileCol, f.tileRow)),
-                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 0);
+                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 10);
 
                     // Door sprite on top
                     var doorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        frames[0], 0f, sortOrder: 2);
+                        frames[0], 0f, sortOrder: 40);
                     var fEntry = new DoorEntry
                     {
                         sr = doorGO.GetComponent<SpriteRenderer>(),
-                        frames = frames, col = f.tileCol, row = f.tileRow
+                        frames = frames, col = f.tileCol, row = f.tileRow,
+                        foundationUid = kv.Key, isH = isH
                     };
                     AddShadowsForDoor(f.tileCol, f.tileRow, _foundRoot.transform, fEntry);
                     _doorEntries.Add(fEntry);
@@ -311,10 +466,44 @@ namespace Waystation.View
                     _foundTiles[kv.Key]  = doorGO;
                     _foundExtras[kv.Key] = new List<GameObject> { floorGO };
                 }
+                else if (f.buildableId.Contains("storage_cabinet"))
+                {
+                    // Cabinet sits on a floor tile shown beneath it.
+                    var floorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol, f.tileRow)),
+                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 10);
+
+                    var cabinetGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
+                        TileAtlas.GetCabinet(f.tileRotation, f.CargoFillRatio()), 0f, sortOrder: 20);
+
+                    _foundTiles[kv.Key]  = cabinetGO;
+                    _foundExtras[kv.Key] = new List<GameObject> { floorGO };
+                }
+                else if (f.buildableId.Contains("battery"))
+                {
+                    // 128-px sprite = 2 world units wide; anchor at (col+0.5, row).
+                    // Pre-place floor tiles under both subtiles.
+                    var floorA = PlaceTile(_foundRoot.transform, f.tileCol,     f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol,     f.tileRow)),
+                        FloorRotation(f.tileCol,     f.tileRow), sortOrder: 10);
+                    var floorB = PlaceTile(_foundRoot.transform, f.tileCol + 1, f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol + 1, f.tileRow)),
+                        FloorRotation(f.tileCol + 1, f.tileRow), sortOrder: 10);
+
+                    var battGO = new GameObject($"Battery_{f.uid}");
+                    battGO.transform.SetParent(_foundRoot.transform, false);
+                    battGO.transform.localPosition = new Vector3(f.tileCol + 0.5f, f.tileRow, 0f);
+                    var sr = battGO.AddComponent<SpriteRenderer>();
+                    sr.sprite       = TileAtlas.GetBattery();
+                    sr.sortingOrder = 30; // layer 3 = large objects
+
+                    _foundTiles[kv.Key]  = battGO;
+                    _foundExtras[kv.Key] = new List<GameObject> { floorA, floorB };
+                }
                 else
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        MakeSolidSquare(new Color(0.22f, 0.25f, 0.32f)), 0f, sortOrder: 0);
+                        MakeSolidSquare(new Color(0.22f, 0.25f, 0.32f)), 0f, sortOrder: 20);
                     _foundTiles[kv.Key] = go;
                 }
             }
@@ -322,39 +511,202 @@ namespace Waystation.View
 
         // ── Tile adjacency helpers ────────────────────────────────────────────
 
-        /// True if (col,row) is a floor tile — starter room interior OR a placed floor foundation.
+        /// True if (col,row) is passable floor.
+        /// Placed wall foundations override the interior range — a wall on an interior
+        /// cell is NOT floor.  Everything else (floor, door, cabinet, objects) is.
         private bool IsFloorTile(int col, int row)
         {
+            // With the layer system, multiple foundations can share one tile (e.g. a floor at
+            // layer 0 beneath a wall at layer 1).  We must check ALL foundations at this
+            // position: a layer-1 structure that is a wall (not a door) blocks traversal.
+            if (_gm?.Station != null)
+            {
+                bool anyFound = false;
+                bool hasWall  = false;
+                foreach (var f in _gm.Station.foundations.Values)
+                {
+                    if (f.tileCol != col || f.tileRow != row) continue;
+                    anyFound = true;
+                    if (f.tileLayer == 1 && f.buildableId.Contains("wall"))
+                    { hasWall = true; break; }
+                }
+                if (anyFound) return !hasWall;
+            }
+
+            // Starter room interior — no overriding foundation present.
             if (col >= IntMinC && col <= IntMaxC &&
                 row >= IntMinR && row <= IntMaxR) return true;
-
-            if (_gm?.Station == null) return false;
-
-            foreach (var f in _gm.Station.foundations.Values)
-                if (f.tileCol == col && f.tileRow == row &&
-                    f.buildableId.Contains("floor")) return true;
 
             return false;
         }
 
-        // Deterministic wall variant (0–4) by position hash — no rotation.
-        private static int PickWallVariant(int col, int row)
+        /// True if (col,row) is within the room grid (0..RoomCols-1, 0..RoomRows-1).
+        private static bool IsInBounds(int col, int row)
+            => col >= 0 && col < RoomCols && row >= 0 && row < RoomRows;
+
+        // Pick a wall variant (0–4) for (col,row) that does not match any of the 8 neighbors.
+        // Result is cached so the same tile always returns the same variant unless cleared.
+        // Uses a position-seeded shuffle so the layout is stable across same-order rebuilds.
+        private int PickWallVariant(int col, int row)
         {
-            int h = unchecked(col * 104729 ^ row * 7919);
-            return ((h % 5) + 5) % 5;
+            if (_wallVariants.TryGetValue((col, row), out var cached)) return cached;
+
+            // Collect variants already assigned to the 8 neighbors.
+            var used = new HashSet<int>();
+            for (int dc = -1; dc <= 1; dc++)
+            for (int dr = -1; dr <= 1; dr++)
+            {
+                if (dc == 0 && dr == 0) continue;
+                if (_wallVariants.TryGetValue((col + dc, row + dr), out var nv)) used.Add(nv);
+            }
+
+            // Position-seeded Fisher-Yates shuffle of [0,1,2,3,4].
+            var rnd   = new System.Random(unchecked(col * 104729 ^ row * 7919));
+            var order = new[] { 0, 1, 2, 3, 4 };
+            for (int i = 4; i > 0; i--)
+            {
+                int j = rnd.Next(i + 1);
+                int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+            }
+
+            int variant = order[0]; // fallback if all 5 somehow used
+            foreach (int candidate in order)
+                if (!used.Contains(candidate)) { variant = candidate; break; }
+
+            _wallVariants[(col, row)] = variant;
+            return variant;
         }
 
-        // Add shadow overlays on a WALL tile at edges that face a floor tile.
+        // Select the correct directional or corner wall sprite based on which neighboring
+        // cells are floor.  Works for both static room boundaries and placed interior walls.
+        //
+        // Direction convention — outer (beveled top) face points AWAY from the floor side:
+        //   floor to North  →  WALL_DIR_S  (outer face south)
+        //   floor to South  →  WALL_DIR_N  (outer face north)
+        //   floor to East   →  WALL_DIR_W  (outer face west)
+        //   floor to West   →  WALL_DIR_E  (outer face east)
+        //
+        // Convex corners (no cardinal floor, one diagonal floor — the room-interior diagonal):
+        //   NE diagonal floor  →  WALL_CORNER_SW  (exterior SW corner of room)
+        //   NW diagonal floor  →  WALL_CORNER_SE
+        //   SE diagonal floor  →  WALL_CORNER_NW
+        //   SW diagonal floor  →  WALL_CORNER_NE
+        private Sprite GetWallSprite(int col, int row)
+        {
+            bool nFloor = IsFloorTile(col,     row + 1);
+            bool sFloor = IsFloorTile(col,     row - 1);
+            bool eFloor = IsFloorTile(col + 1, row    );
+            bool wFloor = IsFloorTile(col - 1, row    );
+            int  v      = PickWallVariant(col, row);
+
+            // Straight wall: exactly one cardinal side has floor.
+            if ( nFloor && !sFloor && !eFloor && !wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);
+            if (!nFloor &&  sFloor && !eFloor && !wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_N, v);
+            if (!nFloor && !sFloor &&  eFloor && !wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_W, v);
+            if (!nFloor && !sFloor && !eFloor &&  wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_E, v);
+
+            // Convex corner: no cardinal floor, single interior diagonal has floor.
+            if (!nFloor && !sFloor && !eFloor && !wFloor)
+            {
+                bool neFloor = IsFloorTile(col + 1, row + 1);
+                bool nwFloor = IsFloorTile(col - 1, row + 1);
+                bool seFloor = IsFloorTile(col + 1, row - 1);
+                bool swFloor = IsFloorTile(col - 1, row - 1);
+                if ( neFloor && !nwFloor && !seFloor && !swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_SW, v);
+                if (!neFloor &&  nwFloor && !seFloor && !swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_SE, v);
+                if (!neFloor && !nwFloor &&  seFloor && !swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_NW, v);
+                if (!neFloor && !nwFloor && !seFloor &&  swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_NE, v);
+            }
+
+            // Fallback: T-junction, walls on both sides, or fully surrounded — legacy flat tile.
+            return TileAtlas.GetWall(PickWallVariant(col, row));
+        }
+
+        // Re-evaluate the sprite and shadow overlays for every cell in the 3×3 neighborhood.
+        // Call this after any tile is added or removed so neighbors auto-update.
+        private void RefreshAdjacentTiles(int col, int row)
+        {
+            for (int dc = -1; dc <= 1; dc++)
+            for (int dr = -1; dr <= 1; dr++)
+                RefreshTile(col + dc, row + dr);
+        }
+
+        // Re-evaluate one tile's wall sprite (if applicable) and its shadow overlays.
+        private void RefreshTile(int col, int row)
+        {
+            if (!IsInBounds(col, row)) return;
+
+            bool isWall  = IsWallAtPos(col, row);
+            bool isFloor = !isWall && IsFloorTile(col, row);
+
+            // Clear cached variant so the tile re-picks against its current neighbors.
+            if (isWall) _wallVariants.Remove((col, row));
+
+            // Update wall sprite via the cached SpriteRenderer.
+            if (isWall && _tileAt.TryGetValue((col, row), out var wallSr) && wallSr)
+                wallSr.sprite = GetWallSprite(col, row);
+
+            // Destroy existing shadows at this position.
+            if (_shadowsAt.TryGetValue((col, row), out var oldSh))
+            {
+                foreach (var go in oldSh) if (go) Destroy(go);
+                _shadowsAt.Remove((col, row));
+            }
+
+            // Rebuild shadows.  Parent to _foundRoot (dynamic layer) so they clean up properly.
+            if (_foundRoot == null) return;
+            var newShadows = new List<GameObject>();
+            if      (isWall)  AddShadowsForWall (col, row, _foundRoot.transform, newShadows);
+            else if (isFloor) AddShadowsForFloor(col, row, _foundRoot.transform, newShadows);
+            if (newShadows.Count > 0) _shadowsAt[(col, row)] = newShadows;
+        }
+
+        // True if (col,row) is occupied by a wall — either the static room boundary or
+        // a placed wall foundation.
+        private bool IsWallAtPos(int col, int row)
+        {
+            bool boundary = col == 0 || col == RoomCols - 1 || row == 0 || row == RoomRows - 1;
+            bool isDoor   = row == 0 && col == RoomCols / 2;
+            if (boundary && !isDoor) return true;
+            if (_gm?.Station?.foundations == null) return false;
+            foreach (var f in _gm.Station.foundations.Values)
+                if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("wall"))
+                    return true;
+            return false;
+        }
+
+        // Add shadow overlays on a WALL tile — cardinal faces that border floor get edge
+        // shadows; corner wall tiles (no cardinal floor, but diagonal floor) get an inside
+        // corner radial to fill the shadow gap where two wall edge-shadows meet at a joint.
         private void AddShadowsForWall(int col, int row, Transform parent,
             List<GameObject> collector = null)
         {
-            if (IsFloorTile(col,     row + 1)) AddShadowOverlay(col, row, TileAtlas.SHADOW_TOP,    parent, collector);
-            if (IsFloorTile(col,     row - 1)) AddShadowOverlay(col, row, TileAtlas.SHADOW_BOTTOM, parent, collector);
-            if (IsFloorTile(col + 1, row    )) AddShadowOverlay(col, row, TileAtlas.SHADOW_RIGHT,  parent, collector);
-            if (IsFloorTile(col - 1, row    )) AddShadowOverlay(col, row, TileAtlas.SHADOW_LEFT,   parent, collector);
+            bool nFloor = IsFloorTile(col,     row + 1);
+            bool sFloor = IsFloorTile(col,     row - 1);
+            bool eFloor = IsFloorTile(col + 1, row    );
+            bool wFloor = IsFloorTile(col - 1, row    );
+
+            // Cardinal edge shadows on faces that border floor
+            if (nFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_TOP,    parent, collector);
+            if (sFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_BOTTOM, parent, collector);
+            if (eFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_RIGHT,  parent, collector);
+            if (wFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_LEFT,   parent, collector);
+
+            // Inside corner radial for wall corner tiles: both cardinals are walls but the
+            // diagonal is floor — darkens the inner corner joint that connects two wall faces.
+            bool nwFloor = IsFloorTile(col - 1, row + 1);
+            bool neFloor = IsFloorTile(col + 1, row + 1);
+            bool swFloor = IsFloorTile(col - 1, row - 1);
+            bool seFloor = IsFloorTile(col + 1, row - 1);
+
+            if (!nFloor && !wFloor && nwFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_TL, parent, collector);
+            if (!nFloor && !eFloor && neFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_TR, parent, collector);
+            if (!sFloor && !wFloor && swFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_BL, parent, collector);
+            if (!sFloor && !eFloor && seFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_BR, parent, collector);
         }
 
-        // Add shadow overlays on a DOOR tile at edges that face non-floor tiles.
+        // Add shadow overlays on a DOOR tile at edges that face wall tiles (in-bounds, non-floor).
+        // Out-of-bounds edges (void/outside) are skipped — void doesn't cast shadows.
         // Shadows go at sortOrder 3 (above door panels) and are tracked in entry.shadows
         // so they can be toggled off when the door opens.
         private void AddShadowsForDoor(int col, int row, Transform parent, DoorEntry entry)
@@ -364,42 +716,58 @@ namespace Waystation.View
             (int dc, int dr)[] dirs = { (0, 1), (0, -1), (1, 0), (-1, 0) };
             for (int i = 0; i < 4; i++)
             {
-                if (IsFloorTile(col + dirs[i].dc, row + dirs[i].dr)) continue;
+                int nc = col + dirs[i].dc, nr = row + dirs[i].dr;
+                // Skip: neighbor is floor (open side) or out of room bounds (void)
+                if (IsFloorTile(nc, nr)) continue;
+                if (!IsInBounds(nc, nr)) continue;
                 var go  = new GameObject($"DoorShadow{edges[i]}_{col},{row}");
                 go.transform.SetParent(parent);
                 go.transform.localPosition = new Vector3(col, row, 0f);
                 var sr  = go.AddComponent<SpriteRenderer>();
                 sr.sprite       = TileAtlas.GetShadow(edges[i]);
-                sr.sortingOrder = 3; // above door panels (2)
+                sr.sortingOrder = 41; // above door panels (40)
                 entry.shadows.Add(sr);
             }
         }
 
         // Add shadow overlay GOs for a floor tile based on non-floor adjacency.
+        // Add shadow overlays on a FLOOR tile using the three-family shadow system:
+        //   Edge shadows    — cardinal neighbours that are walls cast a linear gradient inward.
+        //   Inside corners  — where two adjacent cardinal walls meet, a radial deepens the
+        //                     concave corner (replaces stacking of two edge shadows).
+        //   Outside corners — when only the diagonal neighbour is a wall (both cardinals floor),
+        //                     a gentle radial marks the floor tile beside the wall corner.
         private void AddShadowsForFloor(int col, int row, Transform parent,
             List<GameObject> collector = null)
         {
-            bool nFloor = IsFloorTile(col,     row + 1);
-            bool sFloor = IsFloorTile(col,     row - 1);
-            bool eFloor = IsFloorTile(col + 1, row    );
-            bool wFloor = IsFloorTile(col - 1, row    );
+            bool nWall = !IsFloorTile(col,     row + 1);
+            bool sWall = !IsFloorTile(col,     row - 1);
+            bool eWall = !IsFloorTile(col + 1, row    );
+            bool wWall = !IsFloorTile(col - 1, row    );
 
-            // Cardinal shadows
-            if (!nFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_TOP,    parent, collector);
-            if (!sFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_BOTTOM, parent, collector);
-            if (!eFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_RIGHT,  parent, collector);
-            if (!wFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_LEFT,   parent, collector);
+            // ── Cardinal edge shadows ─────────────────────────────────────────
+            if (nWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_TOP,    parent, collector);
+            if (sWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_BOTTOM, parent, collector);
+            if (eWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_RIGHT,  parent, collector);
+            if (wWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_LEFT,   parent, collector);
 
-            // Diagonal corner shadows — only when the corner is a wall but neither
-            // adjacent cardinal side is already shadowed (avoids double-darkening).
-            if (!IsFloorTile(col - 1, row + 1) && nFloor && wFloor)
-                AddShadowOverlay(col, row, TileAtlas.SHADOW_TL, parent, collector);
-            if (!IsFloorTile(col + 1, row + 1) && nFloor && eFloor)
-                AddShadowOverlay(col, row, TileAtlas.SHADOW_TR, parent, collector);
-            if (!IsFloorTile(col - 1, row - 1) && sFloor && wFloor)
-                AddShadowOverlay(col, row, TileAtlas.SHADOW_BL, parent, collector);
-            if (!IsFloorTile(col + 1, row - 1) && sFloor && eFloor)
-                AddShadowOverlay(col, row, TileAtlas.SHADOW_BR, parent, collector);
+            // ── Corner shadows ────────────────────────────────────────────────
+            // Inside corner: both adjacent cardinals are walls → concave corner radial.
+            // Outside corner: both adjacent cardinals are floor, diagonal is wall → convex radial.
+            bool nwWall = !IsFloorTile(col - 1, row + 1);
+            bool neWall = !IsFloorTile(col + 1, row + 1);
+            bool swWall = !IsFloorTile(col - 1, row - 1);
+            bool seWall = !IsFloorTile(col + 1, row - 1);
+
+            if (nWall && wWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_TL,  parent, collector);
+            if (nWall && eWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_TR,  parent, collector);
+            if (sWall && wWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_BL,  parent, collector);
+            if (sWall && eWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_BR,  parent, collector);
+
+            if (!nWall && !wWall && nwWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_OUT_TL, parent, collector);
+            if (!nWall && !eWall && neWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_OUT_TR, parent, collector);
+            if (!sWall && !wWall && swWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_OUT_BL, parent, collector);
+            if (!sWall && !eWall && seWall) AddShadowOverlay(col, row, TileAtlas.SHADOW_OUT_BR, parent, collector);
         }
 
         private void AddShadowOverlay(int col, int row, int edge, Transform parent,
@@ -410,7 +778,7 @@ namespace Waystation.View
             go.transform.localPosition = new Vector3(col, row, 0f);
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = TileAtlas.GetShadow(edge);
-            sr.sortingOrder = 1; // above floor (0), below door (2)
+            sr.sortingOrder = 11; // above floor (10), below objects (20)
             collector?.Add(go);
         }
 
@@ -469,6 +837,9 @@ namespace Waystation.View
             foreach (var d in _dots) if (d) Destroy(d);
             _dots.Clear();
             _crew.Clear();
+            _dotTile.Clear();
+            _dotTarget.Clear();
+            _selectedDots.Clear();
 
             if (_gm?.Station == null) return;
 
@@ -499,8 +870,9 @@ namespace Waystation.View
                 var sr = go.AddComponent<SpriteRenderer>();
                 sr.sprite       = _dotSprite;
                 sr.color        = col;
-                sr.sortingOrder = 5;
+                sr.sortingOrder = 20;
 
+                _dotTile[i] = slot;
                 _dots.Add(go);
             }
         }
@@ -509,6 +881,134 @@ namespace Waystation.View
         {
             if (station.GetCrew().Count != _crew.Count) SpawnCrewDots();
             RebuildFoundationTiles();
+            WanderDotTiles();
+        }
+
+        // Moves each crew dot to a random adjacent interior tile each tick
+        // (~45 % chance to step per tick).  Purely visual — no data-model state.
+        // Dots will not move to a tile already claimed by another dot.
+        private void WanderDotTiles()
+        {
+            // Build the set of tiles already claimed (current tile OR in-progress target)
+            var claimed = new HashSet<Vector2Int>();
+            for (int k = 0; k < _dots.Count; k++)
+            {
+                if (_dotTile.TryGetValue(k, out Vector2Int t)) claimed.Add(t);
+            }
+
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                // Skip dots that are still mid-move or won't step this tick
+                if (_dotTarget.ContainsKey(i))    continue;
+                if (UnityEngine.Random.value > 0.45f) continue;
+
+                _dotTile.TryGetValue(i, out Vector2Int cur);
+                int col = cur.x, row = cur.y;
+
+                // Shuffle the four cardinal directions (Fisher-Yates)
+                var dirs = new Vector2Int[]
+                {
+                    new Vector2Int( 1,  0),
+                    new Vector2Int(-1,  0),
+                    new Vector2Int( 0,  1),
+                    new Vector2Int( 0, -1),
+                };
+                for (int d = 3; d > 0; d--)
+                {
+                    int j = UnityEngine.Random.Range(0, d + 1);
+                    Vector2Int tmp = dirs[d]; dirs[d] = dirs[j]; dirs[j] = tmp;
+                }
+
+                foreach (var dir in dirs)
+                {
+                    int nc = col + dir.x, nr = row + dir.y;
+                    var candidate = new Vector2Int(nc, nr);
+                    if (nc >= IntMinC && nc <= IntMaxC &&
+                        nr >= IntMinR && nr <= IntMaxR &&
+                        !claimed.Contains(candidate))
+                    {
+                        claimed.Remove(cur);          // release old tile
+                        claimed.Add(candidate);        // claim new tile
+                        _dotTile[i]   = candidate;
+                        _dotTarget[i] = new Vector3(nc, nr, -0.2f); // animate
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ── Drag-selection helpers ────────────────────────────────────────────
+
+        private void CommitDragSelection()
+        {
+            _selectedDots.Clear();
+            if (_dragSelRect.width < 2f && _dragSelRect.height < 2f)
+            {
+                // Point-click: pick the nearest dot within 30 screen px
+                float best = 30f * 30f;
+                int   pick = -1;
+                for (int i = 0; i < _dots.Count; i++)
+                {
+                    if (!_dots[i]) continue;
+                    Vector3 sp = Camera.main != null
+                        ? Camera.main.WorldToScreenPoint(_dots[i].transform.position)
+                        : Vector3.zero;
+                    float dx = sp.x - _dragSelStart.x;
+                    float dy = sp.y - _dragSelStart.y;
+                    float d2 = dx * dx + dy * dy;
+                    if (d2 < best) { best = d2; pick = i; }
+                }
+                if (pick >= 0) _selectedDots.Add(pick);
+                return;
+            }
+
+            // Rect-drag: select all dots whose screen position falls inside
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                Vector3 sp = Camera.main != null
+                    ? Camera.main.WorldToScreenPoint(_dots[i].transform.position)
+                    : Vector3.zero;
+                float gy = Screen.height - sp.y;
+                if (_dragSelRect.Contains(new Vector2(sp.x, gy)))
+                    _selectedDots.Add(i);
+            }
+        }
+
+        private void MoveSelectedToTile(int tileCol, int tileRow)
+        {
+            // Candidate positions: target first, then surrounding tiles
+            var positions = new List<Vector2Int>
+            {
+                new Vector2Int(tileCol, tileRow),
+                new Vector2Int(tileCol-1, tileRow), new Vector2Int(tileCol+1, tileRow),
+                new Vector2Int(tileCol, tileRow-1), new Vector2Int(tileCol, tileRow+1),
+                new Vector2Int(tileCol-1, tileRow-1), new Vector2Int(tileCol+1, tileRow-1),
+                new Vector2Int(tileCol-1, tileRow+1), new Vector2Int(tileCol+1, tileRow+1),
+            };
+
+            // Tiles occupied by non-selected dots (they stay put)
+            var occupied = new HashSet<Vector2Int>();
+            for (int i = 0; i < _dots.Count; i++)
+                if (!_selectedDots.Contains(i) && _dotTile.TryGetValue(i, out var t))
+                    occupied.Add(t);
+
+            var available = new Queue<Vector2Int>();
+            foreach (var p in positions)
+                if (p.x >= IntMinC && p.x <= IntMaxC &&
+                    p.y >= IntMinR && p.y <= IntMaxR &&
+                    !occupied.Contains(p))
+                    available.Enqueue(p);
+
+            foreach (int i in _selectedDots)
+            {
+                if (available.Count == 0) break;
+                var dest = available.Dequeue();
+                occupied.Add(dest);
+                _dotTile[i]   = dest;
+                _dotTarget[i] = new Vector3(dest.x, dest.y, -0.2f);
+            }
         }
 
         // ── Name labels ───────────────────────────────────────────────────────
@@ -541,8 +1041,136 @@ namespace Waystation.View
                 float gy = Screen.height - sp.y - 10f;
 
                 // Use pre-built label string — no per-frame allocation.
+                // Draw a highlight ring around selected dots.
+                if (_selectedDots.Contains(i))
+                {
+                    Vector3 dotSp = Camera.main.WorldToScreenPoint(_dots[i].transform.position);
+                    float rx = dotSp.x - 10f;
+                    float ry = Screen.height - dotSp.y - 10f;
+                    GUI.color = new Color(1f, 0.88f, 0.25f, 0.85f);
+                    GUI.Box(new Rect(rx, ry, 20f, 20f), GUIContent.none);
+                    GUI.color = Color.white;
+                }
                 GUI.Label(new Rect(gx, gy, 130f, 32f), _crewLabels[i], _labelStyle);
             }
+
+            // ── Drag-selection rectangle ──────────────────────────────────────
+            if (_isDragSelecting && (_dragSelRect.width > 2f || _dragSelRect.height > 2f))
+            {
+                GUI.color = new Color(0.35f, 0.75f, 1f, 0.15f);
+                GUI.DrawTexture(_dragSelRect, Texture2D.whiteTexture);
+                GUI.color = new Color(0.35f, 0.75f, 1f, 0.70f);
+                GUI.Box(_dragSelRect, GUIContent.none);
+                GUI.color = Color.white;
+            }
+
+            // ── Right-click context menu ──────────────────────────────────────
+            if (_showContextMenu && _selectedDots.Count > 0)
+            {
+                if (_ctxBoxStyle == null)
+                {
+                    _ctxBoxStyle = new GUIStyle(GUI.skin.box)
+                    {
+                        padding    = new RectOffset(0, 0, 4, 4),
+                        margin     = new RectOffset(0, 0, 0, 0),
+                        normal     = { background = MakeSolidTexture(new Color(0.08f, 0.10f, 0.16f, 0.96f)) },
+                    };
+                    _ctxBtnStyle = new GUIStyle(GUI.skin.button)
+                    {
+                        fontSize  = 11,
+                        alignment = TextAnchor.MiddleLeft,
+                        padding   = new RectOffset(10, 10, 5, 5),
+                        normal    = { textColor = new Color(0.85f, 0.90f, 1.00f) },
+                        hover     = { textColor = Color.white,
+                                      background = MakeSolidTexture(new Color(0.25f, 0.45f, 0.80f, 0.85f)) },
+                    };
+                }
+
+                // Work out what is at the clicked tile
+                bool isInterior = _ctxTileCol >= IntMinC && _ctxTileCol <= IntMaxC &&
+                                  _ctxTileRow >= IntMinR && _ctxTileRow <= IntMaxR;
+
+                string workLabel = null;
+                if (_gm?.Station != null)
+                {
+                    foreach (var kv in _gm.Station.foundations)
+                    {
+                        if (kv.Value.tileCol == _ctxTileCol && kv.Value.tileRow == _ctxTileRow
+                            && kv.Value.status != "complete")
+                        {
+                            workLabel = $"Construct: {kv.Value.buildableId.Split('.')[^1]}";
+                            break;
+                        }
+                    }
+                }
+
+                int btnH  = 28, menuW = 170;
+                int rows  = isInterior ? (workLabel != null ? 3 : 2) : 1;
+                float mx  = Mathf.Clamp(_contextMenuScreen.x, 0, Screen.width  - menuW - 4);
+                float my  = Mathf.Clamp(_contextMenuScreen.y, 0, Screen.height - rows * btnH - 8);
+                var   box = new Rect(mx, my, menuW, rows * btnH + 8);
+
+                GUI.Box(box, GUIContent.none, _ctxBoxStyle);
+                GUI.BeginGroup(box);
+                int by = 4;
+                if (isInterior)
+                {
+                    if (GUI.Button(new Rect(1, by, menuW - 2, btnH), "\u25b6 Move here", _ctxBtnStyle))
+                    {
+                        MoveSelectedToTile(_ctxTileCol, _ctxTileRow);
+                        _showContextMenu = false;
+                    }
+                    by += btnH;
+                }
+                if (workLabel != null)
+                {
+                    if (GUI.Button(new Rect(1, by, menuW - 2, btnH), $"\u2692 {workLabel}", _ctxBtnStyle))
+                    {
+                        AssignSelectedToConstruction(_ctxTileCol, _ctxTileRow);
+                        _showContextMenu = false;
+                    }
+                    by += btnH;
+                }
+                if (GUI.Button(new Rect(1, by, menuW - 2, btnH), "\u2715 Cancel", _ctxBtnStyle))
+                    _showContextMenu = false;
+                GUI.EndGroup();
+
+                // Close on Escape
+                if (Event.current.type == EventType.KeyDown &&
+                    Event.current.keyCode == KeyCode.Escape)
+                    _showContextMenu = false;
+            }
+        }
+
+        private void AssignSelectedToConstruction(int col, int row)
+        {
+            if (_gm?.Station == null) return;
+            foreach (var kv in _gm.Station.foundations)
+            {
+                var f = kv.Value;
+                if (f.tileCol != col || f.tileRow != row) continue;
+                if (f.status == "complete") continue;
+                // Assign first idle selected crew member to this foundation
+                foreach (int di in _selectedDots)
+                {
+                    if (di >= _crew.Count) continue;
+                    var npc = _crew[di];
+                    npc.currentJobId  = "job.build";
+                    npc.jobModuleUid  = f.uid;
+                    f.assignedNpcUid  = npc.uid;
+                    MoveSelectedToTile(col, row);
+                    break;
+                }
+                break;
+            }
+        }
+
+        private static Texture2D MakeSolidTexture(Color c)
+        {
+            var t = new Texture2D(1, 1);
+            t.SetPixel(0, 0, c);
+            t.Apply();
+            return t;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

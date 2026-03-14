@@ -51,18 +51,19 @@
         "schema_version": "1"
     },
     {
-        "id": "buildable.storage_crate",
-        "display_name": "Storage Crate",
+        "id": "buildable.storage_cabinet",
+        "display_name": "Storage Cabinet",
         "category": "object",
-        "description": "A sturdy metal storage crate. Can hold a modest quantity of loose cargo or spare parts and is quick to assemble.",
-        "build_time_ticks": 6,
+        "description": "A reinforced storage cabinet with locking lid. Holds up to 48 items and can be configured to accept specific item types only. Rotatable to face any direction.",
+        "build_time_ticks": 8,
         "required_materials": {
-            "item.steel_plate": 1
+            "item.steel_plate": 2
         },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
-        "max_health": 80,
+        "max_health": 100,
+        "cargo_capacity": 48,
         "schema_version": "1"
     },
     {
@@ -121,6 +122,64 @@
         ],
         "size": 2,
         "max_health": 90,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.generator",
+        "display_name": "Generator",
+        "category": "electrical",
+        "description": "A compact diesel generator. Provides steady power output each tick. Requires fuel to operate. Place inside a pressurised room.",
+        "build_time_ticks": 25,
+        "required_materials": {
+            "item.steel_plate": 4,
+            "item.parts": 3
+        },
+        "required_skills": {
+            "engineering": 2,
+            "electrical": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "power_output": 20,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.power_wire",
+        "display_name": "Power Wire",
+        "category": "electrical",
+        "layer": 0,
+        "description": "A single-tile electrical conduit laid under floor panels. Connects generators and batteries to powered devices. Drag to place runs.",
+        "build_time_ticks": 4,
+        "required_materials": {
+            "item.wiring": 1
+        },
+        "required_skills": {
+            "electrical": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 60,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.battery",
+        "display_name": "Battery Bank",
+        "category": "electrical",
+        "description": "A high-capacity lithium battery array. Stores surplus power and releases it when generator output drops. Requires connection to power wire.",
+        "build_time_ticks": 20,
+        "required_materials": {
+            "item.steel_plate": 3,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 1,
+            "electrical": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "power_capacity": 100,
         "schema_version": "1"
     },
     {
@@ -197,3 +256,4 @@
         "schema_version": "1"
     }
 ]
+

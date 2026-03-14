@@ -139,7 +139,7 @@ namespace Waystation.Core
             SetupStartingCrew();
             SetupStartingPolicies();
             Factions.Initialize(Station);
-            Station.LogEvent($"Waystation '{stationName}' operational. All systems nominal.");
+            Log($"Waystation '{stationName}' operational. All systems nominal.");
 
             IsPaused = false;
             OnGameLoaded?.Invoke();
@@ -173,7 +173,7 @@ namespace Waystation.Core
 
         private void SetupStartingCrew()
         {
-            string[] startingTemplates = { "npc.engineer", "npc.security_officer", "npc.scientist" };
+            string[] startingTemplates = { "npc.engineer", "npc.security_officer", "npc.operations" };
             foreach (var tmpl in startingTemplates)
             {
                 if (!Registry.Npcs.ContainsKey(tmpl)) continue;
@@ -240,7 +240,7 @@ namespace Waystation.Core
             Station.ModifyResource("credits", -RecruitCost);
             npc.statusTags.Remove("visitor");
             npc.statusTags.Add("crew");
-            Station.LogEvent($"{npc.name} recruited as crew ({RecruitCost:F0} credits).");
+            Log($"{npc.name} recruited as crew ({RecruitCost:F0} credits).");
             return (true, $"{npc.name} is now crew.");
         }
 
@@ -257,7 +257,7 @@ namespace Waystation.Core
             float oldDamage = module.damage;
             module.damage   = Mathf.Max(0f, module.damage - RepairDamageAmount);
             if (module.damage == 0f && !module.active) module.active = true;
-            Station.LogEvent($"Repair: {module.displayName} {oldDamage:P0} → {module.damage:P0}.");
+            Log($"Repair: {module.displayName} {oldDamage:P0} → {module.damage:P0}.");
             return (true, $"Repaired {module.displayName}.");
         }
 
@@ -266,7 +266,14 @@ namespace Waystation.Core
             string old = Station.policy.ContainsKey(key) ? Station.policy[key] : "";
             Station.policy[key] = value;
             ApplyPolicyEffects(key, value, old);
-            Station.LogEvent($"Policy '{key}' changed: {old} → {value}.");
+            Log($"Policy '{key}' changed: {old} → {value}.");
+        }
+
+        // Logs a message to the station log and fires OnLogMessage for listeners.
+        private void Log(string msg)
+        {
+            Station.LogEvent(msg);
+            OnLogMessage?.Invoke(msg);
         }
 
         private void ApplyPolicyEffects(string key, string value, string oldValue)
@@ -307,7 +314,7 @@ namespace Waystation.Core
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));
-            Station.LogEvent("Game saved.");
+            Log("Game saved.");
             Debug.Log($"[GameManager] Saved to {path}");
         }
 

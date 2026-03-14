@@ -315,6 +315,9 @@ namespace Waystation.Models
         public int tileCol;
         public int tileRow;
 
+        // Rotation in degrees (0 / 90 / 180 / 270) — used for rotatable objects (e.g. cabinet)
+        public int tileRotation = 0;
+
         // "awaiting_haul" | "constructing" | "complete"
         public string status = "awaiting_haul";
 
@@ -329,8 +332,37 @@ namespace Waystation.Models
         public int   health    = 100;
         public float quality   = 1.0f;
 
+        // Door status — only relevant when buildableId contains "door".
+        // "powered" | "locked" | "unpowered"
+        public string doorStatus = "powered";
+
         // uid of the Engineer NPC currently assigned here, or null
         public string assignedNpcUid;
+
+        // Cargo storage — mirrors ModuleInstance capability for placed storage objects.
+        // cargoCapacity > 0 means this foundation acts as a cargo hold.
+        public int                       cargoCapacity = 0;
+        public CargoHoldSettings         cargoSettings;
+        public Dictionary<string, int>   cargo         = new Dictionary<string, int>();
+
+        /// Total number of item units currently stored (unweighted).
+        public int CargoItemCount()
+        {
+            int n = 0;
+            foreach (var v in cargo.Values) n += v;
+            return n;
+        }
+
+        /// Fill fraction 0–1 based on item count vs capacity.
+        public float CargoFillRatio()
+            => cargoCapacity <= 0 ? 0f : UnityEngine.Mathf.Clamp01((float)CargoItemCount() / cargoCapacity);
+
+        // Tile layer set by BuildingSystem.PlaceFoundation():
+        // 1=floor, 2=object/furniture, 3=large object, 4=structural barrier.
+        public int tileLayer  = 1;
+        // Multi-tile footprint (set by BuildingSystem from BuildableDefinition).
+        public int tileWidth  = 1;
+        public int tileHeight = 1;
 
         /// <summary>
         /// Functionality based on current HP:
@@ -358,17 +390,20 @@ namespace Waystation.Models
         }
 
         public static FoundationInstance Create(string buildableId, int col, int row,
-                                                 int maxHealth = 100, float quality = 1.0f)
+                                                 int maxHealth = 100, float quality = 1.0f,
+                                                 int rotation = 0, int cargoCapacity = 0)
         {
             return new FoundationInstance
             {
-                uid         = Guid.NewGuid().ToString("N")[..8],
-                buildableId = buildableId,
-                tileCol     = col,
-                tileRow     = row,
-                maxHealth   = maxHealth,
-                health      = maxHealth,
-                quality     = quality,
+                uid           = Guid.NewGuid().ToString("N")[..8],
+                buildableId   = buildableId,
+                tileCol       = col,
+                tileRow       = row,
+                maxHealth     = maxHealth,
+                health        = maxHealth,
+                quality       = quality,
+                tileRotation  = rotation,
+                cargoCapacity = cargoCapacity,
             };
         }
     }
@@ -412,6 +447,10 @@ namespace Waystation.Models
 
         // Active build foundations keyed by uid
         public Dictionary<string, FoundationInstance> foundations = new Dictionary<string, FoundationInstance>();
+
+        // Room role designations: canonical floor key "col_row" → role label
+        // (key = "minCol_minRow" of the connected floor-tile set that forms the room)
+        public Dictionary<string, string> roomRoles = new Dictionary<string, string>();
 
         // Communications inbox (most recent first)
         public List<CommMessage> messages = new List<CommMessage>();
