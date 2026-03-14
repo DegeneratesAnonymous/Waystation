@@ -40,6 +40,12 @@ namespace Waystation.Systems
 
         private readonly ContentRegistry _registry;
 
+        /// <summary>
+        /// When true, foundations skip the haul phase and complete instantly
+        /// without consuming any materials.  Toggled via the in-game Dev Tools button.
+        /// </summary>
+        public static bool DevMode = false;
+
         public BuildingSystem(ContentRegistry registry) => _registry = registry;
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -51,7 +57,8 @@ namespace Waystation.Systems
         /// </summary>
         public FoundationInstance PlaceFoundation(StationState station,
                                                    string buildableId,
-                                                   int col, int row)
+                                                   int col, int row,
+                                                   int rotation = 0)
         {
             if (!_registry.Buildables.TryGetValue(buildableId, out var defn))
             {
@@ -73,7 +80,8 @@ namespace Waystation.Systems
             }
 
             var foundation = FoundationInstance.Create(buildableId, col, row,
-                                                        defn.maxHealth, defn.buildQuality);
+                                                        defn.maxHealth, defn.buildQuality,
+                                                        rotation, defn.cargoCapacity);
             station.foundations[foundation.uid] = foundation;
             station.LogEvent($"Foundation placed: {defn.displayName} at tile ({col},{row}).");
             Debug.Log($"[BuildingSystem] Foundation {foundation.uid} placed at ({col},{row}).");
@@ -234,6 +242,13 @@ namespace Waystation.Systems
         {
             var required = defn.requiredMaterials;
 
+            // Dev mode — skip haul entirely, jump straight to constructing.
+            if (DevMode)
+            {
+                foundation.status = "constructing";
+                return;
+            }
+
             // No materials needed — skip straight to constructing
             if (required == null || required.Count == 0)
             {
@@ -308,6 +323,14 @@ namespace Waystation.Systems
                                        StationState station,
                                        List<NPCInstance> idle)
         {
+            // Dev mode — complete instantly, no engineer needed.
+            if (DevMode)
+            {
+                foundation.buildProgress = 1f;
+                CompleteFoundation(foundation, defn, station, null);
+                return;
+            }
+
             // Ensure an engineer is assigned
             NPCInstance assigned = null;
             if (foundation.assignedNpcUid != null)

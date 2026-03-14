@@ -496,6 +496,7 @@ namespace Waystation.Models
         public float  buildQuality      = 1.0f;
         public int    size              = 1;
         public int    maxHealth         = 100;
+        public int    cargoCapacity     = 0;          // > 0 for storage objects (e.g. cabinet)
 
         // item_id → quantity required before construction can begin
         public Dictionary<string, int> requiredMaterials = new Dictionary<string, int>();
@@ -518,6 +519,7 @@ namespace Waystation.Models
                 buildQuality   = raw.GetFloat("build_quality", 1.0f),
                 size           = raw.GetInt("size", 1),
                 maxHealth      = raw.GetInt("max_health", 100),
+                cargoCapacity  = raw.GetInt("cargo_capacity", 0),
             };
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);

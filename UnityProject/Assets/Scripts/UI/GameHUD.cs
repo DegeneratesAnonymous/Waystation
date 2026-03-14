@@ -14,6 +14,7 @@ using Waystation.Core;
 using Waystation.Demo;
 using Waystation.Models;
 using Waystation.Systems;
+using Waystation.View;
 
 namespace Waystation.UI
 {
@@ -40,7 +41,7 @@ namespace Waystation.UI
         private static readonly Color ColSummaryBg = new Color(0.07f, 0.09f, 0.15f, 0.85f);
 
         // ── Tab enum ──────────────────────────────────────────────────────────
-        private enum Tab { None, Build, Crew, Station, AwayMission, Settings }
+        private enum Tab { None, Build, Crew, Station, AwayMission, Rooms, Settings }
 
         private static readonly (Tab tab, string label)[] Tabs =
         {
@@ -48,6 +49,7 @@ namespace Waystation.UI
             (Tab.Crew,        "Crew"),
             (Tab.Station,     "Station"),
             (Tab.AwayMission, "Away"),
+            (Tab.Rooms,       "Rooms"),
             (Tab.Settings,    "Settings"),
         };
 
@@ -90,7 +92,11 @@ namespace Waystation.UI
             StartCoroutine(WaitForGame());
         }
 
-        private void OnDestroy() => DemoBootstrap.HideOverlay = false;
+        private void OnDestroy()
+        {
+            DemoBootstrap.HideOverlay = false;
+            foreach (var go in _ghostPool) if (go) Destroy(go);
+        }
 
         private IEnumerator WaitForGame()
         {
@@ -110,6 +116,8 @@ namespace Waystation.UI
         // ── Update — drawer animation + ghost input ───────────────────────────
         private void Update()
         {
+            UpdateGhostSprites();
+
             float target = _active != Tab.None ? 1f : 0f;
             _drawerT = Mathf.Lerp(_drawerT, target, Time.deltaTime * AnimK);
 
@@ -139,7 +147,7 @@ namespace Waystation.UI
                 if (Input.GetMouseButtonDown(0) && !IsMouseOverDrawer)
                 {
                     _isDragging   = true;
-                    _dragRect     = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                    _dragRect     = true; // deconstruct always selects a rectangle
                     _dragStartCol = _ghostTileCol;
                     _dragStartRow = _ghostTileRow;
                 }
@@ -200,11 +208,58 @@ namespace Waystation.UI
                 {
                     if (!_dragBlocked.Contains((col, row)))
                         _gm.Building.PlaceFoundation(
-                            _gm.Station, _ghostBuildableId, col, row);
+                            _gm.Station, _ghostBuildableId, col, row, _ghostRotation);
                 }
                 _isDragging = false;
                 _dragLine.Clear();
                 _dragBlocked.Clear();
+            }
+        }
+
+        // Maintains a pool of world-space SpriteRenderers showing the actual buildable sprite
+        // with a blue ghost tint while the player is placing.  Uses previous-frame drag state
+        // (called at the top of Update before drag rebuild) — lag is imperceptible at 60 fps.
+        private void UpdateGhostSprites()
+        {
+            bool placing = _ghostBuildableId != null && !_deconstructMode;
+
+            // Build tile list from previous-frame state
+            var tiles = new List<(int col, int row)>();
+            if (placing)
+            {
+                if (_isDragging && _dragLine.Count > 0)
+                    tiles.AddRange(_dragLine);
+                else
+                    tiles.Add((_ghostTileCol, _ghostTileRow));
+            }
+
+            Sprite spr = placing ? TileAtlas.GetPreviewSprite(_ghostBuildableId, _ghostRotation) : null;
+
+            // Grow pool on demand
+            while (_ghostPool.Count < tiles.Count)
+            {
+                var go = new GameObject("GhostTileSprite");
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = 8; // above all tile layers
+                _ghostPool.Add(go);
+            }
+
+            // Update / deactivate each slot
+            for (int i = 0; i < _ghostPool.Count; i++)
+            {
+                if (i >= tiles.Count) { _ghostPool[i].SetActive(false); continue; }
+
+                var (col, row) = tiles[i];
+                _ghostPool[i].SetActive(true);
+                _ghostPool[i].transform.position = new Vector3(col, row, -0.1f);
+                _ghostPool[i].transform.rotation = Quaternion.Euler(0f, 0f, _ghostRotation);
+
+                var sr = _ghostPool[i].GetComponent<SpriteRenderer>();
+                sr.sprite = spr;
+                bool blocked = _dragBlocked.Contains((col, row));
+                sr.color   = blocked
+                    ? new Color(1.00f, 0.30f, 0.20f, 0.60f)
+                    : new Color(0.45f, 0.80f, 1.00f, 0.60f);
             }
         }
 
@@ -215,6 +270,19 @@ namespace Waystation.UI
 
             float sw = Screen.width;
             float sh = Screen.height;
+
+            // ── Dev Tools button (top-left) ──────────────────────────────────────
+            bool devOn = Waystation.Systems.BuildingSystem.DevMode;
+            GUI.color = devOn ? new Color(1.00f, 0.78f, 0.20f, 1f) : new Color(0.55f, 0.60f, 0.70f, 0.85f);
+            if (GUI.Button(new Rect(6f, 6f, 90f, 22f), devOn ? "⚡ DEV ON" : "⚡ Dev Tools", _sBtnSmall))
+                Waystation.Systems.BuildingSystem.DevMode = !devOn;
+            GUI.color = Color.white;
+            if (devOn)
+            {
+                GUI.color = new Color(1f, 0.92f, 0.35f, 0.85f);
+                GUI.Label(new Rect(100f, 8f, 200f, 18f), "Free Build  ON", _sSub);
+                GUI.color = Color.white;
+            }
 
             // ── Drawer (slides in from right) ─────────────────────────────────
             if (_drawerT > 0.004f)
@@ -257,13 +325,11 @@ namespace Waystation.UI
                         var f = kv.Value;
                         if (f.status == "complete") continue;
 
-                        // Yellow if any materials arrived OR actively constructing;
-                        // pale blue-grey if still waiting for the first haul.
+                        // Yellow outline if materials arrived / constructing; blue-grey if waiting.
+                        // Fill is transparent — foundation sprite is tinted by StationRoomView.
                         bool hasResources = f.hauledMaterials.Count > 0 ||
                                             f.status == "constructing";
-                        Color fill  = hasResources
-                                      ? new Color(1.00f, 0.85f, 0.10f, 0.28f)
-                                      : new Color(0.55f, 0.65f, 0.80f, 0.18f);
+                        Color fill = Color.clear;
                         Color edge  = hasResources
                                       ? new Color(1.00f, 0.90f, 0.20f, 0.75f)
                                       : new Color(0.55f, 0.70f, 0.90f, 0.55f);
@@ -273,37 +339,27 @@ namespace Waystation.UI
                 }
             }
 
+            // ── Rooms tab overlay ─────────────────────────────────────────────
+            if (_active == Tab.Rooms && _white != null)
+            {
+                var roomCam = Camera.main;
+                if (roomCam != null) DrawRoomsOverlay(roomCam);
+            }
+
             // ── Deconstruct mode overlays ─────────────────────────────────────
-            if (_deconstructMode && _white != null && _gm?.Station != null)
+            if (_deconstructMode && _isDragging && _dragLine.Count > 0 && _white != null && _gm?.Station != null)
             {
                 var dCam = Camera.main;
                 if (dCam != null)
                 {
-                    if (_isDragging && _dragLine.Count > 0)
+                    foreach (var (col, row) in _dragLine)
                     {
-                        // Show drag-selection tiles
-                        foreach (var (col, row) in _dragLine)
-                        {
-                            bool hasTarget = !_dragBlocked.Contains((col, row));
-                            Color fill = hasTarget ? new Color(1f, 0.20f, 0.15f, 0.55f)
-                                                   : new Color(0.5f, 0.5f, 0.5f, 0.15f);
-                            Color edge = hasTarget ? new Color(1f, 0.45f, 0.35f, 0.95f)
-                                                   : new Color(0.6f, 0.6f, 0.6f, 0.35f);
-                            DrawTileOverlay(dCam, col, row, fill, edge);
-                        }
-                    }
-                    else
-                    {
-                        // Idle — dim-red all foundations + bright hover
-                        foreach (var kv in _gm.Station.foundations)
-                        {
-                            DrawTileOverlay(dCam, kv.Value.tileCol, kv.Value.tileRow,
-                                new Color(1f, 0.22f, 0.18f, 0.28f),
-                                new Color(1f, 0.40f, 0.35f, 0.80f));
-                        }
-                        DrawTileOverlay(dCam, _ghostTileCol, _ghostTileRow,
-                            new Color(1f, 0.50f, 0.40f, 0.45f),
-                            new Color(1f, 0.65f, 0.55f, 0.95f));
+                        bool hasTarget = !_dragBlocked.Contains((col, row));
+                        Color fill = hasTarget ? new Color(1f, 0.20f, 0.15f, 0.55f)
+                                               : new Color(0.5f, 0.5f, 0.5f, 0.15f);
+                        Color edge = hasTarget ? new Color(1f, 0.45f, 0.35f, 0.95f)
+                                               : new Color(0.6f, 0.6f, 0.6f, 0.35f);
+                        DrawTileOverlay(dCam, col, row, fill, edge);
                     }
                 }
             }
@@ -316,25 +372,21 @@ namespace Waystation.UI
                 {
                     if (_isDragging && _dragLine.Count > 0)
                     {
-                        // Draw every tile in the drag line
+                        // Edge outline only — sprite is rendered by UpdateGhostSprites
                         foreach (var (col, row) in _dragLine)
                         {
                             bool blocked = _dragBlocked.Contains((col, row));
-                            Color fill = blocked
-                                ? new Color(1.00f, 0.30f, 0.20f, 0.38f)
-                                : new Color(0.35f, 0.75f, 1.00f, 0.38f);
                             Color edge = blocked
                                 ? new Color(1.00f, 0.50f, 0.35f, 0.85f)
                                 : new Color(0.50f, 0.88f, 1.00f, 0.80f);
-                            DrawTileOverlay(ghostCam, col, row, fill, edge);
+                            DrawTileOverlay(ghostCam, col, row, Color.clear, edge);
                         }
                     }
                     else
                     {
-                        // Single cursor tile
-                        Color fill = new Color(0.35f, 0.75f, 1.00f, 0.38f);
+                        // Single cursor tile — edge outline only
                         Color edge = new Color(0.50f, 0.88f, 1.00f, 0.80f);
-                        DrawTileOverlay(ghostCam, _ghostTileCol, _ghostTileRow, fill, edge);
+                        DrawTileOverlay(ghostCam, _ghostTileCol, _ghostTileRow, Color.clear, edge);
                     }
 
                     // Label anchored to the cursor tile
@@ -391,6 +443,7 @@ namespace Waystation.UI
                 Tab.Crew        => "Crew",
                 Tab.Station     => "Station",
                 Tab.AwayMission => "Away Mission",
+                Tab.Rooms       => "Room Designations",
                 Tab.Settings    => "Settings",
                 _               => "",
             };
@@ -414,6 +467,7 @@ namespace Waystation.UI
                 case Tab.Crew:        DrawCrew(area, cw, contentH);        break;
                 case Tab.Station:     DrawStation(area, cw, contentH);     break;
                 case Tab.AwayMission: DrawAwayMission(area, cw, contentH); break;
+                case Tab.Rooms:       DrawRooms(area, cw, contentH);       break;
                 case Tab.Settings:    DrawSettings(area, cw, contentH);    break;
             }
         }
@@ -422,7 +476,9 @@ namespace Waystation.UI
         private Vector2 _buildScroll;
         private int     _buildNextCol = 0;
         private int     _buildNextRow = 0;
-        private string  _buildInfoOpen   = "";   // buildable id whose info panel is expanded
+        private string  _buildInfoOpen    = "";  // buildable id whose info panel is expanded
+        private string  _foundSettingsOpen = ""; // foundation uid whose cargo settings are open
+        private string  _buildCategoryFilter = ""; // "" = all categories
         private bool    _deconstructMode = false; // deconstruct-mode: click tile to cancel/demolish
         private bool    _showBuildQueue  = false; // toggle inline build-queue panel
 
@@ -439,6 +495,9 @@ namespace Waystation.UI
         private int    _dragStartRow  = 0;
         private readonly System.Collections.Generic.List<(int col, int row)>    _dragLine    = new System.Collections.Generic.List<(int col, int row)>();
         private readonly System.Collections.Generic.HashSet<(int col, int row)> _dragBlocked = new System.Collections.Generic.HashSet<(int col, int row)>();
+
+        // World-space SpriteRenderer GOs that render the actual buildable tile as a ghost.
+        private readonly List<GameObject> _ghostPool = new List<GameObject>();
 
         // True when cursor is over the HUD — used by CameraController to block map scroll/pan
         public static bool IsMouseOverDrawer { get; private set; }
@@ -477,10 +536,32 @@ namespace Waystation.UI
             }
 
             // ── Group catalogue by category ───────────────────────────────────
+            // Category filter buttons
+            string[] catFilters = { "", "structure", "electrical", "production",
+                                    "furniture", "plumbing", "security" };
+            string[] catLabels  = { "All", "Structure", "Elec", "Prod",
+                                    "Furnit", "Plumb", "Secure" };
+            const float CatBtnH = 22f;
+            DrawSolid(new Rect(area.x, area.y + tbH, w, CatBtnH + 4f), new Color(0.04f, 0.06f, 0.11f, 0.9f));
+            float bx = area.x + 4f;
+            float bw = (w - 8f) / catFilters.Length;
+            for (int ci = 0; ci < catFilters.Length; ci++)
+            {
+                bool isActive = _buildCategoryFilter == catFilters[ci];
+                GUI.color = isActive ? new Color(0.35f, 0.60f, 0.90f, 1f) : new Color(0.55f, 0.60f, 0.70f, 1f);
+                if (GUI.Button(new Rect(bx, area.y + tbH + 2f, bw - 2f, CatBtnH - 2f),
+                               catLabels[ci], _sBtnSmall))
+                    _buildCategoryFilter = catFilters[ci];
+                bx += bw;
+            }
+            GUI.color = tbPrev;
+            tbH += CatBtnH + 4f;
+
             var byCategory = new SortedDictionary<string, List<BuildableDefinition>>();
             foreach (var kv in catalog)
             {
                 string cat = string.IsNullOrEmpty(kv.Value.category) ? "other" : kv.Value.category;
+                if (!string.IsNullOrEmpty(_buildCategoryFilter) && cat != _buildCategoryFilter) continue;
                 if (!byCategory.ContainsKey(cat))
                     byCategory[cat] = new List<BuildableDefinition>();
                 byCategory[cat].Add(kv.Value);
@@ -564,8 +645,10 @@ namespace Waystation.UI
 
         private void DrawFoundationRow(FoundationInstance f, float cw, ref float y, StationState s)
         {
-            bool   hasDefn = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
-            string fname   = hasDefn ? fDefn.displayName : f.buildableId;
+            bool   hasDefn     = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
+            string fname       = hasDefn ? fDefn.displayName : f.buildableId;
+            bool   isCabinet   = f.buildableId.Contains("storage_cabinet");
+            bool   settingsOpen = isCabinet && f.status == "complete" && _foundSettingsOpen == f.uid;
 
             DrawSolid(new Rect(0, y, cw, 64f), new Color(0.07f, 0.09f, 0.15f, 0.6f));
             GUI.Label(new Rect(4f, y + 2f, cw * 0.65f, 18f), fname, _sLabel);
@@ -602,8 +685,59 @@ namespace Waystation.UI
                 if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), "Cancel", _sBtnDanger))
                     _gm.Building.CancelFoundation(s, f.uid, refund: true);
             }
+            else if (isCabinet)
+            {
+                // Toggle settings panel
+                string btnLabel = settingsOpen ? "\u25b2 Config" : "\u25bc Config";
+                if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), btnLabel, _sBtnSmall))
+                    _foundSettingsOpen = settingsOpen ? "" : f.uid;
+
+                // Rotation reminder label
+                GUI.Label(new Rect(4f, y + 38f, cw - 8f, 14f),
+                    $"{f.cargoCapacity} items  ·  {f.tileRotation}° rotation", _sSub);
+            }
 
             y += 70f;
+
+            // ── Cargo settings panel (cabinet only, complete, expanded) ───────
+            if (settingsOpen)
+            {
+                if (f.cargoSettings == null) f.cargoSettings = new CargoHoldSettings();
+
+                DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
+                y += 6f;
+                GUI.Label(new Rect(4f, y, cw - 8f, 16f), "Allowed Item Types", _sLabel);
+                y += 20f;
+
+                bool allowAll  = f.cargoSettings.allowedTypes.Count == 0;
+                bool allowNone = f.cargoSettings.allowedTypes.Count == 1 &&
+                                 f.cargoSettings.allowedTypes[0] == CargoHoldSettings.AllowNoneSentinel;
+
+                GUI.Label(new Rect(8f, y, cw * 0.78f, 16f), "No restrictions (allow all)", _sSub);
+                bool newAllowAll = GUI.Toggle(new Rect(cw * 0.82f, y, 16f, 16f), allowAll, "");
+                if (newAllowAll != allowAll)
+                    f.cargoSettings.allowedTypes = newAllowAll
+                        ? new System.Collections.Generic.List<string>()
+                        : new System.Collections.Generic.List<string>(ItemTypes);
+                y += 20f;
+
+                foreach (var type in ItemTypes)
+                {
+                    bool wasAllowed = allowAll || (!allowNone && f.cargoSettings.allowedTypes.Contains(type));
+                    GUI.Label(new Rect(12f, y, cw * 0.78f, 16f), type, _sSub);
+                    bool nowAllowed = GUI.Toggle(new Rect(cw * 0.82f, y, 16f, 16f), wasAllowed, "");
+                    if (nowAllowed != wasAllowed && !allowAll)
+                    {
+                        if (allowNone) f.cargoSettings.allowedTypes.Clear();
+                        if (nowAllowed) { if (!f.cargoSettings.allowedTypes.Contains(type)) f.cargoSettings.allowedTypes.Add(type); }
+                        else f.cargoSettings.allowedTypes.Remove(type);
+                    }
+                    y += 20f;
+                }
+
+                DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
+                y += 6f;
+            }
         }
 
         private void DrawCatalogCard(BuildableDefinition defn, float cw, ref float y, StationState s)
@@ -1177,7 +1311,185 @@ namespace Waystation.UI
                 _sSub);
         }
 
-        // ── Settings tab ──────────────────────────────────────────────────────
+        // ── Rooms tab ─────────────────────────────────────────────────────────
+        private Vector2 _roomsScroll;
+        private string  _roomHoveredKey  = null;  // canonical key of flood-filled hovered room
+        private string  _roomSelectedKey = null;  // canonical key of room for role picker
+        private bool    _roomPickerOpen  = false;
+
+        private static readonly (string id, string label, Color col)[] RoomRoles =
+        {
+            ("",              "Unassigned",    new Color(0.40f, 0.40f, 0.45f, 0.40f)),
+            ("hallway",       "Hallway",       new Color(0.35f, 0.50f, 0.65f, 0.50f)),
+            ("cargo_hold",    "Cargo Hold",    new Color(0.75f, 0.58f, 0.25f, 0.50f)),
+            ("medical_bay",   "Medical Bay",   new Color(0.25f, 0.68f, 0.38f, 0.50f)),
+            ("engineering",   "Engineering",   new Color(0.78f, 0.50f, 0.20f, 0.50f)),
+            ("command",       "Command",       new Color(0.28f, 0.45f, 0.80f, 0.50f)),
+            ("crew_quarters", "Crew Quarters", new Color(0.60f, 0.32f, 0.72f, 0.50f)),
+            ("recreation",    "Recreation",    new Color(0.80f, 0.35f, 0.55f, 0.50f)),
+            ("security",      "Security",      new Color(0.78f, 0.24f, 0.24f, 0.50f)),
+            ("cafeteria",     "Cafeteria",     new Color(0.75f, 0.75f, 0.22f, 0.50f)),
+        };
+
+        // BFS flood-fill from (startCol, startRow) over floor tiles, returning their canonical key.
+        // Returns null if start tile is not a floor.
+        private string FloodFillRoom(int startCol, int startRow, out List<(int c, int r)> tiles)
+        {
+            tiles = new List<(int, int)>();
+            if (_gm?.Station == null) return null;
+            var founds = _gm.Station.foundations;
+
+            // Determine which tiles are "floor" — same logic as StationRoomView.IsFloorTile
+            bool IsFloor(int c, int r)
+            {
+                string key = $"{c}_{r}";
+                if (founds.TryGetValue(key, out var fd))
+                    return fd.buildableId.Contains("floor") && !fd.buildableId.Contains("wall");
+                return c >= 1 && c <= 5 && r >= 1 && r <= 5; // default room interior
+            }
+
+            if (!IsFloor(startCol, startRow)) return null;
+
+            var visited = new System.Collections.Generic.HashSet<(int,int)>();
+            var queue   = new System.Collections.Generic.Queue<(int,int)>();
+            queue.Enqueue((startCol, startRow));
+            visited.Add((startCol, startRow));
+
+            while (queue.Count > 0)
+            {
+                var (c, r) = queue.Dequeue();
+                tiles.Add((c, r));
+                foreach (var (dc, dr) in new[]{(1,0),(-1,0),(0,1),(0,-1)})
+                {
+                    var nb = (c+dc, r+dr);
+                    if (!visited.Contains(nb) && IsFloor(nb.Item1, nb.Item2))
+                    { visited.Add(nb); queue.Enqueue(nb); }
+                }
+            }
+
+            if (tiles.Count == 0) return null;
+            int minC = int.MaxValue, minR = int.MaxValue;
+            foreach (var (c, r) in tiles) { if (c < minC) minC = c; if (r < minR) minR = r; }
+            return $"{minC}_{minR}";
+        }
+
+        private static Color RoleColor(string roleId)
+        {
+            foreach (var rr in RoomRoles) if (rr.id == roleId) return rr.col;
+            return RoomRoles[0].col;
+        }
+
+        private void DrawRooms(Rect area, float w, float h)
+        {
+            if (_gm?.Station == null) return;
+            var roomRoles = _gm.Station.roomRoles;
+
+            // Update hovered room from mouse position
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 wp = cam.ScreenToWorldPoint(new Vector3(
+                    Input.mousePosition.x, Input.mousePosition.y, 0f));
+                int hc = Mathf.RoundToInt(wp.x), hr = Mathf.RoundToInt(wp.y);
+                _roomHoveredKey = FloodFillRoom(hc, hr, out _);
+                if (Input.GetMouseButtonDown(0) && _roomHoveredKey != null)
+                {
+                    _roomSelectedKey = _roomHoveredKey;
+                    _roomPickerOpen  = true;
+                }
+            }
+
+            float y = area.y;
+            GUI.Label(new Rect(area.x, y, w, 18f),
+                "Click a room on the map to assign a role.", _sSub);
+            y += 22f;
+
+            // Role picker popup
+            if (_roomPickerOpen && _roomSelectedKey != null)
+            {
+                DrawSolid(new Rect(area.x, y, w, 22f), new Color(0.18f, 0.28f, 0.46f, 0.9f));
+                GUI.Label(new Rect(area.x + 4f, y + 3f, w - 8f, 16f),
+                    $"Room {_roomSelectedKey}  — assign role:", _sSub);
+                y += 24f;
+
+                foreach (var rr in RoomRoles)
+                {
+                    bool cur = roomRoles.TryGetValue(_roomSelectedKey, out var cr) && cr == rr.id
+                               || (string.IsNullOrEmpty(rr.id) && !roomRoles.ContainsKey(_roomSelectedKey));
+                    GUI.color = cur ? new Color(0.35f, 0.65f, 0.95f) : Color.white;
+                    if (GUI.Button(new Rect(area.x + 4f, y, w - 8f, 20f), rr.label, _sBtnSmall))
+                    {
+                        if (string.IsNullOrEmpty(rr.id)) roomRoles.Remove(_roomSelectedKey);
+                        else roomRoles[_roomSelectedKey] = rr.id;
+                        _roomPickerOpen = false;
+                    }
+                    GUI.color = Color.white;
+                    y += 22f;
+                }
+
+                if (GUI.Button(new Rect(area.x + 4f, y, w - 8f, 20f), "Cancel", _sBtnSmall))
+                    _roomPickerOpen = false;
+                y += 26f;
+            }
+
+            // List designated rooms
+            if (roomRoles.Count == 0)
+            {
+                GUI.Label(new Rect(area.x, y, w, 18f), "No rooms designated yet.", _sSub);
+                return;
+            }
+            GUI.Label(new Rect(area.x, y, w, 18f), "Designated rooms:", _sSub);
+            y += 22f;
+
+            _roomsScroll = GUI.BeginScrollView(new Rect(area.x, y, w, h - (y - area.y)),
+                _roomsScroll, new Rect(0, 0, w - 16f, roomRoles.Count * 22f + 4f));
+            float sy = 0f;
+            foreach (var kv in roomRoles)
+            {
+                string rname = "Unknown";
+                foreach (var rr in RoomRoles) if (rr.id == kv.Value) { rname = rr.label; break; }
+                GUI.Label(new Rect(4f, sy, w - 60f, 18f), $"Room {kv.Key}", _sSub);
+                GUI.Label(new Rect(w - 100f, sy, 96f, 18f), rname, _sSub);
+                sy += 22f;
+            }
+            GUI.EndScrollView();
+        }
+
+        // overlay rendering for Rooms tab (called from OnGUI world-space section)
+        private void DrawRoomsOverlay(Camera cam)
+        {
+            if (_gm?.Station == null) return;
+            var roomRoles = _gm.Station.roomRoles;
+
+            // Draw designated room fills
+            foreach (var kv in roomRoles)
+            {
+                var parts = kv.Key.Split('_');
+                if (parts.Length < 2) continue;
+                if (!int.TryParse(parts[0], out int sc) || !int.TryParse(parts[1], out int sr)) continue;
+                FloodFillRoom(sc, sr, out var rtiles);
+                Color rc = RoleColor(kv.Value);
+                Color edge = new Color(rc.r, rc.g, rc.b, Mathf.Min(1f, rc.a + 0.25f));
+                foreach (var (c, r) in rtiles)
+                    DrawTileOverlay(cam, c, r, rc, edge);
+            }
+
+            // Hover highlight (re-flood-fill to get tile list)
+            if (_roomHoveredKey != null)
+            {
+                var hparts = _roomHoveredKey.Split('_');
+                if (hparts.Length >= 2
+                    && int.TryParse(hparts[0], out int hsc)
+                    && int.TryParse(hparts[1], out int hsr))
+                {
+                    FloodFillRoom(hsc, hsr, out var htiles);
+                    foreach (var (c, r) in htiles)
+                        DrawTileOverlay(cam, c, r, new Color(1f,1f,1f,0.10f), new Color(1f,1f,1f,0.50f));
+                }
+            }
+        }
+
+        // ── Settings tab ─────────────────────────────────────────────────────
         private void DrawSettings(Rect area, float w, float h)
         {
             float y = area.y;

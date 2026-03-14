@@ -39,16 +39,17 @@
     "schema_version": "1"
   },
   {
-    "id": "buildable.storage_crate",
-    "display_name": "Storage Crate",
+    "id": "buildable.storage_cabinet",
+    "display_name": "Storage Cabinet",
     "category": "object",
-    "description": "A sturdy metal storage crate. Can hold a modest quantity of loose cargo or spare parts and is quick to assemble.",
-    "build_time_ticks": 6,
-    "required_materials": { "item.steel_plate": 1 },
+    "description": "A reinforced storage cabinet with locking lid. Holds up to 48 items and can be configured to accept specific item types only. Rotatable to face any direction.",
+    "build_time_ticks": 8,
+    "required_materials": { "item.steel_plate": 2 },
     "required_skills": {},
     "required_tags": [],
     "size": 1,
-    "max_health": 80,
+    "max_health": 100,
+    "cargo_capacity": 48,
     "schema_version": "1"
   },
   {

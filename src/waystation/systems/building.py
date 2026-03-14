@@ -346,10 +346,10 @@ class BuildingSystem:
         Finalise construction: apply tile map changes and mark complete.
 
         The tile change applied depends on the buildable ID:
-          buildable.wall          → solid wall tile
-          buildable.floor         → floor tile
-          buildable.door          → floor tile + N-edge wall with door
-          buildable.storage_crate → floor tile (object placed on floor)
+          buildable.wall            → solid wall tile
+          buildable.floor           → floor tile
+          buildable.door            → floor tile + N-edge wall with door
+          buildable.storage_cabinet → floor tile (object placed on floor)
         """
         col, row = foundation.tile_position
         tm = station.tile_map
