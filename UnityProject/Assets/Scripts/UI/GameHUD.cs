@@ -3,7 +3,7 @@
 // Taskbar: 68 px vertical strip flush to right edge.
 // Drawer:  320 px panel that slides out to the left of the taskbar.
 //
-// Tabs: Build · Crew · Station · Comms · Away Mission · Settings
+// Tabs: Build · Crew · Station · Comms · Away Mission · Rooms · Settings
 //
 // Self-installs via RuntimeInitializeOnLoadMethod; sets DemoBootstrap.HideOverlay
 // so the legacy IMGUI stats box is suppressed.
