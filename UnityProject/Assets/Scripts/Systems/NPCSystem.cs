@@ -161,10 +161,9 @@ namespace Waystation.Systems
                 station.LogEvent($"{npc.name} is exhausted.");
 
             // Idle wandering: move to a random oxygenated module periodically.
-            // Only trigger for crew with no active job assignment; active builders
-            // (currentJobId == "job.build") must not be relocated.
-            if (npc.IsCrew() && string.IsNullOrEmpty(npc.jobModuleUid) &&
-                string.IsNullOrEmpty(npc.currentJobId) &&
+            // Only gate on having no active job; re-wander even if already in a
+            // module so idle NPCs keep moving rather than freezing after first step.
+            if (npc.IsCrew() && string.IsNullOrEmpty(npc.currentJobId) &&
                 UnityEngine.Random.value < 0.05f)
             {
                 WanderToActiveModule(npc, station);
