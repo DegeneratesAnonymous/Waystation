@@ -1,4 +1,0 @@
-pyyaml>=6.0
-jsonschema>=4.0
-colorama>=0.4.6
-pygame-ce>=2.5.0   # pygame Community Edition — supports Python 3.14
