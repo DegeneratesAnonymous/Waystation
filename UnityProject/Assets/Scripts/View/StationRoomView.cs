@@ -65,7 +65,13 @@ namespace Waystation.View
         private static Sprite     _dotSprite;
         private readonly Dictionary<int, Vector2Int> _dotTile   = new Dictionary<int, Vector2Int>();
         private readonly Dictionary<int, Vector3>    _dotTarget = new Dictionary<int, Vector3>();
-        private const float DotMoveSpeed = 4f; // world units per second
+        private readonly Dictionary<int, float>      _dotWanderAt = new Dictionary<int, float>(); // Time.time when dot next steps
+        private readonly HashSet<Vector2Int>         _dotClaimed  = new HashSet<Vector2Int>();     // reused each frame, avoids GC alloc
+        private const float DotMoveSpeed        = 4f;   // world units per second
+        private const float DotStepMinInterval  = 0.6f; // seconds between steps when moving freely
+        private const float DotStepMaxInterval  = 1.4f;
+        private const float DotBlockedMinInterval = 1.0f; // longer pause when all neighbours are occupied
+        private const float DotBlockedMaxInterval = 2.0f;
 
         // ── NPC selection & context menu ──────────────────────────────────────
         private readonly HashSet<int> _selectedDots      = new HashSet<int>();
@@ -172,6 +178,61 @@ namespace Waystation.View
                     _dots[i].transform.position =
                         Vector3.MoveTowards(cur, tgt, DotMoveSpeed * Time.deltaTime);
                 }
+            }
+
+            // ── Continuous NPC dot wandering (real-time, between ticks) ──────────
+            // Each dot picks a new adjacent interior tile on its own timer so the
+            // station feels lively at any game speed.
+            _dotClaimed.Clear();
+            for (int k = 0; k < _dots.Count; k++)
+                if (_dotTile.TryGetValue(k, out Vector2Int ct)) _dotClaimed.Add(ct);
+
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                if (_dotTarget.ContainsKey(i)) continue;  // still mid-move
+
+                float nextStep = _dotWanderAt.TryGetValue(i, out float ns) ? ns : 0f;
+                if (Time.time < nextStep) continue;
+
+                _dotTile.TryGetValue(i, out Vector2Int cur2);
+                int col2 = cur2.x, row2 = cur2.y;
+
+                var dirs = new Vector2Int[]
+                {
+                    new Vector2Int( 1,  0),
+                    new Vector2Int(-1,  0),
+                    new Vector2Int( 0,  1),
+                    new Vector2Int( 0, -1),
+                };
+                for (int d = 3; d > 0; d--)
+                {
+                    int j2 = UnityEngine.Random.Range(0, d + 1);
+                    Vector2Int tmp2 = dirs[d]; dirs[d] = dirs[j2]; dirs[j2] = tmp2;
+                }
+
+                bool stepped = false;
+                foreach (var dir in dirs)
+                {
+                    int nc2 = col2 + dir.x, nr2 = row2 + dir.y;
+                    var cand2 = new Vector2Int(nc2, nr2);
+                    if (nc2 >= IntMinC && nc2 <= IntMaxC &&
+                        nr2 >= IntMinR && nr2 <= IntMaxR &&
+                        !_dotClaimed.Contains(cand2))
+                    {
+                        _dotClaimed.Remove(cur2);
+                        _dotClaimed.Add(cand2);
+                        _dotTile[i]   = cand2;
+                        _dotTarget[i] = new Vector3(nc2, nr2, -0.2f);
+                        stepped = true;
+                        break;
+                    }
+                }
+
+                // Schedule next step: shorter interval if moved, longer if all neighbours were blocked
+                _dotWanderAt[i] = Time.time + UnityEngine.Random.Range(
+                    stepped ? DotStepMinInterval    : DotBlockedMinInterval,
+                    stepped ? DotStepMaxInterval    : DotBlockedMaxInterval);
             }
 
             // ── NPC drag-selection ─────────────────────────────────────────────
@@ -839,6 +900,8 @@ namespace Waystation.View
             _crew.Clear();
             _dotTile.Clear();
             _dotTarget.Clear();
+            _dotWanderAt.Clear();
+            _dotClaimed.Clear();
             _selectedDots.Clear();
 
             if (_gm?.Station == null) return;
@@ -881,61 +944,6 @@ namespace Waystation.View
         {
             if (station.GetCrew().Count != _crew.Count) SpawnCrewDots();
             RebuildFoundationTiles();
-            WanderDotTiles();
-        }
-
-        // Moves each crew dot to a random adjacent interior tile each tick
-        // (~45 % chance to step per tick).  Purely visual — no data-model state.
-        // Dots will not move to a tile already claimed by another dot.
-        private void WanderDotTiles()
-        {
-            // Build the set of tiles already claimed (current tile OR in-progress target)
-            var claimed = new HashSet<Vector2Int>();
-            for (int k = 0; k < _dots.Count; k++)
-            {
-                if (_dotTile.TryGetValue(k, out Vector2Int t)) claimed.Add(t);
-            }
-
-            for (int i = 0; i < _dots.Count; i++)
-            {
-                if (!_dots[i]) continue;
-                // Skip dots that are still mid-move or won't step this tick
-                if (_dotTarget.ContainsKey(i))    continue;
-                if (UnityEngine.Random.value > 0.45f) continue;
-
-                _dotTile.TryGetValue(i, out Vector2Int cur);
-                int col = cur.x, row = cur.y;
-
-                // Shuffle the four cardinal directions (Fisher-Yates)
-                var dirs = new Vector2Int[]
-                {
-                    new Vector2Int( 1,  0),
-                    new Vector2Int(-1,  0),
-                    new Vector2Int( 0,  1),
-                    new Vector2Int( 0, -1),
-                };
-                for (int d = 3; d > 0; d--)
-                {
-                    int j = UnityEngine.Random.Range(0, d + 1);
-                    Vector2Int tmp = dirs[d]; dirs[d] = dirs[j]; dirs[j] = tmp;
-                }
-
-                foreach (var dir in dirs)
-                {
-                    int nc = col + dir.x, nr = row + dir.y;
-                    var candidate = new Vector2Int(nc, nr);
-                    if (nc >= IntMinC && nc <= IntMaxC &&
-                        nr >= IntMinR && nr <= IntMaxR &&
-                        !claimed.Contains(candidate))
-                    {
-                        claimed.Remove(cur);          // release old tile
-                        claimed.Add(candidate);        // claim new tile
-                        _dotTile[i]   = candidate;
-                        _dotTarget[i] = new Vector3(nc, nr, -0.2f); // animate
-                        break;
-                    }
-                }
-            }
         }
 
         // ── Drag-selection helpers ────────────────────────────────────────────

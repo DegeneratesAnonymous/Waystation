@@ -52,6 +52,7 @@ namespace Waystation.UI
             (Tab.Station,     "Station"),
             (Tab.Comms,       "Comms"),
             (Tab.AwayMission, "Away"),
+            (Tab.Rooms,       "Rooms"),
             (Tab.Settings,    "Settings"),
         };
 
@@ -102,6 +103,16 @@ namespace Waystation.UI
             ("job.module_maintenance",  "Maint."),
             ("job.resource_management", "ResMgmt"),
         };
+
+        // ── Dev tool fill amounts ─────────────────────────────────────────────
+        private const float DevFillFood    = 500f;
+        private const float DevFillPower   = 500f;
+        private const float DevFillOxygen  = 500f;
+        private const float DevFillParts   = 200f;
+        private const float DevFillIce     = 500f;
+        private const float DevFillCredits = 5000f;
+        private const int   DevSteelPlateAmount = 50;
+        private const int   DevWiringAmount     = 20;
 
         // ── Styles (built once on first OnGUI) ────────────────────────────────
         private Texture2D _white;
@@ -1943,6 +1954,39 @@ namespace Waystation.UI
             {
                 if (GUI.Button(new Rect(Pad, y, cw, 28f), "\u25b6 Call Trade Ship", _sBtnWide))
                     _gm.Visitors.SpawnTradeShip(_gm.Station);
+                y += 34f;
+            }
+
+            DrawSolid(new Rect(Pad, y, cw, 1f), ColDivider); y += 14f;
+
+            // Resources section
+            GUI.Label(new Rect(Pad, y, cw, 18f), "Resources", _sLabel); y += 24f;
+            if (_ready && _gm != null)
+            {
+                if (GUI.Button(new Rect(Pad, y, cw, 28f), "Fill Station Resources", _sBtnWide))
+                {
+                    _gm.Station.ModifyResource("food",    DevFillFood);
+                    _gm.Station.ModifyResource("power",   DevFillPower);
+                    _gm.Station.ModifyResource("oxygen",  DevFillOxygen);
+                    _gm.Station.ModifyResource("parts",   DevFillParts);
+                    _gm.Station.ModifyResource("ice",     DevFillIce);
+                    _gm.Station.ModifyResource("credits", DevFillCredits);
+                }
+                y += 34f;
+
+                if (GUI.Button(new Rect(Pad, y, cw, 28f), "Add Build Materials", _sBtnWide))
+                {
+                    // Add to the first cargo hold that accepts materials
+                    foreach (var hold in _gm.Inventory.GetCargoHolds(_gm.Station))
+                    {
+                        int added = _gm.Inventory.AddItem(_gm.Station, hold.uid, "item.steel_plate", DevSteelPlateAmount);
+                        if (added > 0)
+                        {
+                            _gm.Inventory.AddItem(_gm.Station, hold.uid, "item.wiring", DevWiringAmount);
+                            break;
+                        }
+                    }
+                }
                 y += 34f;
             }
         }

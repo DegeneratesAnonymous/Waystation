@@ -217,7 +217,8 @@ namespace Waystation.Systems
             string name = ShipPrefixes[UnityEngine.Random.Range(0, ShipPrefixes.Length)]
                         + " " + ShipNames[UnityEngine.Random.Range(0, ShipNames.Length)];
             var ship = ShipInstance.Create(template.id, name, template.role,
-                                           "trade", factionId, template.threatLevel);
+                                           "trade",  // intent: here to buy/sell goods
+                                           factionId, template.threatLevel);
             station.AddShip(ship);
             station.LogEvent($"[DEV] Trade ship called: {ship.name}");
 
