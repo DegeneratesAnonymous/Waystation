@@ -195,6 +195,39 @@ namespace Waystation.Systems
             return true;
         }
 
+        /// <summary>
+        /// Dev tool: spawn and immediately admit a trade ship on demand.
+        /// Falls back to any ship template if no trader template exists.
+        /// If no dock is available the ship queues as incoming.
+        /// </summary>
+        public void SpawnTradeShip(StationState station)
+        {
+            ShipTemplate template = null;
+            foreach (var t in _registry.Ships.Values)
+                if (t.role == "trader") { template = t; break; }
+            if (template == null)
+                foreach (var t in _registry.Ships.Values) { template = t; break; }
+            if (template == null)
+            {
+                Debug.LogWarning("[VisitorSystem] SpawnTradeShip: no ship templates found.");
+                return;
+            }
+
+            string factionId = PickFactionForShip(template);
+            string name = ShipPrefixes[UnityEngine.Random.Range(0, ShipPrefixes.Length)]
+                        + " " + ShipNames[UnityEngine.Random.Range(0, ShipNames.Length)];
+            var ship = ShipInstance.Create(template.id, name, template.role,
+                                           "trade", factionId, template.threatLevel);
+            station.AddShip(ship);
+            station.LogEvent($"[DEV] Trade ship called: {ship.name}");
+
+            if (!AdmitShip(ship.uid, station))
+                station.LogEvent($"{ship.name} is incoming \u2014 no dock free.");
+
+            _eventSystem?.QueueEvent("event.arrival_generic",
+                new Dictionary<string, object> { { "ship_uid", ship.uid } });
+        }
+
         public void DenyShip(string shipUid, StationState station)
         {
             if (!station.ships.TryGetValue(shipUid, out var ship)) return;

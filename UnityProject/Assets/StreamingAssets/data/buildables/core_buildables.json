@@ -20,6 +20,7 @@
         "id": "buildable.floor",
         "display_name": "Floor Panel",
         "category": "structure",
+        "layer": 0,
         "description": "A standard pressurised floor tile. Required before a room can be designated and inhabited by crew.",
         "build_time_ticks": 8,
         "required_materials": {
@@ -70,6 +71,7 @@
         "id": "buildable.power_conduit",
         "display_name": "Power Conduit",
         "category": "structure",
+        "layer": 0,
         "description": "Runs power through station infrastructure. Extends station power grid to newly constructed sections.",
         "build_time_ticks": 12,
         "required_materials": {
