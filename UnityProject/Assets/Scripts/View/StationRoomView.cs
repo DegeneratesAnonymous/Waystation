@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
+using Waystation.UI;
 
 namespace Waystation.View
 {
@@ -62,6 +63,19 @@ namespace Waystation.View
         private bool              _ready;
         private GUIStyle          _labelStyle;
         private static Sprite     _dotSprite;
+        private readonly Dictionary<int, Vector2Int> _dotTile   = new Dictionary<int, Vector2Int>();
+        private readonly Dictionary<int, Vector3>    _dotTarget = new Dictionary<int, Vector3>();
+        private const float DotMoveSpeed = 4f; // world units per second
+
+        // ── NPC selection & context menu ──────────────────────────────────────
+        private readonly HashSet<int> _selectedDots      = new HashSet<int>();
+        private bool    _isDragSelecting;
+        private Vector2 _dragSelStart;            // screen space
+        private Rect    _dragSelRect;
+        private bool    _showContextMenu;
+        private Vector2 _contextMenuScreen;
+        private int     _ctxTileCol, _ctxTileRow;
+        private GUIStyle _ctxBoxStyle, _ctxBtnStyle;
         // ── Door animation ────────────────────────────────────────────────────
         // Each door opens independently when an NPC is one tile away (Manhattan ≤ 1).
         private const float DoorFrameTime = 0.13f; // 130 ms per step — matches spec
@@ -139,7 +153,74 @@ namespace Waystation.View
 
         private void Update()
         {
-            if (!_ready || _doorEntries.Count == 0) return;
+            if (!_ready) return;
+
+            // ── Animate crew dots toward their movement targets ────────────────
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                if (!_dotTarget.TryGetValue(i, out Vector3 tgt)) continue;
+                Vector3 cur = _dots[i].transform.position;
+                if (Vector3.SqrMagnitude(cur - tgt) < 0.0004f)
+                {
+                    _dots[i].transform.position = tgt;
+                    _dotTarget.Remove(i);
+                }
+                else
+                {
+                    _dots[i].transform.position =
+                        Vector3.MoveTowards(cur, tgt, DotMoveSpeed * Time.deltaTime);
+                }
+            }
+
+            // ── NPC drag-selection ─────────────────────────────────────────────
+            bool hudBusy = GameHUD.IsMouseOverDrawer || GameHUD.InBuildMode;
+            if (!hudBusy)
+            {
+                if (Input.GetMouseButtonDown(0))
+                {
+                    _showContextMenu  = false;
+                    _isDragSelecting  = true;
+                    _dragSelStart     = Input.mousePosition;
+                    _dragSelRect      = new Rect();
+                }
+                if (_isDragSelecting && Input.GetMouseButton(0))
+                {
+                    Vector2 cur = Input.mousePosition;
+                    float x = Mathf.Min(cur.x, _dragSelStart.x);
+                    float y = Mathf.Min(Screen.height - cur.y, Screen.height - _dragSelStart.y);
+                    float w = Mathf.Abs(cur.x - _dragSelStart.x);
+                    float h = Mathf.Abs(cur.y - _dragSelStart.y);
+                    _dragSelRect = new Rect(x, y, w, h);
+                }
+                if (_isDragSelecting && Input.GetMouseButtonUp(0))
+                {
+                    _isDragSelecting = false;
+                    CommitDragSelection();
+                    _dragSelRect = new Rect();
+                }
+
+                if (Input.GetMouseButtonDown(1) && _selectedDots.Count > 0)
+                {
+                    var cam = Camera.main;
+                    if (cam != null)
+                    {
+                        Vector3 world = cam.ScreenToWorldPoint(Input.mousePosition);
+                        _ctxTileCol       = Mathf.RoundToInt(world.x);
+                        _ctxTileRow       = Mathf.RoundToInt(world.y);
+                        _contextMenuScreen = new Vector2(
+                            Input.mousePosition.x,
+                            Screen.height - Input.mousePosition.y);
+                        _showContextMenu  = true;
+                    }
+                }
+                else if (Input.GetMouseButtonDown(1))
+                {
+                    _showContextMenu = false;
+                }
+            }
+
+            // ── Door animation ────────────────────────────────────────────────
             for (int i = _doorEntries.Count - 1; i >= 0; i--)
             {
                 var e = _doorEntries[i];
@@ -231,10 +312,10 @@ namespace Waystation.View
                 {
                     // Floor tile first (transparent gap reveals it)
                     PlaceTile(root.transform, c, r, TileAtlas.GetFloor(PickFloorVariant(c, r)),
-                        FloorRotation(c, r), sortOrder: 0);
+                        FloorRotation(c, r), sortOrder: 10);
                     // Door H — south-wall door connects interior (north) to outside
                     Sprite[] frames = TileAtlas.GetDoorHFrames();
-                    var doorGO = PlaceTile(root.transform, c, r, frames[0], 0f, sortOrder: 2);
+                    var doorGO = PlaceTile(root.transform, c, r, frames[0], 0f, sortOrder: 40);
                     var dEntry = new DoorEntry
                     {
                         sr = doorGO.GetComponent<SpriteRenderer>(),
@@ -248,11 +329,11 @@ namespace Waystation.View
                     int variant = PickFloorVariant(c, r);
                     _floorVariants[(c, r)] = variant;
                     PlaceTile(root.transform, c, r, TileAtlas.GetFloor(variant),
-                        FloorRotation(c, r), sortOrder: 0);
+                        FloorRotation(c, r), sortOrder: 10);
                 }
                 else // wall (corner, edge — directional tile selected by position)
                 {
-                    var wallGO = PlaceTile(root.transform, c, r, GetWallSprite(c, r), 0f, sortOrder: 0);
+                    var wallGO = PlaceTile(root.transform, c, r, GetWallSprite(c, r), 0f, sortOrder: 40);
                     _tileAt[(c, r)] = wallGO.GetComponent<SpriteRenderer>();
                 }
             }
@@ -335,7 +416,7 @@ namespace Waystation.View
                     _floorVariants[(f.tileCol, f.tileRow)] = variant;
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         TileAtlas.GetFloor(variant), FloorRotation(f.tileCol, f.tileRow),
-                        sortOrder: 0);
+                        sortOrder: 10);
                     _foundTiles[kv.Key] = go;
                     _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
 
@@ -347,7 +428,7 @@ namespace Waystation.View
                 else if (isWall)
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        GetWallSprite(f.tileCol, f.tileRow), 0f, sortOrder: 0);
+                        GetWallSprite(f.tileCol, f.tileRow), 0f, sortOrder: 40);
                     _foundTiles[kv.Key] = go;
                     _tileAt[(f.tileCol, f.tileRow)] = go.GetComponent<SpriteRenderer>();
                     _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
@@ -366,11 +447,11 @@ namespace Waystation.View
                     // Floor beneath door (transparent gap shows it)
                     var floorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         TileAtlas.GetFloor(PickFloorVariant(f.tileCol, f.tileRow)),
-                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 0);
+                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 10);
 
                     // Door sprite on top
                     var doorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        frames[0], 0f, sortOrder: 2);
+                        frames[0], 0f, sortOrder: 40);
                     var fEntry = new DoorEntry
                     {
                         sr = doorGO.GetComponent<SpriteRenderer>(),
@@ -388,18 +469,39 @@ namespace Waystation.View
                     // Cabinet sits on a floor tile shown beneath it.
                     var floorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         TileAtlas.GetFloor(PickFloorVariant(f.tileCol, f.tileRow)),
-                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 0);
+                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 10);
 
                     var cabinetGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        TileAtlas.GetCabinet(f.tileRotation), 0f, sortOrder: 1);
+                        TileAtlas.GetCabinet(f.tileRotation, f.CargoFillRatio()), 0f, sortOrder: 20);
 
                     _foundTiles[kv.Key]  = cabinetGO;
                     _foundExtras[kv.Key] = new List<GameObject> { floorGO };
                 }
+                else if (f.buildableId.Contains("battery"))
+                {
+                    // 128-px sprite = 2 world units wide; anchor at (col+0.5, row).
+                    // Pre-place floor tiles under both subtiles.
+                    var floorA = PlaceTile(_foundRoot.transform, f.tileCol,     f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol,     f.tileRow)),
+                        FloorRotation(f.tileCol,     f.tileRow), sortOrder: 10);
+                    var floorB = PlaceTile(_foundRoot.transform, f.tileCol + 1, f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol + 1, f.tileRow)),
+                        FloorRotation(f.tileCol + 1, f.tileRow), sortOrder: 10);
+
+                    var battGO = new GameObject($"Battery_{f.uid}");
+                    battGO.transform.SetParent(_foundRoot.transform, false);
+                    battGO.transform.localPosition = new Vector3(f.tileCol + 0.5f, f.tileRow, 0f);
+                    var sr = battGO.AddComponent<SpriteRenderer>();
+                    sr.sprite       = TileAtlas.GetBattery();
+                    sr.sortingOrder = 30; // layer 3 = large objects
+
+                    _foundTiles[kv.Key]  = battGO;
+                    _foundExtras[kv.Key] = new List<GameObject> { floorA, floorB };
+                }
                 else
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        MakeSolidSquare(new Color(0.22f, 0.25f, 0.32f)), 0f, sortOrder: 0);
+                        MakeSolidSquare(new Color(0.22f, 0.25f, 0.32f)), 0f, sortOrder: 20);
                     _foundTiles[kv.Key] = go;
                 }
             }
@@ -412,15 +514,21 @@ namespace Waystation.View
         /// cell is NOT floor.  Everything else (floor, door, cabinet, objects) is.
         private bool IsFloorTile(int col, int row)
         {
-            // Foundations override the interior range check first.
+            // With the layer system, multiple foundations can share one tile (e.g. a floor at
+            // layer 0 beneath a wall at layer 1).  We must check ALL foundations at this
+            // position: a layer-1 structure that is a wall (not a door) blocks traversal.
             if (_gm?.Station != null)
             {
+                bool anyFound = false;
+                bool hasWall  = false;
                 foreach (var f in _gm.Station.foundations.Values)
                 {
                     if (f.tileCol != col || f.tileRow != row) continue;
-                    // Wall foundations block adjacency; all other buildables sit on floor.
-                    return !f.buildableId.Contains("wall");
+                    anyFound = true;
+                    if (f.tileLayer == 1 && f.buildableId.Contains("wall"))
+                    { hasWall = true; break; }
                 }
+                if (anyFound) return !hasWall;
             }
 
             // Starter room interior — no overriding foundation present.
@@ -615,7 +723,7 @@ namespace Waystation.View
                 go.transform.localPosition = new Vector3(col, row, 0f);
                 var sr  = go.AddComponent<SpriteRenderer>();
                 sr.sprite       = TileAtlas.GetShadow(edges[i]);
-                sr.sortingOrder = 3; // above door panels (2)
+                sr.sortingOrder = 41; // above door panels (40)
                 entry.shadows.Add(sr);
             }
         }
@@ -668,7 +776,7 @@ namespace Waystation.View
             go.transform.localPosition = new Vector3(col, row, 0f);
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = TileAtlas.GetShadow(edge);
-            sr.sortingOrder = 1; // above floor (0), below door (2)
+            sr.sortingOrder = 11; // above floor (10), below objects (20)
             collector?.Add(go);
         }
 
@@ -727,6 +835,9 @@ namespace Waystation.View
             foreach (var d in _dots) if (d) Destroy(d);
             _dots.Clear();
             _crew.Clear();
+            _dotTile.Clear();
+            _dotTarget.Clear();
+            _selectedDots.Clear();
 
             if (_gm?.Station == null) return;
 
@@ -757,8 +868,9 @@ namespace Waystation.View
                 var sr = go.AddComponent<SpriteRenderer>();
                 sr.sprite       = _dotSprite;
                 sr.color        = col;
-                sr.sortingOrder = 5;
+                sr.sortingOrder = 20;
 
+                _dotTile[i] = slot;
                 _dots.Add(go);
             }
         }
@@ -767,6 +879,134 @@ namespace Waystation.View
         {
             if (station.GetCrew().Count != _crew.Count) SpawnCrewDots();
             RebuildFoundationTiles();
+            WanderDotTiles();
+        }
+
+        // Moves each crew dot to a random adjacent interior tile each tick
+        // (~45 % chance to step per tick).  Purely visual — no data-model state.
+        // Dots will not move to a tile already claimed by another dot.
+        private void WanderDotTiles()
+        {
+            // Build the set of tiles already claimed (current tile OR in-progress target)
+            var claimed = new HashSet<Vector2Int>();
+            for (int k = 0; k < _dots.Count; k++)
+            {
+                if (_dotTile.TryGetValue(k, out Vector2Int t)) claimed.Add(t);
+            }
+
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                // Skip dots that are still mid-move or won't step this tick
+                if (_dotTarget.ContainsKey(i))    continue;
+                if (UnityEngine.Random.value > 0.45f) continue;
+
+                _dotTile.TryGetValue(i, out Vector2Int cur);
+                int col = cur.x, row = cur.y;
+
+                // Shuffle the four cardinal directions (Fisher-Yates)
+                var dirs = new Vector2Int[]
+                {
+                    new Vector2Int( 1,  0),
+                    new Vector2Int(-1,  0),
+                    new Vector2Int( 0,  1),
+                    new Vector2Int( 0, -1),
+                };
+                for (int d = 3; d > 0; d--)
+                {
+                    int j = UnityEngine.Random.Range(0, d + 1);
+                    Vector2Int tmp = dirs[d]; dirs[d] = dirs[j]; dirs[j] = tmp;
+                }
+
+                foreach (var dir in dirs)
+                {
+                    int nc = col + dir.x, nr = row + dir.y;
+                    var candidate = new Vector2Int(nc, nr);
+                    if (nc >= IntMinC && nc <= IntMaxC &&
+                        nr >= IntMinR && nr <= IntMaxR &&
+                        !claimed.Contains(candidate))
+                    {
+                        claimed.Remove(cur);          // release old tile
+                        claimed.Add(candidate);        // claim new tile
+                        _dotTile[i]   = candidate;
+                        _dotTarget[i] = new Vector3(nc, nr, -0.2f); // animate
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ── Drag-selection helpers ────────────────────────────────────────────
+
+        private void CommitDragSelection()
+        {
+            _selectedDots.Clear();
+            if (_dragSelRect.width < 2f && _dragSelRect.height < 2f)
+            {
+                // Point-click: pick the nearest dot within 30 screen px
+                float best = 30f * 30f;
+                int   pick = -1;
+                for (int i = 0; i < _dots.Count; i++)
+                {
+                    if (!_dots[i]) continue;
+                    Vector3 sp = Camera.main != null
+                        ? Camera.main.WorldToScreenPoint(_dots[i].transform.position)
+                        : Vector3.zero;
+                    float dx = sp.x - _dragSelStart.x;
+                    float dy = sp.y - _dragSelStart.y;
+                    float d2 = dx * dx + dy * dy;
+                    if (d2 < best) { best = d2; pick = i; }
+                }
+                if (pick >= 0) _selectedDots.Add(pick);
+                return;
+            }
+
+            // Rect-drag: select all dots whose screen position falls inside
+            for (int i = 0; i < _dots.Count; i++)
+            {
+                if (!_dots[i]) continue;
+                Vector3 sp = Camera.main != null
+                    ? Camera.main.WorldToScreenPoint(_dots[i].transform.position)
+                    : Vector3.zero;
+                float gy = Screen.height - sp.y;
+                if (_dragSelRect.Contains(new Vector2(sp.x, gy)))
+                    _selectedDots.Add(i);
+            }
+        }
+
+        private void MoveSelectedToTile(int tileCol, int tileRow)
+        {
+            // Candidate positions: target first, then surrounding tiles
+            var positions = new List<Vector2Int>
+            {
+                new Vector2Int(tileCol, tileRow),
+                new Vector2Int(tileCol-1, tileRow), new Vector2Int(tileCol+1, tileRow),
+                new Vector2Int(tileCol, tileRow-1), new Vector2Int(tileCol, tileRow+1),
+                new Vector2Int(tileCol-1, tileRow-1), new Vector2Int(tileCol+1, tileRow-1),
+                new Vector2Int(tileCol-1, tileRow+1), new Vector2Int(tileCol+1, tileRow+1),
+            };
+
+            // Tiles occupied by non-selected dots (they stay put)
+            var occupied = new HashSet<Vector2Int>();
+            for (int i = 0; i < _dots.Count; i++)
+                if (!_selectedDots.Contains(i) && _dotTile.TryGetValue(i, out var t))
+                    occupied.Add(t);
+
+            var available = new Queue<Vector2Int>();
+            foreach (var p in positions)
+                if (p.x >= IntMinC && p.x <= IntMaxC &&
+                    p.y >= IntMinR && p.y <= IntMaxR &&
+                    !occupied.Contains(p))
+                    available.Enqueue(p);
+
+            foreach (int i in _selectedDots)
+            {
+                if (available.Count == 0) break;
+                var dest = available.Dequeue();
+                occupied.Add(dest);
+                _dotTile[i]   = dest;
+                _dotTarget[i] = new Vector3(dest.x, dest.y, -0.2f);
+            }
         }
 
         // ── Name labels ───────────────────────────────────────────────────────
@@ -799,8 +1039,136 @@ namespace Waystation.View
                 float gy = Screen.height - sp.y - 10f;
 
                 // Use pre-built label string — no per-frame allocation.
+                // Draw a highlight ring around selected dots.
+                if (_selectedDots.Contains(i))
+                {
+                    Vector3 dotSp = Camera.main.WorldToScreenPoint(_dots[i].transform.position);
+                    float rx = dotSp.x - 10f;
+                    float ry = Screen.height - dotSp.y - 10f;
+                    GUI.color = new Color(1f, 0.88f, 0.25f, 0.85f);
+                    GUI.Box(new Rect(rx, ry, 20f, 20f), GUIContent.none);
+                    GUI.color = Color.white;
+                }
                 GUI.Label(new Rect(gx, gy, 130f, 32f), _crewLabels[i], _labelStyle);
             }
+
+            // ── Drag-selection rectangle ──────────────────────────────────────
+            if (_isDragSelecting && (_dragSelRect.width > 2f || _dragSelRect.height > 2f))
+            {
+                GUI.color = new Color(0.35f, 0.75f, 1f, 0.15f);
+                GUI.DrawTexture(_dragSelRect, Texture2D.whiteTexture);
+                GUI.color = new Color(0.35f, 0.75f, 1f, 0.70f);
+                GUI.Box(_dragSelRect, GUIContent.none);
+                GUI.color = Color.white;
+            }
+
+            // ── Right-click context menu ──────────────────────────────────────
+            if (_showContextMenu && _selectedDots.Count > 0)
+            {
+                if (_ctxBoxStyle == null)
+                {
+                    _ctxBoxStyle = new GUIStyle(GUI.skin.box)
+                    {
+                        padding    = new RectOffset(0, 0, 4, 4),
+                        margin     = new RectOffset(0, 0, 0, 0),
+                        normal     = { background = MakeSolidTexture(new Color(0.08f, 0.10f, 0.16f, 0.96f)) },
+                    };
+                    _ctxBtnStyle = new GUIStyle(GUI.skin.button)
+                    {
+                        fontSize  = 11,
+                        alignment = TextAnchor.MiddleLeft,
+                        padding   = new RectOffset(10, 10, 5, 5),
+                        normal    = { textColor = new Color(0.85f, 0.90f, 1.00f) },
+                        hover     = { textColor = Color.white,
+                                      background = MakeSolidTexture(new Color(0.25f, 0.45f, 0.80f, 0.85f)) },
+                    };
+                }
+
+                // Work out what is at the clicked tile
+                bool isInterior = _ctxTileCol >= IntMinC && _ctxTileCol <= IntMaxC &&
+                                  _ctxTileRow >= IntMinR && _ctxTileRow <= IntMaxR;
+
+                string workLabel = null;
+                if (_gm?.Station != null)
+                {
+                    foreach (var kv in _gm.Station.foundations)
+                    {
+                        if (kv.Value.tileCol == _ctxTileCol && kv.Value.tileRow == _ctxTileRow
+                            && kv.Value.status != "complete")
+                        {
+                            workLabel = $"Construct: {kv.Value.buildableId.Split('.')[^1]}";
+                            break;
+                        }
+                    }
+                }
+
+                int btnH  = 28, menuW = 170;
+                int rows  = isInterior ? (workLabel != null ? 3 : 2) : 1;
+                float mx  = Mathf.Clamp(_contextMenuScreen.x, 0, Screen.width  - menuW - 4);
+                float my  = Mathf.Clamp(_contextMenuScreen.y, 0, Screen.height - rows * btnH - 8);
+                var   box = new Rect(mx, my, menuW, rows * btnH + 8);
+
+                GUI.Box(box, GUIContent.none, _ctxBoxStyle);
+                GUI.BeginGroup(box);
+                int by = 4;
+                if (isInterior)
+                {
+                    if (GUI.Button(new Rect(1, by, menuW - 2, btnH), "\u25b6 Move here", _ctxBtnStyle))
+                    {
+                        MoveSelectedToTile(_ctxTileCol, _ctxTileRow);
+                        _showContextMenu = false;
+                    }
+                    by += btnH;
+                }
+                if (workLabel != null)
+                {
+                    if (GUI.Button(new Rect(1, by, menuW - 2, btnH), $"\u2692 {workLabel}", _ctxBtnStyle))
+                    {
+                        AssignSelectedToConstruction(_ctxTileCol, _ctxTileRow);
+                        _showContextMenu = false;
+                    }
+                    by += btnH;
+                }
+                if (GUI.Button(new Rect(1, by, menuW - 2, btnH), "\u2715 Cancel", _ctxBtnStyle))
+                    _showContextMenu = false;
+                GUI.EndGroup();
+
+                // Close on Escape
+                if (Event.current.type == EventType.KeyDown &&
+                    Event.current.keyCode == KeyCode.Escape)
+                    _showContextMenu = false;
+            }
+        }
+
+        private void AssignSelectedToConstruction(int col, int row)
+        {
+            if (_gm?.Station == null) return;
+            foreach (var kv in _gm.Station.foundations)
+            {
+                var f = kv.Value;
+                if (f.tileCol != col || f.tileRow != row) continue;
+                if (f.status == "complete") continue;
+                // Assign first idle selected crew member to this foundation
+                foreach (int di in _selectedDots)
+                {
+                    if (di >= _crew.Count) continue;
+                    var npc = _crew[di];
+                    npc.currentJobId  = "job.build";
+                    npc.jobModuleUid  = f.uid;
+                    f.assignedNpcUid  = npc.uid;
+                    MoveSelectedToTile(col, row);
+                    break;
+                }
+                break;
+            }
+        }
+
+        private static Texture2D MakeSolidTexture(Color c)
+        {
+            var t = new Texture2D(1, 1);
+            t.SetPixel(0, 0, c);
+            t.Apply();
+            return t;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

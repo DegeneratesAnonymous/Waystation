@@ -269,8 +269,28 @@ namespace Waystation.Models
 
         // Cargo storage — mirrors ModuleInstance capability for placed storage objects.
         // cargoCapacity > 0 means this foundation acts as a cargo hold.
-        public int               cargoCapacity = 0;
-        public CargoHoldSettings cargoSettings;
+        public int                       cargoCapacity = 0;
+        public CargoHoldSettings         cargoSettings;
+        public Dictionary<string, int>   cargo         = new Dictionary<string, int>();
+
+        /// Total number of item units currently stored (unweighted).
+        public int CargoItemCount()
+        {
+            int n = 0;
+            foreach (var v in cargo.Values) n += v;
+            return n;
+        }
+
+        /// Fill fraction 0–1 based on item count vs capacity.
+        public float CargoFillRatio()
+            => cargoCapacity <= 0 ? 0f : UnityEngine.Mathf.Clamp01((float)CargoItemCount() / cargoCapacity);
+
+        // Tile layer set by BuildingSystem.PlaceFoundation():
+        // 1=floor, 2=object/furniture, 3=large object, 4=structural barrier.
+        public int tileLayer  = 1;
+        // Multi-tile footprint (set by BuildingSystem from BuildableDefinition).
+        public int tileWidth  = 1;
+        public int tileHeight = 1;
 
         /// <summary>
         /// Functionality based on current HP:

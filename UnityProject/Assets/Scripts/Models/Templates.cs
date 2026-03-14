@@ -498,6 +498,13 @@ namespace Waystation.Models
         public int    maxHealth         = 100;
         public int    cargoCapacity     = 0;          // > 0 for storage objects (e.g. cabinet)
 
+        // Tile layer: 1=floor, 2=object/furniture, 3=large object, 4=structural barrier.
+        // Loaded from optional "layer" key in YAML; defaults to 1 for "structure" category, 2 otherwise.
+        public int    tileLayer         = 1;
+        // Multi-tile footprint (default 1×1).
+        public int    tileWidth         = 1;
+        public int    tileHeight        = 1;
+
         // item_id → quantity required before construction can begin
         public Dictionary<string, int> requiredMaterials = new Dictionary<string, int>();
 
@@ -521,6 +528,9 @@ namespace Waystation.Models
                 maxHealth      = raw.GetInt("max_health", 100),
                 cargoCapacity  = raw.GetInt("cargo_capacity", 0),
             };
+            b.tileLayer  = raw.GetInt("layer",       b.category == "structure" ? 1 : 2);
+            b.tileWidth  = raw.GetInt("tile_width",  1);
+            b.tileHeight = raw.GetInt("tile_height", 1);
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);
             if (raw.ContainsKey("required_materials") &&

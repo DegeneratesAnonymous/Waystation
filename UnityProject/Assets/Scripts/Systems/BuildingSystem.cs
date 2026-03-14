@@ -82,6 +82,46 @@ namespace Waystation.Systems
             var foundation = FoundationInstance.Create(buildableId, col, row,
                                                         defn.maxHealth, defn.buildQuality,
                                                         rotation, defn.cargoCapacity);
+            // ── Layer rules ──────────────────────────────────────────────────────
+            int targetLayer = defn.tileLayer;
+            int tileW       = defn.tileWidth;
+            int tileH       = defn.tileHeight;
+
+            // 1. Cancel or remove any same-layer foundation overlapping the new footprint.
+            var conflictUids = new System.Collections.Generic.List<string>();
+            foreach (var existing in station.foundations.Values)
+            {
+                if (existing.tileLayer != targetLayer) continue;
+                bool overlaps = false;
+                for (int dc = 0; dc < tileW && !overlaps; dc++)
+                for (int dr = 0; dr < tileH && !overlaps; dr++)
+                    if (existing.tileCol == col + dc && existing.tileRow == row + dr)
+                        overlaps = true;
+                if (overlaps) conflictUids.Add(existing.uid);
+            }
+            foreach (var uid in conflictUids)
+                if (!CancelFoundation(station, uid, refund: false))
+                    station.foundations.Remove(uid);
+
+            // 2. Auto-place floor (layer 1) beneath any object/structural placement (layer ≥ 2).
+            if (targetLayer >= 2 && _registry.Buildables.ContainsKey("buildable.floor"))
+            {
+                for (int dc = 0; dc < tileW; dc++)
+                for (int dr = 0; dr < tileH; dr++)
+                {
+                    int tc = col + dc, tr = row + dr;
+                    bool floorPresent = false;
+                    foreach (var f in station.foundations.Values)
+                        if (f.tileCol == tc && f.tileRow == tr && f.tileLayer == 1)
+                        { floorPresent = true; break; }
+                    if (!floorPresent)
+                        PlaceFoundation(station, "buildable.floor", tc, tr, 0);
+                }
+            }
+
+            foundation.tileLayer  = targetLayer;
+            foundation.tileWidth  = tileW;
+            foundation.tileHeight = tileH;
             station.foundations[foundation.uid] = foundation;
             station.LogEvent($"Foundation placed: {defn.displayName} at tile ({col},{row}).");
             Debug.Log($"[BuildingSystem] Foundation {foundation.uid} placed at ({col},{row}).");

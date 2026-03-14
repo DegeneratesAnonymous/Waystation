@@ -22,6 +22,7 @@
 - id: buildable.wall
   display_name: Wall
   category: structure
+  layer: 4
   schema_version: "1"
   description: >
     A solid reinforced wall segment. Provides atmospheric containment and
@@ -36,6 +37,7 @@
 - id: buildable.floor
   display_name: Floor Panel
   category: structure
+  layer: 1
   schema_version: "1"
   description: >
     A standard pressurised floor tile. Required before a room can be
@@ -50,6 +52,7 @@
 - id: buildable.door
   display_name: Door
   category: structure
+  layer: 4
   schema_version: "1"
   description: >
     An automated airlock-style door. Separates rooms while allowing
@@ -66,6 +69,7 @@
 - id: buildable.storage_cabinet
   display_name: Storage Cabinet
   category: object
+  layer: 2
   schema_version: "1"
   description: >
     A reinforced storage cabinet with locking lid. Holds up to 48 items and can
@@ -78,3 +82,63 @@
   size: 1
   max_health: 100
   cargo_capacity: 48
+
+# ── Electrical ──────────────────────────────────────────────────────────────────────────
+
+- id: buildable.generator
+  display_name: Generator
+  category: electrical
+  layer: 2
+  schema_version: "1"
+  description: >
+    A compact diesel generator. Provides steady power output each tick.
+    Requires fuel to operate. Place inside a pressurised room.
+  build_time_ticks: 25
+  required_materials:
+    item.steel_plate: 4
+    item.parts: 3
+  required_skills:
+    engineering: 2
+    electrical: 1
+  build_quality: standard
+  size: 1
+  max_health: 150
+  power_output: 20
+
+- id: buildable.power_wire
+  display_name: Power Wire
+  category: electrical
+  layer: 1
+  schema_version: "1"
+  description: >
+    A single-tile electrical conduit laid under floor panels. Connects
+    generators and batteries to powered devices. Drag to place runs.
+  build_time_ticks: 4
+  required_materials:
+    item.wiring: 1
+  required_skills:
+    electrical: 1
+  build_quality: standard
+  size: 1
+  max_health: 60
+
+- id: buildable.battery
+  display_name: Battery Bank
+  category: electrical
+  layer: 3
+  tile_width: 2
+  schema_version: "1"
+  description: >
+    A high-capacity lithium battery array. Stores surplus power and releases
+    it when generator output drops. Requires connection to power wire.
+  build_time_ticks: 20
+  required_materials:
+    item.steel_plate: 3
+    item.parts: 2
+  required_skills:
+    engineering: 1
+    electrical: 2
+  build_quality: standard
+  size: 1
+  max_health: 120
+  power_capacity: 100

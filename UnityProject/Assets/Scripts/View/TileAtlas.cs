@@ -50,7 +50,8 @@ namespace Waystation.View
 
         private static Sprite[] _cache;        // [0..9]  floor 0-4, wall 0-4
         private static Sprite[] _shadowCache;  // [0..11] 4 edges + 4 inside corners + 4 outside corners
-        private static Sprite[] _cabinetCache; // [0..3]  rotation 0 / 90 / 180 / 270
+        private static Sprite[] _cabinetCache; // [8]: orientation(V=0..3, H=4..7) × fill(0-3)
+        private static Sprite   _batteryCache;  // single sprite, 128×64
 
         // ── Public accessors ──────────────────────────────────────────────────
         public static Sprite GetFloor(int variant)
@@ -75,19 +76,34 @@ namespace Waystation.View
             return _shadowCache[Mathf.Clamp(edge, 0, 11)];
         }
 
+        /// Returns the battery bank sprite (128×64 px = 2×1 world units).
+        public static Sprite GetBattery()
+        {
+            if (_batteryCache == null) _batteryCache = MakeBattery128();
+            return _batteryCache;
+        }
+
         /// <summary>
-        /// Returns the cabinet sprite for the given rotation (0 / 90 / 180 / 270).
-        /// Each rotation has a distinct handle position so orientation is readable.
+        /// Returns the cabinet sprite for the given rotation (0/90/180/270) and fill ratio.
+        /// rotation 0/180 → vertical (portrait) sprite.
+        /// rotation 90/270 → horizontal (landscape) sprite — a distinct alternate tile.
+        /// fillRatio drives the 3 capacity LEDs: 0 pips, 1 pip, 2 pips, or 3 pips lit.
         /// </summary>
-        public static Sprite GetCabinet(int rotation)
+        public static Sprite GetCabinet(int rotation, float fillRatio = 1f)
         {
             if (_cabinetCache == null)
             {
-                _cabinetCache = new Sprite[4];
-                for (int i = 0; i < 4; i++) _cabinetCache[i] = MakeCabinet(i * 90);
+                // 8 sprites: indices 0-3 = V variant fill 0-3; indices 4-7 = H variant fill 0-3.
+                _cabinetCache = new Sprite[8];
+                for (int f = 0; f < 4; f++)
+                {
+                    _cabinetCache[f]     = MakeCabinet(false, f);
+                    _cabinetCache[4 + f] = MakeCabinet(true,  f);
+                }
             }
-            int idx = (((rotation / 90) % 4) + 4) % 4;
-            return _cabinetCache[idx];
+            bool isH  = (rotation == 90 || rotation == 270);
+            int  fidx = fillRatio <= 0f ? 0 : fillRatio < 0.34f ? 1 : fillRatio < 0.67f ? 2 : 3;
+            return _cabinetCache[(isH ? 4 : 0) + fidx];
         }
 
         /// Returns the tile sprite used to preview or ghost-render a buildable.
@@ -95,6 +111,7 @@ namespace Waystation.View
         public static Sprite GetPreviewSprite(string buildableId, int rotation = 0)
         {
             if (buildableId.Contains("storage_cabinet")) return GetCabinet(rotation);
+            if (buildableId.Contains("battery"))         return GetBattery();
             if (buildableId.Contains("door"))            return GetDoorHFrames()[0];
             if (buildableId.Contains("wall"))            return GetWall(0);
             return GetFloor(0);
@@ -506,68 +523,172 @@ namespace Waystation.View
             return MakeSprite(p);
         }
 
-        // ── Cabinet palette ───────────────────────────────────────────────────
-        // Top-down view of a station storage cabinet.  Four rotation variants share
-        // the same body but differ in lid-seam orientation and handle position.
-        static readonly Color32 CabBase     = C("#242b3a"); // body / base fill
-        static readonly Color32 CabLid      = C("#2e3749"); // top lid surface
-        static readonly Color32 CabFrame    = C("#404c60"); // raised outer frame edge
-        static readonly Color32 CabSeam     = C("#181e2a"); // seam between lid panels
-        static readonly Color32 CabHandle   = C("#6677aa"); // handle / latch — bright blue-grey
-        static readonly Color32 CabBolt     = C("#4a5870"); // corner reinforcement bolts
-        static readonly Color32 CabBoltHi   = C("#5d6e88"); // bolt highlight
+        // ── Cabinet palette (CabinetTileSheet.html — chestVFront 'closed' design) ────
+        // 3/4 perspective view: lid at top of tile (far edge), front panel at bottom.
+        static readonly Color32 ChBodyBase   = C("#3a4152");
+        static readonly Color32 ChBodyDk     = C("#292e3a");
+        static readonly Color32 ChBodyLt     = C("#4e5768");
+        static readonly Color32 ChEdgeDk     = C("#22262f");
+        static readonly Color32 ChEdgeLt     = C("#5a6275");
+        static readonly Color32 ChLidBase    = C("#424a5a");
+        static readonly Color32 ChLidTop     = C("#515b6d");
+        static readonly Color32 ChLidSeam    = C("#2a2f3b");
+        static readonly Color32 ChPanelIn    = C("#2e3340");
+        static readonly Color32 ChPanelBrd   = C("#4a5263");
+        static readonly Color32 ChPipDk      = C("#1a4a6a");
+        static readonly Color32 ChPipGlow    = C("#3ab8e0");
+        static readonly Color32 ChPipOff     = C("#1e2a38");
+        static readonly Color32 ChClaspBase  = C("#2e3340");
+        static readonly Color32 ChClaspLt    = C("#4a5263");
+        static readonly Color32 ChClaspGlow  = C("#2a7a9a");
+        static readonly Color32 ChBoltLo     = C("#22262f");
+        static readonly Color32 ChBoltHi     = C("#5a6275");
 
-        // Procedural top-down cabinet sprite.  Canvas convention: y=0 = NORTH (top),
-        // y=63 = SOUTH (bottom), x=0 = WEST (left), x=63 = EAST (right).
-        static Sprite MakeCabinet(int rotation)
+        // ── Cabinet drawing helpers ───────────────────────────────────────────
+        // Two distinct tile shapes replace pixel-rotation:
+        //   V (vertical / portrait)  — rotation 0 or 180 — lid at top, tall body.
+        //   H (horizontal / landscape) — rotation 90 or 270 — lid on left, wide body.
+        // fillLevel 0-3 drives the 3 capacity LEDs: 0 = all off, 3 = all on.
+
+        static Sprite MakeCabinet(bool horizontal, int fillLevel)
+            => MakeSprite(horizontal ? DrawCabinetH(fillLevel) : DrawCabinetV(fillLevel));
+
+        // ── V variant (portrait, lid at top) ─────────────────────────────────
+        static Color32[] DrawCabinetV(int fillLevel)
         {
             var p = NewPixels();
 
-            // ── Body ──────────────────────────────────────────────────────────
-            Fr(p, 0, 0, 64, 64, CabBase);
-            // Outer raised frame (3px border highlights)
-            Fr(p, 0,  0,  64, 1, CabFrame);
-            Fr(p, 0,  1,  64, 1, CabFrame);
-            Fr(p, 0, 62,  64, 1, CabFrame);
-            Fr(p, 0, 63,  64, 1, CabFrame);
-            Fr(p, 0,  0,   1, 64, CabFrame);
-            Fr(p, 1,  0,   1, 64, CabFrame);
-            Fr(p, 62, 0,   1, 64, CabFrame);
-            Fr(p, 63, 0,   1, 64, CabFrame);
+            const int CX = 16, CY = 4, CW = 32, CH = 54, LH = 9;
+            const int BY = CY + LH;    // body top    = 13
+            const int BH = CH - LH;    // body height = 45
 
-            // ── Lid surface (inset from frame) ────────────────────────────────
-            Fr(p, 4, 4, 56, 56, CabLid);
+            // Drop shadow
+            Fr(p, CX + 3, CY + CH + 1, CW - 2, 1, new Color32(0, 0, 0, 71));
+            Fr(p, CX + 5, CY + CH + 3, CW - 6, 1, new Color32(0, 0, 0, 26));
 
-            // ── Lid seam — horizontal for N/S-facing doors, vertical for E/W ─
-            if (rotation == 0 || rotation == 180)
-                Fr(p, 6, 30, 52, 3, CabSeam); // horizontal seam across the middle
-            else
-                Fr(p, 30, 6, 3, 52, CabSeam); // vertical seam
+            // Body
+            Fr(p, CX,          BY,          CW,     BH,    ChBodyBase);
+            Fr(p, CX + 1,      BY,          CW - 2,  1,    ChBodyLt);
+            Fr(p, CX,          BY + BH - 5, CW,      5,    ChBodyDk);
+            Fr(p, CX + 1,      BY + BH - 5, CW - 2,  1,    ChEdgeLt);
+            Fr(p, CX,          BY,          1,       BH,    ChEdgeDk);
+            Fr(p, CX + 1,      BY,          1,       BH - 1, ChBodyLt);
+            Fr(p, CX + CW - 1, BY,          1,       BH,    ChEdgeDk);
+            Fr(p, CX + CW - 2, BY,          1,       BH - 1, ChBodyDk);
+            Fr(p, CX,          BY + BH - 1, CW,       1,    ChEdgeDk);
 
-            // ── Corner reinforcement bolts (4×, 3×3 px each) ─────────────────
-            int[] bx = { 7, 54 };
-            int[] by = { 7, 54 };
-            foreach (int bxi in bx)
-            foreach (int byi in by)
+            // Panel
+            int px0 = CX + 4, py0 = BY + 6, pw = CW - 8, ph = BH - 16;
+            Fr(p, px0,          py0,         pw,  ph,  ChPanelIn);
+            Fr(p, px0,          py0,         pw,   1,  ChEdgeDk);
+            Fr(p, px0,          py0,          1,  ph,  ChEdgeDk);
+            Fr(p, px0 + pw - 1, py0,          1,  ph,  ChPanelBrd);
+            Fr(p, px0,          py0 + ph - 1, pw,  1,  ChPanelBrd);
+
+            // 3 vertical capacity LEDs — bottom pip = level 1, top pip = level 3
+            int pipX    = px0 + pw / 2 - 1;
+            int[] pipYs = { py0 + ph - 8, py0 + ph / 2 - 1, py0 + 5 };
+            for (int i = 0; i < 3; i++)
             {
-                Fr(p, bxi, byi, 3, 3, CabBolt);
-                Px(p, bxi + 1, byi, CabBoltHi); // top-edge highlight
+                Fr(p, pipX, pipYs[i], 2, 3, ChPipDk);
+                Px(p, pipX, pipYs[i] + 1, i < fillLevel ? ChPipGlow : ChPipOff);
             }
 
-            // ── Handle / latch — 4px wide, 12px long at the "front" edge ─────
-            // rotation=0   → front faces SOUTH → canvas bottom (y ≈ 56-59)
-            // rotation=90  → front faces EAST  → canvas right  (x ≈ 56-59)
-            // rotation=180 → front faces NORTH → canvas top    (y ≈ 4-7)
-            // rotation=270 → front faces WEST  → canvas left   (x ≈ 4-7)
-            switch (rotation)
+            // Lid
+            Fr(p, CX,          CY,          CW,  LH,  ChLidBase);
+            Fr(p, CX + 1,      CY,          CW - 2, 1, ChLidTop);
+            Fr(p, CX,          CY,          1,   LH,  ChEdgeDk);
+            Fr(p, CX + CW - 1, CY,          1,   LH,  ChEdgeDk);
+            Fr(p, CX,          CY,          CW,   1,  ChEdgeDk);
+            Fr(p, CX,          CY + LH - 1, CW,   1,  ChLidSeam);
+            Fr(p, CX,          CY + LH,     CW,   1,  ChEdgeLt);
+
+            // Clasp on lid
+            int clx = CX + CW / 2 - 3, cly = CY + 2;
+            Fr(p, clx,     cly,     7, 4, ChClaspBase);
+            Fr(p, clx + 1, cly,     5, 1, ChClaspLt);
+            Fr(p, clx + 1, cly,     1, 4, ChClaspLt);
+            Px(p, clx + 3, cly + 1, ChClaspGlow);
+            Px(p, clx + 3, cly + 2, ChClaspGlow);
+
+            // Corner bolts
+            foreach (var (bx, by2) in new[] {
+                (CX + 2, BY + 2), (CX + CW - 4, BY + 2),
+                (CX + 2, BY + BH - 4), (CX + CW - 4, BY + BH - 4) })
             {
-                case   0: Fr(p, 26, 56, 12, 4, CabHandle); break;
-                case  90: Fr(p, 56, 26,  4, 12, CabHandle); break;
-                case 180: Fr(p, 26,  4, 12, 4, CabHandle); break;
-                case 270: Fr(p,  4, 26,  4, 12, CabHandle); break;
+                Fr(p, bx, by2, 2, 2, ChBoltLo);
+                Px(p, bx, by2, ChBoltHi);
+            }
+            return p;
+        }
+
+        // ── H variant (landscape, lid on left) ───────────────────────────────
+        static Color32[] DrawCabinetH(int fillLevel)
+        {
+            var p = NewPixels();
+
+            // Footprint: 54 wide × 32 tall, centred in 64×64 tile.
+            const int CX = 4, CY = 16, CW = 54, CH = 32, LW = 9;
+            const int BX = CX + LW;   // body left  = 13
+            const int BW = CW - LW;   // body width = 45
+
+            // Drop shadow
+            Fr(p, CX + 3, CY + CH,     CW - 4, 1, new Color32(0, 0, 0, 71));
+            Fr(p, CX + 5, CY + CH + 2, CW - 8, 1, new Color32(0, 0, 0, 26));
+
+            // Body
+            Fr(p, BX,          CY,          BW,  CH,  ChBodyBase);
+            Fr(p, BX + 1,      CY,          BW - 2, 1, ChBodyLt);
+            Fr(p, BX,          CY + CH - 5, BW,   5,  ChBodyDk);
+            Fr(p, BX + 1,      CY + CH - 5, BW - 2, 1, ChEdgeLt);
+            Fr(p, BX,          CY,          1,   CH,  ChEdgeDk);
+            Fr(p, BX + BW - 1, CY,          1,   CH,  ChEdgeDk);
+            Fr(p, BX + BW - 2, CY,          1,   CH - 1, ChBodyDk);
+            Fr(p, BX,          CY + CH - 1, BW,   1,  ChEdgeDk);
+
+            // Panel
+            int px0 = BX + 4, py0 = CY + 4, pw = BW - 8, ph = CH - 10;
+            Fr(p, px0,          py0,         pw,  ph,  ChPanelIn);
+            Fr(p, px0,          py0,         pw,   1,  ChEdgeDk);
+            Fr(p, px0,          py0,          1,  ph,  ChEdgeDk);
+            Fr(p, px0 + pw - 1, py0,          1,  ph,  ChPanelBrd);
+            Fr(p, px0,          py0 + ph - 1, pw,  1,  ChPanelBrd);
+
+            // 3 horizontal capacity LEDs — left pip = level 1, right pip = level 3
+            int pipY    = py0 + ph / 2 - 1;
+            int[] pipXs = { px0 + pw / 4 - 1, px0 + pw / 2 - 1, px0 + 3 * pw / 4 - 1 };
+            for (int i = 0; i < 3; i++)
+            {
+                Fr(p, pipXs[i], pipY, 3, 2, ChPipDk);
+                Px(p, pipXs[i] + 1, pipY, i < fillLevel ? ChPipGlow : ChPipOff);
             }
 
-            return MakeSprite(p);
+            // Lid (left side)
+            Fr(p, CX,        CY,          LW,  CH,  ChLidBase);
+            Fr(p, CX + 1,    CY,          LW - 2, 1, ChLidTop);
+            Fr(p, CX,        CY,          1,   CH,  ChEdgeDk);
+            Fr(p, CX,        CY,          LW,   1,  ChEdgeDk);
+            Fr(p, CX,        CY + CH - 1, LW,   1,  ChEdgeDk);
+            Fr(p, CX + LW - 1, CY,        1,   CH,  ChLidSeam);
+            Fr(p, CX + LW,     CY,        1,   CH,  ChEdgeLt);
+
+            // Clasp centred on lid left face
+            int clx = CX + 1, cly = CY + CH / 2 - 3;
+            Fr(p, clx,     cly,     4, 7, ChClaspBase);
+            Fr(p, clx,     cly,     4, 1, ChClaspLt);
+            Fr(p, clx,     cly,     1, 7, ChClaspLt);
+            Px(p, clx + 1, cly + 3, ChClaspGlow);
+            Px(p, clx + 2, cly + 3, ChClaspGlow);
+
+            // Corner bolts on body
+            foreach (var (bx, by2) in new[] {
+                (BX + 2, CY + 2), (BX + BW - 4, CY + 2),
+                (BX + 2, CY + CH - 4), (BX + BW - 4, CY + CH - 4) })
+            {
+                Fr(p, bx, by2, 2, 2, ChBoltLo);
+                Px(p, bx, by2, ChBoltHi);
+            }
+            return p;
         }
 
         // Shadow overlay sprites — three families matching the HTML spec (DEPTH=18, ALPHA=0.30).
@@ -1098,6 +1219,99 @@ namespace Waystation.View
             tex.Apply();
             return Sprite.Create(tex,
                 new Rect(0, 0, 64, 64),
+                new Vector2(0.5f, 0.5f),
+                pixelsPerUnit: 64);
+        }
+
+        // 128×64 battery bank sprite — 2 world units wide, 1 tall (64 PPU).
+        static Sprite MakeBattery128()
+        {
+            var p = new Color32[128 * 64];
+            void Fill(int x, int y, int w, int h, Color32 c)
+            {
+                for (int dy = 0; dy < h; dy++)
+                for (int dx = 0; dx < w; dx++)
+                    p[(63 - (y + dy)) * 128 + (x + dx)] = c;
+            }
+            void Dot(int x, int y, Color32 c) => p[(63 - y) * 128 + x] = c;
+
+            var housing = C("#2b3040");
+            var edgeLt  = C("#424b5c");
+            var edgeDk  = C("#181c26");
+            var cell    = C("#1c2820");
+            var cellLt  = C("#273221");
+            var cellDk  = C("#111915");
+            var term    = C("#b08020");
+            var termHi  = C("#d4a030");
+            var ledOn   = C("#18d050");
+            var vent    = C("#141820");
+            var div     = C("#1c2028");
+            var pipGlow = new Color32(40, 255, 120, 255);
+
+            // ── Outer housing ────────────────────────────────────────────────
+            Fill(0,   0, 128, 64, edgeDk);
+            Fill(1,   1, 126, 62, housing);
+            Fill(2,   1, 124,  1, edgeLt);   // top highlight
+            Fill(1,   2,   1, 60, edgeLt);   // left highlight
+            Fill(126, 2,   1, 60, edgeDk);   // right shadow
+            Fill(2,  62, 124,  1, edgeDk);   // bottom shadow
+
+            // ── Left cell bay (x:4–60, y:4–58) ──────────────────────────────
+            Fill(4,  4, 57, 55, cell);
+            Fill(5,  4, 55,  1, cellLt);     // top highlight
+            Fill(4,  5,  1, 53, cellLt);     // left highlight
+            Fill(60, 5,  1, 53, cellDk);     // right shadow
+            Fill(5, 58, 55,  1, cellDk);     // bottom shadow
+
+            // ── Right cell bay (x:67–123, y:4–58) ───────────────────────────
+            Fill(67,  4, 57, 55, cell);
+            Fill(68,  4, 55,  1, cellLt);
+            Fill(67,  5,  1, 53, cellLt);
+            Fill(123, 5,  1, 53, cellDk);
+            Fill(68, 58, 55,  1, cellDk);
+
+            // ── Centre divider ───────────────────────────────────────────────
+            Fill(61, 4, 6, 55, div);
+            Fill(62, 4, 1, 55, edgeLt);      // divider left highlight
+
+            // ── Vent slots ───────────────────────────────────────────────────
+            for (int v = 0; v < 5; v++)
+            {
+                Fill( 8 + v * 10, 7, 4, 5, vent);
+                Fill(71 + v * 10, 7, 4, 5, vent);
+            }
+
+            // ── LED charge indicators (5 per bay) ────────────────────────────
+            for (int l = 0; l < 5; l++)
+            {
+                int lxL = 9  + l * 10;
+                int lxR = 72 + l * 10;
+                Fill(lxL, 51, 5, 3, ledOn);
+                Dot(lxL + 2, 52, pipGlow);
+                Fill(lxR, 51, 5, 3, ledOn);
+                Dot(lxR + 2, 52, pipGlow);
+            }
+
+            // ── Terminal connectors (top) ─────────────────────────────────────
+            int[] termXs = { 12, 44, 75, 107 };
+            foreach (int tx in termXs)
+            {
+                Fill(tx, 2, 8, 3, term);
+                Fill(tx + 1, 2, 6, 1, termHi);
+            }
+
+            return MakeSprite128(p);
+        }
+
+        /// Creates a 128×64 sprite at 64 PPU → 2 world units wide, 1 tall.
+        static Sprite MakeSprite128(Color32[] pixels)
+        {
+            var tex = new Texture2D(128, 64, TextureFormat.RGBA32, false)
+                { filterMode = FilterMode.Point };
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return Sprite.Create(tex,
+                new Rect(0, 0, 128, 64),
                 new Vector2(0.5f, 0.5f),
                 pixelsPerUnit: 64);
         }

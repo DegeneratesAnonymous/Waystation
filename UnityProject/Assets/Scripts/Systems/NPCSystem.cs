@@ -160,11 +160,11 @@ namespace Waystation.Systems
                 UnityEngine.Random.value < 0.1f)
                 station.LogEvent($"{npc.name} is exhausted.");
 
-            // Idle wandering: move to a random oxygenated module periodically.
-            // Only trigger for crew with no active job assignment; active builders
-            // (currentJobId == "job.build") must not be relocated.
-            if (npc.IsCrew() && string.IsNullOrEmpty(npc.jobModuleUid) &&
-                string.IsNullOrEmpty(npc.currentJobId) &&
+            // Location wandering: occasionally update npc.location so the data
+            // model reflects movement.  Skip active builders so they aren't
+            // relocated mid-construction.  Visual tile movement is handled
+            // independently in StationRoomView.
+            if (npc.IsCrew() && npc.currentJobId != "job.build" &&
                 UnityEngine.Random.value < 0.05f)
             {
                 WanderToActiveModule(npc, station);
@@ -186,8 +186,8 @@ namespace Waystation.Systems
             if (candidates.Count == 0) return;
 
             var chosen = candidates[UnityEngine.Random.Range(0, candidates.Count)];
-            npc.location     = chosen.definitionId;
-            npc.jobModuleUid = chosen.uid;
+            npc.location = chosen.definitionId;
+            // Note: jobModuleUid is managed exclusively by JobSystem — do not set here.
         }
 
         private void TryAdvanceSkill(NPCInstance npc)
