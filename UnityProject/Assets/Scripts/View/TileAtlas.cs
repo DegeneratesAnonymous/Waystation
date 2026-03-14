@@ -110,7 +110,7 @@ namespace Waystation.View
         /// For doors the closed frame is returned; cabinet respects rotation.
         public static Sprite GetPreviewSprite(string buildableId, int rotation = 0)
         {
-            if (buildableId.Contains("storage_cabinet")) return GetCabinet(rotation);
+            if (buildableId.Contains("storage_cabinet")) return GetCabinet(rotation, 0f);
             if (buildableId.Contains("battery"))         return GetBattery();
             if (buildableId.Contains("door"))            return GetDoorHFrames()[0];
             if (buildableId.Contains("wall"))            return GetWall(0);

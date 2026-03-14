@@ -8,6 +8,78 @@ using UnityEngine;
 namespace Waystation.Models
 {
     // -------------------------------------------------------------------------
+    // Comm Message — a radio transmission received from a passing or docked ship
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class CommMessage
+    {
+        public string uid;
+        public string subject;
+        public string body;
+        public string senderName;
+        public string senderType;   // "trade_ship" | "faction" | "system"
+        public string shipUid;      // uid of the ship that sent this, if any
+        public bool   read     = false;
+        public int    tick     = 0;
+        public string replied  = null; // action key chosen, null if not yet replied
+
+        // Tick at which this message auto-expires if still unread/unreplied.
+        // -1 means no expiry (used for quest messages). Trade messages are given
+        // expiresAtTick = tick + 24 (1 in-game day) at creation time.
+        public int expiresAtTick = -1;
+
+        // Response options: each entry has "label" and "action" keys, plus
+        // payload fields (e.g. "iceQty", "icePrice") set by CommsSystem.
+        public List<Dictionary<string, object>> responseOptions =
+            new List<Dictionary<string, object>>();
+
+        public bool IsExpired(int currentTick)
+            => expiresAtTick >= 0 && currentTick >= expiresAtTick && replied == null;
+
+        public static CommMessage Create(string subject, string body,
+                                         string senderName, string senderType,
+                                         string shipUid, int tick,
+                                         int expiresAtTick = -1)
+        {
+            return new CommMessage
+            {
+                uid          = Guid.NewGuid().ToString("N")[..8],
+                subject      = subject,
+                body         = body,
+                senderName   = senderName,
+                senderType   = senderType,
+                shipUid      = shipUid,
+                tick         = tick,
+                expiresAtTick = expiresAtTick
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Department — a named crew department grouping jobs together
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class Department
+    {
+        public string       uid;
+        public string       name;
+        public List<string> allowedJobs = new List<string>();
+
+        public static Department Create(string uid, string name, List<string> allowedJobs = null)
+        {
+            return new Department
+            {
+                uid         = uid,
+                name        = name,
+                allowedJobs = allowedJobs ?? new List<string>()
+            };
+        }
+    }
+
+
+    // -------------------------------------------------------------------------
     // NPC Instance
     // -------------------------------------------------------------------------
 
@@ -380,6 +452,16 @@ namespace Waystation.Models
         // (key = "minCol_minRow" of the connected floor-tile set that forms the room)
         public Dictionary<string, string> roomRoles = new Dictionary<string, string>();
 
+        // Communications inbox (most recent first)
+        public List<CommMessage> messages = new List<CommMessage>();
+
+        // Work assignments per NPC: npcUid → list of job ids the NPC is allowed.
+        // Empty list means all jobs are allowed for that NPC.
+        public Dictionary<string, List<string>> workAssignments = new Dictionary<string, List<string>>();
+
+        // Crew departments
+        public List<Department> departments = new List<Department>();
+
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();
 
@@ -390,6 +472,23 @@ namespace Waystation.Models
             {
                 { "credits", 500f }, { "food", 100f }, { "power", 100f },
                 { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f }
+            };
+            InitDefaultDepartments();
+        }
+
+        private void InitDefaultDepartments()
+        {
+            departments = new List<Department>
+            {
+                Department.Create("dept.engineering", "Engineering",
+                    new List<string> { "job.build", "job.module_maintenance",
+                                       "job.power_management", "job.life_support",
+                                       "job.haul", "job.refine", "job.craft" }),
+                Department.Create("dept.sciences", "Sciences",
+                    new List<string> { "job.refine", "job.craft", "job.resource_management" }),
+                Department.Create("dept.security", "Security",
+                    new List<string> { "job.guard_post", "job.patrol",
+                                       "job.contraband_inspection" }),
             };
         }
 
@@ -469,6 +568,19 @@ namespace Waystation.Models
         }
 
         // -- Logging ----------------------------------------------------------
+
+        public void AddMessage(CommMessage msg)
+        {
+            messages.Insert(0, msg);
+            if (messages.Count > 100) messages.RemoveRange(100, messages.Count - 100);
+        }
+
+        public int UnreadMessageCount()
+        {
+            int count = 0;
+            foreach (var m in messages) if (!m.read) count++;
+            return count;
+        }
 
         public void LogEvent(string message)
         {

@@ -514,6 +514,12 @@ namespace Waystation.Models
         // skill_id → minimum level required (e.g. "engineering" → 2)
         public Dictionary<string, int> requiredSkills = new Dictionary<string, int>();
 
+        // Beauty points this object contributes to its room (0 = none)
+        public int  beautyScore  = 0;
+
+        // If true, this object counts toward the room's workbench limit (max 3 per room)
+        public bool isWorkbench  = false;
+
         public static BuildableDefinition FromDict(Dictionary<string, object> raw)
         {
             var b = new BuildableDefinition
@@ -527,6 +533,8 @@ namespace Waystation.Models
                 size           = raw.GetInt("size", 1),
                 maxHealth      = raw.GetInt("max_health", 100),
                 cargoCapacity  = raw.GetInt("cargo_capacity", 0),
+                beautyScore    = raw.GetInt("beauty_score", 0),
+                isWorkbench    = raw.GetBool("is_workbench", false),
             };
             b.tileLayer  = raw.GetInt("layer",       b.category == "structure" ? 1 : 2);
             b.tileWidth  = raw.GetInt("tile_width",  1);

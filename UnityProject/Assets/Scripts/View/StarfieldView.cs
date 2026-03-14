@@ -22,9 +22,6 @@ namespace Waystation.View
         private const float ShootMinSpeed      = 22f;   // world-units / second
         private const float ShootMaxSpeed      = 48f;
 
-        // Slow background rotation (degrees / second)
-        private const float SpinSpeed = 0.25f;
-
         // ── Per-star data ─────────────────────────────────────────────────────
         private struct StarData
         {
@@ -35,8 +32,7 @@ namespace Waystation.View
             public float          maxAlpha;
         }
 
-        private StarData[]  _stars;
-        private Transform    _starsRoot;
+        private StarData[] _stars;
 
         // ── Shooting-star state ───────────────────────────────────────────────
         private GameObject    _shootGo;
@@ -68,7 +64,6 @@ namespace Waystation.View
 
             var rng  = new System.Random(7331);
             var root = new GameObject("Stars");
-            _starsRoot = root.transform;
 
             _stars = new StarData[StarCount];
 
@@ -119,10 +114,6 @@ namespace Waystation.View
         // ── Update ────────────────────────────────────────────────────────────
         private void Update()
         {
-            // Slowly rotate the entire star field around its centre.
-            if (_starsRoot != null)
-                _starsRoot.Rotate(0f, 0f, SpinSpeed * Time.deltaTime);
-
             float t = Time.time;
 
             // Dual-frequency twinkle — irregular flicker

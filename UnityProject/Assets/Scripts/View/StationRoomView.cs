@@ -92,7 +92,8 @@ namespace Waystation.View
             // Foundation tracking for status/damage refreshes (null = built-in starter door)
             public string foundationUid;
             public bool   isH;
-            public int    dmgLevel;  // 0=normal, 1=worn, 2=broken
+            public int    dmgLevel;    // 0=normal, 1=worn, 2=broken
+            public string doorStatus;  // last rendered door status ("powered"/"locked"/"unpowered")
         }
         private readonly List<DoorEntry> _doorEntries = new List<DoorEntry>();
         // Floor variant cache: (col,row) → 0..4 assigned during BuildRoom / RebuildFoundationTiles
@@ -250,10 +251,11 @@ namespace Waystation.View
                 {
                     int newDmg = fd.health >= 75 ? 0 : fd.health >= 50 ? 1 : 2;
                     string dStatus = fd.doorStatus ?? "powered";
-                    if (newDmg != e.dmgLevel || dStatus != (e.frames.Length > 0 ? null : null))
+                    if (newDmg != e.dmgLevel || dStatus != e.doorStatus)
                     {
-                        e.dmgLevel = newDmg;
-                        e.frames   = TileAtlas.GetDoorFrames(e.isH, dStatus, newDmg);
+                        e.dmgLevel   = newDmg;
+                        e.doorStatus = dStatus;
+                        e.frames     = TileAtlas.GetDoorFrames(e.isH, dStatus, newDmg);
                         e.frameIdx = Mathf.Clamp(e.frameIdx, 0, e.frames.Length - 1);
                     }
                 }
