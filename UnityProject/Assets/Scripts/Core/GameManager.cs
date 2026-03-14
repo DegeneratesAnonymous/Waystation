@@ -240,7 +240,7 @@ namespace Waystation.Core
             Station.ModifyResource("credits", -RecruitCost);
             npc.statusTags.Remove("visitor");
             npc.statusTags.Add("crew");
-            Log($"{npc.name} recruited as crew ({RecruitCost:F0} credits.");
+            Log($"{npc.name} recruited as crew ({RecruitCost:F0} credits).");
             return (true, $"{npc.name} is now crew.");
         }
 

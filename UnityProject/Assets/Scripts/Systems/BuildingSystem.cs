@@ -88,15 +88,17 @@ namespace Waystation.Systems
             int tileH       = defn.tileHeight;
 
             // 1. Cancel or remove any same-layer foundation overlapping the new footprint.
+            //    Check the full footprint of each existing foundation (tileWidth × tileHeight)
+            //    against the full footprint of the new placement so multi-tile objects don't
+            //    slip through on non-origin tiles.
             var conflictUids = new System.Collections.Generic.List<string>();
             foreach (var existing in station.foundations.Values)
             {
                 if (existing.tileLayer != targetLayer) continue;
-                bool overlaps = false;
-                for (int dc = 0; dc < tileW && !overlaps; dc++)
-                for (int dr = 0; dr < tileH && !overlaps; dr++)
-                    if (existing.tileCol == col + dc && existing.tileRow == row + dr)
-                        overlaps = true;
+                // Two axis-aligned rectangles overlap when neither is fully outside the other.
+                bool overlaps =
+                    existing.tileCol < col + tileW && existing.tileCol + existing.tileWidth  > col &&
+                    existing.tileRow < row + tileH && existing.tileRow + existing.tileHeight > row;
                 if (overlaps) conflictUids.Add(existing.uid);
             }
             foreach (var uid in conflictUids)

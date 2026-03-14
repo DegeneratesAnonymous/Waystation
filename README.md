@@ -24,43 +24,20 @@ A sci-fi space station management game in early development. You command a front
 
 ### Prerequisites
 
-- Python 3.10+
-- [pygame-ce](https://pypi.org/project/pygame-ce/) (installed via requirements)
+- **Unity Hub** with **Unity 6000.0.40f1** (or later 6000.x LTS)
 
-```bash
-git clone https://github.com/DegeneratesAnonymous/Waystation.git
-cd Waystation
-pip install -r requirements.txt
-```
+### Opening the project
 
-### Run the interactive demo *(recommended for first time)*
+1. Clone the repository and open **Unity Hub**
+2. Click **Add → Add project from disk** and select the `UnityProject/` folder
+3. Open the project in Unity 6000.0.40f1 or newer
 
-```bash
-python demo.py
-```
+### Running in the editor
 
-Runs a scripted 20-tick scenario with narration. Press **Enter** to advance each beat. Uses a fixed seed for reproducibility.
-
-### Run the GUI game
-
-```bash
-python main_gui.py
-```
-
-| Keybind | Action |
-|---|---|
-| `Space` / `P` | Pause / unpause |
-| `1` / `2` / `4` | Set time multiplier |
-| `Ctrl+S` | Quick-save |
-| `Q` / `Esc` | Return to main menu |
-
-Optional flags: `--saves-dir PATH`, `--log-level {DEBUG,INFO,WARNING,ERROR}`
-
-### Run the CLI game
-
-```bash
-python main.py [--seed SEED] [--station-name NAME] [--log-level LEVEL]
-```
+1. Create `Assets/Scenes/MainMenuScene.unity` and `Assets/Scenes/GameScene.unity`
+2. Wire `MainMenuManager`, `GameManager`, `ContentRegistry`, and `GameViewController` GameObjects in each scene
+3. Add both scenes to **File → Build Settings**
+4. Press **Play**
 
 ---
 
@@ -97,39 +74,28 @@ python main.py [--seed SEED] [--station-name NAME] [--log-level LEVEL]
 
 ## Data-Driven Architecture
 
-All game content lives in YAML files under `data/` — zero hardcoded game data.
+All game content lives in JSON files under `UnityProject/Assets/StreamingAssets/data/` — zero hardcoded game data.
 
 ```
 data/
-├── events/        # 50+ event definitions (faction, arrival, incident, crisis)
+├── buildables/    # Constructable station structures and furniture
+├── classes/       # NPC class attribute and skill ranges
+├── events/        # Event definitions (faction, arrival, incident, crisis)
 ├── factions/      # Faction definitions, diplomacy profiles, behavior tags
+├── items/         # Tradeable items (weapons, food, medicine, contraband, …)
+├── jobs/          # Job definitions with resource and need effects
 ├── modules/       # Station module types with resource effects and capacity
 ├── npcs/          # NPC class templates (skills, traits, starting equipment)
-├── ships/         # Ship templates (role, cargo, threat level)
-├── classes/       # NPC class attribute and skill ranges
-├── jobs/          # Job definitions with resource and need effects
-├── items/         # Tradeable items (weapons, food, medicine, contraband, …)
-├── buildables/    # Constructable station structures
-└── room_types/    # Room templates for procedural station generation
+└── ships/         # Ship templates (role, cargo, threat level)
 ```
 
-The **ContentRegistry** validates all files against JSON Schema at startup and indexes every definition by ID. **Templates** (static, read-only) are cleanly separated from **Instances** (runtime, mutable, JSON-serializable), enabling a full save/load system.
+The **ContentRegistry** loads all JSON files at startup and indexes every definition by ID. **Templates** (static, read-only) are cleanly separated from **Instances** (runtime, mutable, JSON-serializable), enabling a full save/load system.
 
 ---
 
 ## Modding
 
-Drop YAML files into `mods/<your_mod>/` using the same folder structure as `data/`. Mods are loaded after core content and can add or override any definition — no code changes required.
-
-```
-mods/
-└── example_mod/
-    ├── mod.json              # Manifest (id, display_name, version, load_order, …)
-    └── events/
-        └── my_event.yaml     # New event using the standard schema
-```
-
-The `mods/example_mod/` directory included in this repo demonstrates the full manifest and event format.
+Game content can be extended by adding JSON files to `UnityProject/Assets/StreamingAssets/data/` using the same folder structure and schema as the core definitions. New entries are picked up automatically by ContentRegistry at startup.
 
 ---
 
@@ -137,45 +103,20 @@ The `mods/example_mod/` directory included in this repo demonstrates the full ma
 
 ```
 Waystation/
-├── data/                    # All YAML game content (see Data-Driven Architecture)
-├── docs/                    # Development workflow guides and agent prompts
-├── learning-data/           # Reference documents for AI development agents
-├── mods/
-│   └── example_mod/         # Reference mod showing the manifest and YAML format
-├── src/
-│   └── waystation/
-│       ├── core/
-│       │   ├── game.py              # Game orchestrator and tick loop
-│       │   └── registry.py          # ContentRegistry — loads and validates YAML
-│       ├── models/
-│       │   ├── templates.py         # Static definition types (EventDefinition, etc.)
-│       │   ├── instances.py         # Runtime instance types (StationState, NPCInstance, …)
-│       │   └── tilemap.py           # Procedural tile-based floor-plan generation
-│       ├── systems/                 # One file per game system (see Game Systems)
-│       └── ui/
-│           ├── game_view.py         # Pygame HUD (floor plan, crew, events, sidebar)
-│           └── main_menu.py         # Main menu (new game, load game, settings)
-├── UnityProject/            # Unity 6 C# port (architecture complete; scenes TBD)
-├── demo.py                  # Scripted 20-tick demo (recommended first run)
-├── main.py                  # CLI entry point
-├── main_gui.py              # Pygame GUI entry point
-└── requirements.txt
+├── UnityProject/
+│   ├── Assets/
+│   │   ├── Scripts/
+│   │   │   ├── Core/          # GameManager, ContentRegistry, MiniJSON
+│   │   │   ├── Models/        # Templates (definitions) and Instances (runtime state)
+│   │   │   ├── Systems/       # One file per game system (BuildingSystem, CommsSystem, …)
+│   │   │   ├── UI/            # GameHUD (IMGUI overlay with all tabs)
+│   │   │   └── View/          # StationRoomView, TileAtlas, StarfieldView
+│   │   └── StreamingAssets/
+│   │       └── data/          # JSON game content (see Data-Driven Architecture)
+│   └── Packages/              # Unity package manifest
+├── docs/                      # Development workflow guides and agent prompts
+└── learning-data/             # Reference documents for AI development agents
 ```
-
----
-
-## Unity Port *(in progress)*
-
-A Unity 6 (6000.0 LTS) C# port mirrors the Python architecture — the same Template/Instance data model, the same system-per-file layout, and the same data-driven YAML content (converted to JSON under `UnityProject/Assets/StreamingAssets/data/`). Core systems and UI scaffolding are complete; visual assets and scene wiring are pending.
-
-**Setup:**
-1. Install **Unity 6000.0.40f1** (or later 6000.x LTS) via Unity Hub
-2. Open `UnityProject/` in Unity Hub
-3. Create `Assets/Scenes/MainMenuScene.unity` and `Assets/Scenes/GameScene.unity`
-4. Wire `MainMenuManager`, `GameManager`, `ContentRegistry`, and `GameViewController` GameObjects
-5. Add both scenes to **File → Build Settings** and press **Play**
-
----
 
 ## Development Workflow
 
