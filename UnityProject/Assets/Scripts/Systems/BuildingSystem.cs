@@ -391,9 +391,16 @@ namespace Waystation.Systems
             RefreshEngineerTimer(foundation, idle);
 
             // Advance progress: 1/buildTimeTicks per tick, scaled by technical skill
-            int buildTime = defn.buildTimeTicks > 0 ? defn.buildTimeTicks : DefaultBuildTimeTicks;
+            // and any room bonus the assigned engineer's workbench may grant.
+            int buildTime  = defn.buildTimeTicks > 0 ? defn.buildTimeTicks : DefaultBuildTimeTicks;
             int skillLevel = assigned.skills.ContainsKey("technical") ? assigned.skills["technical"] : 5;
             float skillScale = 0.5f + skillLevel / 10f;  // 0.5× at 0, 1.5× at 10
+
+            // If the engineer is assigned to a workbench that has an active room bonus,
+            // apply its multiplier to the effective skill scale.
+            if (foundation.hasRoomBonus && foundation.roomBonusMultiplier > 1f)
+                skillScale *= foundation.roomBonusMultiplier;
+
             float increment  = (1f / buildTime) * skillScale;
 
             foundation.buildProgress = Mathf.Min(1f, foundation.buildProgress + increment);

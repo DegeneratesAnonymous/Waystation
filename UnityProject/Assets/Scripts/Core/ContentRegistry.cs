@@ -22,6 +22,8 @@ namespace Waystation.Core
         public Dictionary<string, ItemDefinition>   Items      { get; private set; } = new Dictionary<string, ItemDefinition>();
         public Dictionary<string, JobDefinition>    Jobs       { get; private set; } = new Dictionary<string, JobDefinition>();
         public Dictionary<string, BuildableDefinition> Buildables { get; private set; } = new Dictionary<string, BuildableDefinition>();
+        public Dictionary<string, MissionDefinition>Missions   { get; private set; } = new Dictionary<string, MissionDefinition>();
+        public Dictionary<string, RoomTypeDefinition> RoomTypes  { get; private set; } = new Dictionary<string, RoomTypeDefinition>();
 
         public bool   IsLoaded  { get; private set; }
         public int    ErrorCount => _errors.Count;
@@ -53,11 +55,13 @@ namespace Waystation.Core
             yield return StartCoroutine(LoadFolder(dataRoot, "items",      LoadItem));
             yield return StartCoroutine(LoadFolder(dataRoot, "jobs",       LoadJob));
             yield return StartCoroutine(LoadFolder(dataRoot, "buildables", LoadBuildable));
+            yield return StartCoroutine(LoadFolder(dataRoot, "missions",   LoadMission));
+            yield return StartCoroutine(LoadFolder(dataRoot, "rooms",      LoadRoomType));
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
                       $"ships:{Ships.Count} classes:{Classes.Count} factions:{Factions.Count} " +
                       $"modules:{Modules.Count} items:{Items.Count} jobs:{Jobs.Count} " +
-                      $"buildables:{Buildables.Count}");
+                      $"buildables:{Buildables.Count} missions:{Missions.Count} roomTypes:{RoomTypes.Count}");
         }
 
         // ── Folder loader ────────────────────────────────────────────────────
@@ -103,6 +107,41 @@ namespace Waystation.Core
         private void LoadItem     (Dictionary<string, object> d) => Items     [d.GetString("id")] = ItemDefinition     .FromDict(d);
         private void LoadJob      (Dictionary<string, object> d) => Jobs      [d.GetString("id")] = JobDefinition      .FromDict(d);
         private void LoadBuildable(Dictionary<string, object> d) => Buildables[d.GetString("id")] = BuildableDefinition.FromDict(d);
+        private void LoadMission  (Dictionary<string, object> d) => Missions  [d.GetString("id")] = MissionDefinition  .FromDict(d);
+        private void LoadRoomType(Dictionary<string, object> d)
+        {
+            var rt = new RoomTypeDefinition
+            {
+                id           = d.GetString("id"),
+                displayName  = d.GetString("display_name", d.GetString("id")),
+                isBuiltIn    = true,
+                workbenchCap = d.GetInt("workbench_cap", 3),
+            };
+            if (d.ContainsKey("requirements_per_workbench") &&
+                d["requirements_per_workbench"] is List<object> reqs)
+            {
+                foreach (var reqObj in reqs)
+                {
+                    if (reqObj is Dictionary<string, object> r)
+                    {
+                        rt.requirementsPerWorkbench.Add(new RoomFurnitureRequirement
+                        {
+                            buildableIdOrTag  = r.GetString("buildable_id_or_tag"),
+                            countPerWorkbench = r.GetInt("count", 1),
+                            displayLabel      = r.GetString("display_label",
+                                               r.GetString("buildable_id_or_tag")),
+                        });
+                    }
+                }
+            }
+            if (d.ContainsKey("skill_bonuses") &&
+                d["skill_bonuses"] is Dictionary<string, object> sb)
+            {
+                foreach (var kv in sb)
+                    rt.skillBonuses[kv.Key] = Convert.ToSingle(kv.Value);
+            }
+            RoomTypes[rt.id] = rt;
+        }
 
         // ── Diagnostics ──────────────────────────────────────────────────────
 

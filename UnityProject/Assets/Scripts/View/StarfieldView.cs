@@ -45,7 +45,9 @@ namespace Waystation.View
         // ── Sprites (shared) ─────────────────────────────────────────────────
         private static Sprite _starSprite;
         private static Sprite _shootSprite;
-
+        // ── Background rotation ───────────────────────────────────────────────
+        private Transform     _starsRoot;
+        private const float   RotateDegPerSec = 0.35f;  // very subtle — one full turn ~17 min
         // ── Auto-install ──────────────────────────────────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
@@ -64,6 +66,7 @@ namespace Waystation.View
 
             var rng  = new System.Random(7331);
             var root = new GameObject("Stars");
+            _starsRoot = root.transform;
 
             _stars = new StarData[StarCount];
 
@@ -114,6 +117,10 @@ namespace Waystation.View
         // ── Update ────────────────────────────────────────────────────────────
         private void Update()
         {
+            // Slowly rotate the entire star field for a subtle drifting effect.
+            if (_starsRoot != null)
+                _starsRoot.Rotate(0f, 0f, RotateDegPerSec * Time.deltaTime);
+
             float t = Time.time;
 
             // Dual-frequency twinkle — irregular flicker

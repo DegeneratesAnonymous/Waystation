@@ -52,6 +52,9 @@ namespace Waystation.Core
         public VisitorSystem     Visitors       { get; private set; }
         public BuildingSystem    Building       { get; private set; }
         public CommsSystem       Comms          { get; private set; }
+        public NetworkSystem     Networks       { get; private set; }
+        public MissionSystem     Missions       { get; private set; }
+        public RoomSystem        Rooms          { get; private set; }
 
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
@@ -122,6 +125,9 @@ namespace Waystation.Core
             Visitors  = new VisitorSystem(Registry, Npcs, Events, Trade);
             Building  = new BuildingSystem(Registry);
             Comms     = new CommsSystem();
+            Networks  = new NetworkSystem(Registry);
+            Missions  = new MissionSystem(Registry);
+            Rooms     = new RoomSystem(Registry);
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -143,6 +149,8 @@ namespace Waystation.Core
 
             IsPaused = false;
             OnGameLoaded?.Invoke();
+            // Seed the room bonus cache immediately so it's available on the first frame.
+            Rooms.RebuildBonusCache(Station);
             Debug.Log($"[GameManager] New game started: {stationName}");
         }
 
@@ -209,6 +217,8 @@ namespace Waystation.Core
             Visitors.Tick(Station);
             Building.Tick(Station);
             Comms.Tick(Station);
+            Missions.Tick(Station);
+            Rooms.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);
@@ -310,7 +320,8 @@ namespace Waystation.Core
                 { "active_tags",          new List<string>(Station.activeTags) },
                 { "policy",               Station.policy },
                 { "event_cooldowns",      Station.eventCooldowns },
-                { "log",                  Station.log }
+                { "log",                  Station.log },
+                { "custom_room_names",    Station.customRoomNames }
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));

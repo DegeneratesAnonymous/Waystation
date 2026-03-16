@@ -516,9 +516,31 @@ namespace Waystation.Models
 
         // Beauty points this object contributes to its room (0 = none)
         public int  beautyScore  = 0;
+        // Optional tag placing this object in a furniture category for room bonus matching.
+        // Values: "seating" | "lighting" | "storage" | "surface" | "decor" | null
+        public string furnitureTag = null;
 
         // If true, this object counts toward the room's workbench limit (max 3 per room)
         public bool isWorkbench  = false;
+
+        // ── Room bonus / workbench typing ──────────────────────────────────────
+        // When non-null, this object is a typed workbench that can grant a room bonus.
+        // e.g. "engineering_workshop", "medical_bay", "research_lab"
+        public string workbenchRoomType     = null;
+        // Minimum summed beautyScore of OTHER (non-workbench) objects in the room.
+        public int    workbenchBeautyReq    = 0;
+        // Minimum count of non-workbench, non-floor, non-wall foundations in the room.
+        public int    workbenchFurnitureReq = 0;
+        // Per-skill multipliers applied to NPCs using workbenches in a qualifying room.
+        // e.g. { "technical": 1.25 } means +25% to technical skill output.
+        public Dictionary<string, float> workbenchSkillBonuses = null;
+
+        // Network / power properties
+        public bool   underWallAllowed = false;   // wire/pipe/duct can pass under walls
+        public string networkType      = null;    // "electric" | "pipe" | "duct" | null
+        public bool   requiresPower    = false;   // consumes from electric network
+        public float  powerDraw        = 0f;      // watts when active
+        public float  idlePowerDraw    = 0f;      // watts when standby
 
         public static BuildableDefinition FromDict(Dictionary<string, object> raw)
         {
@@ -536,9 +558,25 @@ namespace Waystation.Models
                 beautyScore    = raw.GetInt("beauty_score", 0),
                 isWorkbench    = raw.GetBool("is_workbench", false),
             };
+            b.furnitureTag          = raw.GetString("furniture_tag", null);
+            b.workbenchRoomType     = raw.GetString("workbench_room_type", null);
+            b.workbenchBeautyReq    = raw.GetInt("workbench_beauty_req", 0);
+            b.workbenchFurnitureReq = raw.GetInt("workbench_furniture_req", 0);
+            if (raw.ContainsKey("workbench_skill_bonuses") &&
+                raw["workbench_skill_bonuses"] is Dictionary<string, object> wsb)
+            {
+                b.workbenchSkillBonuses = new Dictionary<string, float>();
+                foreach (var kv in wsb)
+                    b.workbenchSkillBonuses[kv.Key] = Convert.ToSingle(kv.Value);
+            }
             b.tileLayer  = raw.GetInt("layer",       b.category == "structure" ? 1 : 2);
             b.tileWidth  = raw.GetInt("tile_width",  1);
             b.tileHeight = raw.GetInt("tile_height", 1);
+            b.underWallAllowed = raw.GetBool("under_wall_allowed", false);
+            b.networkType      = raw.GetString("network_type", null);
+            b.requiresPower    = raw.GetBool("requires_power", false);
+            b.powerDraw        = raw.GetFloat("power_draw", 0f);
+            b.idlePowerDraw    = raw.GetFloat("idle_power_draw", 0f);
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);
             if (raw.ContainsKey("required_materials") &&
@@ -554,6 +592,52 @@ namespace Waystation.Models
                     b.requiredSkills[kv.Key] = Convert.ToInt32(kv.Value);
             }
             return b;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // MissionDefinition — static data for an away mission type.
+    // Loaded from data/missions/*.json by ContentRegistry.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class MissionDefinition
+    {
+        public string id;
+        public string displayName;
+        public string description      = "";
+        public string missionType;        // "mining" | "trade" | "patrol"
+        public int    durationTicks     = 480;
+        public int    crewRequired      = 1;
+        public string requiredSkill     = null;
+        public int    requiredSkillLevel = 1;
+        public float  successChanceBase = 0.7f;   // 0.0–1.0
+        public Dictionary<string, float> rewardsOnSuccess = new Dictionary<string, float>();
+        public Dictionary<string, float> rewardsOnPartial = new Dictionary<string, float>();
+
+        public static MissionDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var m = new MissionDefinition
+            {
+                id                = raw.GetString("id"),
+                displayName       = raw.GetString("display_name", raw.GetString("id")),
+                description       = raw.GetString("description", ""),
+                missionType       = raw.GetString("mission_type", "mining"),
+                durationTicks     = raw.GetInt("duration_ticks", 480),
+                crewRequired      = raw.GetInt("crew_required", 1),
+                requiredSkill     = raw.GetString("required_skill", null),
+                requiredSkillLevel = raw.GetInt("required_skill_level", 1),
+                successChanceBase  = raw.GetFloat("success_chance_base", 0.7f),
+            };
+            if (raw.ContainsKey("rewards_on_success") &&
+                raw["rewards_on_success"] is Dictionary<string, object> rs)
+                foreach (var kv in rs)
+                    m.rewardsOnSuccess[kv.Key] = Convert.ToSingle(kv.Value);
+            if (raw.ContainsKey("rewards_on_partial") &&
+                raw["rewards_on_partial"] is Dictionary<string, object> rp)
+                foreach (var kv in rp)
+                    m.rewardsOnPartial[kv.Key] = Convert.ToSingle(kv.Value);
+            return m;
         }
     }
 }

@@ -52,6 +52,11 @@ namespace Waystation.View
         private static Sprite[] _shadowCache;  // [0..11] 4 edges + 4 inside corners + 4 outside corners
         private static Sprite[] _cabinetCache; // [8]: orientation(V=0..3, H=4..7) × fill(0-3)
         private static Sprite   _batteryCache;  // single sprite, 128×64
+        private static Sprite[] _wireCache;     // [16] topology mask 0-15
+        private static Sprite[,] _pipeCache;    // [16, 3] mask × state (0=normal,1=pressurized,2=burst)
+        private static Sprite[] _ductCache;     // [16] topology mask 0-15
+        private static Dictionary<string, Sprite> _iceRefinerCache; // 15 named variants
+        private static Sprite[] _bedCache;      // [4] rotation steps (0/90/180/270)
 
         // ── Public accessors ──────────────────────────────────────────────────
         public static Sprite GetFloor(int variant)
@@ -114,7 +119,103 @@ namespace Waystation.View
             if (buildableId.Contains("battery"))         return GetBattery();
             if (buildableId.Contains("door"))            return GetDoorHFrames()[0];
             if (buildableId.Contains("wall"))            return GetWall(0);
+            if (buildableId.Contains("wire"))            return GetWire(0xF);
+            if (buildableId.Contains("pipe"))            return GetPipe(0xF, "normal");
+            if (buildableId.Contains("duct"))            return GetDuct(0xF);
+            if (buildableId.Contains("ice_refiner"))     return GetIceRefiner("standby");
+            if (buildableId.Contains("bed"))             return GetBed(0);
             return GetFloor(0);
+        }
+
+        // ── Wire sprites (electric network) ──────────────────────────────────
+
+        /// <summary>
+        /// Returns the wire topology sprite for a 4-bit connection mask
+        /// (N=1, E=2, S=4, W=8).
+        /// </summary>
+        public static Sprite GetWire(int connectionMask)
+        {
+            if (_wireCache == null)
+            {
+                _wireCache = new Sprite[16];
+                for (int m = 0; m < 16; m++) _wireCache[m] = MakeWire(m);
+            }
+            return _wireCache[connectionMask & 0xF];
+        }
+
+        // ── Pipe sprites (fluid network) ───────────────────────────────────
+
+        /// <summary>
+        /// Pipe topology sprite.  state = "normal" | "pressurized" | "burst".
+        /// </summary>
+        public static Sprite GetPipe(int connectionMask, string state = "normal")
+        {
+            if (_pipeCache == null)
+            {
+                _pipeCache = new Sprite[16, 3];
+                for (int m = 0; m < 16; m++)
+                for (int s = 0; s < 3; s++)
+                    _pipeCache[m, s] = MakePipe(m, s);
+            }
+            int si = state == "pressurized" ? 1 : state == "burst" ? 2 : 0;
+            return _pipeCache[connectionMask & 0xF, si];
+        }
+
+        // ── Duct sprites (gas network) ─────────────────────────────────────
+
+        /// <summary>
+        /// Duct topology sprite for the given 4-bit connection mask.
+        /// </summary>
+        public static Sprite GetDuct(int connectionMask)
+        {
+            if (_ductCache == null)
+            {
+                _ductCache = new Sprite[16];
+                for (int m = 0; m < 16; m++) _ductCache[m] = MakeDuct(m);
+            }
+            return _ductCache[connectionMask & 0xF];
+        }
+
+        // ── Ice Refiner sprites (128×64 px) ───────────────────────────────
+
+        private static readonly string[] IceRefinerVariants =
+        {
+            "standby",
+            "refining_0", "refining_1", "refining_2", "refining_3", "refining_4",
+            "output_0",   "output_1",   "output_2",   "output_3",   "output_4",
+            "damaged_0",  "damaged_1",  "damaged_2",
+            "broken"
+        };
+
+        /// <summary>
+        /// Ice refiner sprite by variant id (see IceRefinerVariants).
+        /// Falls back to "standby" for unknown ids.
+        /// </summary>
+        public static Sprite GetIceRefiner(string variantId)
+        {
+            if (_iceRefinerCache == null)
+            {
+                _iceRefinerCache = new Dictionary<string, Sprite>();
+                foreach (var v in IceRefinerVariants)
+                    _iceRefinerCache[v] = MakeIceRefiner(v);
+            }
+            if (_iceRefinerCache.TryGetValue(variantId, out var s)) return s;
+            return _iceRefinerCache["standby"];
+        }
+
+        // ── Bed sprites ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the bed sprite.  rotation is currently always 0 (single orientation).
+        /// </summary>
+        public static Sprite GetBed(int rotation = 0)
+        {
+            if (_bedCache == null)
+            {
+                _bedCache = new Sprite[4];
+                for (int r = 0; r < 4; r++) _bedCache[r] = MakeBed(r);
+            }
+            return _bedCache[Mathf.Clamp(rotation / 90, 0, 3)];
         }
 
         private static void EnsureCache()
@@ -1186,6 +1287,403 @@ namespace Waystation.View
             return MakeSprite(p);
         }
 
+        // ── Wire Make method ─────────────────────────────────────────────────────────
+        // Spec: WireTilesheet.html  — 4px body C0=30..C1=33, transparent bg, blue node
+
+        // Wire palette (WireTilesheet.html)
+        static readonly Color32 WRCore   = C("#2a3048");  // wireCore
+        static readonly Color32 WRMid    = C("#363c54");  // wireMid
+        static readonly Color32 WRHigh   = C("#4e5470");  // wireHi
+        static readonly Color32 WRShd    = C("#141820");  // wireShadow
+        static readonly Color32 WRGrout  = C("#1a1d28");  // wireGrout
+        static readonly Color32 WRNBase  = C("#383c50");  // nodeBase
+        static readonly Color32 WRNHi    = C("#4e5470");  // nodeHi
+        static readonly Color32 WRNLo    = C("#1c1f2c");  // nodeLo
+        static readonly Color32 WRNGt    = C("#141618");  // nodeGrout
+        static readonly Color32 WRNAcc   = C("#4880aa");  // nodeAcc (blue)
+        static readonly Color32 WRNAccG  = C("#111e30");  // nodeAccG
+
+        // Horizontal wire arm: grout+body+shadow rows 29..34 spanning x0..x1
+        static void WireHA(Color32[] p, int x0, int x1)
+        {
+            int w = x1 - x0 + 1;
+            Fr(p, x0, 29, w, 1, WRGrout);
+            Fr(p, x0, 30, w, 1, WRHigh);
+            Fr(p, x0, 31, w, 1, WRMid);
+            Fr(p, x0, 32, w, 1, WRCore);
+            Fr(p, x0, 33, w, 1, WRShd);
+            Fr(p, x0, 34, w, 1, WRShd);
+        }
+
+        // Vertical wire arm: grout+body+shadow cols 29..34 spanning y0..y1
+        static void WireVA(Color32[] p, int y0, int y1)
+        {
+            int h = y1 - y0 + 1;
+            Fr(p, 29, y0, 1, h, WRGrout);
+            Fr(p, 30, y0, 1, h, WRHigh);
+            Fr(p, 31, y0, 1, h, WRMid);
+            Fr(p, 32, y0, 1, h, WRCore);
+            Fr(p, 33, y0, 1, h, WRShd);
+            Fr(p, 34, y0, 1, h, WRShd);
+        }
+
+        // Wire connector node centred at MX=31, MY=31
+        static void WireND(Color32[] p)
+        {
+            Fr(p, 27, 27, 9, 9, WRNGt);   // outer grout 9×9
+            Fr(p, 28, 28, 7, 7, WRNBase); // base 7×7
+            Fr(p, 28, 28, 7, 1, WRNHi);   // top bevel
+            Fr(p, 28, 28, 1, 7, WRNHi);   // left bevel
+            Fr(p, 28, 34, 7, 1, WRNLo);   // bottom bevel
+            Fr(p, 34, 28, 1, 7, WRNLo);   // right bevel
+            Fr(p, 30, 30, 3, 3, WRNGt);   // inner recess 3×3
+            Px(p, 31, 31, WRNAcc);         // blue accent dot
+            Px(p, 30, 31, WRNAccG);  Px(p, 32, 31, WRNAccG);
+            Px(p, 31, 30, WRNAccG);  Px(p, 31, 32, WRNAccG);
+        }
+
+        static Sprite MakeWire(int mask)
+        {
+            var p = NewPixels();
+            bool N = (mask & 1) != 0, E = (mask & 2) != 0,
+                 S = (mask & 4) != 0, W = (mask & 8) != 0;
+            if (N) WireVA(p,  0, 31);
+            if (S) WireVA(p, 31, 63);
+            if (E) WireHA(p, 31, 63);
+            if (W) WireHA(p,  0, 31);
+            WireND(p);
+            return MakeSprite(p);
+        }
+
+        // ── Pipe Make method ──────────────────────────────────────────────────────────
+
+        static readonly Color32 PPBase     = C("#465a70");
+        static readonly Color32 PPDark     = C("#2d3d50");
+        static readonly Color32 PPHi       = C("#5878a0");
+        static readonly Color32 PPAmber    = C("#c8a030");
+        static readonly Color32 PPRed      = C("#c04020");
+        static readonly Color32 PPFlange   = C("#384858");
+        static readonly Color32 PPFlangeHi = C("#506070");
+
+        static Sprite MakePipe(int mask, int stateIdx)
+        {
+            var p = NewPixels();
+            const int C1 = 28, ARW = 8;
+            bool N = (mask & 1) != 0, E = (mask & 2) != 0,
+                 S = (mask & 4) != 0, W = (mask & 8) != 0;
+
+            if (N) { Fr(p, C1, 0,  ARW, 28, PPDark); Fr(p, C1+1, 0, 6, 28, PPBase); Fr(p, C1+2, 0, 4, 28, PPHi); }
+            if (S) { Fr(p, C1, 36, ARW, 28, PPDark); Fr(p, C1+1, 36, 6, 28, PPBase); Fr(p, C1+2, 36, 4, 28, PPHi); }
+            if (E) { Fr(p, 36, C1, 28, ARW, PPDark); Fr(p, 36, C1+1, 28, 6, PPBase); Fr(p, 36, C1+2, 28, 4, PPHi); }
+            if (W) { Fr(p, 0,  C1, 28, ARW, PPDark); Fr(p, 0,  C1+1, 28, 6, PPBase); Fr(p, 0,  C1+2, 28, 4, PPHi); }
+
+            Fr(p, C1-2, C1-2, 12, 12, PPFlange);
+            Fr(p, C1-1, C1-1, 10, 10, PPFlangeHi);
+            Fr(p, C1,   C1,    8,  8, PPBase);
+            Fr(p, C1+1, C1+1,  6,  6, PPHi);
+
+            if (stateIdx == 1)
+            {
+                if (N || S) Fr(p, C1+3, 0, 2, 64, PPAmber);
+                if (E || W) Fr(p, 0, C1+3, 64, 2, PPAmber);
+                Fr(p, C1+3, C1+3, 2, 2, PPAmber);
+            }
+            else if (stateIdx == 2)
+            {
+                Fr(p, C1+1, C1+1, 6, 6, PPRed);
+            }
+            return MakeSprite(p);
+        }
+
+        // ── Duct Make method ─────────────────────────────────────────────────────────
+        // Spec: DuctTilesheet.html — 14px body D0=25..D1=34 + 4px south face D2=38
+
+        // Duct palette (DuctTilesheet.html)
+        static readonly Color32 DTTop    = C("#3a3e52");
+        static readonly Color32 DTTopHi  = C("#4e5268");
+        static readonly Color32 DTTopMd  = C("#343848");
+        static readonly Color32 DTTopLo  = C("#282c3c");
+        static readonly Color32 DTFace   = C("#1e2230");
+        static readonly Color32 DTFaceH  = C("#282c3c");
+        static readonly Color32 DTFaceL  = C("#10121a");
+        static readonly Color32 DTFlng   = C("#2e3244");
+        static readonly Color32 DTFlngH  = C("#424660");
+        static readonly Color32 DTFlngL  = C("#181a26");
+        static readonly Color32 DTFlgGt  = C("#141618");
+        static readonly Color32 DTColl   = C("#383c50");
+        static readonly Color32 DTCollH  = C("#4e5270");
+        static readonly Color32 DTCollL  = C("#1c1e2c");
+        static readonly Color32 DTCollG  = C("#0e0f16");
+        static readonly Color32 DTCollI  = C("#242838");
+        static readonly Color32 DTRvHi   = C("#565e7a");
+        static readonly Color32 DTRvLo   = C("#2c3048");
+
+        // Horizontal duct arm: top face y=25..34, south perspective face y=35..38
+        static void DuctHA(Color32[] p, int x0, int x1)
+        {
+            int w = x1 - x0 + 1;
+            Fr(p, x0, 25, w, 10, DTTopMd);  // base fill
+            Fr(p, x0, 25, w,  1, DTTopHi);  // y=25 north highlight
+            Fr(p, x0, 26, w,  1, DTTop);    // y=26
+            Fr(p, x0, 28, w,  1, DTTop);    // y=28 sheen stripe
+            Fr(p, x0, 33, w,  1, DTTopLo);  // y=33 shadow
+            Fr(p, x0, 34, w,  1, DTTopLo);  // y=34 shadow
+            Fr(p, x0, 35, w,  1, DTFaceH);  // south face top edge
+            Fr(p, x0, 36, w,  2, DTFace);   // south face fill
+            Fr(p, x0, 38, w,  1, DTFaceL);  // south face bottom
+        }
+
+        // Vertical duct arm: west-facing top face x=25..34, east face x=35..38
+        static void DuctVA(Color32[] p, int y0, int y1)
+        {
+            int h = y1 - y0 + 1;
+            Fr(p, 25, y0, 10, h, DTTopMd);
+            Fr(p, 25, y0,  1, h, DTTopHi);
+            Fr(p, 26, y0,  1, h, DTTop);
+            Fr(p, 28, y0,  1, h, DTTop);    // sheen stripe
+            Fr(p, 33, y0,  1, h, DTTopLo);
+            Fr(p, 34, y0,  1, h, DTTopLo);
+            Fr(p, 35, y0,  1, h, DTFaceH);
+            Fr(p, 36, y0,  2, h, DTFace);
+            Fr(p, 38, y0,  1, h, DTFaceL);
+        }
+
+        // Duct collar (junction box) centred at tile centre 31,31
+        static void DuctColl(Color32[] p)
+        {
+            Fr(p, 22, 22, 18, 18, DTFlgGt);   // outer grout 18×18
+            Fr(p, 23, 23, 16, 16, DTFlng);    // flange plate 16×16
+            Fr(p, 23, 23, 16,  1, DTFlngH);   // top bevel
+            Fr(p, 23, 23,  1, 16, DTFlngH);   // left bevel
+            Fr(p, 23, 38, 16,  1, DTFlngL);   // bottom bevel
+            Fr(p, 38, 23,  1, 16, DTFlngL);   // right bevel
+            Fr(p, 25, 25, 12, 12, DTColl);    // inner collar 12×12
+            Fr(p, 25, 25, 12,  1, DTCollH);   Fr(p, 25, 25,  1, 12, DTCollH);
+            Fr(p, 25, 36, 12,  1, DTCollL);   Fr(p, 36, 25,  1, 12, DTCollL);
+            Fr(p, 27, 27,  8,  8, DTCollI);   // inset 8×8
+            Fr(p, 23, 23, 2, 1, DTRvHi); Fr(p, 23, 24, 2, 1, DTRvLo);  // rivet TL
+            Fr(p, 37, 23, 2, 1, DTRvHi); Fr(p, 37, 24, 2, 1, DTRvLo);  // rivet TR
+            Fr(p, 23, 37, 2, 1, DTRvHi); Fr(p, 23, 38, 2, 1, DTRvLo);  // rivet BL
+            Fr(p, 37, 37, 2, 1, DTRvHi); Fr(p, 37, 38, 2, 1, DTRvLo);  // rivet BR
+        }
+
+        static Sprite MakeDuct(int mask)
+        {
+            var p = NewPixels();
+            bool N = (mask & 1) != 0, E = (mask & 2) != 0,
+                 S = (mask & 4) != 0, W = (mask & 8) != 0;
+            if (N) DuctVA(p,  0, 31);
+            if (S) DuctVA(p, 31, 63);
+            if (E) DuctHA(p, 31, 63);
+            if (W) DuctHA(p,  0, 31);
+            DuctColl(p);
+            return MakeSprite(p);
+        }
+
+        // ── Ice Refiner Make method (128×64) ─────────────────────────────────────────
+
+        static readonly Color32 IRBase   = C("#2d3040");
+        static readonly Color32 IRHi     = C("#3a3e56");
+        static readonly Color32 IRDark   = C("#1e2030");
+        static readonly Color32 IRCyan   = C("#30b8c8");
+        static readonly Color32 IRBlue   = C("#4880aa");
+        static readonly Color32 IRAmber  = C("#c8b030");
+        static readonly Color32 IRRed    = C("#d03020");
+        static readonly Color32 IRRivet  = C("#505870");
+        static readonly Color32 IREdge   = C("#1a1c28");
+
+        static Sprite MakeIceRefiner(string variantId)
+        {
+            var p = new Color32[128 * 64];
+            void Fill128(int x, int y, int w, int h, Color32 c)
+            {
+                for (int py = y; py < y + h; py++)
+                for (int px = x; px < x + w; px++)
+                    if ((uint)px < 128 && (uint)py < 64)
+                        p[(63 - py) * 128 + px] = c;
+            }
+            void Dot128(int x, int y, Color32 c)
+            {
+                if ((uint)x < 128 && (uint)y < 64)
+                    p[(63 - y) * 128 + x] = c;
+            }
+
+            bool isRefining = variantId.StartsWith("refining_");
+            bool isOutput   = variantId.StartsWith("output_");
+            bool isDamaged  = variantId.StartsWith("damaged_");
+            bool isBroken   = variantId == "broken";
+
+            int phase = 0;
+            if (isRefining && variantId.Length > 9 && int.TryParse(variantId.Substring(9), out int rp)) phase = rp;
+            if (isOutput   && variantId.Length > 7 && int.TryParse(variantId.Substring(7), out int op)) phase = op;
+            if (isDamaged  && variantId.Length > 8 && int.TryParse(variantId.Substring(8), out int dp)) phase = dp;
+
+            // Housing
+            Fill128(0, 0, 128, 64, IREdge);
+            Fill128(1, 1, 126, 62, IRBase);
+            Fill128(2, 1, 124, 1, IRHi);
+            Fill128(1, 2, 1, 60, IRHi);
+
+            // Hopper (x 3..49)
+            Fill128(3, 4, 47, 55, IRDark);
+            Fill128(4, 5, 45, 53, IRBase);
+            Fill128(5, 6, 43, 6, IRHi);
+
+            Color32 hopperFill = isBroken  ? IRRed :
+                                 isDamaged ? LerpC32(IRBase, IRRed, 0.4f) :
+                                 isRefining ? LerpC32(IRBlue, IRCyan, phase / 4f) : IRBlue;
+            Fill128(7, 20, 36, 20, hopperFill);
+            Fill128(7, 20, 36, 1, IRHi);
+            Fill128(7, 20, 1, 20, IRHi);
+
+            // Compressor (x 50..89)
+            Fill128(52, 4, 38, 55, IRDark);
+            Fill128(53, 5, 36, 53, IRBase);
+            int pistonY = isRefining ? 15 + phase * 4 : 15;
+            Fill128(58, pistonY, 26, 10, IRHi);
+            Fill128(60, pistonY + 1, 22, 8, isRefining ? IRAmber : IRBase);
+
+            // Output (x 90..111)
+            Fill128(91, 4, 20, 55, IRDark);
+            Fill128(92, 5, 18, 53, IRBase);
+            Color32 outputLed = isOutput ? LerpC32(IRCyan, IRBlue, phase / 4f) :
+                                isBroken ? IRRed : IRBlue;
+            Fill128(95, 25, 12, 12, outputLed);
+            Fill128(96, 26, 10, 1, IRHi);
+
+            // Terminal (x 112..127)
+            Fill128(113, 4, 14, 55, IRDark);
+            Fill128(114, 5, 12, 53, IRBase);
+            Color32 statusLed = isBroken ? IRRed : isDamaged ? IRAmber :
+                                isRefining ? IRCyan : isOutput ? IRBlue : IRHi;
+            for (int l = 0; l < 5; l++)
+                Fill128(116, 10 + l * 10, 5, 5, statusLed);
+
+            // Rivets
+            foreach (var (rx, ry) in new[] { (2,2),(2,61),(125,2),(125,61),(49,2),(49,61),(89,2),(89,61),(111,2),(111,61) })
+                Dot128(rx, ry, IRRivet);
+
+            return MakeSprite128(p);
+        }
+
+        // ── Bed Make method ──────────────────────────────────────────────────────────
+        // Spec: BedTilesheet.html — 128×64 landscape, headboard west, footboard east
+
+        // Bed palette (BedTilesheet.html)
+        static readonly Color32 BFrGt  = C("#181614");  // frameGrout
+        static readonly Color32 BFrBs  = C("#32302a");  // frameBase
+        static readonly Color32 BFrHi  = C("#484438");  // frameHi
+        static readonly Color32 BFrLo  = C("#1e1c18");  // frameLo
+        static readonly Color32 BFrPn  = C("#2a2824");  // framePanel
+        static readonly Color32 BFrPHi = C("#3c3830");  // framePanelHi
+        static readonly Color32 BLgBs  = C("#2a2820");  // legBase
+        static readonly Color32 BLgHi  = C("#3e3c30");  // legHi
+        static readonly Color32 BMtBs  = C("#2e3040");  // mattBase
+        static readonly Color32 BMtEd  = C("#383c50");  // mattEdge
+        static readonly Color32 BMtSm  = C("#222430");  // mattSeam
+        static readonly Color32 BBlBs  = C("#343038");  // blankBase
+        static readonly Color32 BBlHi  = C("#484450");  // blankHi
+        static readonly Color32 BBlLo  = C("#201e28");  // blankLo
+        static readonly Color32 BBlMd  = C("#3c3844");  // blankMid
+        static readonly Color32 BBlTk  = C("#1e1c24");  // blankTuck
+        static readonly Color32 BBlWk  = C("#2c2a34");  // blankWrinkle
+        static readonly Color32 BPlBs  = C("#3c3c44");  // pillowBase
+        static readonly Color32 BPlHi  = C("#505058");  // pillowHi
+        static readonly Color32 BPlLo  = C("#282830");  // pillowLo
+        static readonly Color32 BPlSm  = C("#2a2a32");  // pillowSeam
+        static readonly Color32 BPlCs  = C("#343440");  // pillowCase
+        static readonly Color32 BLed   = C("#4880aa");  // acc blue LED
+        static readonly Color32 BLedG  = C("#111e30");  // accG blue LED glow
+
+        static Sprite MakeBed(int rotationStep)
+        {
+            var p = new Color32[128 * 64];
+            void Fill(int x, int y, int w, int h, Color32 c)
+            {
+                for (int dy = 0; dy < h; dy++)
+                for (int dx = 0; dx < w; dx++)
+                {
+                    int bx = x + dx, by = y + dy;
+                    if ((uint)bx < 128 && (uint)by < 64)
+                        p[(63 - by) * 128 + bx] = c;
+                }
+            }
+            void Dot(int x, int y, Color32 c)
+            {
+                if ((uint)x < 128 && (uint)y < 64)
+                    p[(63 - y) * 128 + x] = c;
+            }
+            // x zones: headboard 0..9 | pillow 10..40 | blanket 41..117 | footboard 118..127
+            // y zones: north_rail 0..3 | mattress 4..41 | south_rail 42..45 | south_face 46..63
+
+            // ── North rail (y=0..3) ───────────────────────────────────────────────────
+            Fill(  0,  0, 128,  4, BFrBs);
+            Fill(  0,  0, 128,  1, BFrHi);  // top highlight
+            Fill(  0,  3, 128,  1, BFrGt);  // bottom grout
+
+            // ── South rail (y=42..45) ─────────────────────────────────────────────────
+            Fill(  0, 42, 128,  4, BFrBs);
+            Fill(  0, 42, 128,  1, BFrGt);  // top grout
+            Fill(  0, 45, 128,  1, BFrLo);  // bottom shadow
+
+            // ── South face (y=46..63, FH=18) ──────────────────────────────────────────
+            Fill(  0, 46, 128, 18, BFrPn);
+            Fill(  0, 46, 128,  1, BFrBs);  // lip at top
+            Fill(  0, 63, 128,  1, BFrGt);  // bottom grout
+            Fill(  0, 46,   1, 18, BFrHi);  // left edge
+            Fill(127, 46,   1, 18, BFrLo);  // right shadow
+            Fill(  4, 48, 120, 14, BFrPHi); // recessed panel outer
+            Fill(  5, 49, 118, 12, BFrPn);  // recessed panel inner
+            // Leg stubs
+            Fill(  2, 59,  4,  4, BLgBs); Fill(  2, 59,  4,  1, BLgHi);
+            Fill(122, 59,  4,  4, BLgBs); Fill(122, 59,  4,  1, BLgHi);
+
+            // ── Headboard (x=0..9, y=0..45) ──────────────────────────────────────────
+            Fill(  0,  0, 10, 46, BFrBs);
+            Fill(  0,  0,  1, 46, BFrHi);  // west outer highlight
+            Fill(  9,  0,  1, 46, BFrGt);  // east inner grout
+            Fill(  1,  5,  7, 35, BFrPHi); // panel outer
+            Fill(  2,  6,  5, 33, BFrPn);  // panel inner
+            Fill(  3,  7,  3, 31, BFrPHi); // panel inset
+            Dot(4, 21, BLed);  Dot(5, 21, BLedG);  // blue status LED
+            Dot(4, 22, BLedG); Dot(5, 22, BLedG);
+
+            // ── Footboard (x=118..127, y=0..45) ──────────────────────────────────────
+            Fill(118,  0, 10, 46, BFrBs);
+            Fill(118,  0,  1, 46, BFrGt);  // west inner grout
+            Fill(127,  0,  1, 46, BFrHi);  // east outer highlight
+            Fill(119,  5,  7, 35, BFrPHi);
+            Fill(120,  6,  5, 33, BFrPn);
+
+            // ── Mattress (x=10..117, y=4..41) ────────────────────────────────────────
+            Fill( 10,  4, 108, 38, BMtBs);
+            Fill( 10,  4, 108,  1, BMtEd); // north edge highlight
+            Fill( 10,  4,   1, 38, BMtEd); // west edge highlight
+            Fill( 10, 22, 108,  1, BMtSm); // horizontal seam
+
+            // ── Pillow (x=12..38, y=7..36) ───────────────────────────────────────────
+            Fill( 12,  7, 27, 30, BPlCs);  // pillowCase
+            Fill( 13,  8, 25, 28, BPlBs);  // pillow body
+            Fill( 13,  8, 25,  1, BPlHi);  // top highlight
+            Fill( 13,  8,  1, 28, BPlHi);  // left highlight
+            Fill( 13, 35, 25,  1, BPlLo);  // bottom shadow
+            Fill( 37,  8,  1, 28, BPlLo);  // right shadow
+            Fill( 14, 21, 23,  1, BPlSm);  // seam
+
+            // ── Blanket (x=41..117, y=4..41) ─────────────────────────────────────────
+            Fill( 41,  4,  77, 38, BBlBs);
+            Fill( 41,  4,  77,  1, BBlHi);  // top cuff
+            Fill( 41,  4,   1, 38, BBlHi);  // left cuff edge
+            Fill( 41, 41,  77,  1, BBlLo);  // bottom shadow
+            Fill(117,  4,   1, 38, BBlTk);  // right tuck
+            Fill( 42,  6,  75,  1, BBlMd);  // fold band
+            Fill( 60,  5,   1, 36, BBlWk);  // wrinkle
+            Fill( 80,  5,   1, 36, BBlWk);  // wrinkle
+            Fill(100,  5,   1, 36, BBlWk);  // wrinkle
+
+            return MakeSprite128(p);
+        }
+
         // ── Low-level pixel helpers ───────────────────────────────────────────
 
         static Color32[] NewPixels() => new Color32[64 * 64];
@@ -1226,79 +1724,119 @@ namespace Waystation.View
         // 128×64 battery bank sprite — 2 world units wide, 1 tall (64 PPU).
         static Sprite MakeBattery128()
         {
+            // Spec: BatteryTilesheet.html  — 128×64, 3-box: left cell | right cell | terminal
             var p = new Color32[128 * 64];
             void Fill(int x, int y, int w, int h, Color32 c)
             {
                 for (int dy = 0; dy < h; dy++)
                 for (int dx = 0; dx < w; dx++)
-                    p[(63 - (y + dy)) * 128 + (x + dx)] = c;
+                {
+                    int bx = x + dx, by = y + dy;
+                    if ((uint)bx < 128 && (uint)by < 64)
+                        p[(63 - by) * 128 + bx] = c;
+                }
             }
-            void Dot(int x, int y, Color32 c) => p[(63 - y) * 128 + x] = c;
-
-            var housing = C("#2b3040");
-            var edgeLt  = C("#424b5c");
-            var edgeDk  = C("#181c26");
-            var cell    = C("#1c2820");
-            var cellLt  = C("#273221");
-            var cellDk  = C("#111915");
-            var term    = C("#b08020");
-            var termHi  = C("#d4a030");
-            var ledOn   = C("#18d050");
-            var vent    = C("#141820");
-            var div     = C("#1c2028");
-            var pipGlow = new Color32(40, 255, 120, 255);
-
-            // ── Outer housing ────────────────────────────────────────────────
-            Fill(0,   0, 128, 64, edgeDk);
-            Fill(1,   1, 126, 62, housing);
-            Fill(2,   1, 124,  1, edgeLt);   // top highlight
-            Fill(1,   2,   1, 60, edgeLt);   // left highlight
-            Fill(126, 2,   1, 60, edgeDk);   // right shadow
-            Fill(2,  62, 124,  1, edgeDk);   // bottom shadow
-
-            // ── Left cell bay (x:4–60, y:4–58) ──────────────────────────────
-            Fill(4,  4, 57, 55, cell);
-            Fill(5,  4, 55,  1, cellLt);     // top highlight
-            Fill(4,  5,  1, 53, cellLt);     // left highlight
-            Fill(60, 5,  1, 53, cellDk);     // right shadow
-            Fill(5, 58, 55,  1, cellDk);     // bottom shadow
-
-            // ── Right cell bay (x:67–123, y:4–58) ───────────────────────────
-            Fill(67,  4, 57, 55, cell);
-            Fill(68,  4, 55,  1, cellLt);
-            Fill(67,  5,  1, 53, cellLt);
-            Fill(123, 5,  1, 53, cellDk);
-            Fill(68, 58, 55,  1, cellDk);
-
-            // ── Centre divider ───────────────────────────────────────────────
-            Fill(61, 4, 6, 55, div);
-            Fill(62, 4, 1, 55, edgeLt);      // divider left highlight
-
-            // ── Vent slots ───────────────────────────────────────────────────
-            for (int v = 0; v < 5; v++)
+            void Dot(int x, int y, Color32 c)
             {
-                Fill( 8 + v * 10, 7, 4, 5, vent);
-                Fill(71 + v * 10, 7, 4, 5, vent);
+                if ((uint)x < 128 && (uint)y < 64)
+                    p[(63 - y) * 128 + x] = c;
             }
 
-            // ── LED charge indicators (5 per bay) ────────────────────────────
+            // Spec palette (BatteryTilesheet.html)
+            var tBase   = C("#2d3040");  var tHi    = C("#424858");
+            var tLo     = C("#1c1f2c");  var tGrout = C("#1a1d28");
+            var fBase   = C("#383c50");  var fLit   = C("#434860");
+            var fDark   = C("#252838");  var fBevel = C("#4e5470");
+            var rHi     = C("#565e7a");  var rLo    = C("#2c3048");
+            var acc     = C("#4880aa");  var accG   = C("#111e30");
+            var accD    = C("#1a3a60");
+            var cellFil = C("#303445");  var ventSl = C("#111520");
+            var finHi   = C("#363b50");
+            var termPos = C("#c8a830");  var termPHi= C("#e8c848");  var termPLo= C("#7a6418");
+            var barBlue = C("#4890c8");  var barDim = C("#112038");
+            var stGreen = C("#30c848");  var stGrGlo= C("#106018");  var stGrDim= C("#081c0a");
+
+            const int FH = 18, TS = 46;  // south face height, top surface height
+
+            // ── Outer housing ──────────────────────────────────────────────────────────
+            Fill(  0,  0, 128, 64, tGrout);
+            Fill(  1,  1, 126, 62, tBase);
+            Fill(  2,  1, 124,  1, tHi);    // top edge highlight
+            Fill(  1,  2,   1, 60, tHi);    // left edge highlight
+            Fill(126,  2,   1, 60, tLo);    // right edge shadow
+            Fill(  2, 62, 124,  1, tLo);    // bottom edge shadow
+
+            // ── South face (y=TS..63) ──────────────────────────────────────────────────
+            Fill(  2, TS, 124, FH, fDark);
+            Fill(  2, TS, 124,  1, fBase);  // lip
+            // 5-pip charge bar (all lit = full charge)
             for (int l = 0; l < 5; l++)
-            {
-                int lxL = 9  + l * 10;
-                int lxR = 72 + l * 10;
-                Fill(lxL, 51, 5, 3, ledOn);
-                Dot(lxL + 2, 52, pipGlow);
-                Fill(lxR, 51, 5, 3, ledOn);
-                Dot(lxR + 2, 52, pipGlow);
-            }
+                Fill(8 + l * 11, TS + 5, 8, 6, barBlue);
+            for (int l = 0; l < 5; l++)
+                Dot(12 + l * 11, TS + 8, LerpC32(barBlue, new Color32(255,255,255,255), 0.3f));
 
-            // ── Terminal connectors (top) ─────────────────────────────────────
-            int[] termXs = { 12, 44, 75, 107 };
-            foreach (int tx in termXs)
-            {
-                Fill(tx, 2, 8, 3, term);
-                Fill(tx + 1, 2, 6, 1, termHi);
-            }
+            // ── Box 1: Left cell (x=4..59) ────────────────────────────────────────────
+            const int DIV = 63;
+            Fill(4, 4, DIV - 8, TS - 8, fDark);
+            Fill(5, 5, DIV - 10, TS - 10, cellFil);
+            Fill(5, 5, DIV - 10,  1, fLit);   // bevel top
+            Fill(5, 5,  1, TS - 10, fLit);    // bevel left
+            Fill(5, TS - 6, DIV - 10, 1, tLo);  // bevel bottom
+            Fill(DIV - 5, 5, 1, TS - 10, tLo);  // bevel right
+            // Vent slots
+            for (int v = 0; v < 3; v++) Fill(8 + v * 14, 7, 8, 4, ventSl);
+            // Blue status LED (top-right of box 1)
+            int lx1 = DIV - 12, ly1 = 7;
+            Fill(lx1-1, ly1-1, 6, 1, accG);  Fill(lx1-1, ly1+4, 6, 1, accG);
+            Fill(lx1-1, ly1-1, 1, 6, accG);  Fill(lx1+4, ly1-1, 1, 6, accG);
+            Fill(lx1, ly1, 4, 4, accD);
+            Dot(lx1, ly1, acc);  Dot(lx1+1, ly1, LerpC32(acc, accD, 0.4f));
+            Dot(lx1, ly1+1, LerpC32(acc, accD, 0.4f));  Dot(lx1+1, ly1+1, accD);
+            // Rivets
+            Fill(4, 4, 2, 1, rHi); Fill(4, 5, 2, 1, rLo);
+            Fill(DIV - 6, 4, 2, 1, rHi); Fill(DIV - 6, 5, 2, 1, rLo);
+
+            // ── Divider (x=63..64) ────────────────────────────────────────────────────
+            Fill(DIV, 4, 2, TS - 4, tGrout);
+            Fill(DIV + 1, 5, 1, TS - 6, tHi);
+
+            // ── Box 2: Right cell (x=66..97) ──────────────────────────────────────────
+            const int B2X0 = 66, B2W = 30;
+            Fill(B2X0, 4, B2W, TS - 8, fDark);
+            Fill(B2X0 + 1, 5, B2W - 2, TS - 10, cellFil);
+            Fill(B2X0 + 1, 5, B2W - 2, 1, fLit);
+            Fill(B2X0 + 1, 5, 1, TS - 10, fLit);
+            Fill(B2X0 + 1, TS - 6, B2W - 2, 1, tLo);
+            Fill(B2X0 + B2W - 1, 5, 1, TS - 10, tLo);
+            for (int v = 0; v < 2; v++) Fill(B2X0 + 4 + v * 13, 7, 8, 4, ventSl);  // vents
+            Fill(B2X0, TS / 2 - 1, B2W, 2, finHi);  // separator fin
+
+            // ── Box 3: Terminal block (x=99..126) ────────────────────────────────────
+            const int B3X0 = 99;
+            Fill(B3X0,   2, 27, 60, fDark);
+            Fill(B3X0+1, 3, 25, 58, fBase);
+            Fill(B3X0+1, 3, 25,  1, fBevel);  // top highlight
+            Fill(B3X0+1, 3,  1, 58, fBevel);  // left highlight
+            Fill(B3X0+25, 3, 1, 58, tLo);     // right shadow
+            Fill(B3X0+1, 60, 25, 1, tLo);     // bottom shadow
+            // Positive terminal post
+            Fill(B3X0 + 5,  6, 14,  6, termPos);
+            Fill(B3X0 + 6,  6, 12,  1, termPHi);
+            Fill(B3X0 + 5,  6,  1,  6, termPHi);
+            Fill(B3X0 + 18, 6,  1,  6, termPLo);
+            Fill(B3X0 + 6, 11, 12,  1, termPLo);
+            // Status LED — green (connected + drawing power)
+            int lx3 = B3X0 + 10, ly3 = TS / 2 - 2;
+            Fill(lx3-1, ly3-1, 6, 1, stGrDim); Fill(lx3-1, ly3+4, 6, 1, stGrDim);
+            Fill(lx3-1, ly3-1, 1, 6, stGrDim); Fill(lx3+4, ly3-1, 1, 6, stGrDim);
+            Fill(lx3, ly3, 4, 4, stGrGlo);
+            Dot(lx3,   ly3,   stGreen);
+            Dot(lx3+1, ly3,   LerpC32(stGreen, stGrGlo, 0.4f));
+            Dot(lx3,   ly3+1, LerpC32(stGreen, stGrGlo, 0.4f));
+            Dot(lx3+1, ly3+1, stGrGlo);
+            // Rivets
+            Fill(B3X0+1, 3, 2, 1, rHi); Fill(B3X0+1, 4, 2, 1, rLo);
+            Fill(B3X0+23, 3, 2, 1, rHi); Fill(B3X0+23, 4, 2, 1, rLo);
 
             return MakeSprite128(p);
         }

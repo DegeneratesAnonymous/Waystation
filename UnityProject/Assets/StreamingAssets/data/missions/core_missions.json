@@ -1,0 +1,54 @@
+[
+    {
+        "id": "mission.mining",
+        "display_name": "Mining Run",
+        "description": "Send a crew team to a nearby asteroid belt to extract raw ice and ore. Returns with raw materials for refining.",
+        "mission_type": "mining",
+        "duration_ticks": 480,
+        "crew_required": 2,
+        "required_skill": "engineering",
+        "required_skill_level": 2,
+        "success_chance_base": 0.70,
+        "rewards_on_success": {
+            "ice": 80,
+            "item.parts": 20
+        },
+        "rewards_on_partial": {
+            "ice": 30
+        }
+    },
+    {
+        "id": "mission.trade",
+        "display_name": "Trade Route",
+        "description": "Dispatch a crew member on a local trade circuit. Negotiates favourable deals and returns with credits.",
+        "mission_type": "trade",
+        "duration_ticks": 720,
+        "crew_required": 1,
+        "required_skill": "negotiation",
+        "required_skill_level": 1,
+        "success_chance_base": 0.80,
+        "rewards_on_success": {
+            "credits": 150
+        },
+        "rewards_on_partial": {
+            "credits": 50
+        }
+    },
+    {
+        "id": "mission.patrol",
+        "display_name": "Patrol Circuit",
+        "description": "Armed crew patrol the surrounding sector, deterring pirates and improving station safety ratings.",
+        "mission_type": "patrol",
+        "duration_ticks": 360,
+        "crew_required": 2,
+        "required_skill": "combat",
+        "required_skill_level": 2,
+        "success_chance_base": 0.85,
+        "rewards_on_success": {
+            "credits": 60
+        },
+        "rewards_on_partial": {
+            "credits": 20
+        }
+    }
+]

@@ -1,0 +1,24 @@
+[
+    {
+        "id": "general_workshop",
+        "display_name": "General Workshop",
+        "workbench_cap": 3,
+        "requirements_per_workbench": [
+            { "buildable_id_or_tag": "tag:seating",  "count": 1, "display_label": "Chair" },
+            { "buildable_id_or_tag": "tag:surface",  "count": 1, "display_label": "Table" },
+            { "buildable_id_or_tag": "tag:lighting", "count": 1, "display_label": "Overhead Light" },
+            { "buildable_id_or_tag": "tag:storage",  "count": 1, "display_label": "Storage Cabinet" }
+        ],
+        "skill_bonuses": { "engineering": 1.10 }
+    },
+    {
+        "id": "refinery",
+        "display_name": "Refinery",
+        "workbench_cap": 3,
+        "requirements_per_workbench": [
+            { "buildable_id_or_tag": "tag:lighting", "count": 1, "display_label": "Overhead Light" },
+            { "buildable_id_or_tag": "tag:storage",  "count": 2, "display_label": "Storage Cabinet" }
+        ],
+        "skill_bonuses": { "engineering": 1.15 }
+    }
+]
