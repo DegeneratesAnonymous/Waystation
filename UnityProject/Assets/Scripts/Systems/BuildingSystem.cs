@@ -396,10 +396,18 @@ namespace Waystation.Systems
             int skillLevel = assigned.skills.ContainsKey("technical") ? assigned.skills["technical"] : 5;
             float skillScale = 0.5f + skillLevel / 10f;  // 0.5× at 0, 1.5× at 10
 
-            // If the engineer is assigned to a workbench that has an active room bonus,
-            // apply its multiplier to the effective skill scale.
-            if (foundation.hasRoomBonus && foundation.roomBonusMultiplier > 1f)
-                skillScale *= foundation.roomBonusMultiplier;
+            // If any complete workbench in the station has an active room bonus, apply
+            // the best available multiplier to reward working in a well-equipped workshop.
+            float bonusMultiplier = 1f;
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete" || !f.hasRoomBonus || f.roomBonusMultiplier <= bonusMultiplier)
+                    continue;
+                if (_registry.Buildables.TryGetValue(f.buildableId, out var wb) && wb.workbenchRoomType != null)
+                    bonusMultiplier = f.roomBonusMultiplier;
+            }
+            if (bonusMultiplier > 1f)
+                skillScale *= bonusMultiplier;
 
             float increment  = (1f / buildTime) * skillScale;
 

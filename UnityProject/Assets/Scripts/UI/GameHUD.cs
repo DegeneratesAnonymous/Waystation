@@ -1098,6 +1098,7 @@ namespace Waystation.UI
             }
 
             // Custom types
+            RoomTypeDefinition toDelete = null;
             foreach (var ct in s.customRoomTypes)
             {
                 DrawSolid(new Rect(0, y, cw, 26f), new Color(0.09f, 0.12f, 0.14f, 0.8f));
@@ -1107,9 +1108,10 @@ namespace Waystation.UI
                 GUI.Label(new Rect(cw * 0.56f, y + 4f, cw * 0.18f, 16f), "(custom)", _sSub);
                 GUI.color = colPrev;
                 if (GUI.Button(new Rect(cw - 58f, y + 3f, 54f, 20f), "\u2715 Delete", _sBtnDanger))
-                    s.customRoomTypes.Remove(ct);
+                    toDelete = ct;
                 y += 28f;
             }
+            if (toDelete != null) s.customRoomTypes.Remove(toDelete);
 
             // ── New custom type creator ────────────────────────────────────────
             y += 4f;
