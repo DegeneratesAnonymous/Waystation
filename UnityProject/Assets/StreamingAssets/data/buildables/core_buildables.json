@@ -65,6 +65,7 @@
         "size": 1,
         "max_health": 100,
         "cargo_capacity": 48,
+        "furniture_tag": "storage",
         "schema_version": "1"
     },
     {
@@ -201,6 +202,8 @@
         "max_health": 120,
         "is_workbench": true,
         "beauty_score": 2,
+        "workbench_room_type": "general_workshop",
+        "workbench_skill_bonuses": { "engineering": 1.10 },
         "schema_version": "1"
     },
     {
@@ -221,6 +224,8 @@
         "max_health": 140,
         "is_workbench": true,
         "beauty_score": 0,
+        "workbench_room_type": "refinery",
+        "workbench_skill_bonuses": { "engineering": 1.15 },
         "schema_version": "1"
     },
     {
@@ -238,6 +243,7 @@
         "max_health": 60,
         "is_workbench": false,
         "beauty_score": 10,
+        "furniture_tag": "decor",
         "schema_version": "1"
     },
     {
@@ -255,6 +261,148 @@
         "max_health": 50,
         "is_workbench": false,
         "beauty_score": 20,
+        "furniture_tag": "decor",
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.bed",
+        "display_name": "Crew Bunk",
+        "category": "object",
+        "description": "A single-occupancy crew bunk. Crew will seek an assigned bunk when their sleep need is low.",
+        "build_time_ticks": 40,
+        "layer": 2,
+        "required_materials": {
+            "item.steel_plate": 3
+        },
+        "required_skills": {},
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
+        "cargo_capacity": 0,
+        "beauty_score": 1,
+        "furniture_tag": "sleeping",
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.wire",
+        "display_name": "Electrical Wire",
+        "category": "electrical",
+        "description": "Thin electrical wire that runs under flooring and walls to carry power between devices. Drag to place runs.",
+        "build_time_ticks": 6,
+        "layer": 1,
+        "network_type": "electric",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.wiring": 1
+        },
+        "required_skills": {},
+        "required_tags": [],
+        "size": 1,
+        "max_health": 40,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.pipe",
+        "display_name": "Fluid Pipe",
+        "category": "plumbing",
+        "description": "A pressurised fluid pipe. Connects ice refiners and water storage. One fluid type per connected network.",
+        "build_time_ticks": 12,
+        "layer": 1,
+        "network_type": "pipe",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.steel_plate": 1
+        },
+        "required_skills": {},
+        "required_tags": [],
+        "size": 1,
+        "max_health": 60,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.duct",
+        "display_name": "Gas Duct",
+        "category": "plumbing",
+        "description": "A ventilation duct for gas distribution. Connects oxygen producers to life support consumers. One gas type per connected network.",
+        "build_time_ticks": 12,
+        "layer": 1,
+        "network_type": "duct",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.steel_plate": 1
+        },
+        "required_skills": {},
+        "required_tags": [],
+        "size": 1,
+        "max_health": 60,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.ice_refiner",
+        "display_name": "Ice Refiner",
+        "category": "production",
+        "description": "A 2-tile industrial refiner. Consumes ice and electrical power to produce water and oxygen. Connect to pipe and duct networks for full output.",
+        "build_time_ticks": 120,
+        "tile_width": 2,
+        "layer": 2,
+        "requires_power": true,
+        "power_draw": 15.0,
+        "idle_power_draw": 2.0,
+        "required_materials": {
+            "item.steel_plate": 8,
+            "item.wiring": 3
+        },
+        "required_skills": {
+            "engineering": 3
+        },
+        "required_tags": [],
+        "size": 2,
+        "max_health": 200,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.chair",
+        "display_name": "Chair",
+        "category": "object",
+        "description": "A standard station chair. Required as basic seating in furnished rooms. Contributes to room bonus requirements when placed alongside workbenches.",
+        "build_time_ticks": 6,
+        "required_materials": { "item.steel_plate": 1 },
+        "required_skills": {},
+        "required_tags": [],
+        "size": 1,
+        "max_health": 60,
+        "beauty_score": 2,
+        "furniture_tag": "seating",
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.table",
+        "display_name": "Table",
+        "category": "object",
+        "description": "A work or dining table. Provides a surface for crew activities and contributes to room bonus requirements.",
+        "build_time_ticks": 8,
+        "required_materials": { "item.steel_plate": 2 },
+        "required_skills": {},
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
+        "beauty_score": 2,
+        "furniture_tag": "surface",
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.overhead_light",
+        "display_name": "Overhead Light",
+        "category": "electrical",
+        "description": "A ceiling-mounted light fixture. Required for functional work areas. Contributes to room bonus requirements.",
+        "build_time_ticks": 8,
+        "required_materials": { "item.wiring": 2, "item.parts": 1 },
+        "required_skills": { "electrical": 1 },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 50,
+        "beauty_score": 3,
+        "furniture_tag": "lighting",
         "schema_version": "1"
     }
 ]

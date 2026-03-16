@@ -99,7 +99,7 @@ namespace Waystation.Models
         // Needs — 0.0 (critical) to 1.0 (fully satisfied)
         public Dictionary<string, float> needs    = new Dictionary<string, float>
         {
-            { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 1f }
+            { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 1f }, { "sleep", 1f }
         };
 
         // -1.0 (miserable) to 1.0 (content)
@@ -126,6 +126,16 @@ namespace Waystation.Models
         // Arbitrary memory hooks for events to read/write
         public Dictionary<string, object> memory = new Dictionary<string, object>();
 
+        // Species / rank — used for door access control
+        public string species = "human";      // e.g. "human", "alien"
+        public int    rank    = 0;            // 0=crew, 1=officer, 2=senior, 3=command
+
+        // Department / mission / sleep assignment
+        public string departmentId  = null;   // single dept uid; null = Crewman (unassigned)
+        public string sleepBedUid   = null;   // uid of claimed bed foundation
+        public bool   isSleeping    = false;
+        public string missionUid    = null;   // null when not on an away mission
+
         public static NPCInstance Create(string templateId, string name,
                                          string classId, string subclassId = null)
         {
@@ -139,7 +149,7 @@ namespace Waystation.Models
             };
             npc.needs = new Dictionary<string, float>
             {
-                { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 1f }
+                { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 1f }, { "sleep", 1f }
             };
             return npc;
         }
@@ -160,9 +170,9 @@ namespace Waystation.Models
         {
             var weights = new Dictionary<string, float>
             {
-                { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 2f }
+                { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 2f }, { "sleep", 1f }
             };
-            float totalWeight  = 4.5f;
+            float totalWeight  = 5.5f;
             float weightedSum  = 0f;
             foreach (var kv in weights)
                 weightedSum += (needs.ContainsKey(kv.Key) ? needs[kv.Key] : 0.5f) * kv.Value;
@@ -336,6 +346,12 @@ namespace Waystation.Models
         // "powered" | "locked" | "unpowered"
         public string doorStatus = "powered";
 
+        // Door hold-open: door stays fully open regardless of NPC proximity.
+        public bool doorHoldOpen = false;
+
+        // Door access policy — null means allow all powered NPCs.
+        public DoorAccessPolicy accessPolicy = null;
+
         // uid of the Engineer NPC currently assigned here, or null
         public string assignedNpcUid;
 
@@ -363,6 +379,20 @@ namespace Waystation.Models
         // Multi-tile footprint (set by BuildingSystem from BuildableDefinition).
         public int tileWidth  = 1;
         public int tileHeight = 1;
+
+        // Network connectivity: uid of the NetworkInstance this foundation belongs to.
+        public string networkId      = null;
+        // True when a wire/pipe/duct is placed beneath a wall — hidden in Normal view.
+        public bool   isUnderWall    = false;
+        // Visual operating state for machines ("standby"|"active"|"damaged"|"broken").
+        public string operatingState = "standby";
+
+        // Room bonus — set by RoomSystem each tick.
+        // hasRoomBonus is true when this workbench is in a fully-qualified bonus room.
+        // roomBonusMultiplier is the skill output multiplier while the bonus is active.
+        // (runtime only — not included in hand-rolled save dictionaries)
+        public bool  hasRoomBonus        = false;
+        public float roomBonusMultiplier = 1.0f;
 
         /// <summary>
         /// Functionality based on current HP:
@@ -404,6 +434,159 @@ namespace Waystation.Models
                 quality       = quality,
                 tileRotation  = rotation,
                 cargoCapacity = cargoCapacity,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // DoorAccessPolicy — who may pass through a door freely.
+    // The door opens for an NPC only when NpcCanPass() returns true.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class DoorAccessPolicy
+    {
+        // If true, the door is completely unrestricted (anyone walks through).
+        public bool allowAll = true;
+
+        // Allowed species (empty = no species restriction).
+        public List<string> allowedSpecies       = new List<string>();
+        // Allowed department uids (empty = no dept restriction).
+        public List<string> allowedDepartmentIds = new List<string>();
+        // Minimum rank required (0 = no rank restriction).
+        public int minRank = 0;
+        // Optional faction gate: npcFactionId must match AND rep >= minFactionRep.
+        public string requiredFactionId  = null;
+        public float  minFactionRep      = 0f;
+
+        /// Returns true when the NPC meets at least one non-empty configured rule
+        /// (or allowAll is true, or all rule lists are empty).
+        public bool NpcCanPass(NPCInstance npc)
+        {
+            if (allowAll) return true;
+
+            // Rank gates apply to all NPCs regardless of other rules.
+            if (npc.rank < minRank) return false;
+
+            bool speciesOk  = allowedSpecies.Count == 0      || allowedSpecies.Contains(npc.species ?? "human");
+            bool deptOk     = allowedDepartmentIds.Count == 0 || allowedDepartmentIds.Contains(npc.departmentId ?? "");
+            bool factionOk  = requiredFactionId == null       || npc.factionId == requiredFactionId;
+
+            return speciesOk && deptOk && factionOk;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // RoomFurnitureRequirement — one slot in a room type's per-workbench checklist.
+    // A room needs (countPerWorkbench × workbenchCount) matching items.
+    // buildableIdOrTag: exact buildable id (e.g. "buildable.chair")
+    //   OR a tag prefixed with "tag:" (e.g. "tag:lighting") matched via furnitureTag.
+    // -------------------------------------------------------------------------
+    [Serializable]
+    public class RoomFurnitureRequirement
+    {
+        public string buildableIdOrTag;   // "buildable.chair" OR "tag:lighting"
+        public int    countPerWorkbench;  // multiply by # workbenches for total needed
+        public string displayLabel;       // shown in UI: "Chair", "Overhead Light"
+    }
+
+    // -------------------------------------------------------------------------
+    // RoomTypeDefinition — authored definition for a room type.
+    // Built-in types are loaded from core_room_types.json (isBuiltIn = true).
+    // Custom types are created by the player and stored in StationState.customRoomTypes.
+    // -------------------------------------------------------------------------
+    [Serializable]
+    public class RoomTypeDefinition
+    {
+        public string id;                // matches workbenchRoomType on BuildableDefinition
+        public string displayName;
+        public bool   isBuiltIn   = true;  // false for player-created custom types
+        public int    workbenchCap = 3;    // max workbenches that earn the bonus
+        public List<RoomFurnitureRequirement> requirementsPerWorkbench = new List<RoomFurnitureRequirement>();
+        public Dictionary<string, float>      skillBonuses             = new Dictionary<string, float>();
+    }
+
+    // -------------------------------------------------------------------------
+    // RoomRequirementProgress — runtime progress for one furniture slot.
+    // -------------------------------------------------------------------------
+    public class RoomRequirementProgress
+    {
+        public string displayLabel;
+        public int    current;
+        public int    required;
+        public bool   IsMet => current >= required;
+    }
+
+    // -------------------------------------------------------------------------
+    // RoomBonusState — computed by RoomSystem, stored in StationState.roomBonusCache.
+    // Runtime only (not serialised).
+    // -------------------------------------------------------------------------
+    public class RoomBonusState
+    {
+        public string       roomKey;            // "minCol_minRow" canonical key
+        public string       workbenchRoomType;  // workbenchRoomType of the dominant workbench
+        public string       displayName;        // human-readable name from RoomTypeDefinition
+        public bool         bonusActive;        // true when all requirements met
+        public int          workbenchCount;     // number of workbenches of the dominant type
+        public List<string> workbenchUids = new List<string>();
+        public List<RoomRequirementProgress> requirements = new List<RoomRequirementProgress>();
+    }
+
+    // -------------------------------------------------------------------------
+    // Network Instance — a connected graph of wire/pipe/duct foundations
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class NetworkInstance
+    {
+        public string       uid;
+        public string       networkType;     // "electric" | "pipe" | "duct"
+        public string       contentType;     // resource id for pipe/duct; null for electric
+        public float        contentAmount;   // current stored amount
+        public float        contentCapacity; // max storage in this network
+        public List<string> memberUids = new List<string>(); // foundation uids
+
+        public static NetworkInstance Create(string type, string content = null)
+        {
+            return new NetworkInstance
+            {
+                uid         = Guid.NewGuid().ToString("N")[..8],
+                networkType = type,
+                contentType = content,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Mission Instance — an active away mission
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class MissionInstance
+    {
+        public string       uid;
+        public string       missionType;   // "mining" | "trade" | "patrol"
+        public string       displayName;
+        public string       definitionId;  // references MissionDefinition.id
+        public List<string> crewUids = new List<string>();
+        public int          startTick;
+        public int          endTick;
+        // "active" | "complete" | "failed"
+        public string       status = "active";
+        public Dictionary<string, float> rewards = new Dictionary<string, float>();
+
+        public static MissionInstance Create(string defId, string type, string name,
+                                             int start, int duration)
+        {
+            return new MissionInstance
+            {
+                uid          = Guid.NewGuid().ToString("N")[..8],
+                definitionId = defId,
+                missionType  = type,
+                displayName  = name,
+                status       = "active",
+                startTick    = start,
+                endTick      = start + duration,
             };
         }
     }
@@ -452,6 +635,14 @@ namespace Waystation.Models
         // (key = "minCol_minRow" of the connected floor-tile set that forms the room)
         public Dictionary<string, string> roomRoles = new Dictionary<string, string>();
 
+        // Runtime room bonus cache — rebuilt by RoomSystem.Tick, NOT serialised.
+        // (not included in hand-rolled save dictionaries in GameManager.SaveGame)
+        public Dictionary<string, RoomBonusState> roomBonusCache = new Dictionary<string, RoomBonusState>();
+        // Player-created custom room type definitions (built-ins come from ContentRegistry).
+        public List<RoomTypeDefinition>   customRoomTypes = new List<RoomTypeDefinition>();
+        // Player-assigned display name per room (key = canonical "col_row" room key).
+        public Dictionary<string, string> customRoomNames = new Dictionary<string, string>();
+
         // Communications inbox (most recent first)
         public List<CommMessage> messages = new List<CommMessage>();
 
@@ -461,6 +652,25 @@ namespace Waystation.Models
 
         // Crew departments
         public List<Department> departments = new List<Department>();
+
+        // Rank name overrides — index corresponds to rank int (0–3).
+        // Defaults: Crew, Officer, Senior Officer, Command.
+        // Players can rename these per-station.
+        public List<string> rankNames = new List<string>
+            { "Crew", "Officer", "Senior Officer", "Command" };
+
+        /// Returns the display name for the given rank index, falling back gracefully.
+        public string GetRankName(int rank)
+        {
+            if (rank >= 0 && rank < rankNames.Count) return rankNames[rank];
+            return rank == 0 ? "Crew" : $"Rank {rank}";
+        }
+
+        // Infrastructure networks (electric, pipe, duct)
+        public Dictionary<string, NetworkInstance>  networks = new Dictionary<string, NetworkInstance>();
+
+        // Active away missions
+        public Dictionary<string, MissionInstance>  missions = new Dictionary<string, MissionInstance>();
 
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();

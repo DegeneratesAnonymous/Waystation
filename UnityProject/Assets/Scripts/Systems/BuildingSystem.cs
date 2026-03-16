@@ -239,6 +239,17 @@ namespace Waystation.Systems
 
             if (pending.Count == 0) return;
 
+            // Compute the best active workbench room-bonus multiplier once per tick
+            // so TickConstructing doesn't scan all foundations for every pending build.
+            float roomBonusMultiplier = 1f;
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete" || !f.hasRoomBonus || f.roomBonusMultiplier <= roomBonusMultiplier)
+                    continue;
+                if (_registry.Buildables.TryGetValue(f.buildableId, out var wb) && wb.workbenchRoomType != null)
+                    roomBonusMultiplier = f.roomBonusMultiplier;
+            }
+
             // Track which engineer UIDs have been claimed this tick.
             // An engineer already assigned to *this* foundation may still work on it.
             var usedEngineerUids = new HashSet<string>();
@@ -267,7 +278,7 @@ namespace Waystation.Systems
                 if (foundation.status == "awaiting_haul")
                     TickAwaitingHaul(foundation, defn, station, idle);
                 else if (foundation.status == "constructing")
-                    TickConstructing(foundation, defn, station, idle);
+                    TickConstructing(foundation, defn, station, idle, roomBonusMultiplier);
 
                 // Mark the assigned engineer as used for the rest of this tick.
                 if (foundation.assignedNpcUid != null)
@@ -363,7 +374,8 @@ namespace Waystation.Systems
         private void TickConstructing(FoundationInstance foundation,
                                        BuildableDefinition defn,
                                        StationState station,
-                                       List<NPCInstance> idle)
+                                       List<NPCInstance> idle,
+                                       float roomBonusMultiplier)
         {
             // Dev mode — complete instantly, no engineer needed.
             if (DevMode)
@@ -391,9 +403,14 @@ namespace Waystation.Systems
             RefreshEngineerTimer(foundation, idle);
 
             // Advance progress: 1/buildTimeTicks per tick, scaled by technical skill
-            int buildTime = defn.buildTimeTicks > 0 ? defn.buildTimeTicks : DefaultBuildTimeTicks;
+            // and any room bonus from a qualifying workbench (pre-computed in Tick()).
+            int buildTime  = defn.buildTimeTicks > 0 ? defn.buildTimeTicks : DefaultBuildTimeTicks;
             int skillLevel = assigned.skills.ContainsKey("technical") ? assigned.skills["technical"] : 5;
             float skillScale = 0.5f + skillLevel / 10f;  // 0.5× at 0, 1.5× at 10
+
+            if (roomBonusMultiplier > 1f)
+                skillScale *= roomBonusMultiplier;
+
             float increment  = (1f / buildTime) * skillScale;
 
             foundation.buildProgress = Mathf.Min(1f, foundation.buildProgress + increment);

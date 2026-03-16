@@ -30,7 +30,7 @@ namespace Waystation.Systems
         // Needs decay rates per tick
         public static readonly Dictionary<string, float> NeedsDecayRate = new Dictionary<string, float>
         {
-            { "hunger", -0.04f }, { "rest", -0.03f }, { "social", -0.01f }, { "safety", 0f }
+            { "hunger", -0.04f }, { "rest", -0.03f }, { "social", -0.01f }, { "safety", 0f }, { "sleep", -0.02f }
         };
 
         private const float SkillXpPerTick           = 0.008f;
@@ -107,6 +107,9 @@ namespace Waystation.Systems
 
         private void TickNpc(NPCInstance npc, StationState station, int population)
         {
+            // NPCs on away missions are off-station — skip all local routing.
+            if (npc.missionUid != null) return;
+
             npc.UpdateNeeds(NeedsDecayRate);
 
             // Food consumption
@@ -148,9 +151,22 @@ namespace Waystation.Systems
 
             npc.RecalculateMood();
 
-            // Skill progression
+            // Skill progression + rank promotion
             if (npc.IsCrew() && npc.currentJobId != null)
+            {
                 TryAdvanceSkill(npc);
+                TryPromoteRank(npc, station);
+            }
+
+            // Sleep routing for crew
+            if (npc.IsCrew())
+            {
+                float sleepVal = npc.needs.ContainsKey("sleep") ? npc.needs["sleep"] : 1f;
+                if (!npc.isSleeping && sleepVal < 0.25f)
+                    TryClaimBed(npc, station);
+                else if (npc.isSleeping && sleepVal >= 0.9f)
+                    npc.isSleeping = false;   // wake up; keep bed claimed for next cycle
+            }
 
             // Distress logging (rate-limited)
             if (npc.needs.ContainsKey("hunger") && npc.needs["hunger"] < 0.2f &&
@@ -159,6 +175,9 @@ namespace Waystation.Systems
             if (npc.needs.ContainsKey("rest") && npc.needs["rest"] < 0.1f &&
                 UnityEngine.Random.value < 0.1f)
                 station.LogEvent($"{npc.name} is exhausted.");
+            if (npc.needs.ContainsKey("sleep") && npc.needs["sleep"] < 0.1f &&
+                UnityEngine.Random.value < 0.1f)
+                station.LogEvent($"{npc.name} is exhausted and needs sleep.");
 
             // Idle wandering: move to a random oxygenated module periodically.
             // Only gate on having no active job; re-wander even if already in a
@@ -202,6 +221,133 @@ namespace Waystation.Systems
                 xp -= XpPerLevel;
             }
             npc.skillXp[skill] = xp;
+        }
+
+        // ── Rank progression ──────────────────────────────────────────────────
+        // Rank is driven by total skill points across all skills.
+        //   Rank 0 (Crew)           :  0 – 29
+        //   Rank 1 (Officer)        : 30 – 59
+        //   Rank 2 (Senior Officer) : 60 – 99
+        //   Rank 3 (Command)        : 100+
+        // Promotion awards one trait drawn from a rank-specific pool.
+
+        private const int RankOfficerThreshold = 30;
+        private const int RankSeniorThreshold  = 60;
+        private const int RankCommandThreshold = 100;
+
+        private static readonly Dictionary<int, string[]> RankTraitPool =
+            new Dictionary<int, string[]>
+        {
+            { 1, new[] { "experienced", "disciplined", "reliable"  } },
+            { 2, new[] { "tactical",    "composed",    "inspiring" } },
+            { 3, new[] { "legendary",   "commanding",  "veteran"   } },
+        };
+
+        private static int ComputeTargetRank(int totalSkill)
+        {
+            if (totalSkill >= RankCommandThreshold) return 3;
+            if (totalSkill >= RankSeniorThreshold)  return 2;
+            if (totalSkill >= RankOfficerThreshold) return 1;
+            return 0;
+        }
+
+        private static string RankLabel(int rank) => rank switch
+        {
+            1 => "Officer",
+            2 => "Senior Officer",
+            3 => "Command",
+            _ => "Crew",
+        };
+
+        private void TryPromoteRank(NPCInstance npc, StationState station)
+        {
+            int total = 0;
+            foreach (var v in npc.skills.Values) total += v;
+
+            int target = ComputeTargetRank(total);
+            if (target <= npc.rank) return;   // no promotion (also covers demotion safety)
+
+            npc.rank = target;
+
+            // Award a trait from the rank pool (skip if already possessed).
+            if (RankTraitPool.TryGetValue(target, out var pool))
+            {
+                // Use uid hash for deterministic-but-varied selection.
+                int pick = (System.Math.Abs(npc.uid.GetHashCode()) + target) % pool.Length;
+                string trait = pool[pick];
+                if (!npc.traits.Contains(trait)) npc.traits.Add(trait);
+            }
+
+            station.LogEvent($"{npc.name} promoted to {RankLabel(npc.rank)}.");
+        }
+
+        // ── Bed routing ───────────────────────────────────────────────────────
+
+        private static void TryClaimBed(NPCInstance npc, StationState station)
+        {
+            // Already has a valid bed assigned — just start sleeping there.
+            if (npc.sleepBedUid != null &&
+                station.foundations.TryGetValue(npc.sleepBedUid, out var existing) &&
+                existing.status == "complete")
+            {
+                npc.isSleeping = true;
+                return;
+            }
+
+            // Find any unoccupied, completed bed foundation.
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != "buildable.bed") continue;
+                if (f.status != "complete") continue;
+                bool takenByOther = false;
+                foreach (var other in station.npcs.Values)
+                {
+                    if (other.uid != npc.uid && other.sleepBedUid == f.uid)
+                    { takenByOther = true; break; }
+                }
+                if (takenByOther) continue;
+
+                npc.sleepBedUid = f.uid;
+                npc.isSleeping  = true;
+                return;
+            }
+            // No bed available — can't sleep yet
+        }
+
+        // ── Department skill bonus ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the effective skill value for an NPC on a given job, applying
+        /// a +5 % department bonus when the NPC is the sole holder of a job within
+        /// a matching department.
+        /// </summary>
+        public int GetEffectiveSkill(NPCInstance npc, string jobId, StationState station)
+        {
+            string skillKey = JobSkillMap.ContainsKey(jobId) ? JobSkillMap[jobId] : null;
+            int baseSkill = (skillKey != null && npc.skills.ContainsKey(skillKey))
+                            ? npc.skills[skillKey] : 0;
+
+            if (npc.departmentId == null) return baseSkill;  // Crewman — no bonus
+
+            // Find the department this NPC belongs to
+            Department dept = null;
+            foreach (var d in station.departments)
+                if (d.uid == npc.departmentId) { dept = d; break; }
+            if (dept == null || !dept.allowedJobs.Contains(jobId)) return baseSkill;
+
+            // Count how many NPCs OTHER than this one hold this job in the same dept
+            int holderCount = 0;
+            foreach (var other in station.npcs.Values)
+            {
+                if (other.uid == npc.uid) continue;
+                if (other.departmentId == npc.departmentId && other.currentJobId == jobId)
+                    holderCount++;
+            }
+            // sole holder → 5 % bonus (round is fine for skill values 0-10)
+            if (holderCount == 0)
+                return Mathf.RoundToInt(baseSkill * 1.05f);
+
+            return baseSkill;
         }
 
         // ── Convenience queries ────────────────────────────────────────────────

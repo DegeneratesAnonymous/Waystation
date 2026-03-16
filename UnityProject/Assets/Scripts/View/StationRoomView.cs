@@ -123,6 +123,31 @@ namespace Waystation.View
         // Foundation uid → (col,row) so we know the position when a foundation is removed.
         private readonly Dictionary<string, (int,int)>             _foundPos  = new Dictionary<string, (int,int)>();
 
+        // ── View mode ──────────────────────────────────────────────────
+        public enum ViewMode { Normal, Pipes, Ducts, Electricity, Temperature, Beauty, Pressurized }
+        private ViewMode _viewMode = ViewMode.Normal;
+        public ViewMode ActiveViewMode => _viewMode;
+        public static StationRoomView Instance { get; private set; }
+
+        /// <summary>Called by GameHUD buttons to switch the active view overlay.</summary>
+        public void SetViewMode(ViewMode mode)
+        {
+            _viewMode = mode;
+            UpdateNetworkVisibility();
+        }
+
+        // Tile cycling: left-click the same tile repeatedly to cycle through stacked foundations.
+        private int _lastClickCol = -1, _lastClickRow = -1;
+        private int _tileLayerIndex = 0;
+
+        // Context panel (bottom-left drawer) — the foundation or NPC dot the player last clicked.
+        private FoundationInstance _ctxFoundation = null;
+        private GUIStyle _ctxPanelStyle, _ctxHeaderStyle, _ctxValueStyle, _ctxCtaStyle;
+        // Door access editor sub-state
+        private bool   _doorAccessEditing       = false;
+        private string _doorAccessInput_Species = "";
+        private string _doorAccessInput_Dept    = "";
+
         // ── Auto-install ──────────────────────────────────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
@@ -145,6 +170,7 @@ namespace Waystation.View
 
             if (!this || !isActiveAndEnabled) yield break;
 
+            Instance = this;
             SetupCamera();
             BuildRoom();
 
@@ -216,9 +242,7 @@ namespace Waystation.View
                 {
                     int nc2 = col2 + dir.x, nr2 = row2 + dir.y;
                     var cand2 = new Vector2Int(nc2, nr2);
-                    if (nc2 >= IntMinC && nc2 <= IntMaxC &&
-                        nr2 >= IntMinR && nr2 <= IntMaxR &&
-                        !_dotClaimed.Contains(cand2))
+                    if (IsPassable(nc2, nr2) && !_dotClaimed.Contains(cand2))
                     {
                         _dotClaimed.Remove(cur2);
                         _dotClaimed.Add(cand2);
@@ -245,6 +269,24 @@ namespace Waystation.View
                     _isDragSelecting  = true;
                     _dragSelStart     = Input.mousePosition;
                     _dragSelRect      = new Rect();
+
+                    // Tile cycling: identify clicked tile and cycle context
+                    var cam0 = Camera.main;
+                    if (cam0 != null)
+                    {
+                        Vector3 w0   = cam0.ScreenToWorldPoint(Input.mousePosition);
+                        int clickCol = Mathf.RoundToInt(w0.x);
+                        int clickRow = Mathf.RoundToInt(w0.y);
+                        if (clickCol == _lastClickCol && clickRow == _lastClickRow)
+                            _tileLayerIndex++;
+                        else
+                        {
+                            _lastClickCol   = clickCol;
+                            _lastClickRow   = clickRow;
+                            _tileLayerIndex = 0;
+                        }
+                        SelectContextFoundation(clickCol, clickRow);
+                    }
                 }
                 if (_isDragSelecting && Input.GetMouseButton(0))
                 {
@@ -288,16 +330,50 @@ namespace Waystation.View
                 var e = _doorEntries[i];
                 if (!e.sr) { _doorEntries.RemoveAt(i); continue; }
 
-                // Open when any crew dot is within 1 tile (Manhattan distance).
+                // Open when any crew dot is within 1 tile (Manhattan distance)
+                // AND the corresponding NPC can pass through this door.
                 bool npcNear = false;
-                foreach (var dot in _dots)
+                bool holdOpen = false;   // hoisted so void-gate below can read it
+                if (_gm?.Station != null)
                 {
-                    if (!dot) continue;
-                    Vector3 dp = dot.transform.position;
-                    if (Mathf.Abs(Mathf.RoundToInt(dp.x) - e.col) +
-                        Mathf.Abs(Mathf.RoundToInt(dp.y) - e.row) <= 1)
-                    { npcNear = true; break; }
+                    string doorUid = e.foundationUid;
+                    FoundationInstance doorFnd = null;
+                    if (doorUid != null)
+                        _gm.Station.foundations.TryGetValue(doorUid, out doorFnd);
+
+                    holdOpen = doorFnd != null && doorFnd.doorHoldOpen;
+                    if (holdOpen)
+                    {
+                        npcNear = true;  // always "open"
+                    }
+                    else
+                    {
+                        for (int di = 0; di < _dots.Count && !npcNear; di++)
+                        {
+                            var dot = _dots[di];
+                            if (!dot) continue;
+                            Vector3 dp = dot.transform.position;
+                            if (Mathf.Abs(Mathf.RoundToInt(dp.x) - e.col) +
+                                Mathf.Abs(Mathf.RoundToInt(dp.y) - e.row) > 1) continue;
+
+                            // Check access policy if one is set
+                            if (doorFnd?.accessPolicy != null && !doorFnd.accessPolicy.allowAll)
+                            {
+                                if (di < _crew.Count && doorFnd.accessPolicy.NpcCanPass(_crew[di]))
+                                    npcNear = true;
+                            }
+                            else
+                            {
+                                npcNear = true;
+                            }
+                        }
+                    }
                 }
+
+                // Doors facing void/space must never auto-open (regardless of NPC proximity
+                // or hold-open flag — only explicit holdOpen bypasses this for salvage ops).
+                if (npcNear && !holdOpen && IsDoorAdjacentToVoid(e.col, e.row))
+                    npcNear = false;
 
                 e.timer += Time.deltaTime;
                 while (e.timer >= DoorFrameTime)
@@ -460,6 +536,7 @@ namespace Waystation.View
                         _shadowsAt.Remove(pos);
                     }
                     RefreshAdjacentTiles(pos.Item1, pos.Item2);
+                    RefreshNetworkNeighbors(pos.Item1, pos.Item2);
                 }
             }
 
@@ -561,6 +638,58 @@ namespace Waystation.View
                     _foundTiles[kv.Key]  = battGO;
                     _foundExtras[kv.Key] = new List<GameObject> { floorA, floorB };
                 }
+                else if (f.buildableId == "buildable.bed")
+                {
+                    // 128×64 sprite spans two tiles — place at col+0.5 like battery/ice_refiner
+                    var floorA = PlaceTile(_foundRoot.transform, f.tileCol,     f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol, f.tileRow)),
+                        FloorRotation(f.tileCol, f.tileRow), sortOrder: 10);
+                    var floorB = PlaceTile(_foundRoot.transform, f.tileCol + 1, f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol + 1, f.tileRow)),
+                        FloorRotation(f.tileCol + 1, f.tileRow), sortOrder: 10);
+                    var bedGO = new GameObject($"Bed_{f.uid}");
+                    bedGO.transform.SetParent(_foundRoot.transform, false);
+                    bedGO.transform.localPosition = new Vector3(f.tileCol + 0.5f, f.tileRow, 0f);
+                    var srBed = bedGO.AddComponent<SpriteRenderer>();
+                    srBed.sprite       = TileAtlas.GetBed(0);
+                    srBed.sortingOrder = 20;
+                    _foundTiles[kv.Key]  = bedGO;
+                    _foundExtras[kv.Key] = new List<GameObject> { floorA, floorB };
+                }
+                else if (f.buildableId == "buildable.wire"
+                      || f.buildableId == "buildable.pipe"
+                      || f.buildableId == "buildable.duct")
+                {
+                    Sprite netSprite = GetNetworkSprite(f);
+                    var netGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
+                        netSprite, 0f, sortOrder: f.isUnderWall ? 9 : 15);
+                    // Hide under-wall network tiles in Normal view mode
+                    if (f.isUnderWall && _viewMode == ViewMode.Normal)
+                        netGO.SetActive(false);
+                    _foundTiles[kv.Key] = netGO;
+                    // Update adjacent network tiles so they redraw with the new connection mask.
+                    RefreshNetworkNeighbors(f.tileCol, f.tileRow);
+                }
+                else if (f.buildableId == "buildable.ice_refiner")
+                {
+                    // 2-tile-wide 128×64 sprite anchored at col+0.5
+                    var floorA = PlaceTile(_foundRoot.transform, f.tileCol,     f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol,     f.tileRow)),
+                        FloorRotation(f.tileCol,     f.tileRow), sortOrder: 10);
+                    var floorB = PlaceTile(_foundRoot.transform, f.tileCol + 1, f.tileRow,
+                        TileAtlas.GetFloor(PickFloorVariant(f.tileCol + 1, f.tileRow)),
+                        FloorRotation(f.tileCol + 1, f.tileRow), sortOrder: 10);
+
+                    var refGO = new GameObject($"IceRefiner_{f.uid}");
+                    refGO.transform.SetParent(_foundRoot.transform, false);
+                    refGO.transform.localPosition = new Vector3(f.tileCol + 0.5f, f.tileRow, 0f);
+                    var sr2 = refGO.AddComponent<SpriteRenderer>();
+                    sr2.sprite       = TileAtlas.GetIceRefiner(f.operatingState ?? "standby");
+                    sr2.sortingOrder = 30;
+
+                    _foundTiles[kv.Key]  = refGO;
+                    _foundExtras[kv.Key] = new List<GameObject> { floorA, floorB };
+                }
                 else
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
@@ -571,6 +700,99 @@ namespace Waystation.View
         }
 
         // ── Tile adjacency helpers ────────────────────────────────────────────
+
+        // ── View mode helpers ─────────────────────────────────────────────────
+
+        private void UpdateNetworkVisibility()
+        {
+            if (_gm?.Station == null) return;
+            foreach (var kv in _foundTiles)
+            {
+                if (!_gm.Station.foundations.TryGetValue(kv.Key, out var f)) continue;
+                if (f.isUnderWall && kv.Value != null)
+                    kv.Value.SetActive(_viewMode != ViewMode.Normal);
+            }
+        }
+
+        private Sprite GetNetworkSprite(FoundationInstance f)
+        {
+            if (_gm?.Networks == null) return TileAtlas.GetWire(0);
+            int mask = _gm.Networks.GetConnectionMask(_gm.Station, f.tileCol, f.tileRow, f.buildableId.Contains("wire") ? "electric" : f.buildableId.Contains("pipe") ? "pipe" : "duct");
+            if (f.buildableId == "buildable.wire") return TileAtlas.GetWire(mask);
+            if (f.buildableId == "buildable.pipe") return TileAtlas.GetPipe(mask, "normal");
+            return TileAtlas.GetDuct(mask);
+        }
+
+        private void SelectContextFoundation(int col, int row)
+        {
+            if (_gm?.Station == null) { _ctxFoundation = null; return; }
+            var fList = new List<FoundationInstance>();
+            foreach (var f in _gm.Station.foundations.Values)
+                if (f.tileCol == col && f.tileRow == row) fList.Add(f);
+            if (fList.Count == 0) { _ctxFoundation = null; return; }
+            fList.Sort((a, b) => a.tileLayer.CompareTo(b.tileLayer));
+            _ctxFoundation = fList[_tileLayerIndex % fList.Count];
+        }
+
+        /// <summary>
+        /// True when an NPC dot can step onto (col, row).
+        /// Respects placed walls (block), placed doors (pass unless locked), the
+        /// built-in south-wall boundary door, and any floor/object foundations.
+        /// Works for tiles both inside AND outside the starter 7×7 room bounds so
+        /// that NPCs can navigate into rooms built beyond the starting area.
+        /// </summary>
+        private bool IsPassable(int col, int row)
+        {
+            // Hard safety: don't wander into infinity
+            if (col < -64 || col > 64 || row < -64 || row > 64) return false;
+
+            // Built-in south-wall boundary door is always passable (not in foundations)
+            if (row == 0 && col == RoomCols / 2) return true;
+
+            // Inspect all foundations at this position
+            if (_gm?.Station?.foundations != null)
+            {
+                bool anyFound        = false;
+                bool hasBlockingWall = false;
+                bool hasDoor         = false;
+                bool doorLocked      = false;
+
+                foreach (var f in _gm.Station.foundations.Values)
+                {
+                    if (f.tileCol != col || f.tileRow != row) continue;
+                    anyFound = true;
+                    if (f.tileLayer == 1 && f.buildableId.Contains("wall"))
+                        hasBlockingWall = true;
+                    if (f.buildableId.Contains("door"))
+                    {
+                        hasDoor    = true;
+                        bool locked  = (f.doorStatus ?? "powered") == "locked";
+                        bool holdOpen = f.doorHoldOpen;
+                        // A door with a restrictive access policy blocks random wander
+                        // (we have no NPC context here; treat restriction = wall for wanderers).
+                        bool restricted = f.accessPolicy != null && !f.accessPolicy.allowAll;
+                        doorLocked = locked || (!holdOpen && restricted);
+                    }
+                }
+
+                if (anyFound)
+                {
+                    if (hasDoor)
+                    {
+                        if (doorLocked) return false;
+                        // Don't wander through doors that face void/unpressurized space.
+                        if (IsDoorAdjacentToVoid(col, row)) return false;
+                        return true;
+                    }
+                    if (hasBlockingWall) return false;
+                    return true;  // floor or furniture – always walkable
+                }
+            }
+
+            // No foundations here: passable only if inside the starter room interior
+            return col >= IntMinC && col <= IntMaxC &&
+                   row >= IntMinR && row <= IntMaxR;
+        }
 
         /// True if (col,row) is passable floor.
         /// Placed wall foundations override the interior range — a wall on an interior
@@ -679,8 +901,54 @@ namespace Waystation.View
                 if (!neFloor && !nwFloor && !seFloor &&  swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_NE, v);
             }
 
-            // Fallback: T-junction, walls on both sides, or fully surrounded — legacy flat tile.
+            // Two-floor cases: concave inner corners and partition walls.
+            // For consistent perspective, the south-facing and north-facing directions
+            // take priority over east/west (the camera has a slight south tilt).
+
+            // Partition walls (floor on opposite sides)
+            if  (nFloor && sFloor && !eFloor && !wFloor)
+                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);  // E-W partition
+            if (!nFloor && !sFloor && eFloor && wFloor)
+                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_W, v);  // N-S partition
+
+            // Concave inner corners (floor on two adjacent cardinal sides)
+            if (nFloor && eFloor && !sFloor && !wFloor)
+                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);  // inner NE
+            if (nFloor && wFloor && !sFloor && !eFloor)
+                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);  // inner NW
+            if (sFloor && eFloor && !nFloor && !wFloor)
+                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_N, v);  // inner SE
+            if (sFloor && wFloor && !nFloor && !eFloor)
+                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_N, v);  // inner SW
+
+            // Fallback: T-junction or fully surrounded — legacy flat tile.
             return TileAtlas.GetWall(PickWallVariant(col, row));
+        }
+
+        // Update the SpriteRenderer sprite for any wire/pipe/duct foundation at the given tile.
+        private void RefreshNetworkTileAt(int col, int row)
+        {
+            if (_gm?.Station == null) return;
+            foreach (var f in _gm.Station.foundations.Values)
+            {
+                if (f.tileCol != col || f.tileRow != row) continue;
+                if (f.buildableId != "buildable.wire" &&
+                    f.buildableId != "buildable.pipe" &&
+                    f.buildableId != "buildable.duct") continue;
+                if (!_foundTiles.TryGetValue(f.uid, out var go) || go == null) continue;
+                var sr = go.GetComponent<SpriteRenderer>();
+                if (sr != null) sr.sprite = GetNetworkSprite(f);
+                break;
+            }
+        }
+
+        // Refresh the 4 cardinal-neighbor network tiles after a tile is placed or removed.
+        private void RefreshNetworkNeighbors(int col, int row)
+        {
+            RefreshNetworkTileAt(col,     row + 1);
+            RefreshNetworkTileAt(col + 1, row    );
+            RefreshNetworkTileAt(col,     row - 1);
+            RefreshNetworkTileAt(col - 1, row    );
         }
 
         // Re-evaluate the sprite and shadow overlays for every cell in the 3×3 neighborhood.
@@ -733,6 +1001,42 @@ namespace Waystation.View
             foreach (var f in _gm.Station.foundations.Values)
                 if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("wall"))
                     return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Returns true when the tile is part of a pressurized, habitable area:
+        /// the starter room interior (always pressurized) or a tile that carries a
+        /// completed non-wall foundation (floor/furniture/object).
+        /// Void tiles and tiles outside any built structure return false.
+        /// </summary>
+        private bool IsTilePressurized(int col, int row)
+        {
+            // Starter room interior is implicitly pressurized (no foundations required).
+            if (col >= IntMinC && col <= IntMaxC && row >= IntMinR && row <= IntMaxR) return true;
+            // Any completed non-wall foundation at this position belongs to a built room.
+            if (_gm?.Station?.foundations == null) return false;
+            foreach (var f in _gm.Station.foundations.Values)
+            {
+                if (f.tileCol != col || f.tileRow != row) continue;
+                if (f.status == "complete" && !f.buildableId.Contains("wall")) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Returns true when any non-wall cardinal neighbor of the given door tile is
+        /// not pressurized (i.e. the door faces open space on at least one side).
+        /// </summary>
+        private bool IsDoorAdjacentToVoid(int col, int row)
+        {
+            (int dc, int dr)[] offsets = { (0, 1), (0, -1), (1, 0), (-1, 0) };
+            foreach (var (dc, dr) in offsets)
+            {
+                int nc = col + dc, nr = row + dr;
+                if (IsWallAtPos(nc, nr)) continue;          // wall is not "void"
+                if (!IsTilePressurized(nc, nr)) return true; // non-wall & unpressurized = void
+            }
             return false;
         }
 
@@ -1148,6 +1452,236 @@ namespace Waystation.View
                     Event.current.keyCode == KeyCode.Escape)
                     _showContextMenu = false;
             }
+
+            // ── Context drawer (bottom-left panel) ────────────────────────────
+            DrawContextDrawer();
+        }
+
+        private static readonly string[] _rankLabels = { "Crew", "Officer", "Senior", "Command" };
+
+        private void DrawContextDrawer()
+        {
+            // Lazy-init styles
+            if (_ctxPanelStyle == null)
+            {
+                _ctxPanelStyle = new GUIStyle(GUI.skin.box)
+                {
+                    normal = { background = MakeSolidTexture(new Color(0.07f, 0.09f, 0.14f, 0.93f)) },
+                    padding = new RectOffset(8, 8, 6, 6),
+                };
+                _ctxHeaderStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize  = 12,
+                    fontStyle = FontStyle.Bold,
+                    normal    = { textColor = new Color(0.85f, 0.90f, 1f) },
+                };
+                _ctxValueStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 11,
+                    normal   = { textColor = new Color(0.65f, 0.72f, 0.88f) },
+                };
+                _ctxCtaStyle = new GUIStyle(GUI.skin.button)
+                {
+                    fontSize  = 11,
+                    alignment = TextAnchor.MiddleCenter,
+                    normal    = { textColor = Color.white },
+                };
+            }
+
+            bool hasNpcSel   = _selectedDots.Count > 0 && _crew.Count > 0;
+            bool hasFoundCtx = _ctxFoundation != null && _gm?.Station != null &&
+                               _gm.Station.foundations.ContainsKey(_ctxFoundation.uid);
+
+            if (!hasNpcSel && !hasFoundCtx) { _doorAccessEditing = false; return; }
+
+            bool isDoor = hasFoundCtx && _ctxFoundation.buildableId.Contains("door") &&
+                          _ctxFoundation.status == "complete";
+            if (!isDoor) _doorAccessEditing = false;
+
+            // Compute dynamic panel height so it expands upward for door controls or extra NPC lines.
+            float PH = 150f;
+            if (isDoor)
+            {
+                PH += 8f  +  // separator space
+                      22f +  // Hold Open toggle
+                      22f +  // Allow All toggle
+                      26f;   // Manage Access button
+                if (_doorAccessEditing)
+                {
+                    var pol         = _ctxFoundation.accessPolicy;
+                    int speciesRows = pol != null ? pol.allowedSpecies.Count       : 0;
+                    int deptRows    = pol != null ? pol.allowedDepartmentIds.Count : 0;
+                    PH += 22f                          // section header
+                        + 18f + 18f                    // min rank label + slider
+                        + 18f + speciesRows * 20f + 22f  // species label + chips + input
+                        + 18f + deptRows    * 20f + 22f  // dept label + chips + input
+                        + 22f                          // faction row
+                        + 8f;                          // bottom padding
+                }
+            }
+
+            const float PW = 290f;
+            float px = 10f, py = Screen.height - PH - 10f;
+            var panelRect = new Rect(px, py, PW, PH);
+            GUI.Box(panelRect, GUIContent.none, _ctxPanelStyle);
+            GUI.BeginGroup(panelRect);
+
+            float y = 6f;
+            if (hasFoundCtx)
+            {
+                var f     = _ctxFoundation;
+                string bName = f.buildableId.Contains('.') ? f.buildableId.Split('.')[^1] : f.buildableId;
+                GUI.Label(new Rect(8, y, PW - 16, 18), $"\u25a3  {bName}  [{f.status}]", _ctxHeaderStyle);
+                y += 20;
+                GUI.Label(new Rect(8, y, PW - 16, 16), $"HP: {f.health}/{f.maxHealth}  |  Layer: {f.tileLayer}", _ctxValueStyle);
+                y += 18;
+                if (f.networkId != null && _gm.Station.networks.TryGetValue(f.networkId, out var net))
+                {
+                    string content = net.contentType != null ? $"  [{net.contentType}]" : "";
+                    GUI.Label(new Rect(8, y, PW - 16, 16), $"Network: {net.networkType}{content}  ({net.memberUids.Count} tiles)", _ctxValueStyle);
+                    y += 18;
+                }
+                if (f.buildableId == "buildable.ice_refiner")
+                {
+                    string opState = f.operatingState ?? "standby";
+                    GUI.Label(new Rect(8, y, PW - 16, 16), $"State: {opState}", _ctxValueStyle);
+                }
+
+                // ── Door access controls ─────────────────────────────────────
+                if (isDoor)
+                {
+                    y += 8;
+
+                    // Hold Open toggle
+                    bool newHold = GUI.Toggle(new Rect(8, y, PW - 16, 18), f.doorHoldOpen, " Hold Open");
+                    if (newHold != f.doorHoldOpen) f.doorHoldOpen = newHold;
+                    y += 22;
+
+                    // Allow All toggle
+                    bool curAllow = (f.accessPolicy == null) || f.accessPolicy.allowAll;
+                    bool newAllow = GUI.Toggle(new Rect(8, y, PW - 16, 18), curAllow, " Allow All (no restrictions)");
+                    if (newAllow != curAllow)
+                    {
+                        if (f.accessPolicy == null) f.accessPolicy = new DoorAccessPolicy();
+                        f.accessPolicy.allowAll = newAllow;
+                    }
+                    y += 22;
+
+                    // Manage Access button
+                    string manageLabel = _doorAccessEditing ? "\u25b2 Close Access Editor" : "\u25bc Manage Access\u2026";
+                    if (GUI.Button(new Rect(8, y, PW - 16, 20), manageLabel, _ctxCtaStyle))
+                        _doorAccessEditing = !_doorAccessEditing;
+                    y += 26;
+
+                    if (_doorAccessEditing)
+                        DrawDoorAccessEditor(f, PW, ref y);
+                }
+            }
+            else if (hasNpcSel)
+            {
+                // Show first selected NPC
+                int di = -1;
+                foreach (int x2 in _selectedDots) { di = x2; break; }
+                if (di >= 0 && di < _crew.Count)
+                {
+                    var npc = _crew[di];
+                    string deptLabel = npc.departmentId != null ? npc.departmentId : "Crewman";
+                    if (npc.departmentId != null && _gm?.Station != null)
+                    {
+                        foreach (var d in _gm.Station.departments)
+                            if (d.uid == npc.departmentId) { deptLabel = d.name; break; }
+                    }
+                    GUI.Label(new Rect(8, y, PW - 16, 18), $"\u25c9  {npc.name}  \u2014  {deptLabel}", _ctxHeaderStyle);
+                    y += 20;
+                    string rankStr = npc.rank switch { 1 => "\u2605 Officer", 2 => "\u2605\u2605 Senior", 3 => "\u2605\u2605\u2605 Command", _ => "Crew" };
+                    npc.needs.TryGetValue("sleep", out float sv);
+                    float sleepVal  = npc.isSleeping ? 1f : (sv > 0f ? sv : 1f);
+                    string sleepTxt = npc.isSleeping ? "sleeping" : sleepVal.ToString("P0");
+                    string missionTxt = npc.missionUid != null ? "on mission" : "available";
+                    GUI.Label(new Rect(8, y, PW - 16, 16), $"Rank: {rankStr}  |  Mood: {npc.MoodLabel()}  |  {missionTxt}", _ctxValueStyle);
+                    y += 18;
+                    GUI.Label(new Rect(8, y, PW - 16, 16), $"Sleep: {sleepTxt}  |  Injuries: {npc.injuries}", _ctxValueStyle);
+                }
+            }
+
+            GUI.EndGroup();
+        }
+
+        /// Draws the access rule editor inside the already-open GUI.BeginGroup panel.
+        private void DrawDoorAccessEditor(FoundationInstance f, float panelWidth, ref float y)
+        {
+            if (f.accessPolicy == null) f.accessPolicy = new DoorAccessPolicy();
+            var pol      = f.accessPolicy;
+            float innerW = panelWidth - 16f;
+
+            // Section header
+            GUI.Label(new Rect(8, y, innerW, 18), "\u2014 Access Rules \u2014", _ctxHeaderStyle);
+            y += 22;
+
+            // Min Rank — slider 0..3
+            string rLabel = (pol.minRank >= 0 && pol.minRank < _rankLabels.Length)
+                            ? _rankLabels[pol.minRank] : pol.minRank.ToString();
+            GUI.Label(new Rect(8, y, innerW, 16), $"Min Rank: {rLabel}", _ctxValueStyle);
+            y += 18;
+            pol.minRank = Mathf.RoundToInt(GUI.HorizontalSlider(new Rect(8, y, innerW, 14), pol.minRank, 0, 3));
+            y += 18;
+
+            // ── Allowed Species ──────────────────────────────────────────────
+            GUI.Label(new Rect(8, y, innerW, 16), "Allowed Species (empty = any):", _ctxValueStyle);
+            y += 18;
+            for (int i = pol.allowedSpecies.Count - 1; i >= 0; i--)
+            {
+                GUI.Label(new Rect(10, y, innerW - 30, 18), pol.allowedSpecies[i], _ctxValueStyle);
+                if (GUI.Button(new Rect(innerW - 18, y, 22, 18), "\u00d7", _ctxCtaStyle))
+                    pol.allowedSpecies.RemoveAt(i);
+                y += 20;
+            }
+            _doorAccessInput_Species = GUI.TextField(new Rect(8, y, innerW - 32, 18), _doorAccessInput_Species ?? "");
+            if (GUI.Button(new Rect(innerW - 20, y, 28, 18), "+", _ctxCtaStyle))
+            {
+                string s = (_doorAccessInput_Species ?? "").Trim().ToLower();
+                if (s.Length > 0 && !pol.allowedSpecies.Contains(s))
+                {
+                    pol.allowedSpecies.Add(s);
+                    _doorAccessInput_Species = "";
+                }
+            }
+            y += 22;
+
+            // ── Allowed Departments ──────────────────────────────────────────
+            GUI.Label(new Rect(8, y, innerW, 16), "Allowed Departments (empty = any):", _ctxValueStyle);
+            y += 18;
+            for (int i = pol.allowedDepartmentIds.Count - 1; i >= 0; i--)
+            {
+                // Resolve dept name if possible
+                string dName = pol.allowedDepartmentIds[i];
+                if (_gm?.Station != null)
+                    foreach (var dept in _gm.Station.departments)
+                        if (dept.uid == pol.allowedDepartmentIds[i]) { dName = dept.name; break; }
+                GUI.Label(new Rect(10, y, innerW - 30, 18), dName, _ctxValueStyle);
+                if (GUI.Button(new Rect(innerW - 18, y, 22, 18), "\u00d7", _ctxCtaStyle))
+                    pol.allowedDepartmentIds.RemoveAt(i);
+                y += 20;
+            }
+            _doorAccessInput_Dept = GUI.TextField(new Rect(8, y, innerW - 32, 18), _doorAccessInput_Dept ?? "");
+            if (GUI.Button(new Rect(innerW - 20, y, 28, 18), "+", _ctxCtaStyle))
+            {
+                string s = (_doorAccessInput_Dept ?? "").Trim();
+                if (s.Length > 0 && !pol.allowedDepartmentIds.Contains(s))
+                {
+                    pol.allowedDepartmentIds.Add(s);
+                    _doorAccessInput_Dept = "";
+                }
+            }
+            y += 22;
+
+            // ── Required Faction ─────────────────────────────────────────────
+            float halfW = (innerW - 8f) * 0.45f;
+            GUI.Label(new Rect(8, y, halfW, 16), "Faction ID:", _ctxValueStyle);
+            string newFac = GUI.TextField(new Rect(8 + halfW + 4, y, innerW - halfW - 12, 18),
+                                          pol.requiredFactionId ?? "");
+            pol.requiredFactionId = newFac.Length == 0 ? null : newFac;
+            y += 22;
         }
 
         private void AssignSelectedToConstruction(int col, int row)
