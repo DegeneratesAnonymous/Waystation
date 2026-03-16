@@ -103,8 +103,10 @@ namespace Waystation.Systems
         /// </summary>
         public int GetConnectionMask(StationState station, int col, int row, string networkType)
         {
-            // Use cached lookup when available; fall back to rebuilding if stale.
-            var lookup = _posLookup.Count > 0 ? _posLookup : BuildPosLookup(station);
+            // Use cached lookup when available; populate and cache it on first use.
+            if (_posLookup.Count == 0)
+                _posLookup = BuildPosLookup(station);
+            var lookup = _posLookup;
             int mask = 0;
             if (HasNetworkNeighbor(lookup, col,   row+1, networkType)) mask |= 1; // N
             if (HasNetworkNeighbor(lookup, col+1, row,   networkType)) mask |= 2; // E
