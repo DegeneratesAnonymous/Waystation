@@ -147,7 +147,7 @@ namespace Waystation.Systems
 
             // Capitalise result label for log
             string resultLabel = success ? "Success" : "Partial success";
-            mission.status = success ? "complete" : "failed";
+            mission.status = success ? "complete" : "partial";
             station.LogEvent($"Mission '{def.displayName}' returned. {resultLabel}.");
 
             // Unlock crew

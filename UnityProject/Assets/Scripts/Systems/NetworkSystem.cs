@@ -13,6 +13,11 @@ namespace Waystation.Systems
     {
         private readonly ContentRegistry _registry;
 
+        // Positional lookup: (col, row) → foundations at that tile.
+        // Rebuilt once in RebuildNetworks and reused by all adjacency queries.
+        private Dictionary<(int, int), List<FoundationInstance>> _posLookup
+            = new Dictionary<(int, int), List<FoundationInstance>>();
+
         public NetworkSystem(ContentRegistry registry) => _registry = registry;
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -27,6 +32,9 @@ namespace Waystation.Systems
             foreach (var f in station.foundations.Values)
                 f.networkId = null;
             station.networks.Clear();
+
+            // Build positional lookup for O(1) neighbour queries
+            _posLookup = BuildPosLookup(station);
 
             var visited = new HashSet<string>();
 
@@ -52,7 +60,7 @@ namespace Waystation.Systems
 
                     if (!station.foundations.TryGetValue(uid, out var cur)) continue;
                     // Find adjacent foundations of the same network type
-                    foreach (var neighbor in GetAdjacentFoundations(station, cur.tileCol, cur.tileRow, netType))
+                    foreach (var neighbor in GetAdjacentFoundations(cur.tileCol, cur.tileRow, netType))
                     {
                         if (!visited.Contains(neighbor.uid))
                         {
@@ -95,19 +103,24 @@ namespace Waystation.Systems
         /// </summary>
         public int GetConnectionMask(StationState station, int col, int row, string networkType)
         {
+            // Use cached lookup when available; populate and cache it on first use.
+            if (_posLookup.Count == 0)
+                _posLookup = BuildPosLookup(station);
+            var lookup = _posLookup;
             int mask = 0;
-            if (HasNetworkNeighbor(station, col,   row+1, networkType)) mask |= 1; // N
-            if (HasNetworkNeighbor(station, col+1, row,   networkType)) mask |= 2; // E
-            if (HasNetworkNeighbor(station, col,   row-1, networkType)) mask |= 4; // S
-            if (HasNetworkNeighbor(station, col-1, row,   networkType)) mask |= 8; // W
+            if (HasNetworkNeighbor(lookup, col,   row+1, networkType)) mask |= 1; // N
+            if (HasNetworkNeighbor(lookup, col+1, row,   networkType)) mask |= 2; // E
+            if (HasNetworkNeighbor(lookup, col,   row-1, networkType)) mask |= 4; // S
+            if (HasNetworkNeighbor(lookup, col-1, row,   networkType)) mask |= 8; // W
             return mask;
         }
 
-        private bool HasNetworkNeighbor(StationState station, int col, int row, string netType)
+        private bool HasNetworkNeighbor(Dictionary<(int, int), List<FoundationInstance>> lookup,
+                                        int col, int row, string netType)
         {
-            foreach (var f in station.foundations.Values)
-                if (f.tileCol == col && f.tileRow == row && GetNetworkType(f) == netType)
-                    return true;
+            if (!lookup.TryGetValue((col, row), out var list)) return false;
+            foreach (var f in list)
+                if (GetNetworkType(f) == netType) return true;
             return false;
         }
 
@@ -137,19 +150,33 @@ namespace Waystation.Systems
         }
 
         private IEnumerable<FoundationInstance> GetAdjacentFoundations(
-            StationState station, int col, int row, string netType)
+            int col, int row, string netType)
         {
             var dirs = new[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
             foreach (var (dc, dr) in dirs)
             {
                 int nc = col + dc, nr = row + dr;
-                foreach (var f in station.foundations.Values)
+                if (!_posLookup.TryGetValue((nc, nr), out var list)) continue;
+                foreach (var f in list)
                 {
-                    if (f.tileCol != nc || f.tileRow != nr) continue;
                     if (GetNetworkType(f) != netType) continue;
                     yield return f;
                 }
             }
+        }
+
+        private static Dictionary<(int, int), List<FoundationInstance>> BuildPosLookup(
+            StationState station)
+        {
+            var lookup = new Dictionary<(int, int), List<FoundationInstance>>();
+            foreach (var f in station.foundations.Values)
+            {
+                var key = (f.tileCol, f.tileRow);
+                if (!lookup.TryGetValue(key, out var list))
+                    lookup[key] = list = new List<FoundationInstance>();
+                list.Add(f);
+            }
+            return lookup;
         }
 
         private void InferNetworkContent(StationState station)

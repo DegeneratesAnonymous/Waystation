@@ -264,6 +264,7 @@ namespace Waystation.UI
                         _gm.Building.PlaceFoundation(
                             _gm.Station, _ghostBuildableId, col, row, _ghostRotation);
                 }
+                _gm.Networks.RebuildNetworks(_gm.Station);
                 _isDragging = false;
                 _dragLine.Clear();
                 _dragBlocked.Clear();
@@ -1098,6 +1099,7 @@ namespace Waystation.UI
             }
 
             // Custom types
+            RoomTypeDefinition toDelete = null;
             foreach (var ct in s.customRoomTypes)
             {
                 DrawSolid(new Rect(0, y, cw, 26f), new Color(0.09f, 0.12f, 0.14f, 0.8f));
@@ -1107,9 +1109,10 @@ namespace Waystation.UI
                 GUI.Label(new Rect(cw * 0.56f, y + 4f, cw * 0.18f, 16f), "(custom)", _sSub);
                 GUI.color = colPrev;
                 if (GUI.Button(new Rect(cw - 58f, y + 3f, 54f, 20f), "\u2715 Delete", _sBtnDanger))
-                    s.customRoomTypes.Remove(ct);
+                    toDelete = ct;
                 y += 28f;
             }
+            if (toDelete != null) s.customRoomTypes.Remove(toDelete);
 
             // ── New custom type creator ────────────────────────────────────────
             y += 4f;
@@ -1223,7 +1226,10 @@ namespace Waystation.UI
             if (f.status != "complete")
             {
                 if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), "Cancel", _sBtnDanger))
+                {
                     _gm.Building.CancelFoundation(s, f.uid, refund: true);
+                    _gm.Networks.RebuildNetworks(s);
+                }
             }
             else if (isCabinet)
             {
@@ -1420,6 +1426,7 @@ namespace Waystation.UI
         {
             var s        = _gm.Station;
             var toRemove = new List<string>();
+            bool hadCancels = false;
             foreach (var kv in s.foundations)
             {
                 var f = kv.Value;
@@ -1428,11 +1435,19 @@ namespace Waystation.UI
                     if (f.status == "complete")
                         toRemove.Add(f.uid);
                     else
+                    {
                         _gm.Building.CancelFoundation(s, f.uid, refund: true);
+                        hadCancels = true;
+                    }
                 }
             }
             foreach (var uid in toRemove)
                 s.foundations.Remove(uid);
+            // Rebuild networks after any removal: complete foundations may be network
+            // members (wires, pipes), and cancelled pending foundations may also have
+            // been part of a partial network segment.
+            if (toRemove.Count > 0 || hadCancels)
+                _gm.Networks.RebuildNetworks(s);
         }
 
         // ── Crew tab ──────────────────────────────────────────────────────────

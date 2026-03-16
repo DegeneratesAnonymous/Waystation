@@ -280,7 +280,7 @@
         "max_health": 80,
         "cargo_capacity": 0,
         "beauty_score": 1,
-        "furniture_tag": "seating",
+        "furniture_tag": "sleeping",
         "schema_version": "1"
     },
     {

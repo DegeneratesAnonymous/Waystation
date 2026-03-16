@@ -151,6 +151,8 @@ namespace Waystation.Core
             OnGameLoaded?.Invoke();
             // Seed the room bonus cache immediately so it's available on the first frame.
             Rooms.RebuildBonusCache(Station);
+            // Seed the network positional lookup so GetConnectionMask is O(1) from tick 1.
+            Networks.RebuildNetworks(Station);
             Debug.Log($"[GameManager] New game started: {stationName}");
         }
 
