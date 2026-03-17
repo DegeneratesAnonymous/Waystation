@@ -1,5 +1,5 @@
 // NpcSpriteController — MonoBehaviour that applies an NpcAppearance to the
-// 10 child SpriteRenderer components that make up a layered NPC sprite stack.
+// 9 child SpriteRenderer components that make up a layered NPC sprite stack.
 //
 // Sorting layer  : "NPCs"
 // SortingOrder assignment (higher = rendered on top):
@@ -65,7 +65,7 @@ namespace Waystation.NPC
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Applies the given appearance to all 9 layer SpriteRenderers in one call.
+        /// Applies the given appearance to all 9 layer SpriteRenderers in a single call.
         /// Safe to call multiple times; each call replaces the previous appearance.
         /// </summary>
         public void Apply(NpcAppearance appearance)

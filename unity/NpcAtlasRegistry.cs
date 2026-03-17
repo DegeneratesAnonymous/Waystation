@@ -5,7 +5,7 @@
 //   npc_body   : type-major  col = (int)bodyType * 6 + (int)skinTone
 //   npc_face   : direct      col = (int)faceType
 //   npc_hair   : style-major col = (int)hairStyle * 6 + colorIndex
-//   npc_hat    : colour-major col = colorIndex * 5 + (int)hatType   ← ensures Helmet,0 → col 1
+//   npc_hat    : color-major  col = colorIndex * 5 + (int)hatType   ← ensures Helmet,0 → col 1
 //   npc_shirt  : type-major  col = (int)shirtType * 5 + colorIndex
 //   npc_pants  : type-major  col = (int)pantsType * 5 + colorIndex
 //   npc_shoes  : type-major  col = (int)shoeType * 5 + colorIndex
@@ -28,7 +28,7 @@ namespace Waystation.NPC
         [Tooltip("30 sprites — 5 styles × 6 colours, style-major")]
         public Sprite[] hairSprites;
 
-        [Tooltip("25 sprites — 5 types × 5 colours, colour-major")]
+        [Tooltip("25 sprites — 5 types × 5 colors, color-major")]
         public Sprite[] hatSprites;
 
         [Tooltip("25 sprites — 5 types × 5 colours, type-major")]
