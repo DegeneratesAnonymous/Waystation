@@ -20,5 +20,16 @@
             { "buildable_id_or_tag": "tag:storage",  "count": 2, "display_label": "Storage Cabinet" }
         ],
         "skill_bonuses": { "engineering": 1.15 }
+    },
+    {
+        "id": "research_lab",
+        "display_name": "Research Lab",
+        "workbench_cap": 3,
+        "requirements_per_workbench": [
+            { "buildable_id_or_tag": "tag:seating",  "count": 1, "display_label": "Chair" },
+            { "buildable_id_or_tag": "tag:lighting", "count": 1, "display_label": "Overhead Light" },
+            { "buildable_id_or_tag": "tag:storage",  "count": 1, "display_label": "Storage Cabinet" }
+        ],
+        "skill_bonuses": { "research": 1.15 }
     }
 ]

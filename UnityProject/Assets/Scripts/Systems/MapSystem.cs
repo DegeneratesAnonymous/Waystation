@@ -119,8 +119,8 @@ namespace Waystation.Systems
                 {
                     int oreAmt  = rng.Next(20, 120);
                     int iceAmt  = rng.Next(10, 80);
-                    poi.resourceYield["item.ore"]  = oreAmt;
-                    poi.resourceYield["item.ice"]  = iceAmt;
+                    poi.resourceYield["item.parts"] = oreAmt;
+                    poi.resourceYield["item.ice"]   = iceAmt;
                 }
 
                 if (poi.discovered)
