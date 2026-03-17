@@ -220,6 +220,13 @@ namespace Waystation.Core
             Inventory.Tick(Station);
             Visitors.Tick(Station);
             Building.Tick(Station);
+            // If a network-capable foundation just completed, rebuild utility networks
+            // so the new tile joins its network before the simulation tick runs.
+            if (Building.NetworkRebuildNeeded)
+            {
+                UtilityNetworks.RebuildAll(Station);
+                Building.ClearNetworkRebuildFlag();
+            }
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
