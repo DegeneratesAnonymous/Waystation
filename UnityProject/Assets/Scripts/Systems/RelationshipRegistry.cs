@@ -102,11 +102,15 @@ namespace Waystation.Systems
                 int ticksSinceInteraction = station.tick - rec.lastInteractionTick;
                 if (ticksSinceInteraction < DecayIntervalTicks) continue;
 
-                // Move 1 point toward 0 per decay interval
+                // Move 1 point toward 0 and advance the interaction tick so decay
+                // fires at most once per interval (not every tick after the interval).
                 if (rec.affinityScore > 0f)
                     rec.affinityScore = Mathf.Max(0f, rec.affinityScore - 1f);
                 else
                     rec.affinityScore = Mathf.Min(0f, rec.affinityScore + 1f);
+
+                // Advance by one interval so the next decay fires in another 7 days
+                rec.lastInteractionTick += DecayIntervalTicks;
 
                 rec.UpdateTypeFromAffinity();
             }

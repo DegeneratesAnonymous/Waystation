@@ -83,13 +83,16 @@ namespace Waystation.Systems
         private void ResolveConversations(List<NPCInstance> crew, StationState station,
                                            MoodSystem mood, RelationshipRegistry rels)
         {
+            // Snapshot keys to avoid modifying the dictionary during iteration
+            var keys = new List<string>(_conversationTimer.Keys);
             var completed = new List<string>();
 
-            foreach (var kv in _conversationTimer)
+            foreach (var key in keys)
             {
-                _conversationTimer[kv.Key] = kv.Value - 1;
-                if (_conversationTimer[kv.Key] > 0) continue;
-                completed.Add(kv.Key);
+                if (!_conversationTimer.ContainsKey(key)) continue;
+                _conversationTimer[key]--;
+                if (_conversationTimer[key] <= 0)
+                    completed.Add(key);
             }
 
             foreach (var initiatorUid in completed)
