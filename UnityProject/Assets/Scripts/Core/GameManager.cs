@@ -55,6 +55,8 @@ namespace Waystation.Core
         public NetworkSystem     Networks       { get; private set; }
         public MissionSystem     Missions       { get; private set; }
         public RoomSystem        Rooms          { get; private set; }
+        public FarmingSystem     Farming        { get; private set; }
+        public TemperatureSystem Temperature    { get; private set; }
 
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
@@ -128,6 +130,8 @@ namespace Waystation.Core
             Networks  = new NetworkSystem(Registry);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+            Farming   = new FarmingSystem(Registry);
+            Temperature = new TemperatureSystem(Registry);
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -221,6 +225,8 @@ namespace Waystation.Core
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+            Temperature.Tick(Station);
+            Farming.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);

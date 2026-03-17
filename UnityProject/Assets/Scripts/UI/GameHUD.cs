@@ -1213,7 +1213,8 @@ namespace Waystation.UI
             bool   hasDefn     = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
             string fname       = hasDefn ? fDefn.displayName : f.buildableId;
             bool   isCabinet   = f.buildableId.Contains("storage_cabinet");
-            bool   settingsOpen = isCabinet && f.status == "complete" && _foundSettingsOpen == f.uid;
+            bool   isPlanter   = f.buildableId == "buildable.hydroponics_planter";
+            bool   settingsOpen = (isCabinet || isPlanter) && f.status == "complete" && _foundSettingsOpen == f.uid;
 
             DrawSolid(new Rect(0, y, cw, 64f), new Color(0.07f, 0.09f, 0.15f, 0.6f));
             GUI.Label(new Rect(4f, y + 2f, cw * 0.65f, 18f), fname, _sLabel);
@@ -1264,6 +1265,24 @@ namespace Waystation.UI
                 GUI.Label(new Rect(4f, y + 38f, cw - 8f, 14f),
                     $"{f.cargoCapacity} items  ·  {f.tileRotation}° rotation", _sSub);
             }
+            else if (isPlanter)
+            {
+                // Toggle planter inspect panel
+                string btnLabel = settingsOpen ? "\u25b2 Inspect" : "\u25bc Inspect";
+                if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), btnLabel, _sBtnSmall))
+                    _foundSettingsOpen = settingsOpen ? "" : f.uid;
+
+                // Show crop stage summary inline
+                string stageLabel = f.growthStage switch
+                {
+                    0 => f.cropId != null ? $"Empty — {f.cropId}" : "Empty",
+                    1 => $"Seedling ({f.growthProgress * 100f:F0}%)",
+                    2 => $"Established ({f.growthProgress * 100f:F0}%)",
+                    3 => "Mature — ready to harvest",
+                    _ => "Unknown"
+                };
+                GUI.Label(new Rect(4f, y + 38f, cw - 8f, 14f), stageLabel, _sSub);
+            }
 
             y += 70f;
 
@@ -1301,6 +1320,96 @@ namespace Waystation.UI
                         else f.cargoSettings.allowedTypes.Remove(type);
                     }
                     y += 20f;
+                }
+
+                DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
+                y += 6f;
+            }
+
+            // ── Planter inspect panel (hydroponics planter, complete, expanded) ─
+            if (isPlanter && settingsOpen)
+            {
+                DrawSolid(new Rect(0, y, cw, 1f), ColDivider);
+                y += 6f;
+                GUI.Label(new Rect(4f, y, cw - 8f, 16f), "Planter Status", _sLabel);
+                y += 20f;
+
+                // Crop assignment
+                string cropDisplay = f.cropId != null ? f.cropId : "(none)";
+                GUI.Label(new Rect(4f, y, cw * 0.45f, 16f), "Crop:", _sSub);
+                GUI.Label(new Rect(cw * 0.48f, y, cw * 0.52f, 16f), cropDisplay, _sSub);
+                y += 18f;
+
+                // Crop picker — only when empty
+                if (f.growthStage == 0 && _gm.Registry.Crops.Count > 0)
+                {
+                    GUI.Label(new Rect(4f, y, cw - 8f, 14f), "Assign crop:", _sSub);
+                    y += 16f;
+                    foreach (var kv in _gm.Registry.Crops)
+                    {
+                        bool selected = f.cropId == kv.Key;
+                        Color prev = GUI.color;
+                        if (selected) GUI.color = new Color(0.4f, 0.9f, 0.4f);
+                        if (GUI.Button(new Rect(8f, y, cw - 16f, 18f), kv.Value.cropName, _sBtnSmall))
+                            f.cropId = selected ? null : kv.Key;
+                        GUI.color = prev;
+                        y += 20f;
+                    }
+                }
+
+                // Conditions
+                y += 4f;
+                GUI.Label(new Rect(4f, y, cw - 8f, 16f), "Conditions", _sLabel);
+                y += 18f;
+
+                // Water
+                string waterLabel = f.isWatered ? "\u2713 Watered" : "\u2715 No Water";
+                GUI.color = f.isWatered ? new Color(0.4f, 0.8f, 1f) : new Color(1f, 0.4f, 0.3f);
+                GUI.Label(new Rect(8f, y, cw - 16f, 16f), waterLabel, _sSub);
+                GUI.color = Color.white;
+                y += 18f;
+
+                // Light
+                string lightLabel = $"Light: {f.lightLevel:F1}";
+                _gm.Registry.Crops.TryGetValue(f.cropId ?? "", out var inspCrop);
+                if (inspCrop != null)
+                {
+                    var lt = FarmingSystem.EvalLight(f.lightLevel, inspCrop);
+                    GUI.color = lt == FarmingSystem.ConditionTier.Ideal      ? new Color(0.4f, 0.9f, 0.4f)
+                              : lt == FarmingSystem.ConditionTier.Acceptable ? new Color(1f, 0.85f, 0.2f)
+                              : new Color(1f, 0.4f, 0.3f);
+                    lightLabel += lt == FarmingSystem.ConditionTier.Ideal      ? " (Ideal)"
+                                : lt == FarmingSystem.ConditionTier.Acceptable ? " (OK)"
+                                : " (Critical)";
+                }
+                GUI.Label(new Rect(8f, y, cw - 16f, 16f), lightLabel, _sSub);
+                GUI.color = Color.white;
+                y += 18f;
+
+                // Temperature
+                string tempLabel = $"Temp: {f.tileTemperature:F1} \u00b0C";
+                if (inspCrop != null)
+                {
+                    var tt = FarmingSystem.EvalTemperature(f.tileTemperature, inspCrop);
+                    GUI.color = tt == FarmingSystem.ConditionTier.Ideal      ? new Color(0.4f, 0.9f, 0.4f)
+                              : tt == FarmingSystem.ConditionTier.Acceptable ? new Color(1f, 0.85f, 0.2f)
+                              : new Color(1f, 0.4f, 0.3f);
+                    tempLabel += tt == FarmingSystem.ConditionTier.Ideal      ? " (Ideal)"
+                               : tt == FarmingSystem.ConditionTier.Acceptable ? " (OK)"
+                               : " (Critical)";
+                }
+                GUI.Label(new Rect(8f, y, cw - 16f, 16f), tempLabel, _sSub);
+                GUI.color = Color.white;
+                y += 18f;
+
+                // Damage
+                if (f.cropDamage > 0f)
+                {
+                    GUI.color = new Color(1f, 0.4f, 0.3f);
+                    GUI.Label(new Rect(8f, y, cw - 16f, 16f),
+                        $"Damage: {f.cropDamage * 100f:F0}%", _sSub);
+                    GUI.color = Color.white;
+                    y += 18f;
                 }
 
                 DrawSolid(new Rect(0, y, cw, 1f), ColDivider);

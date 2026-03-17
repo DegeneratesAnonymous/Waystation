@@ -1,0 +1,10 @@
+[
+  {
+    "id": "class.farming",
+    "display_name": "Farmer",
+    "description": "A trained hydroponics specialist. Plants, tends, and harvests crops in the station's greenhouse. Experienced with climate management and soil-free cultivation.",
+    "modifiers": { "farming": 1.5, "biology": 1.2 },
+    "allowed_jobs": ["job.farming"],
+    "schema_version": "1"
+  }
+]
