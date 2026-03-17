@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
+using Waystation.Systems;
 using Waystation.UI;
 
 namespace Waystation.View
@@ -666,7 +667,10 @@ namespace Waystation.View
                 }
                 else if (f.buildableId == "buildable.wire"
                       || f.buildableId == "buildable.pipe"
-                      || f.buildableId == "buildable.duct")
+                      || f.buildableId == "buildable.duct"
+                      || f.buildableId == "buildable.switch"
+                      || f.buildableId == "buildable.valve"
+                      || f.buildableId == "buildable.breaker")
                 {
                     Sprite netSprite = GetNetworkSprite(f);
                     var netGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
@@ -750,11 +754,32 @@ namespace Waystation.View
         private Sprite GetNetworkSprite(FoundationInstance f)
         {
             if (_gm?.Networks == null) return TileAtlas.GetWire(0);
-            int mask = _gm.Networks.GetConnectionMask(_gm.Station, f.tileCol, f.tileRow, f.buildableId.Contains("wire") ? "electric" : f.buildableId.Contains("pipe") ? "pipe" : "duct");
-            if (f.buildableId == "buildable.wire") return TileAtlas.GetWire(mask);
-            if (f.buildableId == "buildable.pipe") return TileAtlas.GetPipe(mask, "normal");
-            return TileAtlas.GetDuct(mask);
+            string netType = f.buildableId switch
+            {
+                "buildable.wire"    or "buildable.switch"  => "electric",
+                "buildable.pipe"    or "buildable.valve"   => "pipe",
+                "buildable.duct"    or "buildable.breaker" => "duct",
+                _ => "electric",
+            };
+            int mask = _gm.Networks.GetConnectionMask(_gm.Station, f.tileCol, f.tileRow, netType);
+            return netType switch
+            {
+                "electric" => TileAtlas.GetWire(mask),
+                "pipe"     => TileAtlas.GetPipe(mask, "normal"),
+                _          => TileAtlas.GetDuct(mask),
+            };
         }
+
+        private bool IsIsolator(FoundationInstance f)
+            => f.buildableId is "buildable.switch" or "buildable.valve" or "buildable.breaker";
+
+        private static string GetIsolatorLabel(string buildableId) => buildableId switch
+        {
+            "buildable.switch"  => "Switch",
+            "buildable.valve"   => "Valve",
+            "buildable.breaker" => "Breaker",
+            _                   => "Isolator",
+        };
 
         private void SelectContextFoundation(int col, int row)
         {
@@ -959,9 +984,12 @@ namespace Waystation.View
             foreach (var f in _gm.Station.foundations.Values)
             {
                 if (f.tileCol != col || f.tileRow != row) continue;
-                if (f.buildableId != "buildable.wire" &&
-                    f.buildableId != "buildable.pipe" &&
-                    f.buildableId != "buildable.duct") continue;
+                if (f.buildableId != "buildable.wire"    &&
+                    f.buildableId != "buildable.pipe"    &&
+                    f.buildableId != "buildable.duct"    &&
+                    f.buildableId != "buildable.switch"  &&
+                    f.buildableId != "buildable.valve"   &&
+                    f.buildableId != "buildable.breaker") continue;
                 if (!_foundTiles.TryGetValue(f.uid, out var go) || go == null) continue;
                 var sr = go.GetComponent<SpriteRenderer>();
                 if (sr != null) sr.sprite = GetNetworkSprite(f);
@@ -1638,6 +1666,32 @@ namespace Waystation.View
                     string content = net.contentType != null ? $"  [{net.contentType}]" : "";
                     GUI.Label(new Rect(8, y, PW - 16, 16), $"Network: {net.networkType}{content}  ({net.memberUids.Count} tiles)", _ctxValueStyle);
                     y += 18;
+                    // ── Utility network inspection data ───────────────────────
+                    if (net.networkType == "electric")
+                    {
+                        GUI.Label(new Rect(8, y, PW - 16, 16),
+                            $"Supply: {net.totalSupply:F0}W  Demand: {net.totalDemand:F0}W", _ctxValueStyle);
+                        y += 16;
+                        GUI.Label(new Rect(8, y, PW - 16, 16),
+                            $"Battery: {net.storedEnergy:F0}/{net.storageCapacity:F0} Wh", _ctxValueStyle);
+                        y += 18;
+                    }
+                    else
+                    {
+                        GUI.Label(new Rect(8, y, PW - 16, 16),
+                            $"Stored: {net.contentAmount:F0}/{net.contentCapacity:F0} L", _ctxValueStyle);
+                        y += 18;
+                    }
+                }
+                // ── Isolator toggle ───────────────────────────────────────────
+                if (f.networkId != null && IsIsolator(f))
+                {
+                    string state = f.isolatorOpen ? "Open" : "Closed";
+                    if (GUI.Button(new Rect(8, y, PW - 16, 20), $"Toggle {GetIsolatorLabel(f.buildableId)} [{state}]", _ctxCtaStyle))
+                    {
+                        _gm.UtilityNetworks.ToggleIsolator(_gm.Station, f.uid);
+                    }
+                    y += 26;
                 }
                 if (f.buildableId == "buildable.ice_refiner")
                 {

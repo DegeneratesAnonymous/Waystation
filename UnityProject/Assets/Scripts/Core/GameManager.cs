@@ -53,6 +53,7 @@ namespace Waystation.Core
         public BuildingSystem    Building       { get; private set; }
         public CommsSystem       Comms          { get; private set; }
         public NetworkSystem     Networks       { get; private set; }
+        public UtilityNetworkManager UtilityNetworks { get; private set; }
         public MissionSystem     Missions       { get; private set; }
         public RoomSystem        Rooms          { get; private set; }
 
@@ -126,6 +127,7 @@ namespace Waystation.Core
             Building  = new BuildingSystem(Registry);
             Comms     = new CommsSystem();
             Networks  = new NetworkSystem(Registry);
+            UtilityNetworks = new UtilityNetworkManager(Registry, Networks);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
 
@@ -151,8 +153,8 @@ namespace Waystation.Core
             OnGameLoaded?.Invoke();
             // Seed the room bonus cache immediately so it's available on the first frame.
             Rooms.RebuildBonusCache(Station);
-            // Seed the network positional lookup so GetConnectionMask is O(1) from tick 1.
-            Networks.RebuildNetworks(Station);
+            // Rebuild utility networks so grid connectivity is available from tick 1.
+            UtilityNetworks.RebuildAll(Station);
             Debug.Log($"[GameManager] New game started: {stationName}");
         }
 
@@ -221,6 +223,7 @@ namespace Waystation.Core
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+            UtilityNetworks.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);

@@ -1,6 +1,13 @@
 // NetworkSystem — manages connected graphs of wire/pipe/duct foundations.
-// Flood-fills connectivity whenever the building layout changes.
+// Uses Union-Find (disjoint set with path compression + union-by-rank) for
+// efficient network rebuilding whenever the building layout changes.
 // Networks are identified by NetworkInstance.uid stored on each member FoundationInstance.
+//
+// Supply / demand tick:
+//   Tick() is called by UtilityNetworkManager once per game tick.  For each network:
+//     Electrical: sums producer OutputWatts, charges/discharges batteries, marks consumers.
+//     Plumbing  : sums fluid producers, fills storage tanks, marks consumers IsFluidSupplied.
+//     Ducting   : sums gas producers,  fills storage tanks, marks consumers IsGasSupplied.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -23,66 +30,132 @@ namespace Waystation.Systems
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Rebuild all networks from scratch by flood-filling connected network foundations.
-        /// Call after any PlaceFoundation or DemolishFoundation.
+        /// Rebuild all networks from scratch using Union-Find over the foundation graph.
+        /// Call after any PlaceFoundation, DemolishFoundation, or isolator-state change.
         /// </summary>
         public void RebuildNetworks(StationState station)
         {
-            // Clear existing network assignments on all foundations
+            // Build positional lookup for O(1) neighbour queries
+            _posLookup = BuildPosLookup(station);
+
+            // Collect all network-capable foundations
+            var netFoundations = new List<FoundationInstance>();
+            foreach (var f in station.foundations.Values)
+            {
+                if (GetNetworkType(f) != null)
+                    netFoundations.Add(f);
+            }
+
+            // ── Union-Find setup ─────────────────────────────────────────────
+            // Map uid → index for O(1) lookup
+            var indexMap = new Dictionary<string, int>(netFoundations.Count);
+            for (int i = 0; i < netFoundations.Count; i++)
+                indexMap[netFoundations[i].uid] = i;
+
+            int n = netFoundations.Count;
+            var parent = new int[n];
+            var rank   = new int[n];
+            for (int i = 0; i < n; i++) { parent[i] = i; rank[i] = 0; }
+
+            int Find(int x)
+            {
+                while (parent[x] != x)
+                {
+                    parent[x] = parent[parent[x]]; // path compression (halving)
+                    x = parent[x];
+                }
+                return x;
+            }
+
+            void Union(int a, int b)
+            {
+                int ra = Find(a), rb = Find(b);
+                if (ra == rb) return;
+                if (rank[ra] < rank[rb]) { parent[ra] = rb; }
+                else if (rank[ra] > rank[rb]) { parent[rb] = ra; }
+                else { parent[rb] = ra; rank[ra]++; }
+            }
+
+            // Union adjacent foundations of the same network type.
+            // Isolators that are closed (isolatorOpen == false) are treated as gaps.
+            foreach (var f in netFoundations)
+            {
+                if (!indexMap.TryGetValue(f.uid, out int fi)) continue;
+                string netType = GetNetworkType(f);
+
+                // A closed isolator stops connectivity in all directions from this node
+                bool fIsClosedIsolator = IsClosedIsolator(f);
+
+                foreach (var dir in s_Dirs)
+                {
+                    int nc = f.tileCol + dir.x, nr = f.tileRow + dir.y;
+                    if (!_posLookup.TryGetValue((nc, nr), out var list)) continue;
+                    foreach (var nb in list)
+                    {
+                        if (GetNetworkType(nb) != netType) continue;
+                        if (!indexMap.TryGetValue(nb.uid, out int ni)) continue;
+
+                        // If either side is a closed isolator, do not union
+                        if (fIsClosedIsolator || IsClosedIsolator(nb)) continue;
+
+                        Union(fi, ni);
+                    }
+                }
+            }
+
+            // ── Assign NetworkIDs ────────────────────────────────────────────
+            // Reset all network assignments
             foreach (var f in station.foundations.Values)
                 f.networkId = null;
             station.networks.Clear();
 
-            // Build positional lookup for O(1) neighbour queries
-            _posLookup = BuildPosLookup(station);
-
-            var visited = new HashSet<string>();
-
-            foreach (var kv in station.foundations)
+            // Group by root → create one NetworkInstance per component
+            var rootToNetwork = new Dictionary<int, NetworkInstance>();
+            foreach (var f in netFoundations)
             {
-                var f = kv.Value;
-                if (visited.Contains(f.uid)) continue;
-
-                // Only network-capable tiles
-                string netType = GetNetworkType(f);
-                if (netType == null) continue;
-
-                // BFS flood-fill
-                var members = new List<string>();
-                var queue   = new Queue<string>();
-                queue.Enqueue(f.uid);
-                visited.Add(f.uid);
-
-                while (queue.Count > 0)
+                if (!indexMap.TryGetValue(f.uid, out int fi)) continue;
+                int root = Find(fi);
+                if (!rootToNetwork.TryGetValue(root, out var net))
                 {
-                    string uid = queue.Dequeue();
-                    members.Add(uid);
-
-                    if (!station.foundations.TryGetValue(uid, out var cur)) continue;
-                    // Find adjacent foundations of the same network type
-                    foreach (var neighbor in GetAdjacentFoundations(cur.tileCol, cur.tileRow, netType))
-                    {
-                        if (!visited.Contains(neighbor.uid))
-                        {
-                            visited.Add(neighbor.uid);
-                            queue.Enqueue(neighbor.uid);
-                        }
-                    }
+                    net = NetworkInstance.Create(GetNetworkType(f));
+                    rootToNetwork[root] = net;
+                    station.networks[net.uid] = net;
                 }
-
-                // Create network and assign uid to all members
-                var net = NetworkInstance.Create(netType);
-                foreach (var uid in members)
-                {
-                    net.memberUids.Add(uid);
-                    if (station.foundations.TryGetValue(uid, out var mf))
-                        mf.networkId = net.uid;
-                }
-                station.networks[net.uid] = net;
+                net.memberUids.Add(f.uid);
+                f.networkId = net.uid;
             }
 
             // After rebuild, infer content type from connected producers
             InferNetworkContent(station);
+        }
+
+        /// <summary>
+        /// Simulate one tick of supply/demand for all networks.
+        /// Called by UtilityNetworkManager.Tick() on a fixed interval.
+        /// </summary>
+        public void Tick(StationState station)
+        {
+            foreach (var net in station.networks.Values)
+            {
+                switch (net.networkType)
+                {
+                    case "electric": TickElectrical(station, net); break;
+                    case "pipe":     TickFluid(station, net);      break;
+                    case "duct":     TickGas(station, net);        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Toggle an isolator foundation between open and closed.
+        /// Automatically triggers a network rebuild.
+        /// </summary>
+        public void ToggleIsolator(StationState station, string foundationUid)
+        {
+            if (!station.foundations.TryGetValue(foundationUid, out var f)) return;
+            if (!IsIsolatorRole(f)) return;
+            f.isolatorOpen = !f.isolatorOpen;
+            RebuildNetworks(station);
         }
 
         /// <summary>
@@ -103,7 +176,6 @@ namespace Waystation.Systems
         /// </summary>
         public int GetConnectionMask(StationState station, int col, int row, string networkType)
         {
-            // Use cached lookup when available; populate and cache it on first use.
             if (_posLookup.Count == 0)
                 _posLookup = BuildPosLookup(station);
             var lookup = _posLookup;
@@ -115,13 +187,36 @@ namespace Waystation.Systems
             return mask;
         }
 
-        private bool HasNetworkNeighbor(Dictionary<(int, int), List<FoundationInstance>> lookup,
-                                        int col, int row, string netType)
+        /// <summary>
+        /// Validates whether a new tile of the given fluid/gas type can connect to
+        /// the adjacent network.  Returns null if OK, or an error message if blocked.
+        /// </summary>
+        public string ValidateContentTypeConnection(StationState station,
+                                                     int col, int row,
+                                                     string networkType,
+                                                     string proposedContentType)
         {
-            if (!lookup.TryGetValue((col, row), out var list)) return false;
-            foreach (var f in list)
-                if (GetNetworkType(f) == netType) return true;
-            return false;
+            if (proposedContentType == null) return null;
+            if (_posLookup.Count == 0)
+                _posLookup = BuildPosLookup(station);
+
+            foreach (var dir in s_Dirs)
+            {
+                int nc = col + dir.x, nr = row + dir.y;
+                if (!_posLookup.TryGetValue((nc, nr), out var list)) continue;
+                foreach (var nb in list)
+                {
+                    if (GetNetworkType(nb) != networkType) continue;
+                    if (nb.networkId == null) continue;
+                    if (!station.networks.TryGetValue(nb.networkId, out var net)) continue;
+                    if (net.contentType != null && net.contentType != proposedContentType)
+                    {
+                        string kind = networkType == "pipe" ? "fluid" : "gas";
+                        return $"Incompatible {kind} network";
+                    }
+                }
+            }
+            return null;
         }
 
         /// <summary>
@@ -131,7 +226,6 @@ namespace Waystation.Systems
         public void SetContent(StationState station, string networkId, string contentType)
         {
             if (!station.networks.TryGetValue(networkId, out var net)) return;
-            // Validate contentType against known resource ids
             if (!IsValidContentType(contentType))
             {
                 Debug.LogWarning($"[NetworkSystem] Rejected unknown contentType '{contentType}'");
@@ -141,7 +235,238 @@ namespace Waystation.Systems
                 net.contentType = contentType;
         }
 
+        // ── Tick helpers ─────────────────────────────────────────────────────
+
+        private void TickElectrical(StationState station, NetworkInstance net)
+        {
+            // Gather all complete foundations on this network
+            float supply  = 0f;
+            float demand  = 0f;
+            float stored  = 0f;
+            float maxCap  = 0f;
+
+            var producers = new List<FoundationInstance>();
+            var consumers = new List<FoundationInstance>();
+            var batteries = new List<FoundationInstance>();
+
+            foreach (var uid in net.memberUids)
+            {
+                if (!station.foundations.TryGetValue(uid, out var f)) continue;
+                if (f.status != "complete") continue;
+                if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
+                if (def.nodeRole == null) continue;
+
+                switch (def.nodeRole)
+                {
+                    case "producer":
+                        supply += def.outputWatts * f.Functionality();
+                        producers.Add(f);
+                        break;
+                    case "consumer":
+                        demand += def.demandWatts;
+                        consumers.Add(f);
+                        break;
+                    case "storage":
+                        stored  += f.storedEnergy;
+                        maxCap  += def.storageCapacityWh;
+                        batteries.Add(f);
+                        break;
+                }
+            }
+
+            float deficit = demand - supply;
+
+            if (deficit <= 0f)
+            {
+                // Surplus — charge batteries
+                float surplus = -deficit;
+                foreach (var bat in batteries)
+                {
+                    if (!_registry.Buildables.TryGetValue(bat.buildableId, out var def)) continue;
+                    float space = def.storageCapacityWh - bat.storedEnergy;
+                    float charge = Mathf.Min(surplus, space);
+                    bat.storedEnergy = Mathf.Clamp(bat.storedEnergy + charge, 0f, def.storageCapacityWh);
+                    surplus -= charge;
+                    if (surplus <= 0f) break;
+                }
+                // All consumers energised
+                foreach (var c in consumers) c.isEnergised = true;
+            }
+            else
+            {
+                // Deficit — draw from batteries
+                float remaining = deficit;
+                foreach (var bat in batteries)
+                {
+                    float draw = Mathf.Min(remaining, bat.storedEnergy);
+                    bat.storedEnergy = Mathf.Max(0f, bat.storedEnergy - draw);
+                    remaining -= draw;
+                    if (remaining <= 0f) break;
+                }
+                bool hasEnoughTotal = remaining <= 0f;
+                foreach (var c in consumers) c.isEnergised = hasEnoughTotal;
+            }
+
+            // Update network aggregate stats
+            net.totalSupply    = supply;
+            net.totalDemand    = demand;
+            net.storedEnergy   = 0f;
+            net.storageCapacity = maxCap;
+            foreach (var bat in batteries)
+                net.storedEnergy += bat.storedEnergy;
+        }
+
+        private void TickFluid(StationState station, NetworkInstance net)
+        {
+            float produced = 0f;
+            var consumers = new List<FoundationInstance>();
+            var tanks     = new List<(FoundationInstance f, float cap)>();
+
+            foreach (var uid in net.memberUids)
+            {
+                if (!station.foundations.TryGetValue(uid, out var f)) continue;
+                if (f.status != "complete") continue;
+                if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
+                if (def.nodeRole == null) continue;
+
+                switch (def.nodeRole)
+                {
+                    case "producer":
+                        // Fluid producers require power when requiresPower is set
+                        if (!def.requiresPower || f.isEnergised)
+                            produced += def.fluidProducePerTick * f.Functionality();
+                        break;
+                    case "consumer":
+                        consumers.Add(f);
+                        break;
+                    case "storage":
+                        tanks.Add((f, def.fluidStorageCapacity));
+                        break;
+                }
+            }
+
+            // Pour production into tanks
+            float toStore = produced;
+            foreach (var (tank, cap) in tanks)
+            {
+                float space = cap - tank.storedFluid;
+                float fill  = Mathf.Min(toStore, space);
+                tank.storedFluid = Mathf.Clamp(tank.storedFluid + fill, 0f, cap);
+                toStore -= fill;
+                if (toStore <= 0f) break;
+            }
+
+            // Supply consumers from tanks
+            float totalStored = 0f;
+            foreach (var (tank, _) in tanks) totalStored += tank.storedFluid;
+
+            float totalDemand = 0f;
+            foreach (var c in consumers)
+            {
+                if (_registry.Buildables.TryGetValue(c.buildableId, out var def))
+                    totalDemand += def.fluidDemandPerTick;
+            }
+
+            bool canSupply = totalStored >= totalDemand;
+            if (canSupply && totalDemand > 0f)
+            {
+                float remaining = totalDemand;
+                foreach (var (tank, _) in tanks)
+                {
+                    float draw = Mathf.Min(remaining, tank.storedFluid);
+                    tank.storedFluid = Mathf.Max(0f, tank.storedFluid - draw);
+                    remaining -= draw;
+                    if (remaining <= 0f) break;
+                }
+            }
+            foreach (var c in consumers) c.isFluidSupplied = canSupply;
+
+            // Update aggregate
+            net.totalSupply     = produced;
+            net.totalDemand     = totalDemand;
+            net.storedEnergy    = 0f; // not used for fluid
+            float cap2 = 0f;
+            float stored2 = 0f;
+            foreach (var (tank, capv) in tanks) { cap2 += capv; stored2 += tank.storedFluid; }
+            net.contentAmount   = stored2;
+            net.contentCapacity = cap2;
+            net.storageCapacity = cap2;
+        }
+
+        private void TickGas(StationState station, NetworkInstance net)
+        {
+            float produced = 0f;
+            var consumers = new List<FoundationInstance>();
+            var tanks     = new List<(FoundationInstance f, float cap)>();
+
+            foreach (var uid in net.memberUids)
+            {
+                if (!station.foundations.TryGetValue(uid, out var f)) continue;
+                if (f.status != "complete") continue;
+                if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
+                if (def.nodeRole == null) continue;
+
+                switch (def.nodeRole)
+                {
+                    case "producer":
+                        if (!def.requiresPower || f.isEnergised)
+                            produced += def.gasProducePerTick * f.Functionality();
+                        break;
+                    case "consumer":
+                        consumers.Add(f);
+                        break;
+                    case "storage":
+                        tanks.Add((f, def.gasStorageCapacity));
+                        break;
+                }
+            }
+
+            float toStore = produced;
+            foreach (var (tank, cap) in tanks)
+            {
+                float space = cap - tank.storedGas;
+                float fill  = Mathf.Min(toStore, space);
+                tank.storedGas = Mathf.Clamp(tank.storedGas + fill, 0f, cap);
+                toStore -= fill;
+                if (toStore <= 0f) break;
+            }
+
+            float totalStored = 0f;
+            foreach (var (tank, _) in tanks) totalStored += tank.storedGas;
+
+            float totalDemand = 0f;
+            foreach (var c in consumers)
+            {
+                if (_registry.Buildables.TryGetValue(c.buildableId, out var def))
+                    totalDemand += def.gasDemandPerTick;
+            }
+
+            bool canSupply = totalStored >= totalDemand;
+            if (canSupply && totalDemand > 0f)
+            {
+                float remaining = totalDemand;
+                foreach (var (tank, _) in tanks)
+                {
+                    float draw = Mathf.Min(remaining, tank.storedGas);
+                    tank.storedGas = Mathf.Max(0f, tank.storedGas - draw);
+                    remaining -= draw;
+                    if (remaining <= 0f) break;
+                }
+            }
+            foreach (var c in consumers) c.isGasSupplied = canSupply;
+
+            net.totalSupply     = produced;
+            net.totalDemand     = totalDemand;
+            float cap3 = 0f; float stored3 = 0f;
+            foreach (var (tank, capv) in tanks) { cap3 += capv; stored3 += tank.storedGas; }
+            net.contentAmount   = stored3;
+            net.contentCapacity = cap3;
+            net.storageCapacity = cap3;
+        }
+
         // ── Private helpers ───────────────────────────────────────────────────
+
+        private static readonly (int x, int y)[] s_Dirs = { (1,0), (-1,0), (0,1), (0,-1) };
 
         private string GetNetworkType(FoundationInstance f)
         {
@@ -149,20 +474,22 @@ namespace Waystation.Systems
             return def.networkType;
         }
 
-        private IEnumerable<FoundationInstance> GetAdjacentFoundations(
-            int col, int row, string netType)
+        private bool IsIsolatorRole(FoundationInstance f)
         {
-            var dirs = new[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
-            foreach (var (dc, dr) in dirs)
-            {
-                int nc = col + dc, nr = row + dr;
-                if (!_posLookup.TryGetValue((nc, nr), out var list)) continue;
-                foreach (var f in list)
-                {
-                    if (GetNetworkType(f) != netType) continue;
-                    yield return f;
-                }
-            }
+            if (!(_registry?.Buildables.TryGetValue(f.buildableId, out var def) == true)) return false;
+            return def.nodeRole == "isolator";
+        }
+
+        private bool IsClosedIsolator(FoundationInstance f)
+            => IsIsolatorRole(f) && !f.isolatorOpen;
+
+        private bool HasNetworkNeighbor(Dictionary<(int, int), List<FoundationInstance>> lookup,
+                                        int col, int row, string netType)
+        {
+            if (!lookup.TryGetValue((col, row), out var list)) return false;
+            foreach (var f in list)
+                if (GetNetworkType(f) == netType) return true;
+            return false;
         }
 
         private static Dictionary<(int, int), List<FoundationInstance>> BuildPosLookup(
@@ -181,26 +508,30 @@ namespace Waystation.Systems
 
         private void InferNetworkContent(StationState station)
         {
-            // For each complete foundation that is a producer/consumer, infer the
-            // network content from the buildable id if not already set.
             foreach (var f in station.foundations.Values)
             {
                 if (f.status != "complete" || f.networkId == null) continue;
                 if (!station.networks.TryGetValue(f.networkId, out var net)) continue;
-                if (net.contentType != null) continue; // already set
+                if (net.contentType != null) continue;
 
-                // Infer from buildable
-                if (f.buildableId.Contains("ice_refiner"))
-                {
-                    // ice refiner connects to both pipe (water) and duct (oxygen) networks,
-                    // but we can't set both here — skip; content must be set when refining begins
-                }
+                if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
+
+                // Infer fluid type from producer definition
+                if (def.nodeRole == "producer" && def.fluidType != null)
+                    net.contentType = def.fluidType;
+                else if (def.nodeRole == "producer" && def.gasType != null)
+                    net.contentType = def.gasType;
+                else if (def.fluidType != null)
+                    net.contentType = def.fluidType;
+                else if (def.gasType != null)
+                    net.contentType = def.gasType;
             }
         }
 
         private static readonly HashSet<string> ValidContentTypes = new HashSet<string>
         {
-            "water", "oxygen", "fuel", "coolant", "waste_water"
+            "water", "oxygen", "fuel", "coolant", "waste_water",
+            "carbon_dioxide", "nitrogen"
         };
         private static bool IsValidContentType(string t) => ValidContentTypes.Contains(t);
     }

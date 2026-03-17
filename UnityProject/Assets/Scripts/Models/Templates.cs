@@ -542,6 +542,27 @@ namespace Waystation.Models
         public float  powerDraw        = 0f;      // watts when active
         public float  idlePowerDraw    = 0f;      // watts when standby
 
+        // ── Utility network simulation fields ─────────────────────────────────
+        // nodeRole: "producer" | "consumer" | "storage" | "conduit" | "isolator" | null
+        public string nodeRole             = null;
+
+        // Electrical
+        public float  outputWatts          = 0f;   // ElectricalProducer — watts generated per tick
+        public float  demandWatts          = 0f;   // ElectricalConsumer — watts consumed per tick
+        public float  storageCapacityWh    = 0f;   // ElectricalStorage  — max watt-hours stored
+
+        // Plumbing
+        public string fluidType            = null; // "water" | "coolant" | "fuel"
+        public float  fluidProducePerTick  = 0f;   // FluidProducer — litres per tick
+        public float  fluidDemandPerTick   = 0f;   // FluidConsumer — litres per tick
+        public float  fluidStorageCapacity = 0f;   // FluidStorage  — max litres
+
+        // Ducting
+        public string gasType              = null; // "oxygen" | "carbon_dioxide" | "nitrogen"
+        public float  gasProducePerTick    = 0f;   // GasProducer  — litres-equivalent per tick
+        public float  gasDemandPerTick     = 0f;   // GasConsumer  — litres-equivalent per tick
+        public float  gasStorageCapacity   = 0f;   // GasStorage   — max litres-equivalent
+
         public static BuildableDefinition FromDict(Dictionary<string, object> raw)
         {
             var b = new BuildableDefinition
@@ -577,6 +598,19 @@ namespace Waystation.Models
             b.requiresPower    = raw.GetBool("requires_power", false);
             b.powerDraw        = raw.GetFloat("power_draw", 0f);
             b.idlePowerDraw    = raw.GetFloat("idle_power_draw", 0f);
+            // Utility network simulation
+            b.nodeRole             = raw.GetString("node_role", null);
+            b.outputWatts          = raw.GetFloat("output_watts", 0f);
+            b.demandWatts          = raw.GetFloat("demand_watts", 0f);
+            b.storageCapacityWh    = raw.GetFloat("storage_capacity_wh", 0f);
+            b.fluidType            = raw.GetString("fluid_type", null);
+            b.fluidProducePerTick  = raw.GetFloat("fluid_produce_per_tick", 0f);
+            b.fluidDemandPerTick   = raw.GetFloat("fluid_demand_per_tick", 0f);
+            b.fluidStorageCapacity = raw.GetFloat("fluid_storage_capacity", 0f);
+            b.gasType              = raw.GetString("gas_type", null);
+            b.gasProducePerTick    = raw.GetFloat("gas_produce_per_tick", 0f);
+            b.gasDemandPerTick     = raw.GetFloat("gas_demand_per_tick", 0f);
+            b.gasStorageCapacity   = raw.GetFloat("gas_storage_capacity", 0f);
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);
             if (raw.ContainsKey("required_materials") &&

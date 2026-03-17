@@ -387,6 +387,22 @@ namespace Waystation.Models
         // Visual operating state for machines ("standby"|"active"|"damaged"|"broken").
         public string operatingState = "standby";
 
+        // ── Utility network simulation state (set each tick by UtilityNetworkManager) ──
+        // Electrical: true when network supply+storage >= demand
+        public bool  isEnergised      = false;
+        // Plumbing: true when fluid network has enough stored volume for this consumer
+        public bool  isFluidSupplied  = false;
+        // Ducting: true when gas network has enough stored volume for this consumer
+        public bool  isGasSupplied    = false;
+
+        // Storage nodes: persisted amounts (serialised in StationData)
+        public float storedEnergy     = 0f;  // Battery — watt-hours currently stored
+        public float storedFluid      = 0f;  // Water Tank / Fluid Tank — litres stored
+        public float storedGas        = 0f;  // Gas Tank — litres-equivalent stored
+
+        // Isolator state: true = open (allows connectivity), false = closed (splits network)
+        public bool  isolatorOpen     = true;
+
         // Room bonus — set by RoomSystem each tick.
         // hasRoomBonus is true when this workbench is in a fully-qualified bonus room.
         // roomBonusMultiplier is the skill output multiplier while the bonus is active.
@@ -545,6 +561,12 @@ namespace Waystation.Models
         public float        contentAmount;   // current stored amount
         public float        contentCapacity; // max storage in this network
         public List<string> memberUids = new List<string>(); // foundation uids
+
+        // ── Simulation state (updated each tick by UtilityNetworkManager) ────
+        public float totalSupply    = 0f;  // watts (electric) or litres/tick (fluid/gas) produced
+        public float totalDemand    = 0f;  // watts (electric) or litres/tick (fluid/gas) consumed
+        public float storedEnergy   = 0f;  // watt-hours stored across all batteries on this net
+        public float storageCapacity = 0f; // total storage capacity across all storage nodes
 
         public static NetworkInstance Create(string type, string content = null)
         {
