@@ -176,15 +176,25 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Unconditionally removes a foundation regardless of its build status.
-        /// Used by Ctrl+Z undo — bypasses the "complete" guard in CancelFoundation.
+        /// Removes a foundation as part of a Ctrl+Z undo operation.
+        /// For incomplete foundations, delegates to CancelFoundation (refund: true) so
+        /// any already-hauled materials are returned to a module inventory.
+        /// For complete foundations the build cost is sunk, so the foundation is removed
+        /// directly without a refund (bypassing the complete-guard in CancelFoundation).
         /// </summary>
         public void UndoFoundation(StationState station, string foundationUid)
         {
             if (!station.foundations.TryGetValue(foundationUid, out var foundation))
                 return;
 
-            // Release any assigned engineer
+            // Incomplete: reuse CancelFoundation to refund any hauled materials.
+            if (foundation.status != "complete")
+            {
+                CancelFoundation(station, foundationUid, refund: true);
+                return;
+            }
+
+            // Complete: bypass the complete-guard and remove directly (no refund).
             if (foundation.assignedNpcUid != null &&
                 station.npcs.TryGetValue(foundation.assignedNpcUid, out var npc) &&
                 npc.currentJobId == BuildJobId)
@@ -196,7 +206,6 @@ namespace Waystation.Systems
             _registry.Buildables.TryGetValue(foundation.buildableId, out var defn);
             string name = defn != null ? defn.displayName : foundation.buildableId;
             station.LogEvent($"Undo: removed {name}.");
-            Debug.Log($"[BuildingSystem] Undo removed foundation {foundationUid}.");
         }
 
         /// <summary>

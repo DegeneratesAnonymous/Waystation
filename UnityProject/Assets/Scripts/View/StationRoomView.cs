@@ -576,7 +576,7 @@ namespace Waystation.View
                 else if (isWall)
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        GetWallSprite(f.tileCol, f.tileRow), GetWallRotation(f.tileCol, f.tileRow), sortOrder: 40);
+                        GetWallSprite(f.tileCol, f.tileRow, f), GetWallRotation(f.tileCol, f.tileRow), sortOrder: 40);
                     _foundTiles[kv.Key] = go;
                     _tileAt[(f.tileCol, f.tileRow)] = go.GetComponent<SpriteRenderer>();
                     _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
@@ -685,12 +685,13 @@ namespace Waystation.View
                     string genState = f.health <= 0 ? "destroyed"
                                     : f.health < f.maxHealth * 0.5f ? "damaged"
                                     : "normal";
+                    var floorGOs = new List<GameObject>();
                     for (int dc = 0; dc < 2; dc++)
                     for (int dr = 0; dr < 2; dr++)
                     {
-                        PlaceTile(_foundRoot.transform, f.tileCol + dc, f.tileRow + dr,
+                        floorGOs.Add(PlaceTile(_foundRoot.transform, f.tileCol + dc, f.tileRow + dr,
                             TileAtlas.GetFloor(PickFloorVariant(f.tileCol + dc, f.tileRow + dr)),
-                            FloorRotation(f.tileCol + dc, f.tileRow + dr), sortOrder: 10);
+                            FloorRotation(f.tileCol + dc, f.tileRow + dr), sortOrder: 10));
                     }
                     var genGO = new GameObject($"Generator_{f.uid}");
                     genGO.transform.SetParent(_foundRoot.transform, false);
@@ -699,7 +700,8 @@ namespace Waystation.View
                     var srGen = genGO.AddComponent<SpriteRenderer>();
                     srGen.sprite       = TileAtlas.GetGenerator(genState);
                     srGen.sortingOrder = 30;
-                    _foundTiles[kv.Key] = genGO;
+                    _foundTiles[kv.Key]  = genGO;
+                    _foundExtras[kv.Key] = floorGOs;
                 }
                 else if (f.buildableId == "buildable.ice_refiner")
                 {
@@ -905,11 +907,22 @@ namespace Waystation.View
         //   NW diagonal floor  →  WALL_CORNER_SE
         //   SE diagonal floor  →  WALL_CORNER_NW
         //   SW diagonal floor  →  WALL_CORNER_NE
-        private Sprite GetWallSprite(int col, int row)
+        //
+        // foundation: when non-null, the health state is used to select normal/damaged/destroyed.
+        //             Boundary room walls (no foundation) always use "normal".
+        private Sprite GetWallSprite(int col, int row, FoundationInstance foundation = null)
         {
-            // All wall tiles — including boundary corners — use the base sprite.
-            // Floor-adjacent face strips are composited on top by AddShadowsForWall.
-            return TileAtlas.GetWallBase("normal");
+            string state = "normal";
+            if (foundation != null && foundation.maxHealth > 0)
+            {
+                float pct = (float)foundation.health / foundation.maxHealth;
+                state = foundation.health <= 0 ? "destroyed"
+                      : pct < 0.5f             ? "damaged"
+                      :                          "normal";
+            }
+            // All wall tiles use the base sprite; floor-adjacent face strips are
+            // composited on top by AddShadowsForWall.
+            return TileAtlas.GetWallBase(state);
         }
 
         // Returns the Z rotation (degrees) for a wall tile so its slab (perspective front
