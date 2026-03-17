@@ -2128,7 +2128,7 @@ namespace Waystation.UI
                 if (alreadyBusy)
                     btnLabel = statusTxt;
                 else if (onCooldown)
-                    btnLabel = $"Wait {s.HailCooldownRemaining(ship.uid)}t";
+                    btnLabel = $"Wait {s.HailCooldownRemaining(ship.uid)} ticks";
                 else if (!hasHangar)
                     btnLabel = "No Hangar";
                 else

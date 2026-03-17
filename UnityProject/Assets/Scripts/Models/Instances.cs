@@ -390,6 +390,7 @@ namespace Waystation.Models
 
     // -------------------------------------------------------------------------
     // Cargo Hold Settings
+    // -------------------------------------------------------------------------
 
     [Serializable]
     public class CargoHoldSettings

@@ -122,8 +122,9 @@ namespace Waystation.Systems
             }
             else
             {
-                station.SetHailCooldown(shipUid, 60);
-                station.LogEvent($"Hail failed — {ship.name} not interested. Cooldown 60 ticks.");
+                station.SetHailCooldown(shipUid, ShipVisitStateMachine.HailCooldownTicks);
+                station.LogEvent($"Hail failed — {ship.name} not interested. " +
+                                 $"Cooldown {ShipVisitStateMachine.HailCooldownTicks} ticks.");
             }
         }
 

@@ -107,9 +107,9 @@ namespace Waystation.Systems
                     var neighbour = (nc, nr);
 
                     if (closed.Contains(neighbour)) continue;
-                    // Allow starting on a non-walkable tile (e.g., mid-placement NPC)
-                    if (current != startPos && !IsPassable(nc, nr)) continue;
-                    if (current == startPos && !IsPassable(nc, nr)) continue;
+                    // NPCs may start on a non-walkable tile (e.g., mid-construction site).
+                    // For all tiles, require the neighbour to be passable.
+                    if (!IsPassable(nc, nr)) continue;
 
                     float tentativeG = (gScore.ContainsKey(current) ? gScore[current] : float.MaxValue) + 1f;
 

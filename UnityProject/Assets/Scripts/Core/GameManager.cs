@@ -137,7 +137,7 @@ namespace Waystation.Core
 
             // Visitor pipeline systems
             Antenna    = new AntennaSystem(Registry, Npcs);
-            ShipVisits = new ShipVisitStateMachine(Registry, Npcs);
+            ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
             TaskQueue  = new NPCTaskQueueManager(Registry);
             CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
 

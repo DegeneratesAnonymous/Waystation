@@ -27,19 +27,26 @@ namespace Waystation.Systems
         // To avoid coupling, visit duration ticks are calculated at docking time.
         // Default visit duration ticks if ShipTemplate doesn't specify (60 ticks ≈ 30s)
         private const int DefaultVisitDurationTicks = 60;
-        // Each second in real time corresponds to this many ticks (GameManager.secondsPerTick=0.5)
-        private const float SecondsPerTick = 0.5f;
+        // Each second in real time corresponds to this many ticks.
+        // Mirrors GameManager.secondsPerTick (default 0.5s). Change both together if speed is altered.
+        private float _secondsPerTick;
 
-        // Hail cooldown in ticks (matches acceptance criteria: 60 seconds)
-        private const int HailCooldownTicks = 60;
+        /// <summary>
+        /// Hail cooldown in ticks (60 ticks = 30 real-time seconds at 0.5s/tick).
+        /// Matches acceptance criteria: player may re-hail after 60 ticks.
+        /// Used by StationState.SetHailCooldown() via CommunicationsSystem.
+        /// </summary>
+        public const int HailCooldownTicks = 60;
 
         private readonly ContentRegistry _registry;
         private readonly NPCSystem       _npcSystem;
 
-        public ShipVisitStateMachine(ContentRegistry registry, NPCSystem npcSystem)
+        public ShipVisitStateMachine(ContentRegistry registry, NPCSystem npcSystem,
+                                      float secondsPerTick = 0.5f)
         {
-            _registry  = registry;
-            _npcSystem = npcSystem;
+            _registry      = registry;
+            _npcSystem     = npcSystem;
+            _secondsPerTick = secondsPerTick;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -226,7 +233,7 @@ namespace Waystation.Systems
             // Calculate visit duration in ticks
             int visitTicks = DefaultVisitDurationTicks;
             if (_registry.Ships.TryGetValue(ship.templateId, out var template))
-                visitTicks = Mathf.Max(1, Mathf.RoundToInt(template.visitDuration / SecondsPerTick));
+                visitTicks = Mathf.Max(1, Mathf.RoundToInt(template.visitDuration / _secondsPerTick));
 
             ship.plannedDepartureTick = station.tick + visitTicks;
 
