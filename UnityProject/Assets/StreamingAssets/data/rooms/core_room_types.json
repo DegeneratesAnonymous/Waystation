@@ -20,5 +20,12 @@
             { "buildable_id_or_tag": "tag:storage",  "count": 2, "display_label": "Storage Cabinet" }
         ],
         "skill_bonuses": { "engineering": 1.15 }
+    },
+    {
+        "id": "hangar",
+        "display_name": "Hangar",
+        "workbench_cap": 0,
+        "requirements_per_workbench": [],
+        "skill_bonuses": {}
     }
 ]

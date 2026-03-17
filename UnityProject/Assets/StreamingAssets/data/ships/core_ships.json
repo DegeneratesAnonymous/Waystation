@@ -6,6 +6,12 @@
     "passenger_capacity": 4,
     "threat_level": 1,
     "behavior_tags": [],
+    "social_resistance": 3,
+    "resources_wanted": ["credits", "food"],
+    "has_entertainment_need": false,
+    "visitor_count": 3,
+    "visit_duration": 180.0,
+    "sprite_variant": 0,
     "schema_version": "1"
   },
   {
@@ -15,6 +21,12 @@
     "passenger_capacity": 2,
     "threat_level": 1,
     "behavior_tags": [],
+    "social_resistance": 2,
+    "resources_wanted": ["credits"],
+    "has_entertainment_need": false,
+    "visitor_count": 2,
+    "visit_duration": 120.0,
+    "sprite_variant": 0,
     "schema_version": "1"
   },
   {
@@ -25,6 +37,12 @@
     "threat_level": 0,
     "behavior_tags": [],
     "faction_restrictions": ["faction.refugee_network"],
+    "social_resistance": 1,
+    "resources_wanted": ["food", "oxygen"],
+    "has_entertainment_need": false,
+    "visitor_count": 6,
+    "visit_duration": 300.0,
+    "sprite_variant": 1,
     "schema_version": "1"
   },
   {
@@ -35,6 +53,12 @@
     "threat_level": 4,
     "behavior_tags": ["carries_inspectors"],
     "faction_restrictions": ["faction.stellar_authority"],
+    "social_resistance": 8,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 4,
+    "visit_duration": 240.0,
+    "sprite_variant": 2,
     "schema_version": "1"
   },
   {
@@ -44,6 +68,12 @@
     "passenger_capacity": 2,
     "threat_level": 2,
     "behavior_tags": ["carries_contraband", "hostile_if_denied"],
+    "social_resistance": 6,
+    "resources_wanted": ["credits"],
+    "has_entertainment_need": true,
+    "visitor_count": 2,
+    "visit_duration": 90.0,
+    "sprite_variant": 3,
     "schema_version": "1"
   },
   {
@@ -54,6 +84,12 @@
     "threat_level": 7,
     "behavior_tags": ["hostile_if_denied", "aggressive"],
     "faction_restrictions": ["faction.scavenger_clans"],
+    "social_resistance": 9,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 0,
+    "visit_duration": 60.0,
+    "sprite_variant": 3,
     "schema_version": "1"
   },
   {
@@ -64,6 +100,12 @@
     "threat_level": 5,
     "behavior_tags": [],
     "faction_restrictions": ["faction.stellar_authority"],
+    "social_resistance": 7,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 2,
+    "visit_duration": 120.0,
+    "sprite_variant": 2,
     "schema_version": "1"
   },
   {
@@ -73,6 +115,12 @@
     "passenger_capacity": 30,
     "threat_level": 1,
     "behavior_tags": [],
+    "social_resistance": 4,
+    "resources_wanted": ["food", "parts"],
+    "has_entertainment_need": true,
+    "visitor_count": 5,
+    "visit_duration": 240.0,
+    "sprite_variant": 1,
     "schema_version": "1"
   }
 ]

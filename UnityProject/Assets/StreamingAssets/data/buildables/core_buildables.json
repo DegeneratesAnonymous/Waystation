@@ -406,6 +406,90 @@
         "beauty_score": 3,
         "furniture_tag": "lighting",
         "schema_version": "1"
+    },
+    {
+        "id": "buildable.antenna",
+        "display_name": "Antenna Array",
+        "category": "object",
+        "description": "A directional antenna array that detects ships within range. Base stats: range=500, maxShips=3. Each Astrometrics Lab on station adds +150 range and +2 ship cap. Requires power to operate.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 8,
+            "item.wiring": 4
+        },
+        "required_skills": {
+            "engineering": 2,
+            "electrical": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "requires_power": true,
+        "power_draw": 10.0,
+        "idle_power_draw": 2.0,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.access_terminal",
+        "display_name": "Access Terminal",
+        "category": "object",
+        "description": "A computer terminal where crew can claim station tasks. Job types accepted can be configured via the inspect menu. A communications-enabled terminal is required for hailing passing ships.",
+        "build_time_ticks": 20,
+        "required_materials": {
+            "item.steel_plate": 3,
+            "item.wiring": 2
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
+        "requires_power": true,
+        "power_draw": 2.0,
+        "idle_power_draw": 0.5,
+        "furniture_tag": "terminal",
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.shuttle_landing_pad",
+        "display_name": "Shuttle Landing Pad",
+        "category": "object",
+        "description": "A floor-level marker tile that designates a landing zone for visitor shuttles. A room containing at least one landing pad is classified as a Hangar. Multiple pads allow simultaneous dockings.",
+        "build_time_ticks": 15,
+        "required_materials": {
+            "item.steel_plate": 4
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "layer": 1,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.astrometrics_lab",
+        "display_name": "Astrometrics Lab",
+        "category": "object",
+        "description": "A specialised sensor suite for tracking distant objects. Each lab on station adds +150 to Antenna range and +2 to maximum tracked ships. Works passively once built.",
+        "build_time_ticks": 40,
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 3
+        },
+        "required_skills": {
+            "engineering": 3,
+            "electrical": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 100,
+        "requires_power": true,
+        "power_draw": 5.0,
+        "idle_power_draw": 1.0,
+        "schema_version": "1"
     }
 ]
 

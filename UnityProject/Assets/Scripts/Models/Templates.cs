@@ -202,6 +202,21 @@ namespace Waystation.Models
         public List<string> behaviorTags = new List<string>();
         public string schemaVersion = "1";
 
+        // ── Visitor system fields ──────────────────────────────────────────
+        // Social resistance: 1 (easy to hail) – 10 (very reluctant). Crew social
+        // skill check must beat socialResistance * 2.
+        public int   socialResistance      = 5;
+        // Resource types this ship is actively seeking (matches station resource keys)
+        public List<string> resourcesWanted = new List<string>();
+        // True when the ship is attracted by station entertainment / hab quality
+        public bool  hasEntertainmentNeed  = false;
+        // Number of visitors spawned when the shuttle docks
+        public int   visitorCount          = 2;
+        // How long visitors stay once docked (seconds in real-time; converted to ticks)
+        public float visitDuration         = 120f;
+        // Sprite variant index into npc_ship atlas (0–3)
+        public int   spriteVariant         = 0;
+
         public static ShipTemplate FromDict(Dictionary<string, object> raw)
         {
             var t = new ShipTemplate
@@ -211,10 +226,16 @@ namespace Waystation.Models
                 cargoCapacity    = raw.GetInt("cargo_capacity"),
                 passengerCapacity= raw.GetInt("passenger_capacity"),
                 threatLevel      = raw.GetInt("threat_level"),
-                schemaVersion    = raw.GetString("schema_version", "1")
+                schemaVersion    = raw.GetString("schema_version", "1"),
+                socialResistance = raw.GetInt("social_resistance", 5),
+                hasEntertainmentNeed = raw.GetBool("has_entertainment_need", false),
+                visitorCount     = raw.GetInt("visitor_count", 2),
+                visitDuration    = raw.GetFloat("visit_duration", 120f),
+                spriteVariant    = raw.GetInt("sprite_variant", 0),
             };
             foreach (var s in raw.GetStringList("faction_restrictions")) t.factionRestrictions.Add(s);
             foreach (var s in raw.GetStringList("behavior_tags"))         t.behaviorTags.Add(s);
+            foreach (var s in raw.GetStringList("resources_wanted"))      t.resourcesWanted.Add(s);
             return t;
         }
     }
