@@ -1000,7 +1000,16 @@ namespace Waystation.View
 
             // Update wall sprite via the cached SpriteRenderer.
             if (isWall && _tileAt.TryGetValue((col, row), out var wallSr) && wallSr)
-                wallSr.sprite = GetWallSprite(col, row);
+            {
+                // Look up any placed wall foundation at this position so GetWallSprite
+                // can select the correct health state (normal/damaged/destroyed).
+                FoundationInstance wallFoundation = null;
+                if (_gm?.Station?.foundations != null)
+                    foreach (var f in _gm.Station.foundations.Values)
+                        if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("wall"))
+                        { wallFoundation = f; break; }
+                wallSr.sprite = GetWallSprite(col, row, wallFoundation);
+            }
 
             // Destroy existing shadows at this position.
             if (_shadowsAt.TryGetValue((col, row), out var oldSh))

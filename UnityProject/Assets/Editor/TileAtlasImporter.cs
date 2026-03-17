@@ -47,7 +47,7 @@ public class TileAtlasImporter : AssetPostprocessor
         catch (System.Exception ex)
         {
             Debug.LogError($"[TileAtlasImporter] Failed to read or parse JSON sidecar" +
-                $" '{jsonAssetPath}': {ex.Message}");
+                $" '{jsonAssetPath}' for texture '{assetPath}': {ex.Message}");
             return;
         }
 

@@ -133,9 +133,11 @@ namespace Waystation.Systems
         /// <summary>
         /// Cancel a pending foundation and optionally refund hauled materials.
         /// Returns true if the foundation was found and removed.
+        /// An optional <paramref name="logMessage"/> overrides the default "Foundation cancelled: …"
+        /// event-log entry — pass a non-null string to substitute a custom message.
         /// </summary>
         public bool CancelFoundation(StationState station, string foundationUid,
-                                      bool refund = true)
+                                      bool refund = true, string logMessage = null)
         {
             if (!station.foundations.TryGetValue(foundationUid, out var foundation))
                 return false;
@@ -171,7 +173,7 @@ namespace Waystation.Systems
 
             station.foundations.Remove(foundationUid);
             string name = defn != null ? defn.displayName : foundation.buildableId;
-            station.LogEvent($"Foundation cancelled: {name}.");
+            station.LogEvent(logMessage ?? $"Foundation cancelled: {name}.");
             return true;
         }
 
@@ -188,9 +190,14 @@ namespace Waystation.Systems
                 return;
 
             // Incomplete: reuse CancelFoundation to refund any hauled materials.
+            // Pass an undo-specific log message so the event log is consistent with
+            // the "Undo: removed …" entry used for complete foundations.
             if (foundation.status != "complete")
             {
-                CancelFoundation(station, foundationUid, refund: true);
+                _registry.Buildables.TryGetValue(foundation.buildableId, out var incompleteDefn);
+                string incompleteName = incompleteDefn != null ? incompleteDefn.displayName : foundation.buildableId;
+                CancelFoundation(station, foundationUid, refund: true,
+                    logMessage: $"Undo: removed {incompleteName}.");
                 return;
             }
 
