@@ -123,5 +123,18 @@
     "value": 12.0,
     "tags": ["industrial", "construction"],
     "schema_version": "1"
+  },
+  {
+    "id": "item.datachip",
+    "display_name": "Research Datachip",
+    "item_type": "Valuables",
+    "subtype": "Research Data",
+    "description": "A physical datachip encoding the results of a completed research project. Must be stored in a Data Storage Server to preserve the research. Loss of the chip does not revoke the unlock, but the station loses proof of that research.",
+    "weight": 0.1,
+    "stack_size": 64,
+    "value": 200.0,
+    "legal": true,
+    "tags": ["datachip", "data", "research"],
+    "schema_version": "1"
   }
 ]

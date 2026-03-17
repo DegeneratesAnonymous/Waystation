@@ -324,6 +324,7 @@ namespace Waystation.Core
             string path = Path.Combine(Application.persistentDataPath, saveFileName);
 
             // Serialise ResearchState: one entry per branch with points + unlocked node ids.
+            // Also captures pending_datachips (chips produced but awaiting storage space).
             var researchData = new Dictionary<string, object>();
             if (Station.research != null)
             {
@@ -335,6 +336,7 @@ namespace Waystation.Core
                         { "unlocked", new List<string>(kv.Value.unlockedNodeIds) },
                     };
                 }
+                researchData["pending_datachips"] = Station.research.pendingDatachips;
             }
 
             var data = new Dictionary<string, object>

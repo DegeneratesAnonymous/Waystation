@@ -2906,9 +2906,35 @@ namespace Waystation.UI
             var s = _gm.Station;
             if (s.research == null) { GUI.Label(new Rect(area.x, area.y, w, 20f), "Initialising...", _sSub); return; }
 
-            // ── Branch filter buttons ─────────────────────────────────────────
-            float fx = area.x;
+            // ── Datachip storage summary bar ──────────────────────────────────
+            const float ChipBarH = 28f; // 26px content + 2px bottom margin
             float fy = area.y;
+            {
+                int chipsStored  = _gm.Research.GetStoredDatachipCount(s);
+                int chipCapacity = _gm.Research.GetDatachipCapacity(s);
+                int pending      = s.research.pendingDatachips;
+
+                DrawSolid(new Rect(area.x, fy, w, ChipBarH - 2f), new Color(0.07f, 0.10f, 0.18f, 0.95f));
+
+                string chipLabel = chipCapacity > 0
+                    ? $"💾 Datachips: {chipsStored}/{chipCapacity}"
+                    : "💾 Datachips: — (no Data Storage Server)";
+                var prevChip = GUI.color;
+                GUI.color = (chipCapacity == 0 || pending > 0) ? ColBarWarn : ColBarGreen;
+                GUI.Label(new Rect(area.x + 4f, fy + 4f, w * 0.65f, 18f), chipLabel, _sSub);
+                GUI.color = prevChip;
+
+                if (pending > 0)
+                {
+                    GUI.color = ColBarWarn;
+                    GUI.Label(new Rect(area.x + w * 0.67f, fy + 4f, w * 0.33f - 4f, 18f),
+                              $"⚠ {pending} pending", _sSub);
+                    GUI.color = prevChip;
+                }
+                fy += ChipBarH;
+            }
+
+            // ── Branch filter buttons ─────────────────────────────────────────
             const float FBtnH = 24f;
             float fbw = (w - 6f) / 4f;
             var   filters = new[] { (ResearchBranchFilter.All,       "All"),
@@ -2921,7 +2947,7 @@ namespace Waystation.UI
                 var (f, lbl) = filters[i];
                 bool active = _researchFilter == f;
                 GUI.color = active ? ColAccent : new Color(0.55f, 0.60f, 0.70f, 1f);
-                if (GUI.Button(new Rect(fx + i * (fbw + 2f), fy, fbw, FBtnH), lbl, _sBtnSmall))
+                if (GUI.Button(new Rect(area.x + i * (fbw + 2f), fy, fbw, FBtnH), lbl, _sBtnSmall))
                     _researchFilter = f;
             }
             GUI.color = prevC;
@@ -2949,10 +2975,11 @@ namespace Waystation.UI
                 }
                 innerH += 38f + unlocked.Length * 20f + available.Length * 48f + lockedCount * 18f + 10f;
             }
-            innerH = Mathf.Max(innerH, h - FBtnH - 4f);
+            float scrollH = h - ChipBarH - FBtnH - 4f;
+            innerH = Mathf.Max(innerH, scrollH);
 
             _researchScroll = GUI.BeginScrollView(
-                new Rect(area.x, fy, w, h - FBtnH - 4f),
+                new Rect(area.x, fy, w, scrollH),
                 _researchScroll, new Rect(0, 0, w - 14f, innerH));
 
             float y = 4f;

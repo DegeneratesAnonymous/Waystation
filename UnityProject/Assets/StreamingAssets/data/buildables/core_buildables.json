@@ -463,6 +463,24 @@
         "requires_power": true,
         "power_draw": 2.5,
         "schema_version": "1"
+    },
+    {
+        "id": "buildable.data_storage_server",
+        "display_name": "Data Storage Server",
+        "category": "object",
+        "description": "A secure rack-mounted server unit for storing research datachips. Each server holds up to 16 datachips. Requires power — a loss of power or structural integrity risks the research stored within.",
+        "build_time_ticks": 25,
+        "required_materials": { "item.steel_plate": 4, "item.wiring": 6, "item.parts": 2 },
+        "required_skills": { "engineering": 2 },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 100,
+        "cargo_capacity": 16,
+        "beauty_score": 1,
+        "furniture_tag": "storage",
+        "requires_power": true,
+        "power_draw": 1.0,
+        "schema_version": "1"
     }
 ]
 

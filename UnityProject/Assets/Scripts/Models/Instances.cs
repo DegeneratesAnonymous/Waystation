@@ -610,6 +610,11 @@ namespace Waystation.Models
         public Dictionary<ResearchBranch, ResearchBranchState> branches =
             new Dictionary<ResearchBranch, ResearchBranchState>();
 
+        // Datachips produced by completed research but not yet housed in a
+        // Data Storage Server (no capacity available at the time of unlock).
+        // Each represents one homeless chip awaiting storage.
+        public int pendingDatachips = 0;
+
         public float TotalPoints(ResearchBranch branch)
             => branches.TryGetValue(branch, out var s) ? s.points : 0f;
 

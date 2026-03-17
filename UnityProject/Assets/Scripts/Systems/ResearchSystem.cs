@@ -1,5 +1,8 @@
 // ResearchSystem — accumulates research points from crew working at research
 // terminals and automatically unlocks nodes when prerequisites are met.
+// On each unlock a physical Datachip (item.datachip) is produced and stored in
+// the nearest complete Data Storage Server foundation.  If no storage space is
+// available the chip is tallied as "pending" and stored as soon as capacity appears.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -11,6 +14,9 @@ namespace Waystation.Systems
     public class ResearchSystem
     {
         private readonly ContentRegistry _registry;
+
+        private const string DatachipItemId      = "item.datachip";
+        private const string DataStorageBuildable = "buildable.data_storage_server";
 
         // Terminal buildable-id → branch mapping
         private static readonly Dictionary<string, ResearchBranch> TerminalBranch =
@@ -72,9 +78,84 @@ namespace Waystation.Systems
                 bState.points -= node.pointCost;   // consume the spent points
                 foreach (var tag in node.unlockTags)
                     station.SetTag(tag);
+
+                // Produce a datachip for the completed research.
+                StoreDatachip(station);
+
                 station.LogEvent($"Research unlocked: {node.displayName}.");
                 Debug.Log($"[ResearchSystem] Unlocked node '{node.id}'.");
             }
+
+            // Attempt to place any pending chips whenever new storage appears.
+            if (station.research.pendingDatachips > 0)
+                FlushPendingDatachips(station);
+        }
+
+        // ── Datachip storage helpers ──────────────────────────────────────────
+
+        /// <summary>
+        /// Try to add one datachip to a complete Data Storage Server foundation.
+        /// Falls back to any complete foundation cargo hold if no server is available.
+        /// If no space exists anywhere, the chip is recorded as pending.
+        /// </summary>
+        private void StoreDatachip(StationState station)
+        {
+            if (TryAddDatachipToStorage(station)) return;
+            // No room anywhere — track as pending.
+            station.research.pendingDatachips++;
+            station.LogEvent("Warning: No Data Storage Server capacity. Research Datachip is pending storage.");
+        }
+
+        /// <summary>Flush pending chips into newly-available storage each tick.</summary>
+        private void FlushPendingDatachips(StationState station)
+        {
+            while (station.research.pendingDatachips > 0)
+            {
+                if (!TryAddDatachipToStorage(station)) break;
+                station.research.pendingDatachips--;
+                station.LogEvent("Pending Research Datachip stored successfully.");
+            }
+        }
+
+        /// <summary>
+        /// Try to store one datachip.  Prefers Data Storage Server foundations;
+        /// falls back to any foundation cargo hold with space.
+        /// Returns true if the chip was stored.
+        /// </summary>
+        private bool TryAddDatachipToStorage(StationState station)
+        {
+            // Pass 1 — prefer dedicated Data Storage Servers.
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != DataStorageBuildable) continue;
+                if (f.status != "complete") continue;
+                if (f.cargoCapacity <= 0) continue;
+                if (f.CargoItemCount() < f.cargoCapacity)
+                {
+                    IncrementCargo(f.cargo, DatachipItemId);
+                    return true;
+                }
+            }
+
+            // Pass 2 — any available foundation cargo hold.
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId == DataStorageBuildable) continue; // already checked
+                if (f.status != "complete") continue;
+                if (f.cargoCapacity <= 0) continue;
+                if (f.CargoItemCount() < f.cargoCapacity)
+                {
+                    IncrementCargo(f.cargo, DatachipItemId);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void IncrementCargo(Dictionary<string, int> cargo, string itemId)
+        {
+            cargo[itemId] = (cargo.TryGetValue(itemId, out var existing) ? existing : 0) + 1;
         }
 
         // ── Queries ───────────────────────────────────────────────────────────
@@ -127,6 +208,36 @@ namespace Waystation.Systems
                 if (n.pointCost < cheapest) cheapest = n.pointCost;
 
             return cheapest > 0 ? Mathf.Clamp01(pts / cheapest) : 1f;
+        }
+
+        /// <summary>
+        /// Total datachips currently stored across all Data Storage Server foundations.
+        /// </summary>
+        public int GetStoredDatachipCount(StationState station)
+        {
+            int total = 0;
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != DataStorageBuildable) continue;
+                if (f.status != "complete") continue;
+                total += f.cargo.TryGetValue(DatachipItemId, out var n) ? n : 0;
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// Total datachip capacity across all complete Data Storage Server foundations.
+        /// </summary>
+        public int GetDatachipCapacity(StationState station)
+        {
+            int total = 0;
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != DataStorageBuildable) continue;
+                if (f.status != "complete") continue;
+                total += f.cargoCapacity;
+            }
+            return total;
         }
     }
 }
