@@ -40,21 +40,26 @@ namespace Waystation.Core
         [SerializeField] private string saveFileName = "waystation_save.json";
 
         // ── System references ─────────────────────────────────────────────────
-        public ContentRegistry   Registry       { get; private set; }
-        public ResourceSystem    Resources      { get; private set; }
-        public NPCSystem         Npcs           { get; private set; }
-        public JobSystem         Jobs           { get; private set; }
-        public FactionSystem     Factions       { get; private set; }
-        public CombatSystem      Combat         { get; private set; }
-        public TradeSystem       Trade          { get; private set; }
-        public EventSystem       Events         { get; private set; }
-        public InventorySystem   Inventory      { get; private set; }
-        public VisitorSystem     Visitors       { get; private set; }
-        public BuildingSystem    Building       { get; private set; }
-        public CommsSystem       Comms          { get; private set; }
-        public NetworkSystem     Networks       { get; private set; }
-        public MissionSystem     Missions       { get; private set; }
-        public RoomSystem        Rooms          { get; private set; }
+        public ContentRegistry      Registry       { get; private set; }
+        public ResourceSystem       Resources      { get; private set; }
+        public NPCSystem            Npcs           { get; private set; }
+        public JobSystem            Jobs           { get; private set; }
+        public FactionSystem        Factions       { get; private set; }
+        public CombatSystem         Combat         { get; private set; }
+        public TradeSystem          Trade          { get; private set; }
+        public EventSystem          Events         { get; private set; }
+        public InventorySystem      Inventory      { get; private set; }
+        public VisitorSystem        Visitors       { get; private set; }
+        public BuildingSystem       Building       { get; private set; }
+        public CommsSystem          Comms          { get; private set; }
+        public NetworkSystem        Networks       { get; private set; }
+        public MissionSystem        Missions       { get; private set; }
+        public RoomSystem           Rooms          { get; private set; }
+        // ── Mood & social systems ─────────────────────────────────────────────
+        public MoodSystem           Mood           { get; private set; }
+        public RelationshipRegistry Relationships  { get; private set; }
+        public ConversationSystem   Conversations  { get; private set; }
+        public ProximitySystem      Proximity      { get; private set; }
 
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
@@ -128,6 +133,23 @@ namespace Waystation.Core
             Networks  = new NetworkSystem(Registry);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+
+            // Mood & social systems
+            Mood          = new MoodSystem();
+            Relationships = new RelationshipRegistry();
+            Conversations = new ConversationSystem();
+            Proximity     = new ProximitySystem();
+
+            // Wire sleep/wake events from NPCSystem → MoodSystem
+            Npcs.OnNPCSleeps += npc => Mood.OnNPCSleeps(npc);
+            Npcs.OnNPCWakes  += npc => Mood.OnNPCWakes(npc);
+
+            // Log crisis events to the station log (requires station to be non-null,
+            // so we use a lambda that captures Station at fire time)
+            Mood.OnNpcEnteredCrisis       += npc => Station?.LogEvent(
+                $"{npc.name} is in crisis and has abandoned their duties.");
+            Mood.OnNpcRecoveredFromCrisis += npc => Station?.LogEvent(
+                $"{npc.name} has recovered from crisis and returned to work.");
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -221,6 +243,13 @@ namespace Waystation.Core
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+
+            // Mood & social systems (run after job assignment so crisis is set before
+            // next job tick, and after NPC needs so sleep state is current)
+            Mood.Tick(Station);
+            Proximity.Tick(Station, Mood, Relationships);
+            Conversations.Tick(Station, Mood, Relationships);
+            Relationships.Tick(Station, Mood);
 
             // Process events
             var newEvents = Events.Tick(Station);

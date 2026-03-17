@@ -80,6 +80,86 @@ namespace Waystation.Models
 
 
     // -------------------------------------------------------------------------
+    // Mood Modifier — a named, time-limited delta applied to an NPC's MoodScore
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class MoodModifierRecord
+    {
+        // Human-readable event identifier (e.g. "harvest_success", "proximity_friend")
+        public string eventId;
+        // The mood delta applied while this modifier is active (+/- 0–100 scale)
+        public float  delta;
+        // Game tick at which this modifier expires; -1 = permanent
+        public int    expiresAtTick;
+        // Optional source identifier used for deduplication (same eventId+source = refresh)
+        public string source;
+    }
+
+    // -------------------------------------------------------------------------
+    // Relationship Type — the categorical type of a bond between two NPCs
+    // -------------------------------------------------------------------------
+
+    public enum RelationshipType
+    {
+        None,           // Strangers (AffinityScore near 0)
+        Acquaintance,   // AffinityScore ≥ 5
+        Friend,         // AffinityScore ≥ 20
+        Enemy,          // AffinityScore ≤ -5
+        Lover,          // AffinityScore ≥ 40
+        Spouse          // AffinityScore ≥ 60, approved by player
+    }
+
+    // -------------------------------------------------------------------------
+    // Relationship Record — the bond between an ordered pair of NPCs
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class RelationshipRecord
+    {
+        // The two NPC uids that form this relationship (npcUid1 < npcUid2 lexically)
+        public string npcUid1;
+        public string npcUid2;
+        // Continuous affinity score: positive = friendly, negative = hostile
+        public float  affinityScore = 0f;
+        // Categorical type derived from affinityScore (or elevated by player action)
+        public RelationshipType relationshipType = RelationshipType.None;
+        // Game tick of last social interaction — used for decay
+        public int    lastInteractionTick = 0;
+        // True once a marriage event has been approved (suppresses further prompts)
+        public bool   married = false;
+        // True when a pending marriage event has been sent to the player notification queue
+        public bool   marriageEventPending = false;
+        // Tick at which marriage event was last fired (for re-fire interval)
+        public int    lastMarriageEventTick = -1;
+
+        /// <summary>
+        /// Returns a canonical string key for a pair, using lexicographic ordering
+        /// so (A,B) and (B,A) always resolve to the same record.
+        /// </summary>
+        public static string MakeKey(string uid1, string uid2)
+        {
+            return string.Compare(uid1, uid2, StringComparison.Ordinal) <= 0
+                ? $"{uid1}:{uid2}"
+                : $"{uid2}:{uid1}";
+        }
+
+        /// <summary>
+        /// Derives RelationshipType from the current affinityScore.
+        /// Spouse is preserved if already set (it requires player approval to set).
+        /// </summary>
+        public void UpdateTypeFromAffinity()
+        {
+            if (relationshipType == RelationshipType.Spouse) return;
+            if      (affinityScore >=  40f) relationshipType = RelationshipType.Lover;
+            else if (affinityScore >=  20f) relationshipType = RelationshipType.Friend;
+            else if (affinityScore >=   5f) relationshipType = RelationshipType.Acquaintance;
+            else if (affinityScore <=  -5f) relationshipType = RelationshipType.Enemy;
+            else                            relationshipType = RelationshipType.None;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // NPC Instance
     // -------------------------------------------------------------------------
 
@@ -135,6 +215,21 @@ namespace Waystation.Models
         public string sleepBedUid   = null;   // uid of claimed bed foundation
         public bool   isSleeping    = false;
         public string missionUid    = null;   // null when not on an away mission
+
+        // ── Mood & Relationships (MoodSystem) ─────────────────────────────────
+        // MoodScore: 0–100. 50 is baseline. Drifts toward 50 over waking hours.
+        // Separate from the needs-based `mood` float which drives the existing label.
+        public float moodScore             = 50f;
+        // Multiplier applied to job duration (higher mood = faster work).
+        // 1.05 = Thriving, 1.0 = Content, 0.95 = Struggling. Set by MoodSystem.
+        public float workModifier          = 1.0f;
+        // True when MoodScore has dropped below the crisis threshold (< 20).
+        // While in crisis the NPC abandons work and takes recreational tasks.
+        public bool  inCrisis              = false;
+        // Active timed mood modifiers (named deltas with expiry ticks)
+        public List<MoodModifierRecord> moodModifiers = new List<MoodModifierRecord>();
+        // Game tick of the last conversation this NPC completed (60-tick cooldown)
+        public int   lastConversationTick  = -99;
 
         public static NPCInstance Create(string templateId, string name,
                                          string classId, string subclassId = null)
@@ -652,6 +747,13 @@ namespace Waystation.Models
 
         // Crew departments
         public List<Department> departments = new List<Department>();
+
+        // NPC relationship records: keyed by RelationshipRecord.MakeKey(uid1, uid2)
+        public Dictionary<string, RelationshipRecord> relationships = new Dictionary<string, RelationshipRecord>();
+
+        // Pending marriage event notifications waiting for player acknowledgement.
+        // Each entry is a pair key (RelationshipRecord.MakeKey) of two NPCs.
+        public List<string> pendingMarriageEvents = new List<string>();
 
         // Rank name overrides — index corresponds to rank int (0–3).
         // Defaults: Crew, Officer, Senior Officer, Command.
