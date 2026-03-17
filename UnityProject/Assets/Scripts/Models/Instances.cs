@@ -387,6 +387,22 @@ namespace Waystation.Models
         // Visual operating state for machines ("standby"|"active"|"damaged"|"broken").
         public string operatingState = "standby";
 
+        // ── Farming / climate fields ─────────────────────────────────────────
+        // Hydroponics Planter Tile state (only used when buildableId == "buildable.hydroponics_planter")
+        public string cropId          = null;  // assigned CropDataDefinition.id; null = unassigned
+        public int    growthStage     = 0;     // 0=empty, 1=seedling, 2=established, 3=mature
+        public float  growthProgress  = 0f;   // 0–1 within current stage
+        public float  cropDamage      = 0f;   // 0–1; plant destroyed at 1.0
+
+        // Runtime sensor values updated each tick by FarmingSystem/TemperatureSystem
+        public float  lightLevel      = 0f;   // set by GrowLight above (0 = dark)
+        public float  tileTemperature = 20f;  // °C from TemperatureSystem
+        public bool   isWatered       = false; // set by FarmingSystem from pipe adjacency
+        public bool   isEnergised     = false; // set by FarmingSystem from wire adjacency
+
+        // Heater / Cooler target temperature (player-configurable via inspect menu)
+        public float  targetTemperature = 20f;
+
         // Room bonus — set by RoomSystem each tick.
         // hasRoomBonus is true when this workbench is in a fully-qualified bonus room.
         // roomBonusMultiplier is the skill output multiplier while the bonus is active.
@@ -592,6 +608,38 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // FarmingTaskInstance — a pending or active farming task for an NPC.
+    // Types: "sow" | "harvest" | "tend"
+    // Status lifecycle: "pending" → "in_progress" → "complete"
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class FarmingTaskInstance
+    {
+        public string uid;
+        public string taskType;         // "sow" | "harvest" | "tend"
+        public string planterUid;       // target FoundationInstance uid
+        public string cropId;           // crop to sow (sow tasks only; null for harvest/tend)
+        public string assignedNpcUid;   // null = unclaimed
+        public string status;           // "pending" | "in_progress" | "complete"
+        public int    progressTicks;    // ticks remaining until task completes (counts down)
+
+        public static FarmingTaskInstance Create(string type, string planterUid,
+                                                  string cropId = null, int ticks = 30)
+        {
+            return new FarmingTaskInstance
+            {
+                uid          = Guid.NewGuid().ToString("N")[..8],
+                taskType     = type,
+                planterUid   = planterUid,
+                cropId       = cropId,
+                status       = "pending",
+                progressTicks = ticks,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Station State
     // -------------------------------------------------------------------------
 
@@ -674,6 +722,21 @@ namespace Waystation.Models
 
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();
+
+        // ── Farming system ───────────────────────────────────────────────────
+        // Pending and in-progress farming tasks for NPC workers.
+        public List<FarmingTaskInstance> farmingTasks = new List<FarmingTaskInstance>();
+
+        // Per-room temperature (°C), keyed by canonical "minCol_minRow" room key.
+        // Populated and updated by TemperatureSystem. Default = 20°C when absent.
+        public Dictionary<string, float> roomTemperatures = new Dictionary<string, float>();
+
+        // Per-tile temperature (°C), keyed by "col_row". Used for tiles outside sealed rooms.
+        public Dictionary<string, float> tileTemperatures = new Dictionary<string, float>();
+
+        // Reverse mapping: tile "col_row" → canonical room key. Populated by RoomSystem.
+        // Runtime only — not serialised into saves.
+        public Dictionary<string, string> tileToRoomKey = new Dictionary<string, string>();
 
         public StationState(string name)
         {

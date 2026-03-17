@@ -51,6 +51,7 @@ namespace Waystation.Systems
             }
 
             station.roomBonusCache.Clear();
+            station.tileToRoomKey.Clear();
 
             // Flood-fill each unvisited floor tile to discover rooms
             var visited  = new HashSet<(int c, int r)>();
@@ -63,8 +64,24 @@ namespace Waystation.Systems
                 var roomTiles = FloodFillRoom(station, f.tileCol, f.tileRow);
                 foreach (var t in roomTiles) visited.Add(t);
 
+                // Compute canonical room key and populate the reverse mapping
+                if (roomTiles.Count > 0)
+                {
+                    int minC = int.MaxValue, minR = int.MaxValue;
+                    foreach (var t in roomTiles)
+                    {
+                        if (t.col < minC) minC = t.col;
+                        if (t.row < minR) minR = t.row;
+                    }
+                    string roomKey = $"{minC}_{minR}";
+                    foreach (var t in roomTiles)
+                        station.tileToRoomKey[$"{t.col}_{t.row}"] = roomKey;
+                }
+
                 EvaluateRoom(station, roomTiles);
             }
+
+            ClassifyGreenhouseRooms(station);
         }
 
         /// Returns all floor tiles connected to (startCol, startRow) via BFS,
@@ -125,6 +142,35 @@ namespace Waystation.Systems
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Any sealed room containing at least one Hydroponics Planter Tile is
+        /// classified as a Greenhouse and stored in station.roomRoles.
+        /// Rooms that lose all planters have the Greenhouse designation removed.
+        /// </summary>
+        private void ClassifyGreenhouseRooms(StationState station)
+        {
+            // Build set of room keys that contain planters
+            var greenhouseKeys = new HashSet<string>();
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != "buildable.hydroponics_planter") continue;
+                string tileKey = $"{f.tileCol}_{f.tileRow}";
+                if (station.tileToRoomKey.TryGetValue(tileKey, out var roomKey))
+                    greenhouseKeys.Add(roomKey);
+            }
+
+            // Remove old Greenhouse designations for rooms that no longer qualify
+            var toRemove = new System.Collections.Generic.List<string>();
+            foreach (var kv in station.roomRoles)
+                if (kv.Value == "Greenhouse" && !greenhouseKeys.Contains(kv.Key))
+                    toRemove.Add(kv.Key);
+            foreach (var k in toRemove) station.roomRoles.Remove(k);
+
+            // Apply Greenhouse to qualifying rooms
+            foreach (var key in greenhouseKeys)
+                station.roomRoles[key] = "Greenhouse";
+        }
 
         private void EvaluateRoom(StationState station, List<(int col, int row)> tiles)
         {

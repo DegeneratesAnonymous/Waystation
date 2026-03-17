@@ -640,4 +640,55 @@ namespace Waystation.Models
             return m;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // CropDataDefinition — static data for a growable crop type.
+    // Loaded from data/crops/*.json by ContentRegistry.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class CropDataDefinition
+    {
+        public string id;
+        public string cropName;
+        public string seedItemId;
+        public string harvestItemId;
+        public int    harvestQtyMin         = 1;
+        public int    harvestQtyMax         = 3;
+        public float  growthTimePerStage    = 60f;   // seconds at ideal conditions
+        public float  idealTempMin          = 18f;
+        public float  idealTempMax          = 28f;
+        public float  acceptableTempMin     = 10f;
+        public float  acceptableTempMax     = 35f;
+        public float  idealLightMin         = 0.6f;
+        public float  idealLightMax         = 1.0f;
+        public float  acceptableLightMin    = 0.3f;
+        public float  acceptableLightMax    = 1.0f;
+        public bool   requiresWater         = true;
+        public float  damagePerSecond       = 5f;    // % damage/tick under critical conditions
+
+        public static CropDataDefinition FromDict(Dictionary<string, object> raw)
+        {
+            return new CropDataDefinition
+            {
+                id                 = raw.GetString("id"),
+                cropName           = raw.GetString("crop_name", raw.GetString("id")),
+                seedItemId         = raw.GetString("seed_item_id"),
+                harvestItemId      = raw.GetString("harvest_item_id"),
+                harvestQtyMin      = raw.GetInt("harvest_qty_min", 1),
+                harvestQtyMax      = raw.GetInt("harvest_qty_max", 3),
+                growthTimePerStage = raw.GetFloat("growth_time_per_stage", 60f),
+                idealTempMin       = raw.GetFloat("ideal_temp_min", 18f),
+                idealTempMax       = raw.GetFloat("ideal_temp_max", 28f),
+                acceptableTempMin  = raw.GetFloat("acceptable_temp_min", 10f),
+                acceptableTempMax  = raw.GetFloat("acceptable_temp_max", 35f),
+                idealLightMin      = raw.GetFloat("ideal_light_min", 0.6f),
+                idealLightMax      = raw.GetFloat("ideal_light_max", 1.0f),
+                acceptableLightMin = raw.GetFloat("acceptable_light_min", 0.3f),
+                acceptableLightMax = raw.GetFloat("acceptable_light_max", 1.0f),
+                requiresWater      = raw.GetBool("requires_water", true),
+                damagePerSecond    = raw.GetFloat("damage_per_second", 5f),
+            };
+        }
+    }
 }
