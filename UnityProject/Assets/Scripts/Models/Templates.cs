@@ -481,6 +481,59 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Research enums and ResearchNodeDefinition
+    // -------------------------------------------------------------------------
+
+    public enum ResearchBranch { Military, Economics, Sciences }
+
+    public enum ResearchSubbranch
+    {
+        // Military
+        Defence, Offensive, Command,
+        // Economics
+        Production, Diplomacy, Entrepreneurship,
+        // Sciences
+        Physics, Material, Biological
+    }
+
+    [Serializable]
+    public class ResearchNodeDefinition
+    {
+        public string         id;
+        public string         displayName;
+        public string         description  = "";
+        public ResearchBranch    branch;
+        public ResearchSubbranch subbranch;
+        public int            pointCost    = 100;
+        public List<string>   prerequisites = new List<string>();
+        public List<string>   unlockTags    = new List<string>();
+
+        public static ResearchNodeDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var b = new ResearchNodeDefinition
+            {
+                id          = raw.GetString("id"),
+                displayName = raw.GetString("display_name", raw.GetString("id")),
+                description = raw.GetString("description", ""),
+                pointCost   = raw.GetInt("point_cost", 100),
+            };
+            b.branch    = Enum.TryParse<ResearchBranch>(   raw.GetString("branch"),    out var br) ? br : ResearchBranch.Sciences;
+            b.subbranch = Enum.TryParse<ResearchSubbranch>(raw.GetString("subbranch"), out var sr) ? sr : ResearchSubbranch.Physics;
+            foreach (var p in raw.GetStringList("prerequisites")) b.prerequisites.Add(p);
+            foreach (var t in raw.GetStringList("unlock_tags"))   b.unlockTags.Add(t);
+            return b;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Map enums
+    // -------------------------------------------------------------------------
+
+    public enum MapViewLevel { System, Sector, Quadrant, Galaxy }
+
+    public enum PoiType { Asteroid, TradePost, AbandonedStation, NebulaPocket }
+
+    // -------------------------------------------------------------------------
     // BuildableDefinition — static data for a placeable construction item.
     // Loaded from data/buildables/*.json by ContentRegistry.
     // -------------------------------------------------------------------------

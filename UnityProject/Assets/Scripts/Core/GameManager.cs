@@ -55,6 +55,9 @@ namespace Waystation.Core
         public NetworkSystem     Networks       { get; private set; }
         public MissionSystem     Missions       { get; private set; }
         public RoomSystem        Rooms          { get; private set; }
+        public ResearchSystem    Research       { get; private set; }
+        public MapSystem         Map            { get; private set; }
+        public AsteroidMissionSystem AsteroidMissions { get; private set; }
 
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
@@ -128,6 +131,9 @@ namespace Waystation.Core
             Networks  = new NetworkSystem(Registry);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+            Research  = new ResearchSystem(Registry);
+            Map       = new MapSystem(Registry);
+            AsteroidMissions = new AsteroidMissionSystem(Registry);
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -221,6 +227,9 @@ namespace Waystation.Core
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+            Research.Tick(Station);
+            Map.Tick(Station);
+            AsteroidMissions.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);

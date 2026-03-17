@@ -1,0 +1,142 @@
+[
+  {
+    "id": "research.military.hull_plating",
+    "display_name": "Hull Plating",
+    "description": "Reinforced hull segments reduce incoming damage.",
+    "branch": "Military",
+    "subbranch": "Defence",
+    "point_cost": 100,
+    "prerequisites": [],
+    "unlock_tags": ["tech.hull_plating"]
+  },
+  {
+    "id": "research.military.point_defense",
+    "display_name": "Point Defense",
+    "description": "Automated point-defense turrets intercept incoming projectiles.",
+    "branch": "Military",
+    "subbranch": "Defence",
+    "point_cost": 250,
+    "prerequisites": ["research.military.hull_plating"],
+    "unlock_tags": ["tech.point_defense"]
+  },
+  {
+    "id": "research.military.railgun",
+    "display_name": "Railgun Array",
+    "description": "Long-range kinetic weapons for offensive capability.",
+    "branch": "Military",
+    "subbranch": "Offensive",
+    "point_cost": 200,
+    "prerequisites": [],
+    "unlock_tags": ["tech.railgun"]
+  },
+  {
+    "id": "research.military.tactical_overlay",
+    "display_name": "Tactical Overlay",
+    "description": "Unlocks sector-level map view.",
+    "branch": "Military",
+    "subbranch": "Command",
+    "point_cost": 150,
+    "prerequisites": [],
+    "unlock_tags": ["tech.map_sector"]
+  },
+  {
+    "id": "research.military.strategic_command",
+    "display_name": "Strategic Command",
+    "description": "Unlocks quadrant-level map view.",
+    "branch": "Military",
+    "subbranch": "Command",
+    "point_cost": 400,
+    "prerequisites": ["research.military.tactical_overlay"],
+    "unlock_tags": ["tech.map_quadrant"]
+  },
+  {
+    "id": "research.economics.advanced_fabrication",
+    "display_name": "Advanced Fabrication",
+    "description": "Improved manufacturing yields more parts per cycle.",
+    "branch": "Economics",
+    "subbranch": "Production",
+    "point_cost": 100,
+    "prerequisites": [],
+    "unlock_tags": ["tech.advanced_fabrication"]
+  },
+  {
+    "id": "research.economics.mass_production",
+    "display_name": "Mass Production",
+    "description": "Assembly line techniques double output efficiency.",
+    "branch": "Economics",
+    "subbranch": "Production",
+    "point_cost": 300,
+    "prerequisites": ["research.economics.advanced_fabrication"],
+    "unlock_tags": ["tech.mass_production"]
+  },
+  {
+    "id": "research.economics.open_trade",
+    "display_name": "Open Trade Protocols",
+    "description": "Establishes standardised trade agreements, improving credit income.",
+    "branch": "Economics",
+    "subbranch": "Diplomacy",
+    "point_cost": 120,
+    "prerequisites": [],
+    "unlock_tags": ["tech.open_trade"]
+  },
+  {
+    "id": "research.economics.market_analysis",
+    "display_name": "Market Analysis",
+    "description": "Station economists predict demand cycles, increasing trade profits.",
+    "branch": "Economics",
+    "subbranch": "Entrepreneurship",
+    "point_cost": 180,
+    "prerequisites": ["research.economics.open_trade"],
+    "unlock_tags": ["tech.market_analysis"]
+  },
+  {
+    "id": "research.sciences.propulsion",
+    "display_name": "Advanced Propulsion",
+    "description": "Upgraded thruster designs for faster shuttle transit.",
+    "branch": "Sciences",
+    "subbranch": "Physics",
+    "point_cost": 150,
+    "prerequisites": [],
+    "unlock_tags": ["tech.advanced_propulsion"]
+  },
+  {
+    "id": "research.sciences.galaxy_nav",
+    "display_name": "Galactic Navigation",
+    "description": "Long-range navigation charts, unlocking galaxy-level map view.",
+    "branch": "Sciences",
+    "subbranch": "Physics",
+    "point_cost": 600,
+    "prerequisites": ["research.sciences.propulsion", "research.military.strategic_command"],
+    "unlock_tags": ["tech.map_galaxy"]
+  },
+  {
+    "id": "research.sciences.alloy_composition",
+    "display_name": "Alloy Composition",
+    "description": "New alloy formulas increase hull strength.",
+    "branch": "Sciences",
+    "subbranch": "Material",
+    "point_cost": 130,
+    "prerequisites": [],
+    "unlock_tags": ["tech.alloy_composition"]
+  },
+  {
+    "id": "research.sciences.hydroponics",
+    "display_name": "Advanced Hydroponics",
+    "description": "Efficient growing techniques increase food yield.",
+    "branch": "Sciences",
+    "subbranch": "Biological",
+    "point_cost": 100,
+    "prerequisites": [],
+    "unlock_tags": ["tech.hydroponics"]
+  },
+  {
+    "id": "research.sciences.xenobiology",
+    "display_name": "Xenobiology",
+    "description": "Alien biology research opens new treatment options.",
+    "branch": "Sciences",
+    "subbranch": "Biological",
+    "point_cost": 280,
+    "prerequisites": ["research.sciences.hydroponics"],
+    "unlock_tags": ["tech.xenobiology"]
+  }
+]

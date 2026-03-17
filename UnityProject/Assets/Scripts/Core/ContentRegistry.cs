@@ -24,6 +24,7 @@ namespace Waystation.Core
         public Dictionary<string, BuildableDefinition> Buildables { get; private set; } = new Dictionary<string, BuildableDefinition>();
         public Dictionary<string, MissionDefinition>Missions   { get; private set; } = new Dictionary<string, MissionDefinition>();
         public Dictionary<string, RoomTypeDefinition> RoomTypes  { get; private set; } = new Dictionary<string, RoomTypeDefinition>();
+        public Dictionary<string, ResearchNodeDefinition> ResearchNodes { get; private set; } = new Dictionary<string, ResearchNodeDefinition>();
 
         public bool   IsLoaded  { get; private set; }
         public int    ErrorCount => _errors.Count;
@@ -57,11 +58,13 @@ namespace Waystation.Core
             yield return StartCoroutine(LoadFolder(dataRoot, "buildables", LoadBuildable));
             yield return StartCoroutine(LoadFolder(dataRoot, "missions",   LoadMission));
             yield return StartCoroutine(LoadFolder(dataRoot, "rooms",      LoadRoomType));
+            yield return StartCoroutine(LoadFolder(dataRoot, "research",   LoadResearchNode));
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
                       $"ships:{Ships.Count} classes:{Classes.Count} factions:{Factions.Count} " +
                       $"modules:{Modules.Count} items:{Items.Count} jobs:{Jobs.Count} " +
-                      $"buildables:{Buildables.Count} missions:{Missions.Count} roomTypes:{RoomTypes.Count}");
+                      $"buildables:{Buildables.Count} missions:{Missions.Count} " +
+                      $"roomTypes:{RoomTypes.Count} researchNodes:{ResearchNodes.Count}");
         }
 
         // ── Folder loader ────────────────────────────────────────────────────
@@ -108,6 +111,7 @@ namespace Waystation.Core
         private void LoadJob      (Dictionary<string, object> d) => Jobs      [d.GetString("id")] = JobDefinition      .FromDict(d);
         private void LoadBuildable(Dictionary<string, object> d) => Buildables[d.GetString("id")] = BuildableDefinition.FromDict(d);
         private void LoadMission  (Dictionary<string, object> d) => Missions  [d.GetString("id")] = MissionDefinition  .FromDict(d);
+        private void LoadResearchNode(Dictionary<string, object> d) => ResearchNodes[d.GetString("id")] = ResearchNodeDefinition.FromDict(d);
         private void LoadRoomType(Dictionary<string, object> d)
         {
             var rt = new RoomTypeDefinition
@@ -148,7 +152,8 @@ namespace Waystation.Core
         public string Summary() =>
             $"events:{Events.Count} npcs:{Npcs.Count} ships:{Ships.Count} " +
             $"classes:{Classes.Count} factions:{Factions.Count} modules:{Modules.Count} " +
-            $"items:{Items.Count} jobs:{Jobs.Count} buildables:{Buildables.Count}" +
+            $"items:{Items.Count} jobs:{Jobs.Count} buildables:{Buildables.Count} " +
+            $"researchNodes:{ResearchNodes.Count}" +
             (_errors.Count > 0 ? $" | errors:{_errors.Count}" : "");
 
         public IReadOnlyList<string> Errors() => _errors;
