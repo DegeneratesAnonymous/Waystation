@@ -66,8 +66,10 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Regenerate (or refresh) the POI map.  The set of POIs is seeded from the
-        /// station name hash so the same station always produces the same layout.
+        /// Regenerate (or refresh) the POI map.  The layout is seeded from the station
+        /// name hash combined with an era counter (tick / RegenInterval) so that the same
+        /// station produces a consistent set of POIs within each era but refreshes them
+        /// every ~48 ticks as the player's map view level expands.
         /// </summary>
         public void GeneratePois(StationState station)
         {

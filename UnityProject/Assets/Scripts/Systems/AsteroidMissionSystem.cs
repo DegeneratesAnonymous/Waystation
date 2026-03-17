@@ -125,7 +125,8 @@ namespace Waystation.Systems
             int iceYield  = Mathf.RoundToInt(iceTiles * YieldFractionPerCrew * crewCount);
 
             // Add resources.
-            station.ModifyResource("parts", oreYield);  // ore refines to parts
+            // Ore tiles yield parts (refined in the shuttle en-route); ice tiles yield raw ice.
+            station.ModifyResource("parts", oreYield);
             station.ModifyResource("ice",   iceYield);
 
             map.extractedResources["parts"] = oreYield;

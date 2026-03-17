@@ -322,7 +322,22 @@ namespace Waystation.Core
         {
             if (Station == null) return;
             string path = Path.Combine(Application.persistentDataPath, saveFileName);
-            var data    = new Dictionary<string, object>
+
+            // Serialise ResearchState: one entry per branch with points + unlocked node ids.
+            var researchData = new Dictionary<string, object>();
+            if (Station.research != null)
+            {
+                foreach (var kv in Station.research.branches)
+                {
+                    researchData[kv.Key.ToString()] = new Dictionary<string, object>
+                    {
+                        { "points",   kv.Value.points },
+                        { "unlocked", new List<string>(kv.Value.unlockedNodeIds) },
+                    };
+                }
+            }
+
+            var data = new Dictionary<string, object>
             {
                 { "station_name",         Station.stationName },
                 { "tick",                 Station.tick },
@@ -332,7 +347,8 @@ namespace Waystation.Core
                 { "policy",               Station.policy },
                 { "event_cooldowns",      Station.eventCooldowns },
                 { "log",                  Station.log },
-                { "custom_room_names",    Station.customRoomNames }
+                { "custom_room_names",    Station.customRoomNames },
+                { "research",             researchData },
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));
