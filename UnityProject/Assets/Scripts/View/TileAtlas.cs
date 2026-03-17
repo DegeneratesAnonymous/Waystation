@@ -57,6 +57,7 @@ namespace Waystation.View
         private static Sprite[] _ductCache;     // [16] topology mask 0-15
         private static Dictionary<string, Sprite> _iceRefinerCache; // 15 named variants
         private static Sprite[] _bedCache;      // [4] rotation steps (0/90/180/270)
+        private static Dictionary<string, Sprite> _generatorCache; // keyed by state id
 
         // ── Public accessors ──────────────────────────────────────────────────
         public static Sprite GetFloor(int variant)
@@ -118,12 +119,13 @@ namespace Waystation.View
             if (buildableId.Contains("storage_cabinet")) return GetCabinet(rotation, 0f);
             if (buildableId.Contains("battery"))         return GetBattery();
             if (buildableId.Contains("door"))            return GetDoorHFrames()[0];
-            if (buildableId.Contains("wall"))            return GetWall(0);
+            if (buildableId.Contains("wall"))            return GetWallAtlas("straight_ew");
             if (buildableId.Contains("wire"))            return GetWire(0xF);
             if (buildableId.Contains("pipe"))            return GetPipe(0xF, "normal");
             if (buildableId.Contains("duct"))            return GetDuct(0xF);
             if (buildableId.Contains("ice_refiner"))     return GetIceRefiner("standby");
             if (buildableId.Contains("bed"))             return GetBed(0);
+            if (buildableId.Contains("generator"))       return GetGenerator("normal");
             return GetFloor(0);
         }
 
@@ -216,6 +218,125 @@ namespace Waystation.View
                 for (int r = 0; r < 4; r++) _bedCache[r] = MakeBed(r);
             }
             return _bedCache[Mathf.Clamp(rotation / 90, 0, 3)];
+        }
+
+        // ── Generator sprites (128×128 px, 2×2 world units) ──────────────────
+
+        /// <summary>
+        /// Returns the generator sprite for the given state.
+        /// state: "normal" | "damaged" | "destroyed".
+        /// Loaded from the sliced atlas at Resources/Buildables/generator_atlas.
+        /// Falls back to "normal" for unknown states.
+        /// </summary>
+        public static Sprite GetGenerator(string state = "normal")
+        {
+            if (_generatorCache == null)
+            {
+                _generatorCache = new Dictionary<string, Sprite>();
+                // Resources.LoadAll returns all sprite slices of the atlas by their name.
+                // The atlas lives at Assets/Art/Tiles/Resources/Buildables/generator_atlas.png
+                // which maps to runtime path "Buildables/generator_atlas".
+                Sprite[] slices = Resources.LoadAll<Sprite>("Buildables/generator_atlas");
+                foreach (var s in slices)
+                    _generatorCache[s.name] = s;
+            }
+            string key = "prop_generator_" + state;
+            if (_generatorCache.TryGetValue(key, out var sprite)) return sprite;
+            if (_generatorCache.TryGetValue("prop_generator_normal", out var fallback)) return fallback;
+            return null;
+        }
+
+        // ── Wall atlas sprites ───────────────────────────────────────────────
+
+        private static Dictionary<string, Sprite> _wallAtlasCache;
+
+        /// <summary>
+        /// Returns a wall sprite from the atlas by connectivity shape and health state.
+        /// shape: "straight_ew" | "straight_ns" | "corner_ne" | "corner_nw" | "corner_se" |
+        ///        "corner_sw" | "tjunc_n" | "tjunc_s" | "tjunc_e" | "tjunc_w" | "cross" |
+        ///        "endcap_n" | "endcap_s" | "endcap_e" | "endcap_w"
+        /// state: "normal" | "damaged" | "destroyed"
+        /// Falls back to procedural sprite if the atlas is unavailable.
+        /// </summary>
+        public static Sprite GetWallAtlas(string shapeId, string state = "normal")
+        {
+            if (_wallAtlasCache == null)
+            {
+                _wallAtlasCache = new Dictionary<string, Sprite>();
+
+                // Try the primary path under the Art/Tiles/Resources folder.
+                Sprite[] slices = Resources.LoadAll<Sprite>("Walls/wall_metal_atlas");
+
+                // Some Unity versions return an empty array for the bare texture name;
+                // try loading the texture explicitly then pulling its sub-assets.
+                if (slices == null || slices.Length == 0)
+                {
+                    var tex = Resources.Load<Texture2D>("Walls/wall_metal_atlas");
+                    if (tex != null)
+                        slices = Resources.LoadAll<Sprite>("Walls/wall_metal_atlas");
+                }
+
+                if (slices != null)
+                    foreach (var s in slices)
+                        _wallAtlasCache[s.name] = s;
+
+                if (_wallAtlasCache.Count == 0)
+                    Debug.LogWarning("[TileAtlas] Wall atlas not found at Resources/Walls/wall_metal_atlas" +
+                        " — reimport the PNG in Unity or check the Resources folder path." +
+                        " Walls will use the procedural flat-block fallback.");
+                else
+                    Debug.Log($"[TileAtlas] Wall atlas loaded: {_wallAtlasCache.Count} sprites.");
+            }
+            string key = "wall_" + shapeId + "_" + state;
+            if (_wallAtlasCache.TryGetValue(key, out var sprite)) return sprite;
+            // Fallback: try normal state of the same shape
+            string normalKey = "wall_" + shapeId + "_normal";
+            if (_wallAtlasCache.TryGetValue(normalKey, out var normFallback)) return normFallback;
+            // Last resort: solid EW straight
+            if (_wallAtlasCache.TryGetValue("wall_straight_ew_normal", out var def)) return def;
+            return GetWall(0); // procedural fallback if atlas not yet loaded
+        }
+
+        // ── Base wall tile (wall_base.png — normal / damaged / destroyed) ────
+        private static Dictionary<string, Sprite> _wallBaseCache;
+
+        public static Sprite GetWallBase(string state = "normal")
+        {
+            if (_wallBaseCache == null)
+            {
+                _wallBaseCache = new Dictionary<string, Sprite>();
+                Sprite[] slices = Resources.LoadAll<Sprite>("Walls/wall_base");
+                if (slices != null)
+                    foreach (var s in slices) _wallBaseCache[s.name] = s;
+
+                if (_wallBaseCache.Count == 0)
+                    Debug.LogWarning("[TileAtlas] wall_base not found at Resources/Walls/wall_base" +
+                        " — reimport the PNG or check the Resources path. Using procedural fallback.");
+            }
+            if (_wallBaseCache.TryGetValue("wall_base_" + state, out var sprite)) return sprite;
+            if (_wallBaseCache.TryGetValue("wall_base_normal",   out var norm))   return norm;
+            return GetWall(0);
+        }
+
+        // ── Wall overlay strips (wall_overlays.png — 9 face combos) ──────────
+        // IDs: ov_n · ov_s · ov_e · ov_w · ov_ne · ov_nw · ov_se · ov_sw · ov_cross
+        private static Dictionary<string, Sprite> _wallOverlayCache;
+
+        public static Sprite GetWallOverlay(string id)
+        {
+            if (_wallOverlayCache == null)
+            {
+                _wallOverlayCache = new Dictionary<string, Sprite>();
+                Sprite[] slices = Resources.LoadAll<Sprite>("Walls/wall_overlays");
+                if (slices != null)
+                    foreach (var s in slices) _wallOverlayCache[s.name] = s;
+
+                if (_wallOverlayCache.Count == 0)
+                    Debug.LogWarning("[TileAtlas] wall_overlays not found at Resources/Walls/wall_overlays" +
+                        " — reimport the PNG or check the Resources path.");
+            }
+            _wallOverlayCache.TryGetValue(id, out var sprite);
+            return sprite; // null = caller skips
         }
 
         private static void EnsureCache()

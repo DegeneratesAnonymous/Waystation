@@ -1,0 +1,471 @@
+{
+  "atlas": "wall_metal_atlas.png",
+  "tile_size": {
+    "w": 64,
+    "h": 64
+  },
+  "slot_size": {
+    "w": 66,
+    "h": 66
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "wall",
+  "layout": {
+    "cols": "shapes (0=straight_ew..14=endcap_w)",
+    "rows": "states (0=normal,1=damaged,2=destroyed)"
+  },
+  "tiles": [
+    {
+      "id": "wall_straight_ew_normal",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "wall",
+        "straight_ew",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_straight_ew_damaged",
+      "col": 0,
+      "row": 1,
+      "tags": [
+        "wall",
+        "straight_ew",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_straight_ew_destroyed",
+      "col": 0,
+      "row": 2,
+      "tags": [
+        "wall",
+        "straight_ew",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_straight_ns_normal",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "wall",
+        "straight_ns",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_straight_ns_damaged",
+      "col": 1,
+      "row": 1,
+      "tags": [
+        "wall",
+        "straight_ns",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_straight_ns_destroyed",
+      "col": 1,
+      "row": 2,
+      "tags": [
+        "wall",
+        "straight_ns",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_corner_ne_normal",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "wall",
+        "corner_ne",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_corner_ne_damaged",
+      "col": 2,
+      "row": 1,
+      "tags": [
+        "wall",
+        "corner_ne",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_corner_ne_destroyed",
+      "col": 2,
+      "row": 2,
+      "tags": [
+        "wall",
+        "corner_ne",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_corner_nw_normal",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "wall",
+        "corner_nw",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_corner_nw_damaged",
+      "col": 3,
+      "row": 1,
+      "tags": [
+        "wall",
+        "corner_nw",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_corner_nw_destroyed",
+      "col": 3,
+      "row": 2,
+      "tags": [
+        "wall",
+        "corner_nw",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_corner_se_normal",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "wall",
+        "corner_se",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_corner_se_damaged",
+      "col": 4,
+      "row": 1,
+      "tags": [
+        "wall",
+        "corner_se",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_corner_se_destroyed",
+      "col": 4,
+      "row": 2,
+      "tags": [
+        "wall",
+        "corner_se",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_corner_sw_normal",
+      "col": 5,
+      "row": 0,
+      "tags": [
+        "wall",
+        "corner_sw",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_corner_sw_damaged",
+      "col": 5,
+      "row": 1,
+      "tags": [
+        "wall",
+        "corner_sw",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_corner_sw_destroyed",
+      "col": 5,
+      "row": 2,
+      "tags": [
+        "wall",
+        "corner_sw",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_tjunc_n_normal",
+      "col": 6,
+      "row": 0,
+      "tags": [
+        "wall",
+        "tjunc_n",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_tjunc_n_damaged",
+      "col": 6,
+      "row": 1,
+      "tags": [
+        "wall",
+        "tjunc_n",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_tjunc_n_destroyed",
+      "col": 6,
+      "row": 2,
+      "tags": [
+        "wall",
+        "tjunc_n",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_tjunc_s_normal",
+      "col": 7,
+      "row": 0,
+      "tags": [
+        "wall",
+        "tjunc_s",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_tjunc_s_damaged",
+      "col": 7,
+      "row": 1,
+      "tags": [
+        "wall",
+        "tjunc_s",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_tjunc_s_destroyed",
+      "col": 7,
+      "row": 2,
+      "tags": [
+        "wall",
+        "tjunc_s",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_tjunc_e_normal",
+      "col": 8,
+      "row": 0,
+      "tags": [
+        "wall",
+        "tjunc_e",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_tjunc_e_damaged",
+      "col": 8,
+      "row": 1,
+      "tags": [
+        "wall",
+        "tjunc_e",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_tjunc_e_destroyed",
+      "col": 8,
+      "row": 2,
+      "tags": [
+        "wall",
+        "tjunc_e",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_tjunc_w_normal",
+      "col": 9,
+      "row": 0,
+      "tags": [
+        "wall",
+        "tjunc_w",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_tjunc_w_damaged",
+      "col": 9,
+      "row": 1,
+      "tags": [
+        "wall",
+        "tjunc_w",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_tjunc_w_destroyed",
+      "col": 9,
+      "row": 2,
+      "tags": [
+        "wall",
+        "tjunc_w",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_cross_normal",
+      "col": 10,
+      "row": 0,
+      "tags": [
+        "wall",
+        "cross",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_cross_damaged",
+      "col": 10,
+      "row": 1,
+      "tags": [
+        "wall",
+        "cross",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_cross_destroyed",
+      "col": 10,
+      "row": 2,
+      "tags": [
+        "wall",
+        "cross",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_endcap_n_normal",
+      "col": 11,
+      "row": 0,
+      "tags": [
+        "wall",
+        "endcap_n",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_endcap_n_damaged",
+      "col": 11,
+      "row": 1,
+      "tags": [
+        "wall",
+        "endcap_n",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_endcap_n_destroyed",
+      "col": 11,
+      "row": 2,
+      "tags": [
+        "wall",
+        "endcap_n",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_endcap_s_normal",
+      "col": 12,
+      "row": 0,
+      "tags": [
+        "wall",
+        "endcap_s",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_endcap_s_damaged",
+      "col": 12,
+      "row": 1,
+      "tags": [
+        "wall",
+        "endcap_s",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_endcap_s_destroyed",
+      "col": 12,
+      "row": 2,
+      "tags": [
+        "wall",
+        "endcap_s",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_endcap_e_normal",
+      "col": 13,
+      "row": 0,
+      "tags": [
+        "wall",
+        "endcap_e",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_endcap_e_damaged",
+      "col": 13,
+      "row": 1,
+      "tags": [
+        "wall",
+        "endcap_e",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_endcap_e_destroyed",
+      "col": 13,
+      "row": 2,
+      "tags": [
+        "wall",
+        "endcap_e",
+        "state:destroyed"
+      ]
+    },
+    {
+      "id": "wall_endcap_w_normal",
+      "col": 14,
+      "row": 0,
+      "tags": [
+        "wall",
+        "endcap_w",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_endcap_w_damaged",
+      "col": 14,
+      "row": 1,
+      "tags": [
+        "wall",
+        "endcap_w",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "wall_endcap_w_destroyed",
+      "col": 14,
+      "row": 2,
+      "tags": [
+        "wall",
+        "endcap_w",
+        "state:destroyed"
+      ]
+    }
+  ]
+}

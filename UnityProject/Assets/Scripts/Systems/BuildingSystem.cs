@@ -176,6 +176,30 @@ namespace Waystation.Systems
         }
 
         /// <summary>
+        /// Unconditionally removes a foundation regardless of its build status.
+        /// Used by Ctrl+Z undo — bypasses the "complete" guard in CancelFoundation.
+        /// </summary>
+        public void UndoFoundation(StationState station, string foundationUid)
+        {
+            if (!station.foundations.TryGetValue(foundationUid, out var foundation))
+                return;
+
+            // Release any assigned engineer
+            if (foundation.assignedNpcUid != null &&
+                station.npcs.TryGetValue(foundation.assignedNpcUid, out var npc) &&
+                npc.currentJobId == BuildJobId)
+            {
+                npc.currentJobId = null;
+            }
+
+            station.foundations.Remove(foundationUid);
+            _registry.Buildables.TryGetValue(foundation.buildableId, out var defn);
+            string name = defn != null ? defn.displayName : foundation.buildableId;
+            station.LogEvent($"Undo: removed {name}.");
+            Debug.Log($"[BuildingSystem] Undo removed foundation {foundationUid}.");
+        }
+
+        /// <summary>
         /// Check whether a buildable can be placed on the station right now.
         /// Validates required_tags and required_skills (at least one crew member
         /// must meet every skill requirement).

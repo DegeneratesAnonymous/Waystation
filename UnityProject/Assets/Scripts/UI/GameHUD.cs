@@ -179,6 +179,18 @@ namespace Waystation.UI
             IsMouseOverDrawer = overRight || overLeft;
             InBuildMode       = _ghostBuildableId != null || _deconstructMode;
 
+            // ── Ctrl+Z — undo last placement ────────────────────────────────────────────────
+            if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                && Input.GetKeyDown(KeyCode.Z)
+                && _undoStack.Count > 0 && _gm?.Station != null)
+            {
+                var toUndo = _undoStack.Pop();
+                foreach (var uid in toUndo)
+                    _gm.Building.UndoFoundation(_gm.Station, uid);
+                _gm.Networks.RebuildNetworks(_gm.Station);
+                StationRoomView.Instance?.ForceRefreshFoundations();
+            }
+
             // ── Deconstruct mode ──────────────────────────────────────────────
             if (_deconstructMode && _ghostBuildableId == null)
             {
@@ -258,12 +270,25 @@ namespace Waystation.UI
             // Commit on mouse-up: place all valid tiles, then keep ghost active
             if (Input.GetMouseButtonUp(0) && _isDragging)
             {
+                // Snapshot all existing UIDs before placing so we can capture
+                // auto-placed floors (and any other side-effect foundations) in
+                // the undo entry, not just the primary placement UIDs.
+                var beforeUids = new System.Collections.Generic.HashSet<string>(
+                    _gm.Station.foundations.Keys);
+
                 foreach (var (col, row) in _dragLine)
                 {
                     if (!_dragBlocked.Contains((col, row)))
                         _gm.Building.PlaceFoundation(
                             _gm.Station, _ghostBuildableId, col, row, _ghostRotation);
                 }
+
+                // Everything that wasn't there before is undoable as one group.
+                var allNew = new List<string>();
+                foreach (var k in _gm.Station.foundations.Keys)
+                    if (!beforeUids.Contains(k)) allNew.Add(k);
+                if (allNew.Count > 0) _undoStack.Push(allNew);
+
                 _gm.Networks.RebuildNetworks(_gm.Station);
                 _isDragging = false;
                 _dragLine.Clear();
@@ -290,8 +315,8 @@ namespace Waystation.UI
 
             Sprite spr = placing ? TileAtlas.GetPreviewSprite(_ghostBuildableId, _ghostRotation) : null;
 
-            // 2-tile-wide objects (bed, battery, ice_refiner) must have their ghost
-            // centred between the two tiles they occupy, i.e. offset +0.5 in X.
+            // All multi-tile sprites use centre pivot; offset the ghost so its centre
+            // aligns with the centre of the footprint in tile-centre coordinates.
             float ghostXOff = 0f;
             float ghostYOff = 0f;
             int   ghostTW   = 1, ghostTH = 1;
@@ -496,13 +521,6 @@ namespace Waystation.UI
                         }
                     }
 
-                    // Label anchored to the cursor tile
-                    Vector3 sp     = ghostCam.WorldToScreenPoint(new Vector3(_ghostTileCol, _ghostTileRow, 0f));
-                    Vector3 spNext = ghostCam.WorldToScreenPoint(new Vector3(_ghostTileCol + 1, _ghostTileRow, 0f));
-                    float   pxSize = Mathf.Abs(spNext.x - sp.x);
-                    float   guiX   = sp.x - pxSize * 0.5f;
-                    float   guiY   = Screen.height - sp.y - pxSize * 0.5f;
-
                     string bName = (_gm?.Registry?.Buildables != null &&
                                     _gm.Registry.Buildables.TryGetValue(_ghostBuildableId, out var gd))
                                    ? gd.displayName : _ghostBuildableId;
@@ -518,7 +536,8 @@ namespace Waystation.UI
                     {
                         hint = $"{bName}  {_ghostRotation}°  ·  Q ↺  E ↻  drag=line  Shift+drag=rect  ·  RMB cancel";
                     }
-                    GUI.Label(new Rect(guiX - 80f, guiY - 22f, 350f, 18f), hint, _sSub);
+                    // Fixed bottom-left position instead of following the cursor
+                    GUI.Label(new Rect(12f, Screen.height - 28f, 480f, 20f), hint, _sSub);
                 }
             }
         }
@@ -647,6 +666,9 @@ namespace Waystation.UI
 
         // World-space SpriteRenderer GOs that render the actual buildable tile as a ghost.
         private readonly List<GameObject> _ghostPool = new List<GameObject>();
+
+        // Undo stack: each entry is the list of UIDs placed in one placement action.
+        private readonly Stack<List<string>> _undoStack = new Stack<List<string>>();
 
         // True when cursor is over the HUD — used by CameraController to block map scroll/pan
         public static bool IsMouseOverDrawer { get; private set; }

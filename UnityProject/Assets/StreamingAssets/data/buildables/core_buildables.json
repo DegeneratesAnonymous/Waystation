@@ -142,7 +142,9 @@
             "electrical": 1
         },
         "required_tags": [],
-        "size": 1,
+        "size": 4,
+        "tile_width": 2,
+        "tile_height": 2,
         "max_health": 150,
         "power_output": 20,
         "schema_version": "1"
