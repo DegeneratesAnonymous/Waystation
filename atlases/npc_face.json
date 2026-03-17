@@ -1,0 +1,61 @@
+{
+  "atlas": "npc_face.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc",
+  "tiles": [
+    {
+      "id": "npc_face_neutral",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "face",
+        "expression:neutral",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_face_stern",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "face",
+        "expression:stern",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_face_weary",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "face",
+        "expression:weary",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_face_alert",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "face",
+        "expression:alert",
+        "state:normal"
+      ]
+    }
+  ]
+}

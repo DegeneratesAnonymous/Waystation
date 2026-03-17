@@ -1,0 +1,317 @@
+{
+  "atlas": "npc_shirt.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc",
+  "tiles": [
+    {
+      "id": "npc_shirt_tshirt_grey",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tshirt_blue",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tshirt_green",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tshirt_red",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tshirt_brown",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_collar_grey",
+      "col": 5,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_collar_blue",
+      "col": 6,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_collar_green",
+      "col": 7,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_collar_red",
+      "col": 8,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_collar_brown",
+      "col": 9,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform_grey",
+      "col": 10,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform_blue",
+      "col": 11,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform_green",
+      "col": 12,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform_red",
+      "col": 13,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform_brown",
+      "col": 14,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_vest_grey",
+      "col": 15,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_vest_blue",
+      "col": 16,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_vest_green",
+      "col": 17,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_vest_red",
+      "col": 18,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_vest_brown",
+      "col": 19,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tank_grey",
+      "col": 20,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tank_blue",
+      "col": 21,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tank_green",
+      "col": 22,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tank_red",
+      "col": 23,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_shirt_tank_brown",
+      "col": 24,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "color:brown",
+        "state:normal"
+      ]
+    }
+  ]
+}
