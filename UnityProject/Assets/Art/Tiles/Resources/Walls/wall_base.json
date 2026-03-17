@@ -1,0 +1,11 @@
+{
+  "tile_size": { "w": 64, "h": 64 },
+  "slot_size": { "w": 66, "h": 66 },
+  "padding": 1,
+  "pivot": "center",
+  "tiles": [
+    { "id": "wall_base_normal",    "col": 0, "row": 0 },
+    { "id": "wall_base_damaged",   "col": 1, "row": 0 },
+    { "id": "wall_base_destroyed", "col": 2, "row": 0 }
+  ]
+}

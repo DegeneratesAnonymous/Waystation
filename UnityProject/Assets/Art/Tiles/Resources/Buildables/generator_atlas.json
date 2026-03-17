@@ -1,0 +1,47 @@
+{
+  "atlas": "generator_atlas.png",
+  "tile_size": {
+    "w": 128,
+    "h": 128
+  },
+  "slot_size": {
+    "w": 130,
+    "h": 130
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "prop",
+  "tiles": [
+    {
+      "id": "prop_generator_normal",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "prop",
+        "generator",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "prop_generator_damaged",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "prop",
+        "generator",
+        "state:damaged"
+      ]
+    },
+    {
+      "id": "prop_generator_destroyed",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "prop",
+        "generator",
+        "state:destroyed"
+      ]
+    }
+  ]
+}

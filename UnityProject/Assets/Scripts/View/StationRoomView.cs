@@ -472,7 +472,7 @@ namespace Waystation.View
                 }
                 else // wall (corner, edge — directional tile selected by position)
                 {
-                    var wallGO = PlaceTile(root.transform, c, r, GetWallSprite(c, r), 0f, sortOrder: 40);
+                    var wallGO = PlaceTile(root.transform, c, r, GetWallSprite(c, r), GetWallRotation(c, r), sortOrder: 40);
                     _tileAt[(c, r)] = wallGO.GetComponent<SpriteRenderer>();
                 }
             }
@@ -502,6 +502,14 @@ namespace Waystation.View
         }
 
         // ── Foundation tile rendering ─────────────────────────────────────────
+
+        /// <summary>
+        /// Immediately syncs rendered GOs with station.foundations without waiting
+        /// for the next game tick.  Called after Ctrl+Z undo so removed foundations
+        /// disappear from the view straight away.
+        /// </summary>
+        public void ForceRefreshFoundations() => RebuildFoundationTiles();
+
         private void RebuildFoundationTiles()
         {
             if (_gm?.Station == null || _foundRoot == null) return;
@@ -568,7 +576,7 @@ namespace Waystation.View
                 else if (isWall)
                 {
                     var go = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
-                        GetWallSprite(f.tileCol, f.tileRow), 0f, sortOrder: 40);
+                        GetWallSprite(f.tileCol, f.tileRow, f), GetWallRotation(f.tileCol, f.tileRow), sortOrder: 40);
                     _foundTiles[kv.Key] = go;
                     _tileAt[(f.tileCol, f.tileRow)] = go.GetComponent<SpriteRenderer>();
                     _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
@@ -669,6 +677,31 @@ namespace Waystation.View
                     _foundTiles[kv.Key] = netGO;
                     // Update adjacent network tiles so they redraw with the new connection mask.
                     RefreshNetworkNeighbors(f.tileCol, f.tileRow);
+                }
+                else if (f.buildableId == "buildable.generator")
+                {
+                    // 128×128 px sprite @ 64 PPU = 2×2 world units.
+                    // Place floor tiles under all four subtiles, then the generator on top.
+                    string genState = f.health <= 0 ? "destroyed"
+                                    : f.health < f.maxHealth * 0.5f ? "damaged"
+                                    : "normal";
+                    var floorGOs = new List<GameObject>();
+                    for (int dc = 0; dc < 2; dc++)
+                    for (int dr = 0; dr < 2; dr++)
+                    {
+                        floorGOs.Add(PlaceTile(_foundRoot.transform, f.tileCol + dc, f.tileRow + dr,
+                            TileAtlas.GetFloor(PickFloorVariant(f.tileCol + dc, f.tileRow + dr)),
+                            FloorRotation(f.tileCol + dc, f.tileRow + dr), sortOrder: 10));
+                    }
+                    var genGO = new GameObject($"Generator_{f.uid}");
+                    genGO.transform.SetParent(_foundRoot.transform, false);
+                    // Centre pivot: position at the centre of the 2×2 footprint (col+0.5, row+0.5).
+                    genGO.transform.localPosition = new Vector3(f.tileCol + 0.5f, f.tileRow + 0.5f, 0f);
+                    var srGen = genGO.AddComponent<SpriteRenderer>();
+                    srGen.sprite       = TileAtlas.GetGenerator(genState);
+                    srGen.sortingOrder = 30;
+                    _foundTiles[kv.Key]  = genGO;
+                    _foundExtras[kv.Key] = floorGOs;
                 }
                 else if (f.buildableId == "buildable.ice_refiner")
                 {
@@ -874,55 +907,49 @@ namespace Waystation.View
         //   NW diagonal floor  →  WALL_CORNER_SE
         //   SE diagonal floor  →  WALL_CORNER_NW
         //   SW diagonal floor  →  WALL_CORNER_NE
-        private Sprite GetWallSprite(int col, int row)
+        //
+        // foundation: when non-null, the health state is used to select normal/damaged/destroyed.
+        //             Boundary room walls (no foundation) always use "normal".
+        private Sprite GetWallSprite(int col, int row, FoundationInstance foundation = null)
         {
-            bool nFloor = IsFloorTile(col,     row + 1);
-            bool sFloor = IsFloorTile(col,     row - 1);
-            bool eFloor = IsFloorTile(col + 1, row    );
-            bool wFloor = IsFloorTile(col - 1, row    );
-            int  v      = PickWallVariant(col, row);
-
-            // Straight wall: exactly one cardinal side has floor.
-            if ( nFloor && !sFloor && !eFloor && !wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);
-            if (!nFloor &&  sFloor && !eFloor && !wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_N, v);
-            if (!nFloor && !sFloor &&  eFloor && !wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_W, v);
-            if (!nFloor && !sFloor && !eFloor &&  wFloor) return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_E, v);
-
-            // Convex corner: no cardinal floor, single interior diagonal has floor.
-            if (!nFloor && !sFloor && !eFloor && !wFloor)
+            string state = "normal";
+            if (foundation != null && foundation.maxHealth > 0)
             {
-                bool neFloor = IsFloorTile(col + 1, row + 1);
-                bool nwFloor = IsFloorTile(col - 1, row + 1);
-                bool seFloor = IsFloorTile(col + 1, row - 1);
-                bool swFloor = IsFloorTile(col - 1, row - 1);
-                if ( neFloor && !nwFloor && !seFloor && !swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_SW, v);
-                if (!neFloor &&  nwFloor && !seFloor && !swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_SE, v);
-                if (!neFloor && !nwFloor &&  seFloor && !swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_NW, v);
-                if (!neFloor && !nwFloor && !seFloor &&  swFloor) return TileAtlas.GetWallCorner(TileAtlas.WALL_CORNER_NE, v);
+                float pct = (float)foundation.health / foundation.maxHealth;
+                state = foundation.health <= 0 ? "destroyed"
+                      : pct < 0.5f             ? "damaged"
+                      :                          "normal";
             }
+            // All wall tiles use the base sprite; floor-adjacent face strips are
+            // composited on top by AddShadowsForWall.
+            return TileAtlas.GetWallBase(state);
+        }
 
-            // Two-floor cases: concave inner corners and partition walls.
-            // For consistent perspective, the south-facing and north-facing directions
-            // take priority over east/west (the camera has a slight south tilt).
+        // Returns the Z rotation (degrees) for a wall tile so its slab (perspective front
+        // face) always points toward the room interior / adjacent floor.
+        //   0°   — slab faces south  (north boundary walls, floor beneath)
+        //   180° — slab faces north  (south boundary walls)
+        //   +90° — slab faces east   (west boundary walls, CCW rotation)
+        //   -90° — slab faces west   (east boundary walls, CW rotation)
+        private float GetWallRotation(int col, int row)
+        {
+            bool northBoundary = row == RoomRows - 1;
+            bool southBoundary = row == 0;
+            bool eastBoundary  = col == RoomCols - 1;
+            bool westBoundary  = col == 0;
 
-            // Partition walls (floor on opposite sides)
-            if  (nFloor && sFloor && !eFloor && !wFloor)
-                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);  // E-W partition
-            if (!nFloor && !sFloor && eFloor && wFloor)
-                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_W, v);  // N-S partition
+            // Non-corner boundary walls: rotate so slab faces interior.
+            if (northBoundary && !eastBoundary && !westBoundary) return   0f;
+            if (southBoundary && !eastBoundary && !westBoundary) return 180f;
+            if (eastBoundary  && !northBoundary && !southBoundary) return -90f;
+            if (westBoundary  && !northBoundary && !southBoundary) return  90f;
 
-            // Concave inner corners (floor on two adjacent cardinal sides)
-            if (nFloor && eFloor && !sFloor && !wFloor)
-                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);  // inner NE
-            if (nFloor && wFloor && !sFloor && !eFloor)
-                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_S, v);  // inner NW
-            if (sFloor && eFloor && !nFloor && !wFloor)
-                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_N, v);  // inner SE
-            if (sFloor && wFloor && !nFloor && !eFloor)
-                return TileAtlas.GetWallDirectional(TileAtlas.WALL_DIR_N, v);  // inner SW
-
-            // Fallback: T-junction or fully surrounded — legacy flat tile.
-            return TileAtlas.GetWall(PickWallVariant(col, row));
+            // Corner tiles and interior placed walls: pick slab direction from floor neighbors.
+            if (IsFloorTile(col,     row - 1)) return   0f; // floor south → slab south
+            if (IsFloorTile(col,     row + 1)) return 180f; // floor north → slab north
+            if (IsFloorTile(col + 1, row    )) return  90f; // floor east  → slab east
+            if (IsFloorTile(col - 1, row    )) return -90f; // floor west  → slab west
+            return 0f;
         }
 
         // Update the SpriteRenderer sprite for any wire/pipe/duct foundation at the given tile.
@@ -973,7 +1000,16 @@ namespace Waystation.View
 
             // Update wall sprite via the cached SpriteRenderer.
             if (isWall && _tileAt.TryGetValue((col, row), out var wallSr) && wallSr)
-                wallSr.sprite = GetWallSprite(col, row);
+            {
+                // Look up any placed wall foundation at this position so GetWallSprite
+                // can select the correct health state (normal/damaged/destroyed).
+                FoundationInstance wallFoundation = null;
+                if (_gm?.Station?.foundations != null)
+                    foreach (var f in _gm.Station.foundations.Values)
+                        if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("wall"))
+                        { wallFoundation = f; break; }
+                wallSr.sprite = GetWallSprite(col, row, wallFoundation);
+            }
 
             // Destroy existing shadows at this position.
             if (_shadowsAt.TryGetValue((col, row), out var oldSh))
@@ -1040,34 +1076,96 @@ namespace Waystation.View
             return false;
         }
 
-        // Add shadow overlays on a WALL tile — cardinal faces that border floor get edge
-        // shadows; corner wall tiles (no cardinal floor, but diagonal floor) get an inside
-        // corner radial to fill the shadow gap where two wall edge-shadows meet at a joint.
+        // Add wall_overlays.png face strips on a WALL tile for every face that borders floor.
+        // Uses combined sprites (ov_ne, ov_nw, ov_se, ov_sw, ov_cross) where available for
+        // clean corner joins, stacking singles for any remaining uncovered faces.
         private void AddShadowsForWall(int col, int row, Transform parent,
             List<GameObject> collector = null)
         {
-            bool nFloor = IsFloorTile(col,     row + 1);
-            bool sFloor = IsFloorTile(col,     row - 1);
-            bool eFloor = IsFloorTile(col + 1, row    );
-            bool wFloor = IsFloorTile(col - 1, row    );
+            const int wallOverlayOrder = 41;
 
-            // Cardinal edge shadows on faces that border floor
-            if (nFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_TOP,    parent, collector);
-            if (sFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_BOTTOM, parent, collector);
-            if (eFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_RIGHT,  parent, collector);
-            if (wFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_LEFT,   parent, collector);
+            // Boundary corner tiles have no cardinal floor neighbors but their diagonal IS
+            // interior — apply the matching two-face corner overlay so the strips from the
+            // adjacent straight wall runs connect cleanly across the corner joint.
+            bool isBoundaryCorner = (col == 0 || col == RoomCols - 1)
+                                 && (row == 0 || row == RoomRows - 1);
+            if (isBoundaryCorner)
+            {
+                // Room corners — art top = game South, so the inner-corner filler
+                // sprite names map based on where the pocket appears in the image:
+                //   SW room corner (0,0)           → S+E faces → ov_corner_tr (top-right pocket)
+                //   SE room corner (RoomCols-1, 0) → S+W faces → ov_corner_tl (top-left pocket)
+                //   NW room corner (0, RoomRows-1) → N+E faces → ov_corner_br (bot-right pocket)
+                //   NE room corner (both max)      → N+W faces → ov_corner_bl (bot-left pocket)
+                string cornerId = (col == 0            && row == 0           ) ? "ov_corner_tr"
+                                : (col == RoomCols - 1 && row == 0           ) ? "ov_corner_tl"
+                                : (col == 0            && row == RoomRows - 1) ? "ov_corner_br"
+                                :                                                "ov_corner_bl";
+                PlaceWallOverlay(cornerId, col, row, parent, collector, wallOverlayOrder);
+                return;
+            }
 
-            // Inside corner radial for wall corner tiles: both cardinals are walls but the
-            // diagonal is floor — darkens the inner corner joint that connects two wall faces.
-            bool nwFloor = IsFloorTile(col - 1, row + 1);
-            bool neFloor = IsFloorTile(col + 1, row + 1);
-            bool swFloor = IsFloorTile(col - 1, row - 1);
-            bool seFloor = IsFloorTile(col + 1, row - 1);
+            bool n = IsFloorTile(col,     row + 1);
+            bool s = IsFloorTile(col,     row - 1);
+            bool e = IsFloorTile(col + 1, row    );
+            bool w = IsFloorTile(col - 1, row    );
 
-            if (!nFloor && !wFloor && nwFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_TL, parent, collector);
-            if (!nFloor && !eFloor && neFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_TR, parent, collector);
-            if (!sFloor && !wFloor && swFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_BL, parent, collector);
-            if (!sFloor && !eFloor && seFloor) AddShadowOverlay(col, row, TileAtlas.SHADOW_IN_BR, parent, collector);
+            if (!n && !s && !e && !w) return;
+
+            foreach (string id in WallOverlayIds(n, s, e, w))
+                PlaceWallOverlay(id, col, row, parent, collector, wallOverlayOrder);
+        }
+
+        private void PlaceWallOverlay(string id, int col, int row, Transform parent,
+            List<GameObject> collector, int sortOrder)
+        {
+            var spr = TileAtlas.GetWallOverlay(id);
+            if (spr == null) return;
+            var go = new GameObject($"WallOverlay{id}_{col},{row}");
+            go.transform.SetParent(parent);
+            go.transform.localPosition = new Vector3(col, row, 0f);
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite       = spr;
+            sr.sortingOrder = sortOrder;
+            collector?.Add(go);
+        }
+
+        // Returns the minimal set of overlay IDs needed to cover the given floor-adjacent faces.
+        //
+        // Art coordinate note: the tile image has game-South at the top (perspective slab face)
+        // and game-North at the bottom.  HTML sprite names therefore map inversely:
+        //   ov_n  (HTML top)     → game-South face strip
+        //   ov_s  (HTML bottom)  → game-North face strip
+        //   ov_ne (HTML top-right)  → game S+E corner
+        //   ov_nw (HTML top-left)   → game S+W corner
+        //   ov_se (HTML bot-right)  → game N+E corner
+        //   ov_sw (HTML bot-left)   → game N+W corner
+        //   ov_corner_tr (top-right pocket)  → inner filler for game S+E join
+        //   ov_corner_tl (top-left  pocket)  → inner filler for game S+W join
+        //   ov_corner_br (bot-right pocket)  → inner filler for game N+E join
+        //   ov_corner_bl (bot-left  pocket)  → inner filler for game N+W join
+        private static IEnumerable<string> WallOverlayIds(bool n, bool s, bool e, bool w)
+        {
+            // All four
+            if (n && s && e && w) { yield return "ov_cross"; yield break; }
+            // Clean two-face corners (face strip + inner corner filler)
+            if (s && e && !n && !w) { yield return "ov_ne"; yield return "ov_corner_tr"; yield break; }
+            if (s && w && !n && !e) { yield return "ov_nw"; yield return "ov_corner_tl"; yield break; }
+            if (n && e && !s && !w) { yield return "ov_se"; yield return "ov_corner_br"; yield break; }
+            if (n && w && !s && !e) { yield return "ov_sw"; yield return "ov_corner_bl"; yield break; }
+            // Three-face
+            if (s && n && e) { yield return "ov_ne"; yield return "ov_s"; yield break; }
+            if (s && n && w) { yield return "ov_nw"; yield return "ov_s"; yield break; }
+            if (s && e && w) { yield return "ov_ne"; yield return "ov_w"; yield break; }
+            if (n && e && w) { yield return "ov_se"; yield return "ov_w"; yield break; }
+            // Opposite pairs
+            if (n && s) { yield return "ov_s"; yield return "ov_n"; yield break; }
+            if (e && w) { yield return "ov_e"; yield return "ov_w"; yield break; }
+            // Singles: ov_n is the game-South strip; ov_s is the game-North strip
+            if (s) yield return "ov_n";
+            if (n) yield return "ov_s";
+            if (e) yield return "ov_e";
+            if (w) yield return "ov_w";
         }
 
         // Add shadow overlays on a DOOR tile at edges that face wall tiles (in-bounds, non-floor).
@@ -1136,14 +1234,14 @@ namespace Waystation.View
         }
 
         private void AddShadowOverlay(int col, int row, int edge, Transform parent,
-            List<GameObject> collector)
+            List<GameObject> collector, int sortOrder = 11)
         {
             var go = new GameObject($"Shadow{edge}_{col},{row}");
             go.transform.SetParent(parent);
             go.transform.localPosition = new Vector3(col, row, 0f);
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = TileAtlas.GetShadow(edge);
-            sr.sortingOrder = 11; // above floor (10), below objects (20)
+            sr.sortingOrder = sortOrder;
             collector?.Add(go);
         }
 

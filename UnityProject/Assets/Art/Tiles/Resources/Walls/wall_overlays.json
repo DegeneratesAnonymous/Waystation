@@ -1,0 +1,21 @@
+{
+  "tile_size": { "w": 64, "h": 64 },
+  "slot_size": { "w": 66, "h": 66 },
+  "padding": 1,
+  "pivot": "center",
+  "tiles": [
+    { "id": "ov_n",         "col": 0, "row": 0 },
+    { "id": "ov_s",         "col": 1, "row": 0 },
+    { "id": "ov_e",         "col": 2, "row": 0 },
+    { "id": "ov_w",         "col": 3, "row": 0 },
+    { "id": "ov_ne",        "col": 4, "row": 0 },
+    { "id": "ov_nw",        "col": 5, "row": 0 },
+    { "id": "ov_se",        "col": 6, "row": 0 },
+    { "id": "ov_sw",        "col": 7, "row": 0 },
+    { "id": "ov_cross",     "col": 8, "row": 0 },
+    { "id": "ov_corner_bl", "col": 9, "row": 0 },
+    { "id": "ov_corner_br", "col": 10, "row": 0 },
+    { "id": "ov_corner_tl", "col": 11, "row": 0 },
+    { "id": "ov_corner_tr", "col": 12, "row": 0 }
+  ]
+}
