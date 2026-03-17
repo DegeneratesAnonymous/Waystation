@@ -99,10 +99,91 @@ Game content can be extended by adding JSON files to `UnityProject/Assets/Stream
 
 ---
 
+## NPC Sprite System
+
+Waystation uses a **layered NPC sprite system** inspired by RimWorld and Prison Architect. Each NPC is rendered by compositing 9 independent transparent PNG atlas layers via Unity `SpriteRenderer` child hierarchies, enabling runtime-swappable equipment and skin tones without re-exporting art.
+
+### Sprite Atlases
+
+All 9 atlases live in `atlases/`. Each sprite is **32×48 px** of content inside a **34×50 px** slot (1 px transparent padding). The atlases ship in the repository pre-generated; use the HTML generators to regenerate them if needed.
+
+| Atlas | Dimensions | Variants | Layout |
+|---|---|---|---|
+| `npc_body.png` | 612×50 | 18 (3 types × 6 skin tones) | type-major |
+| `npc_face.png` | 136×50 | 4 expressions | sequential |
+| `npc_hair.png` | 1020×50 | 30 (5 styles × 6 colours) | style-major |
+| `npc_hat.png` | 850×50 | 25 (5 types × 5 colours) | colour-major |
+| `npc_shirt.png` | 850×50 | 25 (5 types × 5 colours) | type-major |
+| `npc_pants.png` | 680×50 | 20 (4 types × 5 colours) | type-major |
+| `npc_shoes.png` | 510×50 | 15 (3 types × 5 colours) | type-major |
+| `npc_back.png` | 340×50 | 10 (5 types × 2 colours) | type-major |
+| `npc_weapon.png` | 680×50 | 20 (8 weapons + 12 reserved) | sequential |
+
+Each atlas has a matching JSON sidecar (`atlases/*.json`) following the project schema.
+
+### HTML Generators
+
+Source generators live in `generators/`. Open any `.html` file in a browser to preview the sprites and download a fresh PNG + JSON pair. Use `generators/npc_composite_test.html` to preview all 9 layers composited together.
+
+### Unity Integration
+
+Scripts live in `unity/` (copy into your Unity project's `Assets/Scripts/NPC/` folder):
+
+| Script | Type | Purpose |
+|---|---|---|
+| `NpcAppearance.cs` | ScriptableObject | Stores the visual description of one NPC (body type, skin tone, hair, equipment, etc.) |
+| `NpcAtlasRegistry.cs` | ScriptableObject | Holds `Sprite[]` arrays for each layer; exposes `GetBody`, `GetFace`, `GetHair`, `GetHat`, `GetShirt`, `GetPants`, `GetShoes`, `GetBack`, `GetWeapon` accessors |
+| `NpcSpriteController.cs` | MonoBehaviour | Applies an `NpcAppearance` to 9 child `SpriteRenderer`s in a single `Apply()` call |
+| `Editor/NpcAtlasImporter.cs` | Editor tool | Auto-slices atlas PNGs and populates `NpcAtlasRegistry`; accessible at **Waystation → NPC → Import NPC Atlases** |
+
+#### Sorting Layer Setup
+
+1. Open **Edit → Project Settings → Tags and Layers**
+2. Add a sorting layer named **`NPCs`** (above the default tile layers)
+3. The `NpcSpriteController` assigns `sortingOrder` values 10–18 automatically
+
+#### sortingOrder Assignments
+
+| Order | Layer |
+|---|---|
+| 10 | Back item (rendered behind body) |
+| 11 | Body |
+| 12 | Shoes |
+| 13 | Pants |
+| 14 | Shirt |
+| 15 | Face |
+| 16 | Hair |
+| 17 | Hat |
+| 18 | Weapon |
+
+#### Import Steps
+
+1. Copy the 9 PNG atlases from `atlases/` into `Assets/Art/NPCs/` in the Unity project
+2. Open **Waystation → NPC → Import NPC Atlases** in the menu bar
+3. The tool slices each atlas at 34×50 slots and populates `Assets/Resources/NpcAtlasRegistry.asset`
+4. Assign the registry to each `NpcSpriteController` in the Inspector
+
+#### Unity Import Settings (manual fallback)
+
+- Sprite Mode: **Multiple**
+- Filter Mode: **Point (no filter)**
+- Pixels Per Unit: **32**
+- Alpha Is Transparency: **checked**
+
+---
+
 ## Project Structure
 
 ```
 Waystation/
+├── atlases/               # Pre-generated NPC sprite PNG atlases + JSON sidecars
+├── generators/            # Browser-based HTML sprite generators (open in browser to re-export)
+│   └── npc_composite_test.html  # Visual QA: composite all 9 layers
+├── unity/                 # Unity C# scripts (copy into Assets/Scripts/NPC/)
+│   ├── NpcAppearance.cs
+│   ├── NpcAtlasRegistry.cs
+│   ├── NpcSpriteController.cs
+│   └── Editor/NpcAtlasImporter.cs
 ├── UnityProject/
 │   ├── Assets/
 │   │   ├── Scripts/

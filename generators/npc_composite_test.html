@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NPC Composite Test</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#0a0b0e;color:#7a8aaa;font-family:'Share Tech Mono',monospace;padding:28px;}
+  h1{font-size:11px;letter-spacing:.2em;color:#3d5570;text-transform:uppercase;margin-bottom:4px;}
+  .sub{font-size:9px;color:#1a2530;letter-spacing:.15em;margin-bottom:20px;}
+  canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
+  .sec{font-size:9px;color:#243040;letter-spacing:.18em;text-transform:uppercase;margin:20px 0 10px;}
+  .controls{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px;}
+  .ctrl{display:flex;flex-direction:column;gap:4px;min-width:160px;}
+  label{font-size:8px;letter-spacing:.12em;color:#2e4a60;}
+  select{background:#0d1820;color:#4880aa;border:1px solid #1a3048;
+         font-family:inherit;font-size:8px;padding:4px 6px;cursor:pointer;}
+  .btn{display:inline-block;margin:12px 8px 0 0;padding:6px 14px;font-family:inherit;
+       font-size:8px;letter-spacing:.15em;text-transform:uppercase;
+       background:#0d1820;color:#4880aa;border:1px solid #1a3048;cursor:pointer;}
+  .btn:hover{background:#111e2c;}
+  .checker{
+    background-image:linear-gradient(45deg,#141820 25%,transparent 25%),
+      linear-gradient(-45deg,#141820 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#141820 75%),
+      linear-gradient(-45deg,transparent 75%,#141820 75%);
+    background-size:12px 12px;
+    background-position:0 0,0 6px,6px -6px,-6px 0;
+    display:inline-block;padding:8px;}
+  .layer-info{font-size:8px;color:#1e3040;margin-top:12px;line-height:1.9;}
+  .layer-info b{color:#2e4a60;}
+</style>
+</head>
+<body>
+<h1>// npc · composite test · all 9 layers</h1>
+<p class="sub">loads atlas PNGs from atlases/ and composites all layers at selected indices — verify no z-fighting, silhouette overflow, or colour inconsistency</p>
+
+<div class="sec">// layer controls</div>
+<div class="controls">
+  <div class="ctrl">
+    <label>BODY TYPE</label>
+    <select id="bodyType"><option value="0">slim</option><option value="1" selected>average</option><option value="2">stocky</option></select>
+  </div>
+  <div class="ctrl">
+    <label>SKIN TONE</label>
+    <select id="skinTone"><option value="0">pale</option><option value="1" selected>fair</option><option value="2">medium</option><option value="3">olive</option><option value="4">brown</option><option value="5">dark</option></select>
+  </div>
+  <div class="ctrl">
+    <label>FACE</label>
+    <select id="faceType"><option value="0" selected>neutral</option><option value="1">stern</option><option value="2">weary</option><option value="3">alert</option></select>
+  </div>
+  <div class="ctrl">
+    <label>HAIR STYLE</label>
+    <select id="hairStyle"><option value="0" selected>short</option><option value="1">long</option><option value="2">medium</option><option value="3">buzz</option><option value="4">ponytail</option></select>
+  </div>
+  <div class="ctrl">
+    <label>HAIR COLOR</label>
+    <select id="hairColor"><option value="0" selected>blonde</option><option value="1">auburn</option><option value="2">brown</option><option value="3">black</option><option value="4">grey</option><option value="5">white</option></select>
+  </div>
+  <div class="ctrl">
+    <label>HAT TYPE</label>
+    <select id="hatType"><option value="0">cap</option><option value="1">helmet</option><option value="2">beret</option><option value="3">visor</option><option value="4" selected>none</option></select>
+  </div>
+  <div class="ctrl">
+    <label>HAT COLOR</label>
+    <select id="hatColor"><option value="0" selected>grey</option><option value="1">blue</option><option value="2">green</option><option value="3">red</option><option value="4">brown</option></select>
+  </div>
+  <div class="ctrl">
+    <label>SHIRT TYPE</label>
+    <select id="shirtType"><option value="0" selected>tshirt</option><option value="1">collar</option><option value="2">uniform</option><option value="3">vest</option><option value="4">tank</option></select>
+  </div>
+  <div class="ctrl">
+    <label>SHIRT COLOR</label>
+    <select id="shirtColor"><option value="0" selected>grey</option><option value="1">blue</option><option value="2">green</option><option value="3">red</option><option value="4">brown</option></select>
+  </div>
+  <div class="ctrl">
+    <label>PANTS TYPE</label>
+    <select id="pantsType"><option value="0" selected>casual</option><option value="1">cargo</option><option value="2">uniform</option><option value="3">shorts</option></select>
+  </div>
+  <div class="ctrl">
+    <label>PANTS COLOR</label>
+    <select id="pantsColor"><option value="0" selected>grey</option><option value="1">blue</option><option value="2">green</option><option value="3">red</option><option value="4">brown</option></select>
+  </div>
+  <div class="ctrl">
+    <label>SHOE TYPE</label>
+    <select id="shoeType"><option value="0" selected>boots</option><option value="1">sneakers</option><option value="2">formal</option></select>
+  </div>
+  <div class="ctrl">
+    <label>SHOE COLOR</label>
+    <select id="shoeColor"><option value="0" selected>grey</option><option value="1">blue</option><option value="2">green</option><option value="3">red</option><option value="4">brown</option></select>
+  </div>
+  <div class="ctrl">
+    <label>BACK ITEM</label>
+    <select id="backType"><option value="0" selected>none</option><option value="1">backpack</option><option value="2">quiver</option><option value="3">jetpack</option><option value="4">shield</option></select>
+  </div>
+  <div class="ctrl">
+    <label>BACK COLOR</label>
+    <select id="backColor"><option value="0" selected>grey</option><option value="1">blue</option></select>
+  </div>
+  <div class="ctrl">
+    <label>WEAPON</label>
+    <select id="weaponType"><option value="0" selected>none</option><option value="1">pistol</option><option value="2">rifle</option><option value="3">shotgun</option><option value="4">knife</option><option value="5">bat</option><option value="6">wrench</option><option value="7">shield</option></select>
+  </div>
+</div>
+
+<div class="sec">// composite preview · 8×</div>
+<div class="checker">
+  <canvas id="composite"></canvas>
+</div>
+
+<div class="sec">// individual layers · 4×</div>
+<div id="layerPreviews" style="display:flex;flex-wrap:wrap;gap:16px;"></div>
+
+<div class="layer-info">
+  <b>sortingOrder</b> → 10:back · 11:body · 12:shoes · 13:pants · 14:shirt · 15:face · 16:hair · 17:hat · 18:weapon<br>
+  <b>atlas folder</b> → atlases/ relative to this file's parent directory<br>
+  <b>slot size</b> → 34×50px · sprite content 32×48px · 1px transparent padding
+</div>
+
+<script>
+'use strict';
+
+const TW=32, TH=48, SW=34, SH=50, PAD=1;
+const SCALE_COMPOSITE=8, SCALE_LAYER=4;
+
+// ── Atlas configurations ────────────────────────────────────────────────────
+// Each entry: { file, cols, getCol(state) }
+// state = current values of all dropdowns
+
+function bodyCol(s)    { return parseInt(s.bodyType)*6 + parseInt(s.skinTone); }
+function faceCol(s)    { return parseInt(s.faceType); }
+function hairCol(s)    { return parseInt(s.hairStyle)*6 + parseInt(s.hairColor); }
+function hatCol(s)     { return parseInt(s.hatColor)*5 + parseInt(s.hatType); }
+function shirtCol(s)   { return parseInt(s.shirtType)*5 + parseInt(s.shirtColor); }
+function pantsCol(s)   { return parseInt(s.pantsType)*5 + parseInt(s.pantsColor); }
+function shoeCol(s)    { return parseInt(s.shoeType)*5 + parseInt(s.shoeColor); }
+function backCol(s)    { return parseInt(s.backType)*2 + parseInt(s.backColor); }
+function weaponCol(s)  { return parseInt(s.weaponType); }
+
+// Ordered back-to-front for compositing
+const LAYERS = [
+  { id:'back',   file:'../atlases/npc_back.png',   getCol:backCol,   label:'back'   },
+  { id:'body',   file:'../atlases/npc_body.png',   getCol:bodyCol,   label:'body'   },
+  { id:'shoes',  file:'../atlases/npc_shoes.png',  getCol:shoeCol,   label:'shoes'  },
+  { id:'pants',  file:'../atlases/npc_pants.png',  getCol:pantsCol,  label:'pants'  },
+  { id:'shirt',  file:'../atlases/npc_shirt.png',  getCol:shirtCol,  label:'shirt'  },
+  { id:'face',   file:'../atlases/npc_face.png',   getCol:faceCol,   label:'face'   },
+  { id:'hair',   file:'../atlases/npc_hair.png',   getCol:hairCol,   label:'hair'   },
+  { id:'hat',    file:'../atlases/npc_hat.png',    getCol:hatCol,    label:'hat'    },
+  { id:'weapon', file:'../atlases/npc_weapon.png', getCol:weaponCol, label:'weapon' },
+];
+
+// ── Image cache ─────────────────────────────────────────────────────────────
+const imgCache = {};
+
+function loadImage(src) {
+  if (imgCache[src]) return Promise.resolve(imgCache[src]);
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { imgCache[src] = img; res(img); };
+    img.onerror = () => rej(new Error('Failed to load: ' + src));
+    img.src = src;
+  });
+}
+
+// ── Extract sprite from atlas ────────────────────────────────────────────────
+function extractSprite(img, col) {
+  const sx = col * SW + PAD;  // source x (content start)
+  const sy = PAD;             // source y
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = TW;
+  offscreen.height = TH;
+  const ctx = offscreen.getContext('2d');
+  ctx.drawImage(img, sx, sy, TW, TH, 0, 0, TW, TH);
+  return offscreen;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function getState() {
+  const ids = ['bodyType','skinTone','faceType','hairStyle','hairColor',
+               'hatType','hatColor','shirtType','shirtColor','pantsType',
+               'pantsColor','shoeType','shoeColor','backType','backColor','weaponType'];
+  const s = {};
+  for (const id of ids) s[id] = document.getElementById(id).value;
+  return s;
+}
+
+async function render() {
+  const state = getState();
+
+  // Load all atlas images in parallel
+  const images = await Promise.all(
+    LAYERS.map(l => loadImage(l.file).catch(e => { console.warn(e); return null; }))
+  );
+
+  // ── Composite canvas ──
+  const compCanvas = document.getElementById('composite');
+  compCanvas.width  = TW * SCALE_COMPOSITE;
+  compCanvas.height = TH * SCALE_COMPOSITE;
+  const compCtx = compCanvas.getContext('2d');
+  compCtx.clearRect(0, 0, compCanvas.width, compCanvas.height);
+  compCtx.imageSmoothingEnabled = false;
+
+  // ── Individual layer previews ──
+  const previewsDiv = document.getElementById('layerPreviews');
+  previewsDiv.innerHTML = '';
+
+  for (let i = 0; i < LAYERS.length; i++) {
+    const layer = LAYERS[i];
+    const img   = images[i];
+
+    if (!img) {
+      const err = document.createElement('div');
+      err.style.cssText = 'font-size:8px;color:#883030;width:140px;';
+      err.textContent = `${layer.label}: failed to load`;
+      previewsDiv.appendChild(err);
+      continue;
+    }
+
+    const col     = layer.getCol(state);
+    const sprite  = extractSprite(img, col);
+
+    // Draw onto composite
+    compCtx.drawImage(sprite, 0, 0,
+      TW * SCALE_COMPOSITE, TH * SCALE_COMPOSITE);
+
+    // Individual preview
+    const wrap   = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+    const lbl    = document.createElement('div');
+    lbl.style.cssText = 'font-size:7px;letter-spacing:.12em;color:#1e3040;';
+    lbl.textContent  = `${layer.label} · col ${col}`;
+    const layerCanvas = document.createElement('canvas');
+    layerCanvas.width  = TW * SCALE_LAYER;
+    layerCanvas.height = TH * SCALE_LAYER;
+    layerCanvas.style.cssText = 'image-rendering:pixelated;image-rendering:crisp-edges;';
+    const lCtx = layerCanvas.getContext('2d');
+    lCtx.imageSmoothingEnabled = false;
+    lCtx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
+    lCtx.drawImage(sprite, 0, 0, TW * SCALE_LAYER, TH * SCALE_LAYER);
+    wrap.appendChild(lbl);
+    wrap.appendChild(layerCanvas);
+    previewsDiv.appendChild(wrap);
+  }
+}
+
+// ── Wire controls ─────────────────────────────────────────────────────────────
+document.querySelectorAll('select').forEach(sel => sel.addEventListener('change', render));
+render();
+</script>
+</body>
+</html>
