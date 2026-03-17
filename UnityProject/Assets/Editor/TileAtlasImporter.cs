@@ -37,11 +37,36 @@ public class TileAtlasImporter : AssetPostprocessor
         if (!File.Exists(jsonFullPath))
             return;
 
-        string              jsonText = File.ReadAllText(jsonFullPath);
-        TileAtlasManifest   manifest = JsonUtility.FromJson<TileAtlasManifest>(jsonText);
+        string jsonText;
+        TileAtlasManifest manifest;
+        try
+        {
+            jsonText = File.ReadAllText(jsonFullPath);
+            manifest = JsonUtility.FromJson<TileAtlasManifest>(jsonText);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[TileAtlasImporter] Failed to read or parse JSON sidecar" +
+                $" '{jsonAssetPath}' for texture '{assetPath}': {ex.Message}");
+            return;
+        }
 
         if (manifest == null || manifest.tiles == null || manifest.tiles.Count == 0)
             return;
+
+        if (manifest.tile_size == null || manifest.tile_size.w <= 0 || manifest.tile_size.h <= 0)
+        {
+            Debug.LogError($"[TileAtlasImporter] '{jsonAssetPath}' has missing or invalid" +
+                " 'tile_size' (w/h must be > 0). Skipping atlas slice.");
+            return;
+        }
+
+        if (manifest.slot_size == null || manifest.slot_size.w <= 0 || manifest.slot_size.h <= 0)
+        {
+            Debug.LogError($"[TileAtlasImporter] '{jsonAssetPath}' has missing or invalid" +
+                " 'slot_size' (w/h must be > 0). Skipping atlas slice.");
+            return;
+        }
 
         TextureImporter ti = (TextureImporter)assetImporter;
 
@@ -50,7 +75,7 @@ public class TileAtlasImporter : AssetPostprocessor
         ti.spriteImportMode     = SpriteImportMode.Multiple;
         ti.filterMode           = FilterMode.Point;           // no filtering — pixel art
         ti.textureCompression   = TextureImporterCompression.Uncompressed;
-        ti.isReadable           = true;
+        ti.isReadable           = false;
         ti.maxTextureSize       = 8192;
         ti.spritePixelsPerUnit  = 64; // 64 px = 1 world unit, matching TileAtlas procedural sprites
 
