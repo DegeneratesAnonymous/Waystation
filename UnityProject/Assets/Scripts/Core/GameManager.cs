@@ -55,6 +55,14 @@ namespace Waystation.Core
         public NetworkSystem     Networks       { get; private set; }
         public MissionSystem     Missions       { get; private set; }
         public RoomSystem        Rooms          { get; private set; }
+
+        // ── Visitor pipeline systems ──────────────────────────────────────────
+        public AntennaSystem           Antenna         { get; private set; }
+        public ShipVisitStateMachine   ShipVisits      { get; private set; }
+        public NPCTaskQueueManager     TaskQueue       { get; private set; }
+        public CommunicationsSystem    CommSystem      { get; private set; }
+
+        // ── Farming / climate systems ─────────────────────────────────────────
         public FarmingSystem     Farming        { get; private set; }
         public TemperatureSystem Temperature    { get; private set; }
 
@@ -130,6 +138,14 @@ namespace Waystation.Core
             Networks  = new NetworkSystem(Registry);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+
+            // Visitor pipeline systems
+            Antenna    = new AntennaSystem(Registry);
+            ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
+            TaskQueue  = new NPCTaskQueueManager();
+            CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
+
+            // Farming / climate systems
             Farming   = new FarmingSystem(Registry);
             Temperature = new TemperatureSystem(Registry);
 
@@ -225,6 +241,13 @@ namespace Waystation.Core
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+
+            // Visitor pipeline (antenna detection → state machine → comms tasks)
+            Antenna.Tick(Station);
+            ShipVisits.Tick(Station);
+            CommSystem.Tick(Station);
+
+            // Farming / climate (temperature before farming so planter temps are fresh)
             Temperature.Tick(Station);
             Farming.Tick(Station);
 
@@ -245,6 +268,12 @@ namespace Waystation.Core
         public void DenyShip(string shipUid)   => Visitors.DenyShip(shipUid, Station);
         public void ResolveEventChoice(PendingEvent pending, string choiceId)
             => Events.ResolveChoice(pending, choiceId, Station);
+
+        /// <summary>
+        /// Attempt to hail a ship via the Communications Menu Call button.
+        /// Returns a message to display in the UI (success, failure reason, or cooldown).
+        /// </summary>
+        public string TryHailShip(string shipUid) => CommSystem.TryHailShip(shipUid, Station);
 
         public (bool ok, string msg) RecruitVisitor(string npcUid)
         {
