@@ -63,16 +63,22 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Mark GrowLights, Heaters, Coolers, and Vents as energised when they are
-        /// adjacent to at least one electric wire foundation (networkType == "electric").
+        /// adjacent to at least one complete electric wire conduit (buildable.wire).
+        /// Only complete wire foundations are counted; non-complete foundations are skipped.
         /// </summary>
         private void UpdateEnergisedStatus(StationState station)
         {
-            // Build position lookup of electric-wire foundations
+            // Build position lookup of complete wire conduit foundations only.
+            // We match buildable.wire (networkType=="electric", not a powered device) to
+            // avoid counting devices themselves as their own power source.
             var wirePositions = new HashSet<(int, int)>();
             foreach (var f in station.foundations.Values)
             {
+                if (f.status != "complete") continue;
                 if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
-                if (def.networkType == "electric") wirePositions.Add((f.tileCol, f.tileRow));
+                // Only count actual wire conduits, not powered consumers
+                if (def.networkType == "electric" && !def.requiresPower)
+                    wirePositions.Add((f.tileCol, f.tileRow));
             }
 
             foreach (var f in station.foundations.Values)
@@ -111,16 +117,21 @@ namespace Waystation.Systems
         // ── Step 3 — water status ─────────────────────────────────────────────
 
         /// <summary>
-        /// A planter is watered when any pipe foundation (networkType == "pipe") exists
-        /// at the same tile position or at any directly adjacent tile.
+        /// A planter is watered when any complete pipe conduit foundation (buildable.pipe)
+        /// exists at the same tile position or at any directly adjacent tile.
+        /// The planter itself is excluded from the pipe lookup to prevent self-watering.
         /// </summary>
         private void UpdateWaterStatus(StationState station)
         {
             var pipePositions = new HashSet<(int, int)>();
             foreach (var f in station.foundations.Values)
             {
+                if (f.status != "complete") continue;
+                if (f.buildableId == "buildable.hydroponics_planter") continue; // exclude self
                 if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
-                if (def.networkType == "pipe") pipePositions.Add((f.tileCol, f.tileRow));
+                // Only count actual pipe conduits, not pipe consumers
+                if (def.networkType == "pipe" && !def.requiresPower)
+                    pipePositions.Add((f.tileCol, f.tileRow));
             }
 
             foreach (var f in station.foundations.Values)
@@ -230,6 +241,11 @@ namespace Waystation.Systems
                 if (!npc.IsCrew()) continue;
                 if (npc.classId != "class.farming") continue;
 
+                // Only proceed when JobSystem has already assigned job.farming to this NPC.
+                // This ensures sleep, hunger, night, and crisis overrides (rest/eat/recreate)
+                // from JobSystem are respected — FarmingSystem never overrides them.
+                if (npc.currentJobId != "job.farming") continue;
+
                 // Find if this NPC already has an in-progress task
                 FarmingTaskInstance activeTask = null;
                 foreach (var task in station.farmingTasks)
@@ -243,9 +259,8 @@ namespace Waystation.Systems
 
                 if (activeTask != null)
                 {
-                    // Refresh jobTimer so JobSystem does not reassign this NPC
-                    npc.currentJobId = "job.farming";
-                    npc.jobTimer     = JobRefreshTicks;
+                    // Keep jobTimer alive so JobSystem does not reassign mid-task
+                    npc.jobTimer = JobRefreshTicks;
 
                     activeTask.progressTicks--;
                     if (activeTask.progressTicks <= 0)
@@ -260,15 +275,14 @@ namespace Waystation.Systems
                         if (task.status != "pending") continue;
                         task.assignedNpcUid = npc.uid;
                         task.status         = "in_progress";
-                        npc.currentJobId    = "job.farming";
                         npc.jobTimer        = JobRefreshTicks;
                         assigned            = true;
                         break;
                     }
 
-                    // If no task was found and the NPC still holds job.farming, release it
-                    if (!assigned && npc.currentJobId == "job.farming" && npc.jobTimer <= 1)
-                        npc.jobTimer = 0;   // let JobSystem reassign next tick
+                    // If no task was found, let jobTimer expire so JobSystem can reassign
+                    if (!assigned && npc.jobTimer <= 1)
+                        npc.jobTimer = 0;
                 }
             }
         }
@@ -425,9 +439,11 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Add qty units of itemId to the first cargo hold with sufficient space.
-        /// Returns true if all items were stored; logs a warning and returns false
-        /// if no space is available (NPC drops items at tile — no softlock).
+        /// Add qty units of itemId to station storage.
+        /// Prefers modules with cargoSettings (cargo holds); falls back to any module,
+        /// then foundation cargo. Foundation cargo respects cargoCapacity limits.
+        /// Returns true if all items were stored; returns false if no storage found
+        /// (NPC drops items at tile — no softlock).
         /// </summary>
         private static bool AddItemToStorage(StationState station, string itemId, int qty)
         {
@@ -448,16 +464,22 @@ namespace Waystation.Systems
                 return true;
             }
 
-            // Foundation cargo
+            // Foundation cargo — respect capacity
             foreach (var f in station.foundations.Values)
             {
                 if (f.cargoCapacity <= 0) continue;
+                int totalStored = 0;
+                foreach (var v in f.cargo.Values) totalStored += v;
+                int space = f.cargoCapacity - totalStored;
+                if (space <= 0) continue;
+                int store = System.Math.Min(qty, space);
                 f.cargo[itemId] =
-                    (f.cargo.TryGetValue(itemId, out int cur) ? cur : 0) + qty;
-                return true;
+                    (f.cargo.TryGetValue(itemId, out int cur2) ? cur2 : 0) + store;
+                if (store >= qty) return true;
+                qty -= store;
             }
 
-            return false;   // no storage found
+            return false;   // no storage with capacity found
         }
 
         // ── Utility helpers ───────────────────────────────────────────────────

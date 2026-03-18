@@ -128,6 +128,9 @@ namespace Waystation.Systems
             }
         }
 
+        private static readonly (int dc, int dr)[] VentOffsets =
+            { (0, 1), (0, -1), (1, 0), (-1, 0) };
+
         private void ProcessVents(StationState station)
         {
             // Passive circulation: equalise temperature between a vent's room and
@@ -138,8 +141,7 @@ namespace Waystation.Systems
                 if (!f.isEnergised) continue;
 
                 float myTemp = GetEffectiveTemperature(station, f.tileCol, f.tileRow);
-                var offsets  = new[] { (0, 1), (0, -1), (1, 0), (-1, 0) };
-                foreach (var (dc, dr) in offsets)
+                foreach (var (dc, dr) in VentOffsets)
                 {
                     float neighbour = GetEffectiveTemperature(station,
                                                                f.tileCol + dc,

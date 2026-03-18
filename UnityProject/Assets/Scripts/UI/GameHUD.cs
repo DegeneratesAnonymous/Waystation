@@ -2567,6 +2567,7 @@ namespace Waystation.UI
             ("recreation",    "Recreation",    new Color(0.80f, 0.35f, 0.55f, 0.50f)),
             ("security",      "Security",      new Color(0.78f, 0.24f, 0.24f, 0.50f)),
             ("cafeteria",     "Cafeteria",     new Color(0.75f, 0.75f, 0.22f, 0.50f)),
+            ("greenhouse",    "Greenhouse",    new Color(0.30f, 0.72f, 0.30f, 0.50f)),
         };
 
         // BFS flood-fill from (startCol, startRow) over floor tiles, returning their canonical key.

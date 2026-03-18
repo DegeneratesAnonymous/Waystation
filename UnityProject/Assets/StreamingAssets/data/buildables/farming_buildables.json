@@ -16,7 +16,6 @@
     "layer": 1,
     "size": 1,
     "max_health": 80,
-    "network_type": "pipe",
     "schema_version": "1"
   },
   {
@@ -36,7 +35,8 @@
     "layer": 2,
     "size": 1,
     "max_health": 60,
-    "network_type": "electric",
+    "requires_power": true,
+    "power_draw": 30.0,
     "schema_version": "1"
   },
   {
@@ -56,7 +56,9 @@
     "layer": 2,
     "size": 1,
     "max_health": 80,
-    "network_type": "electric",
+    "requires_power": true,
+    "power_draw": 150.0,
+    "idle_power_draw": 5.0,
     "schema_version": "1"
   },
   {
@@ -76,7 +78,9 @@
     "layer": 2,
     "size": 1,
     "max_health": 80,
-    "network_type": "electric",
+    "requires_power": true,
+    "power_draw": 200.0,
+    "idle_power_draw": 5.0,
     "schema_version": "1"
   },
   {
@@ -96,7 +100,8 @@
     "layer": 2,
     "size": 1,
     "max_health": 60,
-    "network_type": "electric",
+    "requires_power": true,
+    "power_draw": 10.0,
     "schema_version": "1"
   }
 ]

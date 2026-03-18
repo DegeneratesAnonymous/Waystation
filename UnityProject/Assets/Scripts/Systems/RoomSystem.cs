@@ -145,8 +145,9 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Any sealed room containing at least one Hydroponics Planter Tile is
-        /// classified as a Greenhouse and stored in station.roomRoles.
-        /// Rooms that lose all planters have the Greenhouse designation removed.
+        /// classified as a Greenhouse and stored in station.roomRoles using the
+        /// stable id "greenhouse" (matches the RoomRoles entry in GameHUD).
+        /// Rooms that lose all planters have the greenhouse designation removed.
         /// </summary>
         private void ClassifyGreenhouseRooms(StationState station)
         {
@@ -160,16 +161,16 @@ namespace Waystation.Systems
                     greenhouseKeys.Add(roomKey);
             }
 
-            // Remove old Greenhouse designations for rooms that no longer qualify
+            // Remove old greenhouse designations for rooms that no longer qualify
             var toRemove = new System.Collections.Generic.List<string>();
             foreach (var kv in station.roomRoles)
-                if (kv.Value == "Greenhouse" && !greenhouseKeys.Contains(kv.Key))
+                if (kv.Value == "greenhouse" && !greenhouseKeys.Contains(kv.Key))
                     toRemove.Add(kv.Key);
             foreach (var k in toRemove) station.roomRoles.Remove(k);
 
-            // Apply Greenhouse to qualifying rooms
+            // Apply greenhouse to qualifying rooms
             foreach (var key in greenhouseKeys)
-                station.roomRoles[key] = "Greenhouse";
+                station.roomRoles[key] = "greenhouse";
         }
 
         private void EvaluateRoom(StationState station, List<(int col, int row)> tiles)
