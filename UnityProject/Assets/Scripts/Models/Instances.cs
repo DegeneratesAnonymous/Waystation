@@ -80,6 +80,86 @@ namespace Waystation.Models
 
 
     // -------------------------------------------------------------------------
+    // Mood Modifier — a named, time-limited delta applied to an NPC's MoodScore
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class MoodModifierRecord
+    {
+        // Human-readable event identifier (e.g. "harvest_success", "proximity_friend")
+        public string eventId;
+        // The mood delta applied while this modifier is active (+/- 0–100 scale)
+        public float  delta;
+        // Game tick at which this modifier expires; -1 = permanent
+        public int    expiresAtTick;
+        // Optional source identifier used for deduplication (same eventId+source = refresh)
+        public string source;
+    }
+
+    // -------------------------------------------------------------------------
+    // Relationship Type — the categorical type of a bond between two NPCs
+    // -------------------------------------------------------------------------
+
+    public enum RelationshipType
+    {
+        None,           // Strangers (AffinityScore near 0)
+        Acquaintance,   // AffinityScore ≥ 5
+        Friend,         // AffinityScore ≥ 20
+        Enemy,          // AffinityScore ≤ -5
+        Lover,          // AffinityScore ≥ 40
+        Spouse          // AffinityScore ≥ 60, approved by player
+    }
+
+    // -------------------------------------------------------------------------
+    // Relationship Record — the bond between an ordered pair of NPCs
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class RelationshipRecord
+    {
+        // The two NPC uids that form this relationship (npcUid1 < npcUid2 lexically)
+        public string npcUid1;
+        public string npcUid2;
+        // Continuous affinity score: positive = friendly, negative = hostile
+        public float  affinityScore = 0f;
+        // Categorical type derived from affinityScore (or elevated by player action)
+        public RelationshipType relationshipType = RelationshipType.None;
+        // Game tick of last social interaction — used for decay
+        public int    lastInteractionTick = 0;
+        // True once a marriage event has been approved (suppresses further prompts)
+        public bool   married = false;
+        // True when a pending marriage event has been sent to the player notification queue
+        public bool   marriageEventPending = false;
+        // Tick at which marriage event was last fired (for re-fire interval)
+        public int    lastMarriageEventTick = -1;
+
+        /// <summary>
+        /// Returns a canonical string key for a pair, using lexicographic ordering
+        /// so (A,B) and (B,A) always resolve to the same record.
+        /// </summary>
+        public static string MakeKey(string uid1, string uid2)
+        {
+            return string.Compare(uid1, uid2, StringComparison.Ordinal) <= 0
+                ? $"{uid1}:{uid2}"
+                : $"{uid2}:{uid1}";
+        }
+
+        /// <summary>
+        /// Derives RelationshipType from the current affinityScore.
+        /// Spouse is preserved if already set (it requires player approval to set).
+        /// </summary>
+        public void UpdateTypeFromAffinity()
+        {
+            if (relationshipType == RelationshipType.Spouse) return;
+            if      (affinityScore >=  40f) relationshipType = RelationshipType.Lover;
+            else if (affinityScore >=  20f) relationshipType = RelationshipType.Friend;
+            else if (affinityScore >=   5f) relationshipType = RelationshipType.Acquaintance;
+            else if (affinityScore <=  -5f) relationshipType = RelationshipType.Enemy;
+            else                            relationshipType = RelationshipType.None;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // NPC Instance
     // -------------------------------------------------------------------------
 
@@ -146,6 +226,20 @@ namespace Waystation.Models
         public bool isPathing       = false;
         // ID of the current NPCTask in progress (null = idle)
         public string currentTaskId = null;
+        // ── Mood & Relationships (MoodSystem) ─────────────────────────────────
+        // MoodScore: 0–100. 50 is baseline. Drifts toward 50 over waking hours.
+        // Separate from the needs-based `mood` float which drives the existing label.
+        public float moodScore             = 50f;
+        // Multiplier applied to job duration (higher mood = faster work).
+        // 1.05 = Thriving, 1.0 = Content, 0.95 = Struggling. Set by MoodSystem.
+        public float workModifier          = 1.0f;
+        // True when MoodScore has dropped below the crisis threshold (< 20).
+        // While in crisis the NPC abandons work and takes recreational tasks.
+        public bool  inCrisis              = false;
+        // Active timed mood modifiers (named deltas with expiry ticks)
+        public List<MoodModifierRecord> moodModifiers = new List<MoodModifierRecord>();
+        // Game tick of the last conversation this NPC completed (60-tick cooldown)
+        public int   lastConversationTick  = -99;
 
         public static NPCInstance Create(string templateId, string name,
                                          string classId, string subclassId = null)
@@ -528,6 +622,37 @@ namespace Waystation.Models
         // Visual operating state for machines ("standby"|"active"|"damaged"|"broken").
         public string operatingState = "standby";
 
+        // ── Utility network simulation state (set each tick by UtilityNetworkManager) ──
+        // Electrical: true when network supply+storage >= demand
+        public bool  isEnergised      = false;
+        // Plumbing: true when fluid network has enough stored volume for this consumer
+        public bool  isFluidSupplied  = false;
+        // Ducting: true when gas network has enough stored volume for this consumer
+        public bool  isGasSupplied    = false;
+
+        // Storage nodes: persisted amounts (serialised in StationData)
+        public float storedEnergy     = 0f;  // Battery — watt-hours currently stored
+        public float storedFluid      = 0f;  // Water Tank / Fluid Tank — litres stored
+        public float storedGas        = 0f;  // Gas Tank — litres-equivalent stored
+
+        // Isolator state: true = open (allows connectivity), false = closed (splits network)
+        public bool  isolatorOpen     = true;
+
+        // ── Farming / climate fields ─────────────────────────────────────────
+        // ── Farming / climate fields ─────────────────────────────────────────
+        // Hydroponics Planter Tile state (only used when buildableId == "buildable.hydroponics_planter")
+        public string cropId          = null;  // assigned CropDataDefinition.id; null = unassigned
+        public int    growthStage     = 0;     // 0=empty, 1=seedling, 2=established, 3=mature
+        public float  growthProgress  = 0f;   // 0–1 within current stage
+        public float  cropDamage      = 0f;   // 0–1; plant destroyed at 1.0
+
+        // Runtime sensor values updated each tick by FarmingSystem/TemperatureSystem
+        public float  lightLevel      = 0f;   // set by GrowLight above (0 = dark)
+        public float  tileTemperature = 20f;  // °C from TemperatureSystem
+        public bool   isWatered       = false; // set by FarmingSystem from pipe adjacency
+        // Heater / Cooler target temperature (player-configurable via inspect menu)
+        public float  targetTemperature = 20f;
+
         // Room bonus — set by RoomSystem each tick.
         // hasRoomBonus is true when this workbench is in a fully-qualified bonus room.
         // roomBonusMultiplier is the skill output multiplier while the bonus is active.
@@ -687,6 +812,12 @@ namespace Waystation.Models
         public float        contentCapacity; // max storage in this network
         public List<string> memberUids = new List<string>(); // foundation uids
 
+        // ── Simulation state (updated each tick by UtilityNetworkManager) ────
+        public float totalSupply    = 0f;  // watts (electric) or litres/tick (fluid/gas) produced
+        public float totalDemand    = 0f;  // watts (electric) or litres/tick (fluid/gas) consumed
+        public float storedEnergy   = 0f;  // watt-hours stored across all batteries on this net
+        public float storageCapacity = 0f; // total storage capacity across all storage nodes
+
         public static NetworkInstance Create(string type, string content = null)
         {
             return new NetworkInstance
@@ -728,6 +859,173 @@ namespace Waystation.Models
                 status       = "active",
                 startTick    = start,
                 endTick      = start + duration,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // ResearchBranchState / ResearchState
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ResearchBranchState
+    {
+        public float          points          = 0f;
+        public HashSet<string> unlockedNodeIds = new HashSet<string>();
+
+        public static ResearchBranchState Create() => new ResearchBranchState();
+    }
+
+    [Serializable]
+    public class ResearchState
+    {
+        public Dictionary<ResearchBranch, ResearchBranchState> branches =
+            new Dictionary<ResearchBranch, ResearchBranchState>();
+
+        // Datachips produced by completed research but not yet housed in a
+        // Data Storage Server (no capacity available at the time of unlock).
+        // Each represents one homeless chip awaiting storage.
+        public int pendingDatachips = 0;
+
+        public float TotalPoints(ResearchBranch branch)
+            => branches.TryGetValue(branch, out var s) ? s.points : 0f;
+
+        public bool IsUnlocked(string nodeId)
+        {
+            foreach (var b in branches.Values)
+                if (b.unlockedNodeIds.Contains(nodeId)) return true;
+            return false;
+        }
+
+        public static ResearchState Create()
+        {
+            var rs = new ResearchState();
+            foreach (ResearchBranch b in Enum.GetValues(typeof(ResearchBranch)))
+                rs.branches[b] = ResearchBranchState.Create();
+            return rs;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // PointOfInterest
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class PointOfInterest
+    {
+        public string uid;
+        public string poiType;      // "Asteroid" | "TradePost" | "AbandonedStation" | "NebulaPocket"
+        public string displayName;
+        public float  posX;
+        public float  posY;
+        public bool   discovered;
+        public bool   visited;
+        public Dictionary<string, int> resourceYield = new Dictionary<string, int>();
+        public int    seed;
+
+        public static PointOfInterest Create(string type, string name,
+                                             float x, float y, int seed)
+        {
+            return new PointOfInterest
+            {
+                uid         = Guid.NewGuid().ToString("N")[..8],
+                poiType     = type,
+                displayName = name,
+                posX        = x,
+                posY        = y,
+                seed        = seed,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // AsteroidMapState
+    // -------------------------------------------------------------------------
+
+    // Tile values stored in AsteroidMapState.tiles (byte[]).
+    public enum AsteroidTile : byte { Empty = 0, Rock = 1, Ore = 2, Ice = 3, Wall = 4 }
+
+    [Serializable]
+    public class AsteroidMapState
+    {
+        public string uid;
+        public string poiUid;
+        public int    width;
+        public int    height;
+        public int    seed;
+        public byte[] tiles;     // width × height, row-major
+        public Dictionary<string, int> extractedResources = new Dictionary<string, int>();
+        public List<string>            assignedNpcUids    = new List<string>();
+        public string                  missionUid;
+        public string                  status    = "active";  // "active" | "complete"
+        public int                     startTick;
+        public int                     endTick;
+
+        public byte GetTile(int x, int y)
+        {
+            if (x < 0 || x >= width || y < 0 || y >= height) return (byte)AsteroidTile.Wall;
+            return tiles[y * width + x];
+        }
+
+        public void SetTile(int x, int y, byte val)
+        {
+            if (x < 0 || x >= width || y < 0 || y >= height) return;
+            tiles[y * width + x] = val;
+        }
+
+        public static AsteroidMapState Create(string poiUid, string missionUid,
+                                              int seed, int width, int height,
+                                              int startTick, int durationTicks)
+        {
+            return new AsteroidMapState
+            {
+                uid         = Guid.NewGuid().ToString("N")[..8],
+                poiUid      = poiUid,
+                missionUid  = missionUid,
+                seed        = seed,
+                width       = width,
+                height      = height,
+                tiles       = new byte[width * height],
+                status      = "active",
+                startTick   = startTick,
+                endTick     = startTick + durationTicks,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // FarmingTaskInstance — a pending or active farming task for an NPC.
+    // Types: "sow" | "harvest" | "tend"
+    // Status lifecycle: "pending" → "in_progress" → "complete"
+    // -------------------------------------------------------------------------
+
+    // FarmingTaskInstance — a pending or active farming task for an NPC.
+    // Types: "sow" | "harvest" | "tend"
+    // Status lifecycle: "pending" → "in_progress" → "complete"
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class FarmingTaskInstance
+    {
+        public string uid;
+        public string taskType;         // "sow" | "harvest" | "tend"
+        public string planterUid;       // target FoundationInstance uid
+        public string cropId;           // crop to sow (sow tasks only; null for harvest/tend)
+        public string assignedNpcUid;   // null = unclaimed
+        public string status;           // "pending" | "in_progress" | "complete"
+        public int    progressTicks;    // ticks remaining until task completes (counts down)
+
+        public static FarmingTaskInstance Create(string type, string planterUid,
+                                                  string cropId = null, int ticks = 30)
+        {
+            return new FarmingTaskInstance
+            {
+                uid          = Guid.NewGuid().ToString("N")[..8],
+                taskType     = type,
+                planterUid   = planterUid,
+                cropId       = cropId,
+                status       = "pending",
+                progressTicks = ticks,
             };
         }
     }
@@ -794,6 +1092,13 @@ namespace Waystation.Models
         // Crew departments
         public List<Department> departments = new List<Department>();
 
+        // NPC relationship records: keyed by RelationshipRecord.MakeKey(uid1, uid2)
+        public Dictionary<string, RelationshipRecord> relationships = new Dictionary<string, RelationshipRecord>();
+
+        // Pending marriage event notifications waiting for player acknowledgement.
+        // Each entry is a pair key (RelationshipRecord.MakeKey) of two NPCs.
+        public List<string> pendingMarriageEvents = new List<string>();
+
         // Rank name overrides — index corresponds to rank int (0–3).
         // Defaults: Crew, Officer, Senior Officer, Command.
         // Players can rename these per-station.
@@ -813,8 +1118,32 @@ namespace Waystation.Models
         // Active away missions
         public Dictionary<string, MissionInstance>  missions = new Dictionary<string, MissionInstance>();
 
+        // Research progression
+        public ResearchState research = null;
+
+        // Map — points of interest
+        public Dictionary<string, PointOfInterest> pointsOfInterest = new Dictionary<string, PointOfInterest>();
+
+        // Asteroid away-mission maps
+        public Dictionary<string, AsteroidMapState> asteroidMaps = new Dictionary<string, AsteroidMapState>();
+
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();
+
+        // ── Farming system ───────────────────────────────────────────────────
+        // Pending and in-progress farming tasks for NPC workers.
+        public List<FarmingTaskInstance> farmingTasks = new List<FarmingTaskInstance>();
+
+        // Per-room temperature (°C), keyed by canonical "minCol_minRow" room key.
+        // Populated and updated by TemperatureSystem. Default = 20°C when absent.
+        public Dictionary<string, float> roomTemperatures = new Dictionary<string, float>();
+
+        // Per-tile temperature (°C), keyed by "col_row". Used for tiles outside sealed rooms.
+        public Dictionary<string, float> tileTemperatures = new Dictionary<string, float>();
+
+        // Reverse mapping: tile "col_row" → canonical room key. Populated by RoomSystem.
+        // Runtime only — not serialised into saves.
+        public Dictionary<string, string> tileToRoomKey = new Dictionary<string, string>();
 
         // ── Visitor / Shuttle system state ──────────────────────────────────
 
@@ -836,6 +1165,7 @@ namespace Waystation.Models
                 { "credits", 500f }, { "food", 100f }, { "power", 100f },
                 { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f }
             };
+            research = ResearchState.Create();
             InitDefaultDepartments();
         }
 

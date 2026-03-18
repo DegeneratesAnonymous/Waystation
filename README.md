@@ -17,6 +17,10 @@ A sci-fi space station management game in early development. You command a front
 - Trade with docked ships, negotiate prices, and manage cargo holds
 - Survive boarding actions and repair hull damage
 - Expand your station by constructing new modules
+- Research technology across three branches (Military, Economics, Sciences) and dispatch crews on asteroid mining away missions
+- Wire up electrical, plumbing, and ducting utility networks — every powered buildable must be connected to a working supply
+- Grow food and resources in greenhouse modules through the hydroponics farming system
+- Watch crew morale, friendships, rivalries, and relationships evolve through proximity and conversation
 
 ---
 
@@ -56,6 +60,17 @@ A sci-fi space station management game in early development. You command a front
 | **BuildingSystem** | Tile-based procedural station layout, module placement, and wall damage/repair |
 | **CombatSystem** | Boarding resolution (attacker vs. defender power + variance), outcome tiers, and crew losses |
 | **TimeSystem** | 24-tick day/night cycle (day ticks 6–20: work; night ticks 21–6: rest) |
+| **NetworkSystem** | Union-Find graph management for electrical, plumbing, and ducting networks; per-tick supply/demand — producers charge batteries, consumers are energised or starved; filters to completed conduits only |
+| **UtilityNetworkManager** | Orchestrates network rebuilds when the station layout changes; dispatches per-tick supply/demand resolution across all three network types |
+| **ResearchSystem** | Accumulates research points from crew stationed at branch terminals (Military, Economics, Sciences); auto-unlocks nodes when prerequisites are met; produces Datachips stored in Data Storage Servers |
+| **MapSystem** | Procedural Points of Interest (asteroids, derelicts, anomalies) within detection range; range expands with Antenna buildables; map resolution (System → Sector → Quadrant → Galaxy) unlocked via research tags |
+| **AsteroidMissionSystem** | Dispatches crews on multi-tick asteroid mining away missions; generates procedural asteroid tile maps; calculates mineral yield on crew return |
+| **FarmingSystem** | Hydroponics planter tile lifecycle (sow → grow → harvest); NPC sow/harvest/tend task generation; growth rate gated on light level, water supply, and ambient temperature |
+| **TemperatureSystem** | Per-room and per-tile temperature simulation; heaters/coolers dynamically scale power draw toward a target; vents equalise adjacent rooms; planter tiles read temperature each tick |
+| **MoodSystem** | 0–100 mood score per crew member drifting downward during waking hours and resetting on sleep; named time-limited modifiers stack additively; crisis state (< 20) clears the task queue until mood recovers |
+| **RelationshipRegistry** | Pairwise NPC affinity scores (None → Acquaintance → Friend → Lover → Spouse); slow decay after 7-day inactivity; affinity thresholds trigger relationship-type changes |
+| **ConversationSystem** | Idle co-module NPCs autonomously converse; outcome probability weighted by current relationship type; updates affinity and pushes mood modifiers on both participants |
+| **ProximitySystem** | Friends sharing a module receive a passive mood boost each tick; enemies share a mood penalty; modifier expires naturally after NPCs separate |
 
 ---
 
@@ -78,14 +93,17 @@ All game content lives in JSON files under `UnityProject/Assets/StreamingAssets/
 
 ```
 data/
-├── buildables/    # Constructable station structures and furniture
+├── buildables/    # Constructable station structures, terminals, and utility network nodes
 ├── classes/       # NPC class attribute and skill ranges
+├── crops/         # Crop definitions (growth stages, light/temperature requirements, yield)
 ├── events/        # Event definitions (faction, arrival, incident, crisis)
 ├── factions/      # Faction definitions, diplomacy profiles, behavior tags
 ├── items/         # Tradeable items (weapons, food, medicine, contraband, …)
 ├── jobs/          # Job definitions with resource and need effects
 ├── modules/       # Station module types with resource effects and capacity
 ├── npcs/          # NPC class templates (skills, traits, starting equipment)
+├── research/      # Research node definitions (branch, prerequisites, cost, unlock tags)
+├── rooms/         # Room type definitions (workbench bonuses, greenhouse climate rules)
 └── ships/         # Ship templates (role, cargo, threat level)
 ```
 

@@ -55,6 +55,11 @@ namespace Waystation.Systems
 
         public NPCSystem(ContentRegistry registry) => _registry = registry;
 
+        // ── Sleep / Wake events ────────────────────────────────────────────────
+        // Subscribed by MoodSystem in GameManager.InitSystems()
+        public event System.Action<NPCInstance> OnNPCSleeps;
+        public event System.Action<NPCInstance> OnNPCWakes;
+
         // ── Factory methods ────────────────────────────────────────────────────
 
         public NPCInstance SpawnFromTemplate(string templateId,
@@ -163,9 +168,17 @@ namespace Waystation.Systems
             {
                 float sleepVal = npc.needs.ContainsKey("sleep") ? npc.needs["sleep"] : 1f;
                 if (!npc.isSleeping && sleepVal < 0.25f)
+                {
                     TryClaimBed(npc, station);
+                    // Fire sleep event only if TryClaimBed successfully put NPC to sleep
+                    if (npc.isSleeping)
+                        OnNPCSleeps?.Invoke(npc);
+                }
                 else if (npc.isSleeping && sleepVal >= 0.9f)
+                {
                     npc.isSleeping = false;   // wake up; keep bed claimed for next cycle
+                    OnNPCWakes?.Invoke(npc);
+                }
             }
 
             // Distress logging (rate-limited)

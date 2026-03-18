@@ -41,6 +41,17 @@ namespace Waystation.Systems
         private readonly ContentRegistry _registry;
 
         /// <summary>
+        /// Set to true when a foundation whose buildable has a networkType transitions
+        /// to "complete".  GameManager checks this after Tick() and calls
+        /// UtilityNetworks.RebuildAll() so the new tile joins its network immediately.
+        /// Cleared by GameManager after the rebuild.
+        /// </summary>
+        public bool NetworkRebuildNeeded { get; private set; }
+
+        /// <summary>Called by GameManager after it has triggered a network rebuild.</summary>
+        public void ClearNetworkRebuildFlag() => NetworkRebuildNeeded = false;
+
+        /// <summary>
         /// When true, foundations skip the haul phase and complete instantly
         /// without consuming any materials.  Toggled via the in-game Dev Tools button.
         /// </summary>
@@ -477,10 +488,10 @@ namespace Waystation.Systems
             }
         }
 
-        private static void CompleteFoundation(FoundationInstance foundation,
-                                                BuildableDefinition defn,
-                                                StationState station,
-                                                NPCInstance npc)
+        private void CompleteFoundation(FoundationInstance foundation,
+                                        BuildableDefinition defn,
+                                        StationState station,
+                                        NPCInstance npc)
         {
             foundation.status        = "complete";
             foundation.buildProgress = 1f;
@@ -491,6 +502,10 @@ namespace Waystation.Systems
                 npc.currentJobId          = null;
                 foundation.assignedNpcUid = null;
             }
+
+            // Signal that utility networks need a rebuild so this tile joins its network.
+            if (defn.networkType != null)
+                NetworkRebuildNeeded = true;
 
             station.LogEvent(
                 $"{defn.displayName} construction complete at " +

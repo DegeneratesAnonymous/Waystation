@@ -502,6 +502,59 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Research enums and ResearchNodeDefinition
+    // -------------------------------------------------------------------------
+
+    public enum ResearchBranch { Military, Economics, Sciences }
+
+    public enum ResearchSubbranch
+    {
+        // Military
+        Defence, Offensive, Command,
+        // Economics
+        Production, Diplomacy, Entrepreneurship,
+        // Sciences
+        Physics, Material, Biological
+    }
+
+    [Serializable]
+    public class ResearchNodeDefinition
+    {
+        public string         id;
+        public string         displayName;
+        public string         description  = "";
+        public ResearchBranch    branch;
+        public ResearchSubbranch subbranch;
+        public int            pointCost    = 100;
+        public List<string>   prerequisites = new List<string>();
+        public List<string>   unlockTags    = new List<string>();
+
+        public static ResearchNodeDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var b = new ResearchNodeDefinition
+            {
+                id          = raw.GetString("id"),
+                displayName = raw.GetString("display_name", raw.GetString("id")),
+                description = raw.GetString("description", ""),
+                pointCost   = raw.GetInt("point_cost", 100),
+            };
+            b.branch    = Enum.TryParse<ResearchBranch>(   raw.GetString("branch"),    out var br) ? br : ResearchBranch.Sciences;
+            b.subbranch = Enum.TryParse<ResearchSubbranch>(raw.GetString("subbranch"), out var sr) ? sr : ResearchSubbranch.Physics;
+            foreach (var p in raw.GetStringList("prerequisites")) b.prerequisites.Add(p);
+            foreach (var t in raw.GetStringList("unlock_tags"))   b.unlockTags.Add(t);
+            return b;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Map enums
+    // -------------------------------------------------------------------------
+
+    public enum MapViewLevel { System, Sector, Quadrant, Galaxy }
+
+    public enum PoiType { Asteroid, TradePost, AbandonedStation, NebulaPocket }
+
+    // -------------------------------------------------------------------------
     // BuildableDefinition — static data for a placeable construction item.
     // Loaded from data/buildables/*.json by ContentRegistry.
     // -------------------------------------------------------------------------
@@ -563,6 +616,27 @@ namespace Waystation.Models
         public float  powerDraw        = 0f;      // watts when active
         public float  idlePowerDraw    = 0f;      // watts when standby
 
+        // ── Utility network simulation fields ─────────────────────────────────
+        // nodeRole: "producer" | "consumer" | "storage" | "conduit" | "isolator" | null
+        public string nodeRole             = null;
+
+        // Electrical
+        public float  outputWatts          = 0f;   // ElectricalProducer — watts generated per tick
+        public float  demandWatts          = 0f;   // ElectricalConsumer — watts consumed per tick
+        public float  storageCapacityWh    = 0f;   // ElectricalStorage  — max watt-hours stored
+
+        // Plumbing
+        public string fluidType            = null; // "water" | "coolant" | "fuel"
+        public float  fluidProducePerTick  = 0f;   // FluidProducer — litres per tick
+        public float  fluidDemandPerTick   = 0f;   // FluidConsumer — litres per tick
+        public float  fluidStorageCapacity = 0f;   // FluidStorage  — max litres
+
+        // Ducting
+        public string gasType              = null; // "oxygen" | "carbon_dioxide" | "nitrogen"
+        public float  gasProducePerTick    = 0f;   // GasProducer  — litres-equivalent per tick
+        public float  gasDemandPerTick     = 0f;   // GasConsumer  — litres-equivalent per tick
+        public float  gasStorageCapacity   = 0f;   // GasStorage   — max litres-equivalent
+
         public static BuildableDefinition FromDict(Dictionary<string, object> raw)
         {
             var b = new BuildableDefinition
@@ -598,6 +672,19 @@ namespace Waystation.Models
             b.requiresPower    = raw.GetBool("requires_power", false);
             b.powerDraw        = raw.GetFloat("power_draw", 0f);
             b.idlePowerDraw    = raw.GetFloat("idle_power_draw", 0f);
+            // Utility network simulation
+            b.nodeRole             = raw.GetString("node_role", null);
+            b.outputWatts          = raw.GetFloat("output_watts", 0f);
+            b.demandWatts          = raw.GetFloat("demand_watts", 0f);
+            b.storageCapacityWh    = raw.GetFloat("storage_capacity_wh", 0f);
+            b.fluidType            = raw.GetString("fluid_type", null);
+            b.fluidProducePerTick  = raw.GetFloat("fluid_produce_per_tick", 0f);
+            b.fluidDemandPerTick   = raw.GetFloat("fluid_demand_per_tick", 0f);
+            b.fluidStorageCapacity = raw.GetFloat("fluid_storage_capacity", 0f);
+            b.gasType              = raw.GetString("gas_type", null);
+            b.gasProducePerTick    = raw.GetFloat("gas_produce_per_tick", 0f);
+            b.gasDemandPerTick     = raw.GetFloat("gas_demand_per_tick", 0f);
+            b.gasStorageCapacity   = raw.GetFloat("gas_storage_capacity", 0f);
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);
             if (raw.ContainsKey("required_materials") &&
@@ -659,6 +746,57 @@ namespace Waystation.Models
                 foreach (var kv in rp)
                     m.rewardsOnPartial[kv.Key] = Convert.ToSingle(kv.Value);
             return m;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // CropDataDefinition — static data for a growable crop type.
+    // Loaded from data/crops/*.json by ContentRegistry.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class CropDataDefinition
+    {
+        public string id;
+        public string cropName;
+        public string seedItemId;
+        public string harvestItemId;
+        public int    harvestQtyMin         = 1;
+        public int    harvestQtyMax         = 3;
+        public float  growthTimePerStage    = 60f;   // seconds at ideal conditions
+        public float  idealTempMin          = 18f;
+        public float  idealTempMax          = 28f;
+        public float  acceptableTempMin     = 10f;
+        public float  acceptableTempMax     = 35f;
+        public float  idealLightMin         = 0.6f;
+        public float  idealLightMax         = 1.0f;
+        public float  acceptableLightMin    = 0.3f;
+        public float  acceptableLightMax    = 1.0f;
+        public bool   requiresWater         = true;
+        public float  damagePerSecond       = 5f;    // % damage/tick under critical conditions
+
+        public static CropDataDefinition FromDict(Dictionary<string, object> raw)
+        {
+            return new CropDataDefinition
+            {
+                id                 = raw.GetString("id"),
+                cropName           = raw.GetString("crop_name", raw.GetString("id")),
+                seedItemId         = raw.GetString("seed_item_id"),
+                harvestItemId      = raw.GetString("harvest_item_id"),
+                harvestQtyMin      = raw.GetInt("harvest_qty_min", 1),
+                harvestQtyMax      = raw.GetInt("harvest_qty_max", 3),
+                growthTimePerStage = raw.GetFloat("growth_time_per_stage", 60f),
+                idealTempMin       = raw.GetFloat("ideal_temp_min", 18f),
+                idealTempMax       = raw.GetFloat("ideal_temp_max", 28f),
+                acceptableTempMin  = raw.GetFloat("acceptable_temp_min", 10f),
+                acceptableTempMax  = raw.GetFloat("acceptable_temp_max", 35f),
+                idealLightMin      = raw.GetFloat("ideal_light_min", 0.6f),
+                idealLightMax      = raw.GetFloat("ideal_light_max", 1.0f),
+                acceptableLightMin = raw.GetFloat("acceptable_light_min", 0.3f),
+                acceptableLightMax = raw.GetFloat("acceptable_light_max", 1.0f),
+                requiresWater      = raw.GetBool("requires_water", true),
+                damagePerSecond    = raw.GetFloat("damage_per_second", 5f),
+            };
         }
     }
 }

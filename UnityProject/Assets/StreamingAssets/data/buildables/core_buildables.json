@@ -125,7 +125,11 @@
         ],
         "size": 2,
         "max_health": 90,
-        "schema_version": "1"
+        "schema_version": "1",
+        "layer": 2,
+        "network_type": "electric",
+        "node_role": "producer",
+        "output_watts": 50.0
     },
     {
         "id": "buildable.generator",
@@ -147,7 +151,10 @@
         "tile_height": 2,
         "max_health": 150,
         "power_output": 20,
-        "schema_version": "1"
+        "schema_version": "1",
+        "network_type": "electric",
+        "node_role": "producer",
+        "output_watts": 200.0
     },
     {
         "id": "buildable.power_wire",
@@ -185,7 +192,10 @@
         "size": 1,
         "max_health": 120,
         "power_capacity": 100,
-        "schema_version": "1"
+        "schema_version": "1",
+        "network_type": "electric",
+        "node_role": "storage",
+        "storage_capacity_wh": 500.0
     },
     {
         "id": "buildable.workbench",
@@ -205,7 +215,9 @@
         "is_workbench": true,
         "beauty_score": 2,
         "workbench_room_type": "general_workshop",
-        "workbench_skill_bonuses": { "engineering": 1.10 },
+        "workbench_skill_bonuses": {
+            "engineering": 1.1
+        },
         "schema_version": "1"
     },
     {
@@ -227,7 +239,9 @@
         "is_workbench": true,
         "beauty_score": 0,
         "workbench_room_type": "refinery",
-        "workbench_skill_bonuses": { "engineering": 1.15 },
+        "workbench_skill_bonuses": {
+            "engineering": 1.15
+        },
         "schema_version": "1"
     },
     {
@@ -301,7 +315,8 @@
         "required_tags": [],
         "size": 1,
         "max_health": 40,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "conduit"
     },
     {
         "id": "buildable.pipe",
@@ -319,7 +334,8 @@
         "required_tags": [],
         "size": 1,
         "max_health": 60,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "conduit"
     },
     {
         "id": "buildable.duct",
@@ -337,7 +353,8 @@
         "required_tags": [],
         "size": 1,
         "max_health": 60,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "conduit"
     },
     {
         "id": "buildable.ice_refiner",
@@ -360,7 +377,13 @@
         "required_tags": [],
         "size": 2,
         "max_health": 200,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "producer",
+        "fluid_type": "water",
+        "fluid_produce_per_tick": 10.0,
+        "gas_type": "oxygen",
+        "gas_produce_per_tick": 5.0,
+        "demand_watts": 15.0
     },
     {
         "id": "buildable.chair",
@@ -368,7 +391,9 @@
         "category": "object",
         "description": "A standard station chair. Required as basic seating in furnished rooms. Contributes to room bonus requirements when placed alongside workbenches.",
         "build_time_ticks": 6,
-        "required_materials": { "item.steel_plate": 1 },
+        "required_materials": {
+            "item.steel_plate": 1
+        },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
@@ -383,7 +408,9 @@
         "category": "object",
         "description": "A work or dining table. Provides a surface for crew activities and contributes to room bonus requirements.",
         "build_time_ticks": 8,
-        "required_materials": { "item.steel_plate": 2 },
+        "required_materials": {
+            "item.steel_plate": 2
+        },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
@@ -398,13 +425,179 @@
         "category": "electrical",
         "description": "A ceiling-mounted light fixture. Required for functional work areas. Contributes to room bonus requirements.",
         "build_time_ticks": 8,
-        "required_materials": { "item.wiring": 2, "item.parts": 1 },
-        "required_skills": { "electrical": 1 },
+        "required_materials": {
+            "item.wiring": 2,
+            "item.parts": 1
+        },
+        "required_skills": {
+            "electrical": 1
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 50,
         "beauty_score": 3,
         "furniture_tag": "lighting",
+        "schema_version": "1",
+        "node_role": "consumer",
+        "demand_watts": 5.0,
+        "requires_power": true,
+        "network_type": "electric"
+    },
+    {
+        "id": "buildable.switch",
+        "display_name": "Electrical Switch",
+        "category": "electrical",
+        "layer": 1,
+        "description": "An inline electrical switch. Toggle open/closed to connect or disconnect wire segments. Open = network connected; closed = network split.",
+        "build_time_ticks": 8,
+        "network_type": "electric",
+        "node_role": "isolator",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.wiring": 2
+        },
+        "required_skills": {
+            "electrical": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 60,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.water_extractor",
+        "display_name": "Water Extractor",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "Extracts water from station ice reserves and pumps it into the connected pipe network. Requires electrical power.",
+        "build_time_ticks": 40,
+        "network_type": "pipe",
+        "node_role": "producer",
+        "fluid_type": "water",
+        "fluid_produce_per_tick": 10.0,
+        "requires_power": true,
+        "demand_watts": 20.0,
+        "required_materials": {
+            "item.steel_plate": 4,
+            "item.wiring": 2
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.water_tank",
+        "display_name": "Water Tank",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "A pressurised storage tank for Water. Connects to fluid pipe networks. Capacity: 500 L.",
+        "build_time_ticks": 30,
+        "network_type": "pipe",
+        "node_role": "storage",
+        "fluid_type": "water",
+        "fluid_storage_capacity": 500.0,
+        "required_materials": {
+            "item.steel_plate": 6
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.valve",
+        "display_name": "Pipe Valve",
+        "category": "plumbing",
+        "layer": 1,
+        "description": "An inline pipe valve. Toggle open/closed to connect or isolate fluid pipe segments.",
+        "build_time_ticks": 10,
+        "network_type": "pipe",
+        "node_role": "isolator",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.steel_plate": 1
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.oxygen_generator",
+        "display_name": "Oxygen Generator",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "Electrolyses water to produce oxygen gas for distribution through duct networks. Requires electrical power and a connected water supply.",
+        "build_time_ticks": 60,
+        "network_type": "duct",
+        "node_role": "producer",
+        "gas_type": "oxygen",
+        "gas_produce_per_tick": 5.0,
+        "requires_power": true,
+        "demand_watts": 30.0,
+        "required_materials": {
+            "item.steel_plate": 5,
+            "item.wiring": 4,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 3
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.gas_tank",
+        "display_name": "Gas Tank",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "A high-pressure storage vessel for gas duct networks. Configurable for Oxygen, CarbonDioxide, or Nitrogen. Capacity: 1000 L.",
+        "build_time_ticks": 35,
+        "network_type": "duct",
+        "node_role": "storage",
+        "gas_storage_capacity": 1000.0,
+        "required_materials": {
+            "item.steel_plate": 8
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 180,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.breaker",
+        "display_name": "Duct Breaker",
+        "category": "plumbing",
+        "layer": 1,
+        "description": "An inline duct breaker. Toggle open/closed to connect or isolate gas duct segments.",
+        "build_time_ticks": 10,
+        "network_type": "duct",
+        "node_role": "isolator",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.steel_plate": 1
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
         "schema_version": "1"
     },
     {
@@ -424,10 +617,11 @@
         "required_tags": [],
         "size": 1,
         "max_health": 120,
-        "requires_power": true,
-        "power_draw": 10.0,
         "idle_power_draw": 2.0,
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 10.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.access_terminal",
@@ -445,11 +639,12 @@
         "required_tags": [],
         "size": 1,
         "max_health": 80,
-        "requires_power": true,
-        "power_draw": 2.0,
         "idle_power_draw": 0.5,
         "furniture_tag": "terminal",
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 2.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.shuttle_landing_pad",
@@ -487,6 +682,111 @@
         "size": 1,
         "max_health": 100,
         "schema_version": "1"
+    },
+    {
+        "id": "buildable.military_terminal",
+        "display_name": "Military Research Terminal",
+        "category": "object",
+        "description": "A hardened research station for military technologies. Crew assigned here generate Military research points.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 8,
+            "item.wiring": 4
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "beauty_score": 2,
+        "is_workbench": true,
+        "workbench_room_type": "research_lab",
+        "workbench_skill_bonuses": {
+            "research": 1.2
+        },
+        "schema_version": "1",
+        "demand_watts": 2.0,
+        "network_type": "electric",
+        "node_role": "consumer"
+    },
+    {
+        "id": "buildable.economic_terminal",
+        "display_name": "Economic Research Terminal",
+        "category": "object",
+        "description": "An analytics workstation for economic research. Crew assigned here generate Economics research points.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 5
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "beauty_score": 2,
+        "is_workbench": true,
+        "workbench_room_type": "research_lab",
+        "workbench_skill_bonuses": {
+            "research": 1.2
+        },
+        "schema_version": "1",
+        "demand_watts": 1.5,
+        "network_type": "electric",
+        "node_role": "consumer"
+    },
+    {
+        "id": "buildable.science_terminal",
+        "display_name": "Science Research Terminal",
+        "category": "object",
+        "description": "A multi-purpose science workstation for theoretical research. Crew assigned here generate Sciences research points.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 6
+        },
+        "required_skills": {
+            "engineering": 3
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "beauty_score": 3,
+        "is_workbench": true,
+        "workbench_room_type": "research_lab",
+        "workbench_skill_bonuses": {
+            "research": 1.25
+        },
+        "schema_version": "1",
+        "demand_watts": 2.5,
+        "network_type": "electric",
+        "node_role": "consumer"
+    },
+    {
+        "id": "buildable.data_storage_server",
+        "display_name": "Data Storage Server",
+        "category": "object",
+        "description": "A secure rack-mounted server unit for storing research datachips. Each server holds up to 16 datachips. Requires power \u2014 a loss of power or structural integrity risks the research stored within.",
+        "build_time_ticks": 25,
+        "required_materials": {
+            "item.steel_plate": 4,
+            "item.wiring": 6,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 100,
+        "cargo_capacity": 16,
+        "beauty_score": 1,
+        "furniture_tag": "storage",
+        "schema_version": "1",
+        "demand_watts": 1.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     }
 ]
-

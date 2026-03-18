@@ -15,6 +15,7 @@ namespace Waystation.Systems
 
         private const string RestJob         = "job.rest";
         private const string EatJob          = "job.eat";
+        private const string RecreateJob     = "job.recreate";
         private const float  HungerCritical  = 0.25f;
         private const float  RestCritical    = 0.20f;
 
@@ -22,9 +23,10 @@ namespace Waystation.Systems
         private static readonly Dictionary<string, List<string>> ClassDayJobs =
             new Dictionary<string, List<string>>
         {
-            { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection" } },
-            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support", "job.haul", "job.refine", "job.craft" } },
-            { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul" } }
+            { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection", "job.research_military" } },
+            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support", "job.haul", "job.refine", "job.craft", "job.research_science" } },
+            { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul", "job.research_economic", "job.research_military", "job.research_science" } },
+            { "class.farming",     new List<string> { "job.farming" } }
         };
 
         // Category priority for wander fallback: lower index = preferred
@@ -66,6 +68,16 @@ namespace Waystation.Systems
             if (rest < RestCritical && npc.currentJobId != RestJob)
             {
                 SetJob(npc, RestJob, station);
+                return;
+            }
+
+            // Crisis override: force recreational task, reject productive work
+            if (npc.inCrisis)
+            {
+                if (npc.currentJobId != RecreateJob || npc.jobTimer <= 0)
+                    AssignRecreationalTask(npc, station);
+                else
+                    npc.jobTimer--;
                 return;
             }
 
@@ -163,8 +175,34 @@ namespace Waystation.Systems
             var module = FindModule(job, station);
             npc.currentJobId  = jobId;
             npc.jobModuleUid  = module?.uid;
-            npc.jobTimer      = job.durationTicks;
+            // Apply WorkModifier to job duration: higher mood = shorter duration (faster work)
+            int baseDuration  = job.durationTicks;
+            float modifier    = npc.workModifier > 0f ? npc.workModifier : 1.0f;
+            npc.jobTimer      = Mathf.Max(1, Mathf.RoundToInt(baseDuration / modifier));
             if (module != null) npc.location = module.definitionId;
+        }
+
+        /// <summary>
+        /// Assigns a recreational task to an NPC in crisis.  The NPC wanders to
+        /// the most comfortable non-work module and idles there.
+        /// </summary>
+        private void AssignRecreationalTask(NPCInstance npc, StationState station)
+        {
+            // Prefer hab modules for recreation
+            ModuleInstance best = null;
+            int bestPriority = int.MaxValue;
+            foreach (var mod in station.modules.Values)
+            {
+                if (!mod.active) continue;
+                int priority = System.Array.IndexOf(WanderCategoryPriority, mod.category);
+                if (priority < 0) priority = WanderCategoryPriority.Length;
+                if (priority < bestPriority) { bestPriority = priority; best = mod; }
+            }
+
+            npc.currentJobId  = RecreateJob;
+            npc.jobModuleUid  = best?.uid;
+            npc.jobTimer      = 4;
+            if (best != null) npc.location = best.definitionId;
         }
 
         private ModuleInstance FindModule(JobDefinition job, StationState station)

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "greenhouse",
+    "display_name": "Greenhouse",
+    "workbench_cap": 8,
+    "requirements_per_workbench": [
+      { "buildable_id_or_tag": "buildable.grow_light",  "count": 1, "display_label": "Grow Light" },
+      { "buildable_id_or_tag": "buildable.vent",        "count": 1, "display_label": "Climate Vent" }
+    ],
+    "skill_bonuses": { "farming": 1.15 }
+  }
+]

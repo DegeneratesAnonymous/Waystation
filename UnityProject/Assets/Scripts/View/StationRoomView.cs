@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
+using Waystation.Systems;
 using Waystation.UI;
 
 namespace Waystation.View
@@ -129,11 +130,26 @@ namespace Waystation.View
         public ViewMode ActiveViewMode => _viewMode;
         public static StationRoomView Instance { get; private set; }
 
+        // ── Overlay tint colours ───────────────────────────────────────
+        // Electrical overlay: amber = powered, dark orange = underpowered, grey = isolated
+        private static readonly Color TintElecPowered    = new Color(1.00f, 0.75f, 0.10f); // bright amber
+        private static readonly Color TintElecUnpowered  = new Color(0.70f, 0.25f, 0.05f); // dark orange
+        private static readonly Color TintElecIsolated   = new Color(0.35f, 0.30f, 0.20f); // dim brown
+        // Plumbing overlay: blue = has fluid, grey = empty
+        private static readonly Color TintPipeFlowing    = new Color(0.20f, 0.55f, 1.00f); // bright blue
+        private static readonly Color TintPipeEmpty      = new Color(0.25f, 0.28f, 0.40f); // steel grey
+        // Ducting overlay: teal = has gas, grey = empty
+        private static readonly Color TintDuctFlowing    = new Color(0.10f, 0.85f, 0.72f); // bright teal
+        private static readonly Color TintDuctEmpty      = new Color(0.22f, 0.35f, 0.35f); // dim teal-grey
+        // Non-relevant network tile (dimmed when a different overlay is active)
+        private static readonly Color TintDimmed         = new Color(0.20f, 0.22f, 0.25f); // near-black
+
         /// <summary>Called by GameHUD buttons to switch the active view overlay.</summary>
         public void SetViewMode(ViewMode mode)
         {
             _viewMode = mode;
             UpdateNetworkVisibility();
+            UpdateNetworkOverlay();
         }
 
         // Tile cycling: left-click the same tile repeatedly to cycle through stacked foundations.
@@ -175,6 +191,8 @@ namespace Waystation.View
             BuildRoom();
 
             _gm.OnTick += OnTick;
+            if (_gm.UtilityNetworks != null)
+                _gm.UtilityNetworks.OnNetworkChanged += _ => UpdateNetworkOverlay();
             SpawnCrewDots();
             _ready = true;
         }
@@ -666,7 +684,10 @@ namespace Waystation.View
                 }
                 else if (f.buildableId == "buildable.wire"
                       || f.buildableId == "buildable.pipe"
-                      || f.buildableId == "buildable.duct")
+                      || f.buildableId == "buildable.duct"
+                      || f.buildableId == "buildable.switch"
+                      || f.buildableId == "buildable.valve"
+                      || f.buildableId == "buildable.breaker")
                 {
                     Sprite netSprite = GetNetworkSprite(f);
                     var netGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
@@ -747,14 +768,149 @@ namespace Waystation.View
             }
         }
 
+        /// <summary>
+        /// Apply per-network colour tinting to all wire / pipe / duct tiles based on
+        /// the current overlay mode and each network's live supply state.
+        /// Called after every tick and whenever the overlay mode changes.
+        /// In Normal mode all tiles are reset to white (no tint).
+        /// </summary>
+        private void UpdateNetworkOverlay()
+        {
+            if (_gm?.Station == null) return;
+            foreach (var kv in _foundTiles)
+            {
+                if (!_gm.Station.foundations.TryGetValue(kv.Key, out var f)) continue;
+                if (kv.Value == null) continue;
+                var sr = kv.Value.GetComponent<SpriteRenderer>();
+                if (sr == null) continue;
+                sr.color = GetNetworkTileColor(f);
+            }
+        }
+
+        /// <summary>
+        /// Returns the tint colour a network tile should show in the current overlay
+        /// mode.  Non-network foundations and tiles not relevant to the active overlay
+        /// are returned as white (no tint).
+        /// </summary>
+        private Color GetNetworkTileColor(FoundationInstance f)
+        {
+            if (_viewMode == ViewMode.Normal) return Color.white;
+            if (_gm?.Station == null)         return Color.white;
+
+            // Classify the foundation by its network role
+            string tileNetType = f.buildableId switch
+            {
+                "buildable.wire"    or "buildable.switch"  => "electric",
+                "buildable.pipe"    or "buildable.valve"   => "pipe",
+                "buildable.duct"    or "buildable.breaker" => "duct",
+                _ => null
+            };
+
+            if (tileNetType == null) return Color.white; // not a network conduit tile
+
+            // Look up the network this tile belongs to
+            NetworkInstance net = null;
+            if (f.networkId != null)
+                _gm.Station.networks.TryGetValue(f.networkId, out net);
+
+            switch (_viewMode)
+            {
+                case ViewMode.Electricity:
+                    if (tileNetType != "electric") return TintDimmed;
+                    if (net == null)               return TintElecIsolated;
+                    {
+                        Color baseColor = net.totalDemand <= 0f || net.totalSupply + net.storedEnergy >= net.totalDemand
+                            ? TintElecPowered
+                            : TintElecUnpowered;
+                        return ApplyNetworkHue(net, baseColor);
+                    }
+
+                case ViewMode.Pipes:
+                    if (tileNetType != "pipe") return TintDimmed;
+                    if (net == null)           return TintPipeEmpty;
+                    {
+                        Color baseColor = net.contentAmount > 0f ? TintPipeFlowing : TintPipeEmpty;
+                        return ApplyNetworkHue(net, baseColor);
+                    }
+
+                case ViewMode.Ducts:
+                    if (tileNetType != "duct") return TintDimmed;
+                    if (net == null)           return TintDuctEmpty;
+                    {
+                        Color baseColor = net.contentAmount > 0f ? TintDuctFlowing : TintDuctEmpty;
+                        return ApplyNetworkHue(net, baseColor);
+                    }
+
+                default:
+                    return Color.white;
+            }
+        }
+
+        /// <summary>
+        /// Shifts the hue of <paramref name="baseColor"/> by a small, deterministic
+        /// amount derived from the network UID so that adjacent sub-networks render
+        /// in visually distinct shades within the same overlay.
+        /// </summary>
+        private static Color ApplyNetworkHue(NetworkInstance net, Color baseColor)
+        {
+            // Use a stable FNV-1a hash (not string.GetHashCode which varies per
+            // runtime / platform) to get a ±15° hue shift that is deterministic
+            // across sessions and all Unity target platforms.
+            int hash     = StableHash(net.uid);
+            float offset = ((hash & 0xFF) / 255f - 0.5f) * 0.083f; // ≈ ±15° / 360°
+            Color.RGBToHSV(baseColor, out float h, out float s, out float v);
+            h = (h + offset + 1f) % 1f;
+            return Color.HSVToRGB(h, s, v);
+        }
+
         private Sprite GetNetworkSprite(FoundationInstance f)
         {
             if (_gm?.Networks == null) return TileAtlas.GetWire(0);
-            int mask = _gm.Networks.GetConnectionMask(_gm.Station, f.tileCol, f.tileRow, f.buildableId.Contains("wire") ? "electric" : f.buildableId.Contains("pipe") ? "pipe" : "duct");
-            if (f.buildableId == "buildable.wire") return TileAtlas.GetWire(mask);
-            if (f.buildableId == "buildable.pipe") return TileAtlas.GetPipe(mask, "normal");
-            return TileAtlas.GetDuct(mask);
+            string netType = f.buildableId switch
+            {
+                "buildable.wire"    or "buildable.switch"  => "electric",
+                "buildable.pipe"    or "buildable.valve"   => "pipe",
+                "buildable.duct"    or "buildable.breaker" => "duct",
+                _ => "electric",
+            };
+            int mask = _gm.Networks.GetConnectionMask(_gm.Station, f.tileCol, f.tileRow, netType);
+            return netType switch
+            {
+                "electric" => TileAtlas.GetWire(mask),
+                "pipe"     => TileAtlas.GetPipe(mask, "normal"),
+                _          => TileAtlas.GetDuct(mask),
+            };
         }
+
+        /// <summary>
+        /// FNV-1a hash over the UTF-16 characters of <paramref name="s"/>.
+        /// Stable across all .NET runtime versions and Unity platforms,
+        /// unlike <c>string.GetHashCode()</c>.
+        /// </summary>
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                foreach (char c in s)
+                {
+                    hash ^= c;
+                    hash *= 16777619u;
+                }
+                return (int)(hash & int.MaxValue);
+            }
+        }
+
+        private bool IsIsolator(FoundationInstance f)
+            => f.buildableId is "buildable.switch" or "buildable.valve" or "buildable.breaker";
+
+        private static string GetIsolatorLabel(string buildableId) => buildableId switch
+        {
+            "buildable.switch"  => "Switch",
+            "buildable.valve"   => "Valve",
+            "buildable.breaker" => "Breaker",
+            _                   => "Isolator",
+        };
 
         private void SelectContextFoundation(int col, int row)
         {
@@ -959,9 +1115,12 @@ namespace Waystation.View
             foreach (var f in _gm.Station.foundations.Values)
             {
                 if (f.tileCol != col || f.tileRow != row) continue;
-                if (f.buildableId != "buildable.wire" &&
-                    f.buildableId != "buildable.pipe" &&
-                    f.buildableId != "buildable.duct") continue;
+                if (f.buildableId != "buildable.wire"    &&
+                    f.buildableId != "buildable.pipe"    &&
+                    f.buildableId != "buildable.duct"    &&
+                    f.buildableId != "buildable.switch"  &&
+                    f.buildableId != "buildable.valve"   &&
+                    f.buildableId != "buildable.breaker") continue;
                 if (!_foundTiles.TryGetValue(f.uid, out var go) || go == null) continue;
                 var sr = go.GetComponent<SpriteRenderer>();
                 if (sr != null) sr.sprite = GetNetworkSprite(f);
@@ -1346,6 +1505,10 @@ namespace Waystation.View
         {
             if (station.GetCrew().Count != _crew.Count) SpawnCrewDots();
             RebuildFoundationTiles();
+            // Re-apply network overlay tinting every tick so supply-state changes
+            // (isEnergised, isFluidSupplied, isGasSupplied) are reflected visually.
+            if (_viewMode != ViewMode.Normal)
+                UpdateNetworkOverlay();
         }
 
         // ── Drag-selection helpers ────────────────────────────────────────────
@@ -1596,6 +1759,11 @@ namespace Waystation.View
                           _ctxFoundation.status == "complete";
             if (!isDoor) _doorAccessEditing = false;
 
+            // Fetch network inspection data once so it can inform height + drawing.
+            NetworkInspectionData netInspect = null;
+            if (hasFoundCtx && _ctxFoundation.networkId != null && _gm?.UtilityNetworks != null)
+                netInspect = _gm.UtilityNetworks.GetInspectionData(_gm.Station, _ctxFoundation.uid);
+
             // Compute dynamic panel height so it expands upward for door controls or extra NPC lines.
             float PH = 150f;
             if (isDoor)
@@ -1618,6 +1786,17 @@ namespace Waystation.View
                 }
             }
 
+            // Expand height for network member list (producers, consumers, storage).
+            const int MaxMembersShown = 6;
+            if (netInspect != null && netInspect.Members.Count > 0)
+            {
+                int shown = Mathf.Min(netInspect.Members.Count, MaxMembersShown);
+                PH += 18f          // "Members:" header
+                    + shown * 14f; // one row per member
+                if (netInspect.Members.Count > MaxMembersShown)
+                    PH += 12f;     // "+N more…" overflow line
+            }
+
             const float PW = 290f;
             float px = 10f, py = Screen.height - PH - 10f;
             var panelRect = new Rect(px, py, PW, PH);
@@ -1638,6 +1817,66 @@ namespace Waystation.View
                     string content = net.contentType != null ? $"  [{net.contentType}]" : "";
                     GUI.Label(new Rect(8, y, PW - 16, 16), $"Network: {net.networkType}{content}  ({net.memberUids.Count} tiles)", _ctxValueStyle);
                     y += 18;
+                    // ── Utility network inspection data ───────────────────────
+                    if (net.networkType == "electric")
+                    {
+                        GUI.Label(new Rect(8, y, PW - 16, 16),
+                            $"Supply: {net.totalSupply:F0}W  Demand: {net.totalDemand:F0}W", _ctxValueStyle);
+                        y += 16;
+                        GUI.Label(new Rect(8, y, PW - 16, 16),
+                            $"Battery: {net.storedEnergy:F0}/{net.storageCapacity:F0} Wh", _ctxValueStyle);
+                        y += 18;
+                    }
+                    else
+                    {
+                        GUI.Label(new Rect(8, y, PW - 16, 16),
+                            $"Stored: {net.contentAmount:F0}/{net.contentCapacity:F0} L", _ctxValueStyle);
+                        y += 18;
+                    }
+                    // ── Member list (producers, consumers, storage) ───────────
+                    if (netInspect != null && netInspect.Members.Count > 0)
+                    {
+                        GUI.Label(new Rect(8, y, PW - 16, 16), "Members:", _ctxValueStyle);
+                        y += 16;
+                        int shown = Mathf.Min(netInspect.Members.Count, MaxMembersShown);
+                        for (int mi = 0; mi < shown; mi++)
+                        {
+                            var m        = netInspect.Members[mi];
+                            string bName = m.BuildableId.Contains('.') ? m.BuildableId.Split('.')[^1] : m.BuildableId;
+                            string stat  = m.Role switch
+                            {
+                                "producer" => net.networkType == "electric"
+                                    ? $"+{m.OutputWatts:F0}W"
+                                    : "+prod",
+                                "consumer" => net.networkType == "electric"
+                                    ? $"-{m.DemandWatts:F0}W {(m.IsEnergised ? "\u2713" : "\u2717")}"
+                                    : $"{(m.IsSupplied ? "\u2713" : "\u2717")}",
+                                "storage"  => net.networkType == "electric"
+                                    ? $"{m.StoredAmount:F0} Wh"
+                                    : $"{m.StoredAmount:F0} L",
+                                _          => m.Role,
+                            };
+                            GUI.Label(new Rect(16, y, PW - 24, 13),
+                                $"\u2022 {bName}  [{m.Role}]  {stat}", _ctxValueStyle);
+                            y += 14;
+                        }
+                        if (netInspect.Members.Count > MaxMembersShown)
+                        {
+                            GUI.Label(new Rect(16, y, PW - 24, 12),
+                                $"+ {netInspect.Members.Count - MaxMembersShown} more\u2026", _ctxValueStyle);
+                            y += 12;
+                        }
+                    }
+                }
+                // ── Isolator toggle ───────────────────────────────────────────
+                if (f.networkId != null && IsIsolator(f))
+                {
+                    string state = f.isolatorOpen ? "Open" : "Closed";
+                    if (GUI.Button(new Rect(8, y, PW - 16, 20), $"Toggle {GetIsolatorLabel(f.buildableId)} [{state}]", _ctxCtaStyle))
+                    {
+                        _gm.UtilityNetworks.ToggleIsolator(_gm.Station, f.uid);
+                    }
+                    y += 26;
                 }
                 if (f.buildableId == "buildable.ice_refiner")
                 {

@@ -40,28 +40,41 @@ namespace Waystation.Core
         [SerializeField] private string saveFileName = "waystation_save.json";
 
         // ── System references ─────────────────────────────────────────────────
-        public ContentRegistry   Registry       { get; private set; }
-        public ResourceSystem    Resources      { get; private set; }
-        public NPCSystem         Npcs           { get; private set; }
-        public JobSystem         Jobs           { get; private set; }
-        public FactionSystem     Factions       { get; private set; }
-        public CombatSystem      Combat         { get; private set; }
-        public TradeSystem       Trade          { get; private set; }
-        public EventSystem       Events         { get; private set; }
-        public InventorySystem   Inventory      { get; private set; }
-        public VisitorSystem     Visitors       { get; private set; }
-        public BuildingSystem    Building       { get; private set; }
-        public CommsSystem       Comms          { get; private set; }
-        public NetworkSystem     Networks       { get; private set; }
-        public MissionSystem     Missions       { get; private set; }
-        public RoomSystem        Rooms          { get; private set; }
+        public ContentRegistry      Registry          { get; private set; }
+        public ResourceSystem       Resources         { get; private set; }
+        public NPCSystem            Npcs              { get; private set; }
+        public JobSystem            Jobs              { get; private set; }
+        public FactionSystem        Factions          { get; private set; }
+        public CombatSystem         Combat            { get; private set; }
+        public TradeSystem          Trade             { get; private set; }
+        public EventSystem          Events            { get; private set; }
+        public InventorySystem      Inventory         { get; private set; }
+        public VisitorSystem        Visitors          { get; private set; }
+        public BuildingSystem       Building          { get; private set; }
+        public CommsSystem          Comms             { get; private set; }
+        public NetworkSystem        Networks          { get; private set; }
+        public UtilityNetworkManager UtilityNetworks  { get; private set; }
+        public MissionSystem        Missions          { get; private set; }
+        public RoomSystem           Rooms             { get; private set; }
+        public ResearchSystem       Research          { get; private set; }
+        public MapSystem            Map               { get; private set; }
+        public AsteroidMissionSystem AsteroidMissions { get; private set; }
 
-        // ── Visitor pipeline systems ──────────────────────────────────────────
-        public AntennaSystem           Antenna         { get; private set; }
-        public ShipVisitStateMachine   ShipVisits      { get; private set; }
-        public NPCTaskQueueManager     TaskQueue       { get; private set; }
-        public CommunicationsSystem    CommSystem      { get; private set; }
+        // ── Visitor pipeline systems ──────────────────────────────────────────────────────────
+        public AntennaSystem            Antenna       { get; private set; }
+        public ShipVisitStateMachine    ShipVisits    { get; private set; }
+        public NPCTaskQueueManager      TaskQueue     { get; private set; }
+        public CommunicationsSystem     CommSystem    { get; private set; }
 
+        // ── Farming / climate systems ───────────────────────────────────────────────────────
+        public FarmingSystem            Farming       { get; private set; }
+        public TemperatureSystem        Temperature   { get; private set; }
+
+        // ── Mood & social systems ───────────────────────────────────────────────────────────────
+        public MoodSystem               Mood          { get; private set; }
+        public RelationshipRegistry     Relationships { get; private set; }
+        public ConversationSystem       Conversations { get; private set; }
+        public ProximitySystem          Proximity     { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -132,14 +145,39 @@ namespace Waystation.Core
             Building  = new BuildingSystem(Registry);
             Comms     = new CommsSystem();
             Networks  = new NetworkSystem(Registry);
+            UtilityNetworks = new UtilityNetworkManager(Registry, Networks);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+            Research  = new ResearchSystem(Registry);
+            Map       = new MapSystem();
+            AsteroidMissions = new AsteroidMissionSystem();
 
             // Visitor pipeline systems
             Antenna    = new AntennaSystem(Registry);
             ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
             TaskQueue  = new NPCTaskQueueManager();
             CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
+
+            // Farming / climate systems
+            Farming   = new FarmingSystem(Registry);
+            Temperature = new TemperatureSystem(Registry);
+
+            // Mood & social systems
+            Mood          = new MoodSystem();
+            Relationships = new RelationshipRegistry();
+            Conversations = new ConversationSystem();
+            Proximity     = new ProximitySystem();
+
+            // Wire sleep/wake events from NPCSystem → MoodSystem
+            Npcs.OnNPCSleeps += npc => Mood.OnNPCSleeps(npc);
+            Npcs.OnNPCWakes  += npc => Mood.OnNPCWakes(npc);
+
+            // Log crisis events to the station log (requires station to be non-null,
+            // so we use a lambda that captures Station at fire time)
+            Mood.OnNpcEnteredCrisis       += npc => Station?.LogEvent(
+                $"{npc.name} is in crisis and has abandoned their duties.");
+            Mood.OnNpcRecoveredFromCrisis += npc => Station?.LogEvent(
+                $"{npc.name} has recovered from crisis and returned to work.");
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -163,8 +201,8 @@ namespace Waystation.Core
             OnGameLoaded?.Invoke();
             // Seed the room bonus cache immediately so it's available on the first frame.
             Rooms.RebuildBonusCache(Station);
-            // Seed the network positional lookup so GetConnectionMask is O(1) from tick 1.
-            Networks.RebuildNetworks(Station);
+            // Rebuild utility networks so grid connectivity is available from tick 1.
+            UtilityNetworks.RebuildAll(Station);
             Debug.Log($"[GameManager] New game started: {stationName}");
         }
 
@@ -230,14 +268,36 @@ namespace Waystation.Core
             Inventory.Tick(Station);
             Visitors.Tick(Station);
             Building.Tick(Station);
+            // If a network-capable foundation just completed, rebuild utility networks
+            // so the new tile joins its network before the simulation tick runs.
+            if (Building.NetworkRebuildNeeded)
+            {
+                UtilityNetworks.RebuildAll(Station);
+                Building.ClearNetworkRebuildFlag();
+            }
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+            Research.Tick(Station);
+            Map.Tick(Station);
+            AsteroidMissions.Tick(Station);
+            UtilityNetworks.Tick(Station);
 
             // Visitor pipeline (antenna detection → state machine → comms tasks)
             Antenna.Tick(Station);
             ShipVisits.Tick(Station);
             CommSystem.Tick(Station);
+
+            // Farming / climate (temperature before farming so planter temps are fresh)
+            Temperature.Tick(Station);
+            Farming.Tick(Station);
+
+            // Mood & social systems (run after job assignment so crisis is set before
+            // next job tick, and after NPC needs so sleep state is current)
+            Mood.Tick(Station);
+            Proximity.Tick(Station, Mood, Relationships);
+            Conversations.Tick(Station, Mood, Relationships);
+            Relationships.Tick(Station, Mood);
 
             // Process events
             var newEvents = Events.Tick(Station);
@@ -336,7 +396,24 @@ namespace Waystation.Core
         {
             if (Station == null) return;
             string path = Path.Combine(Application.persistentDataPath, saveFileName);
-            var data    = new Dictionary<string, object>
+
+            // Serialise ResearchState: one entry per branch with points + unlocked node ids.
+            // Also captures pending_datachips (chips produced but awaiting storage space).
+            var researchData = new Dictionary<string, object>();
+            if (Station.research != null)
+            {
+                foreach (var kv in Station.research.branches)
+                {
+                    researchData[kv.Key.ToString()] = new Dictionary<string, object>
+                    {
+                        { "points",   kv.Value.points },
+                        { "unlocked", new List<string>(kv.Value.unlockedNodeIds) },
+                    };
+                }
+                researchData["pending_datachips"] = Station.research.pendingDatachips;
+            }
+
+            var data = new Dictionary<string, object>
             {
                 { "station_name",         Station.stationName },
                 { "tick",                 Station.tick },
@@ -346,7 +423,8 @@ namespace Waystation.Core
                 { "policy",               Station.policy },
                 { "event_cooldowns",      Station.eventCooldowns },
                 { "log",                  Station.log },
-                { "custom_room_names",    Station.customRoomNames }
+                { "custom_room_names",    Station.customRoomNames },
+                { "research",             researchData },
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));
