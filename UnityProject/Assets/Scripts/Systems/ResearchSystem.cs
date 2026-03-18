@@ -23,18 +23,22 @@ namespace Waystation.Systems
         private static readonly Dictionary<string, ResearchBranch> TerminalBranch =
             new Dictionary<string, ResearchBranch>
             {
-                { "buildable.military_terminal",  ResearchBranch.Military   },
-                { "buildable.economic_terminal",  ResearchBranch.Economics  },
-                { "buildable.science_terminal",   ResearchBranch.Sciences   },
+                { "buildable.industry_terminal",    ResearchBranch.Industry    },
+                { "buildable.exploration_terminal", ResearchBranch.Exploration },
+                { "buildable.diplomacy_terminal",   ResearchBranch.Diplomacy   },
+                { "buildable.security_terminal",    ResearchBranch.Security    },
+                { "buildable.science_terminal",     ResearchBranch.Science     },
             };
 
         // Research job-id → branch mapping
         private static readonly Dictionary<string, ResearchBranch> JobBranch =
             new Dictionary<string, ResearchBranch>
             {
-                { "job.research_military",  ResearchBranch.Military   },
-                { "job.research_economic",  ResearchBranch.Economics  },
-                { "job.research_science",   ResearchBranch.Sciences   },
+                { "job.research_industry",    ResearchBranch.Industry    },
+                { "job.research_exploration", ResearchBranch.Exploration },
+                { "job.research_diplomacy",   ResearchBranch.Diplomacy   },
+                { "job.research_security",    ResearchBranch.Security    },
+                { "job.research_science",     ResearchBranch.Science     },
             };
 
         public ResearchSystem(ContentRegistry registry) => _registry = registry;
@@ -55,8 +59,9 @@ namespace Waystation.Systems
                 if (npc.currentJobId == null) continue;
                 if (!JobBranch.TryGetValue(npc.currentJobId, out var branch)) continue;
 
-                int researchSkill = npc.skills.ContainsKey("research") ? npc.skills["research"] : 5;
-                float pts = 0.04f * (0.5f + researchSkill / 10f);
+                int researchSkill = npc.skills.ContainsKey("science") ? npc.skills["science"]
+                                  : npc.skills.ContainsKey("research") ? npc.skills["research"] : 5;
+                float pts = 0.04f * (0.5f + researchSkill / 10f) * npc.workModifier;
 
                 // Apply room bonus from any complete terminal of matching branch.
                 pts *= GetTerminalMultiplier(branch, station);

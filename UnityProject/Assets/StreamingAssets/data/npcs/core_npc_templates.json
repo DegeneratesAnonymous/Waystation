@@ -2,15 +2,37 @@
   {
     "id": "npc.engineer",
     "base_class": "class.engineering",
-    "allowed_subclasses": ["class.engineering"],
+    "allowed_subclasses": [
+      "class.engineering"
+    ],
     "skill_ranges": {
-      "engineering": [3, 7],
-      "electrical":  [2, 5],
-      "repair":      [3, 8],
-      "technical":   [3, 7],
-      "combat":      [1, 3]
+      "engineering": [
+        3,
+        7
+      ],
+      "electrical": [
+        2,
+        5
+      ],
+      "repair": [
+        3,
+        8
+      ],
+      "technical": [
+        3,
+        7
+      ],
+      "combat": [
+        1,
+        3
+      ]
     },
-    "trait_pool": ["methodical", "resilient", "curious", "anxious"],
+    "trait_pool": [
+      "methodical",
+      "resilient",
+      "curious",
+      "anxious"
+    ],
     "name_pool": [],
     "equipment_pool": [],
     "spawn_rules": {},
@@ -19,13 +41,29 @@
   {
     "id": "npc.security_officer",
     "base_class": "class.security",
-    "allowed_subclasses": ["class.security"],
+    "allowed_subclasses": [
+      "class.security"
+    ],
     "skill_ranges": {
-      "combat":      [4, 9],
-      "perception":  [3, 7],
-      "investigation":[2, 6]
+      "combat": [
+        4,
+        9
+      ],
+      "perception": [
+        3,
+        7
+      ],
+      "investigation": [
+        2,
+        6
+      ]
     },
-    "trait_pool": ["vigilant", "resilient", "bitter", "brave"],
+    "trait_pool": [
+      "vigilant",
+      "resilient",
+      "bitter",
+      "brave"
+    ],
     "name_pool": [],
     "equipment_pool": [],
     "spawn_rules": {},
@@ -34,14 +72,34 @@
   {
     "id": "npc.scientist",
     "base_class": "class.sciences",
-    "allowed_subclasses": ["class.sciences"],
+    "allowed_subclasses": [
+      "class.sciences"
+    ],
     "skill_ranges": {
-      "research":    [3, 8],
-      "medical":     [2, 6],
-      "analysis":    [3, 7],
-      "chemistry":   [2, 5]
+      "medical": [
+        2,
+        6
+      ],
+      "analysis": [
+        3,
+        7
+      ],
+      "chemistry": [
+        2,
+        5
+      ],
+      "science": [
+        3,
+        8
+      ]
     },
-    "trait_pool": ["curious", "methodical", "eccentric", "pragmatic", "anxious"],
+    "trait_pool": [
+      "curious",
+      "methodical",
+      "eccentric",
+      "pragmatic",
+      "anxious"
+    ],
     "name_pool": [],
     "equipment_pool": [],
     "spawn_rules": {},
@@ -52,13 +110,23 @@
     "base_class": "class.trader",
     "allowed_subclasses": [],
     "skill_ranges": {
-      "negotiation": [3, 8],
-      "logistics":   [2, 6]
+      "negotiation": [
+        3,
+        8
+      ],
+      "logistics": [
+        2,
+        6
+      ]
     },
-    "trait_pool": ["opportunistic", "friendly", "pragmatic"],
+    "trait_pool": [
+      "opportunistic",
+      "friendly",
+      "pragmatic"
+    ],
     "faction_bias": {
       "faction.free_traders_guild": 0.7,
-      "faction.stellar_authority":  0.3
+      "faction.stellar_authority": 0.3
     },
     "spawn_rules": {},
     "schema_version": "1"
@@ -68,10 +136,19 @@
     "base_class": "class.civilian",
     "allowed_subclasses": [],
     "skill_ranges": {
-      "negotiation": [1, 4]
+      "negotiation": [
+        1,
+        4
+      ]
     },
-    "trait_pool": ["resilient", "anxious", "desperate"],
-    "faction_bias": { "faction.refugee_network": 1.0 },
+    "trait_pool": [
+      "resilient",
+      "anxious",
+      "desperate"
+    ],
+    "faction_bias": {
+      "faction.refugee_network": 1.0
+    },
     "spawn_rules": {},
     "schema_version": "1"
   },
@@ -80,11 +157,23 @@
     "base_class": "class.security",
     "allowed_subclasses": [],
     "skill_ranges": {
-      "investigation": [5, 9],
-      "perception":    [4, 8]
+      "investigation": [
+        5,
+        9
+      ],
+      "perception": [
+        4,
+        8
+      ]
     },
-    "trait_pool": ["methodical", "vigilant", "authoritarian"],
-    "faction_bias": { "faction.stellar_authority": 1.0 },
+    "trait_pool": [
+      "methodical",
+      "vigilant",
+      "authoritarian"
+    ],
+    "faction_bias": {
+      "faction.stellar_authority": 1.0
+    },
     "spawn_rules": {},
     "schema_version": "1"
   },
@@ -93,11 +182,24 @@
     "base_class": "class.trader",
     "allowed_subclasses": [],
     "skill_ranges": {
-      "negotiation": [4, 8],
-      "logistics":   [3, 7],
-      "combat":      [2, 5]
+      "negotiation": [
+        4,
+        8
+      ],
+      "logistics": [
+        3,
+        7
+      ],
+      "combat": [
+        2,
+        5
+      ]
     },
-    "trait_pool": ["cunning", "pragmatic", "opportunistic"],
+    "trait_pool": [
+      "cunning",
+      "pragmatic",
+      "opportunistic"
+    ],
     "spawn_rules": {},
     "schema_version": "1"
   },
@@ -106,11 +208,23 @@
     "base_class": "class.security",
     "allowed_subclasses": [],
     "skill_ranges": {
-      "combat":     [5, 10],
-      "perception": [2, 6]
+      "combat": [
+        5,
+        10
+      ],
+      "perception": [
+        2,
+        6
+      ]
     },
-    "trait_pool": ["brutal", "aggressive", "cunning"],
-    "faction_bias": { "faction.scavenger_clans": 1.0 },
+    "trait_pool": [
+      "brutal",
+      "aggressive",
+      "cunning"
+    ],
+    "faction_bias": {
+      "faction.scavenger_clans": 1.0
+    },
     "spawn_rules": {},
     "schema_version": "1"
   }

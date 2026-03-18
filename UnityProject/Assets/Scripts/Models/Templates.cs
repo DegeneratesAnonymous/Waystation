@@ -505,16 +505,20 @@ namespace Waystation.Models
     // Research enums and ResearchNodeDefinition
     // -------------------------------------------------------------------------
 
-    public enum ResearchBranch { Military, Economics, Sciences }
+    public enum ResearchBranch { Industry, Exploration, Diplomacy, Security, Science }
 
     public enum ResearchSubbranch
     {
-        // Military
-        Defence, Offensive, Command,
-        // Economics
-        Production, Diplomacy, Entrepreneurship,
-        // Sciences
-        Physics, Material, Biological
+        // Industry
+        Production, Engineering, Biology,
+        // Exploration
+        Navigation, Geology, Astrometrics,
+        // Diplomacy
+        Trade, Relations, Entrepreneurship,
+        // Security
+        Defence, Intelligence, Command,
+        // Science
+        Physics, Materials, Xenobiology
     }
 
     [Serializable]
@@ -538,7 +542,7 @@ namespace Waystation.Models
                 description = raw.GetString("description", ""),
                 pointCost   = raw.GetInt("point_cost", 100),
             };
-            b.branch    = Enum.TryParse<ResearchBranch>(   raw.GetString("branch"),    out var br) ? br : ResearchBranch.Sciences;
+            b.branch    = Enum.TryParse<ResearchBranch>(   raw.GetString("branch"),    out var br) ? br : ResearchBranch.Science;
             b.subbranch = Enum.TryParse<ResearchSubbranch>(raw.GetString("subbranch"), out var sr) ? sr : ResearchSubbranch.Physics;
             foreach (var p in raw.GetStringList("prerequisites")) b.prerequisites.Add(p);
             foreach (var t in raw.GetStringList("unlock_tags"))   b.unlockTags.Add(t);

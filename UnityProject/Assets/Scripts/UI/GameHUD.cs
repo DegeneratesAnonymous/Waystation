@@ -109,7 +109,7 @@ namespace Waystation.UI
 
         // ── Research tab state ────────────────────────────────────────────────
         private Vector2 _researchScroll;
-        private enum ResearchBranchFilter { All, Military, Economics, Sciences }
+        private enum ResearchBranchFilter { All, Industry, Exploration, Diplomacy, Security, Science }
         private ResearchBranchFilter _researchFilter = ResearchBranchFilter.All;
 
         // ── Map tab state ─────────────────────────────────────────────────────
@@ -3348,11 +3348,13 @@ namespace Waystation.UI
 
             // ── Branch filter buttons ─────────────────────────────────────────
             const float FBtnH = 24f;
-            float fbw = (w - 6f) / 4f;
-            var   filters = new[] { (ResearchBranchFilter.All,       "All"),
-                                    (ResearchBranchFilter.Military,  "Military"),
-                                    (ResearchBranchFilter.Economics, "Economics"),
-                                    (ResearchBranchFilter.Sciences,  "Sciences") };
+            float fbw = (w - 6f) / 6f;
+            var   filters = new[] { (ResearchBranchFilter.All,        "All"),
+                                    (ResearchBranchFilter.Industry,    "Industry"),
+                                    (ResearchBranchFilter.Exploration, "Exploration"),
+                                    (ResearchBranchFilter.Diplomacy,   "Diplomacy"),
+                                    (ResearchBranchFilter.Security,    "Security"),
+                                    (ResearchBranchFilter.Science,     "Science") };
             var prevC = GUI.color;
             for (int i = 0; i < filters.Length; i++)
             {
@@ -3367,7 +3369,7 @@ namespace Waystation.UI
 
             // ── Scrollable content ────────────────────────────────────────────
             float innerH = 0f;
-            var branches = new[] { ResearchBranch.Military, ResearchBranch.Economics, ResearchBranch.Sciences };
+            var branches = new[] { ResearchBranch.Industry, ResearchBranch.Exploration, ResearchBranch.Diplomacy, ResearchBranch.Security, ResearchBranch.Science };
             foreach (var branch in branches)
             {
                 if (_researchFilter != ResearchBranchFilter.All &&
