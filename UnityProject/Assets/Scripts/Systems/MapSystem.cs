@@ -8,26 +8,26 @@
 //
 // POI detection range is based on complete "buildable.antenna" foundations.
 //   Base range = 500 units; each complete antenna adds +150 units.
-// POIs are regenerated when the map is empty or every ~48 ticks.
+// POIs are regenerated when the map is empty or every ~48 ticks (but never
+// while asteroid missions are active, to preserve poiUid references).
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using Waystation.Core;
 using Waystation.Models;
 
 namespace Waystation.Systems
 {
     public class MapSystem
     {
-        private readonly ContentRegistry _registry;
-
         private const float BaseRange    = 500f;
         private const float AntennaBonus = 150f;
 
+        // POIs are spread across a 2× detection radius; only those within range
+        // are discovered and stored.  This makes discovery meaningful.
+        private const float SpreadMultiplier = 2.0f;
+
         private int _lastGenTick = -1;
         private const int RegenInterval = 48;
-
-        public MapSystem(ContentRegistry registry) => _registry = registry;
 
         // ── Tick ──────────────────────────────────────────────────────────────
 
@@ -37,9 +37,13 @@ namespace Waystation.Systems
 
             bool empty    = station.pointsOfInterest.Count == 0;
             bool interval = station.tick - _lastGenTick >= RegenInterval;
+            if (!empty && !interval) return;
 
-            if (empty || interval)
-                GeneratePois(station);
+            // Don't regen while asteroid missions are active — poiUid refs must stay valid.
+            foreach (var am in station.asteroidMaps.Values)
+                if (am.status == "active") return;
+
+            GeneratePois(station);
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -66,21 +70,34 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Regenerate (or refresh) the POI map.  The layout is seeded from the station
-        /// name hash combined with an era counter (tick / RegenInterval) so that the same
-        /// station produces a consistent set of POIs within each era but refreshes them
-        /// every ~48 ticks as the player's map view level expands.
+        /// Regenerate (or refresh) the POI map.  Uses a stable FNV-1a seed derived
+        /// from the station name, combined with an era counter (tick / RegenInterval),
+        /// so the same station produces consistent POIs within each era.
+        /// <para>
+        /// Visited POIs (those tied to active or completed missions) are preserved
+        /// across regens.  Undiscovered POIs are discarded and replaced.
+        /// POIs at distance &gt; range are generated but not stored (they become
+        /// visible when detection range increases and a new regen fires).
+        /// </para>
         /// </summary>
         public void GeneratePois(StationState station)
         {
             if (station == null) return;
 
             _lastGenTick = station.tick;
-            station.pointsOfInterest.Clear();
+
+            // Discard undiscovered / unvisited POIs so they can be refreshed.
+            // Visited POIs (missions dispatched or completed) are preserved.
+            var toRemove = new List<string>();
+            foreach (var kv in station.pointsOfInterest)
+                if (!kv.Value.visited) toRemove.Add(kv.Key);
+            foreach (var k in toRemove)
+                station.pointsOfInterest.Remove(k);
 
             var    level = GetMapViewLevel(station);
             float  range = GetDetectionRange(station);
-            int    seed  = Math.Abs(station.stationName.GetHashCode());
+            // Stable hash avoids runtime-version-dependent string.GetHashCode().
+            int    seed  = StableHash(station.stationName);
             var    rng   = new System.Random(seed + station.tick / RegenInterval);
 
             int count = level switch
@@ -101,30 +118,46 @@ namespace Waystation.Systems
                 _                    => new[] { "Asteroid" },
             };
 
+            float spreadRadius = range * SpreadMultiplier;
+
             for (int i = 0; i < count; i++)
             {
                 string type  = poiTypes[rng.Next(poiTypes.Length)];
                 float  angle = (float)(rng.NextDouble() * Math.PI * 2.0);
-                float  dist  = (float)(rng.NextDouble() * range);
+                float  dist  = (float)(rng.NextDouble() * spreadRadius);
                 float  x     = (float)Math.Cos(angle) * dist;
                 float  y     = (float)Math.Sin(angle) * dist;
+                // pSeed is consumed here regardless of discovery, keeping the RNG sequence stable.
                 int    pSeed = rng.Next(int.MaxValue);
                 string name  = GenerateName(type, i, rng);
 
-                var poi = PointOfInterest.Create(type, name, x, y, pSeed);
-                poi.discovered = dist <= range;
-
-                // Assign resource yield for asteroids.
+                // Asteroid yield is always generated to maintain RNG determinism.
+                int oreAmt = 0, iceAmt = 0;
                 if (type == "Asteroid")
                 {
-                    int oreAmt  = rng.Next(20, 120);
-                    int iceAmt  = rng.Next(10, 80);
+                    oreAmt = rng.Next(20, 120);
+                    iceAmt = rng.Next(10, 80);
+                }
+
+                // Only discovered (within range) POIs are stored.
+                if (dist > range) continue;
+
+                // Deterministic UID from pSeed ensures stable identity across regens.
+                string uid = $"poi_{pSeed:x8}";
+                // Preserve visited state if the POI was already known.
+                if (station.pointsOfInterest.ContainsKey(uid)) continue;
+
+                var poi = PointOfInterest.Create(type, name, x, y, pSeed);
+                poi.uid        = uid;
+                poi.discovered = true;
+
+                if (type == "Asteroid")
+                {
                     poi.resourceYield["item.parts"] = oreAmt;
                     poi.resourceYield["item.ice"]   = iceAmt;
                 }
 
-                if (poi.discovered)
-                    station.pointsOfInterest[poi.uid] = poi;
+                station.pointsOfInterest[uid] = poi;
             }
         }
 
@@ -139,6 +172,25 @@ namespace Waystation.Systems
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// FNV-1a hash over the UTF-16 characters of <paramref name="s"/>.
+        /// Unlike <c>string.GetHashCode()</c>, this is stable across all
+        /// .NET runtime versions and Unity platforms.
+        /// </summary>
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                foreach (char c in s)
+                {
+                    hash ^= c;
+                    hash *= 16777619u;
+                }
+                return (int)(hash & int.MaxValue); // ensure non-negative seed
+            }
+        }
 
         private static readonly string[][] NameParts =
         {

@@ -481,6 +481,30 @@
         "requires_power": true,
         "power_draw": 1.0,
         "schema_version": "1"
+    },
+    {
+        "id": "buildable.antenna",
+        "display_name": "Antenna Array",
+        "category": "structure",
+        "description": "A directional antenna array. Each complete, powered antenna extends the station's POI detection range by 150 units, allowing discovery of more distant Points of Interest on the Map.",
+        "build_time_ticks": 40,
+        "required_materials": {
+            "item.steel_plate": 3,
+            "item.wiring": 4,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 2,
+            "electrical": 1
+        },
+        "required_tags": [
+            "exterior_hull"
+        ],
+        "size": 2,
+        "max_health": 80,
+        "requires_power": true,
+        "power_draw": 1.0,
+        "schema_version": "1"
     }
 ]
 

@@ -1,8 +1,9 @@
 // ResearchSystem — accumulates research points from crew working at research
 // terminals and automatically unlocks nodes when prerequisites are met.
 // On each unlock a physical Datachip (item.datachip) is produced and stored in
-// the nearest complete Data Storage Server foundation.  If no storage space is
-// available the chip is tallied as "pending" and stored as soon as capacity appears.
+// the first available complete Data Storage Server foundation.  If no storage
+// space is available the chip is tallied as "pending" and stored as soon as
+// capacity appears.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -46,6 +47,8 @@ namespace Waystation.Systems
             if (station.research == null) station.research = ResearchState.Create();
 
             // Accumulate points: one entry per NPC doing a research job.
+            // If a complete research terminal of the matching branch is present in
+            // a fully-qualified research_lab room, its room bonus multiplier is applied.
             foreach (var npc in station.npcs.Values)
             {
                 if (!npc.IsCrew()) continue;
@@ -54,6 +57,10 @@ namespace Waystation.Systems
 
                 int researchSkill = npc.skills.ContainsKey("research") ? npc.skills["research"] : 5;
                 float pts = 0.04f * (0.5f + researchSkill / 10f);
+
+                // Apply room bonus from any complete terminal of matching branch.
+                pts *= GetTerminalMultiplier(branch, station);
+
                 station.research.branches[branch].points += pts;
             }
 
@@ -92,6 +99,21 @@ namespace Waystation.Systems
         }
 
         // ── Datachip storage helpers ──────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the room bonus multiplier from any complete terminal of the given
+        /// branch that has an active research_lab room bonus, or 1.0 if none exist.
+        /// </summary>
+        private static float GetTerminalMultiplier(ResearchBranch branch, StationState station)
+        {
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete") continue;
+                if (!TerminalBranch.TryGetValue(f.buildableId, out var fb) || fb != branch) continue;
+                if (f.hasRoomBonus) return f.roomBonusMultiplier;
+            }
+            return 1.0f;
+        }
 
         /// <summary>
         /// Try to add one datachip to a complete Data Storage Server foundation.

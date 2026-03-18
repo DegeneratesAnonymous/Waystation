@@ -3111,10 +3111,7 @@ namespace Waystation.UI
             float listH = h - (y - area.y) - 4f;
             float innerH2 = 0f;
             foreach (var poi in pois)
-            {
-                bool sel = _selectedPoiUid == poi.uid;
-                innerH2 += sel ? 96f : 52f;
-            }
+                innerH2 += ComputePoiRowHeight(poi, s);
             innerH2 = Mathf.Max(innerH2, listH);
 
             _mapScroll = GUI.BeginScrollView(
@@ -3125,7 +3122,8 @@ namespace Waystation.UI
             foreach (var poi in pois)
             {
                 bool sel = _selectedPoiUid == poi.uid;
-                float rowH = sel ? 96f : 52f;
+                float rowH   = ComputePoiRowHeight(poi, s);
+                float startLy = ly;
                 DrawSolid(new Rect(0, ly, w - 14f, rowH - 4f),
                           sel ? ColTabHl : new Color(0.09f, 0.11f, 0.18f, 0.9f));
 
@@ -3217,7 +3215,8 @@ namespace Waystation.UI
                             ly += 16f;
                         }
                     }
-                    // rowH was already advanced within the expanded block; nothing more to do.
+                    // Snap to the pre-computed row boundary for clean alignment.
+                    ly = startLy + rowH;
                 }
                 else
                 {
@@ -3225,6 +3224,38 @@ namespace Waystation.UI
                 }
             }
             GUI.EndScrollView();
+        }
+
+        /// <summary>
+        /// Computes the actual pixel height for a POI row, accounting for the variable
+        /// number of crew lines and optional controls in the expanded asteroid panel.
+        /// </summary>
+        private float ComputePoiRowHeight(PointOfInterest poi, StationState s)
+        {
+            if (_selectedPoiUid != poi.uid || poi.poiType != "Asteroid")
+                return 52f;
+
+            // 44px header section + 16px yield line
+            float h = 44f + 16f;
+
+            bool alreadyDispatched = false;
+            foreach (var am in s.asteroidMaps.Values)
+                if (am.poiUid == poi.uid && am.status == "active") { alreadyDispatched = true; break; }
+
+            if (alreadyDispatched)
+            {
+                h += 18f; // "Mission in progress." label
+            }
+            else
+            {
+                var crew = s.GetCrew();
+                foreach (var npc in crew)
+                    if (npc.missionUid == null) h += 18f; // one row per available crew member
+                if (_selectedMapCrew.Count > 0) h += 24f; // "Send Mining Team" button
+                if (!string.IsNullOrEmpty(_mapMissionMsg)) h += 16f; // feedback message
+            }
+
+            return h + 4f; // 4px gap between rows
         }
 
         // ── Style setup ───────────────────────────────────────────────────────

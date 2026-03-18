@@ -132,8 +132,8 @@ namespace Waystation.Core
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
             Research  = new ResearchSystem(Registry);
-            Map       = new MapSystem(Registry);
-            AsteroidMissions = new AsteroidMissionSystem(Registry);
+            Map       = new MapSystem();
+            AsteroidMissions = new AsteroidMissionSystem();
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);

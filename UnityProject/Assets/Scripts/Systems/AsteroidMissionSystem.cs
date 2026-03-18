@@ -4,19 +4,14 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using Waystation.Core;
 using Waystation.Models;
 
 namespace Waystation.Systems
 {
     public class AsteroidMissionSystem
     {
-        private readonly ContentRegistry _registry;
-
         // How many tiles are sampled for yield calculation (as a fraction).
         private const float YieldFractionPerCrew = 0.10f;
-
-        public AsteroidMissionSystem(ContentRegistry registry) => _registry = registry;
 
         // ── Public API ────────────────────────────────────────────────────────
 
