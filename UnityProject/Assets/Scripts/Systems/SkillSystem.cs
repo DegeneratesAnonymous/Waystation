@@ -67,12 +67,6 @@ namespace Waystation.Systems
         /// </summary>
         public event Action<NPCInstance, int> OnCharacterLevelUp;
 
-        // ── In-game day tracking ──────────────────────────────────────────────
-
-        // Ticks per in-game day (used to derive current day index from station.tick)
-        // Kept configurable here; default 16 matches the waking-day assumption.
-        public int TicksPerDay = 16;
-
         // ── Constructor ───────────────────────────────────────────────────────
 
         public SkillSystem(ContentRegistry registry)
@@ -232,7 +226,8 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Replace one chosen expertise with another.
-        /// Net slot count is unchanged. The old expertise's tracked progress resets.
+        /// Net slot count is unchanged. The old expertise is simply removed; no
+        /// per-expertise progress is tracked so there is nothing to reset.
         /// </summary>
         public (bool ok, string msg) SwapExpertise(NPCInstance npc, string oldExpertiseId,
                                                     string newExpertiseId, StationState station)
@@ -294,6 +289,9 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Recompute expertiseModifier by multiplying all WorkSpeed passive bonuses.
+        /// WorkSpeed bonuses are applied as a global job-duration multiplier regardless
+        /// of <c>bonus.targetSkillId</c>; per-skill speed differentiation is not
+        /// implemented at the JobSystem level.
         /// Called after expertise is chosen/swapped.
         /// </summary>
         public void RebuildExpertiseModifier(NPCInstance npc)
@@ -392,7 +390,7 @@ namespace Waystation.Systems
         private void AddXPWithDiminishing(NPCInstance npc, SkillInstance inst,
                                            float xp, StationState station)
         {
-            int today = station.tick / Mathf.Max(1, TicksPerDay);
+            int today = station.tick / Mathf.Max(1, TimeSystem.TicksPerDay);
 
             // Reset daily accumulator when a new day begins
             if (inst.dailyXPDay != today)

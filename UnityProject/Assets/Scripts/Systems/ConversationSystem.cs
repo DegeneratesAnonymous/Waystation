@@ -216,18 +216,9 @@ namespace Waystation.Systems
             // Social skill XP on positive outcome (both participants learn from good conversations)
             if (positive && _skillSystem != null)
             {
-                _skillSystem.AwardSkillXP(initiator, "skill.social",
-                    GetSocialXPAmount(initiator), station);
-                _skillSystem.AwardSkillXP(partner, "skill.social",
-                    GetSocialXPAmount(partner), station);
+                _skillSystem.AwardXP(initiator, "conversation_positive", station);
+                _skillSystem.AwardXP(partner,   "conversation_positive", station);
             }
-        }
-
-        private float GetSocialXPAmount(NPCInstance npc)
-        {
-            // Base XP from skill definition, with Negotiator expertise bonus applied
-            // via SkillSystem's internal ApplyXPGainModifier (handled in AwardSkillXP).
-            return 10f;
         }
     }
 }

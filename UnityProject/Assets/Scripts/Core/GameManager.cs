@@ -178,6 +178,7 @@ namespace Waystation.Core
             Skills.RegisterAllCapabilities();
             // Wire skill system into systems that need to award XP.
             Research.SetSkillSystem(Skills);
+            Research.SetSecondsPerTick(secondsPerTick);
             Farming.SetSkillSystem(Skills);
             Conversations.SetSkillSystem(Skills);
 

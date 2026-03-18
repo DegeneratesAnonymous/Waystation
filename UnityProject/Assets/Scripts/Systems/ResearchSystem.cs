@@ -16,6 +16,7 @@ namespace Waystation.Systems
     {
         private readonly ContentRegistry _registry;
         private SkillSystem              _skillSystem;
+        private float                    _secondsPerTick = 0.5f;
 
         private const string DatachipItemId      = "item.datachip";
         private const string DataStorageBuildable = "buildable.data_storage_server";
@@ -52,6 +53,9 @@ namespace Waystation.Systems
         /// <summary>Wire up SkillSystem after construction (called from GameManager).</summary>
         public void SetSkillSystem(SkillSystem skillSystem) => _skillSystem = skillSystem;
 
+        /// <summary>Set the real-time seconds per game tick so XP rates stay consistent when game speed changes.</summary>
+        public void SetSecondsPerTick(float secondsPerTick) => _secondsPerTick = secondsPerTick;
+
         // ── Tick ──────────────────────────────────────────────────────────────
 
         public void Tick(StationState station)
@@ -85,7 +89,7 @@ namespace Waystation.Systems
                 {
                     if (_registry.Skills.TryGetValue(xpSkillId, out var skillDef))
                         _skillSystem.AwardXPOverTime(npc, xpSkillId,
-                            skillDef.xpPerActiveSecond, 1f, station);
+                            skillDef.xpPerActiveSecond, _secondsPerTick, station);
                 }
             }
 

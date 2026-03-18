@@ -10,6 +10,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Demo;
@@ -106,6 +107,7 @@ namespace Waystation.UI
         private bool    _expertisePanelOpen     = false;
         private string  _swapTargetExpertiseId  = "";   // expertise being replaced (empty = spend slot)
         private Vector2 _expertisePanelScroll;
+        private Vector2 _skillsScroll;
 
         // ── Relationships sub-panel state ─────────────────────────────────────
         private Vector2 _relScroll;
@@ -3849,8 +3851,12 @@ namespace Waystation.UI
                       $"Character Level", _sSub);
             GUI.Label(new Rect(84f, y + 18f, w - 100f, 14f),
                       $"Total XP: {totalXP:F0}   Slots: {slotCount}   Unspent: {unspent}", _sSub);
-            // XP bar toward next slot threshold
-            float xpPct = Mathf.Clamp01(totalXP / Mathf.Max(1, nextThreshold));
+            // XP bar toward next slot — progress within the current interval [currentThreshold, nextThreshold]
+            int currentThreshold = (charLevel / SkillSystem.SlotEveryNLevels)
+                                   * SkillSystem.SlotEveryNLevels
+                                   * SkillSystem.CharLevelDivisor;
+            float xpPct = Mathf.Clamp01((totalXP - currentThreshold)
+                          / Mathf.Max(1, nextThreshold - currentThreshold));
             float barW  = w - 18f;
             DrawSolid(new Rect(4f, y + 38f, barW, 8f), ColBarBg);
             DrawSolid(new Rect(4f, y + 38f, barW * xpPct, 8f), ColAccent);
@@ -3863,7 +3869,8 @@ namespace Waystation.UI
             GUI.Label(new Rect(4f, y, w - 14f, 16f), "Skills", _sLabel);
             y += 18f;
 
-            foreach (var skillDef in _gm.Registry.Skills.Values)
+            foreach (var skillDef in _gm.Registry.Skills.Values
+                         .OrderBy(s => s.skillId))
             {
                 var inst  = SkillSystem.GetSkillInstance(npc, skillDef.skillId);
                 int level = inst?.Level ?? 0;
@@ -3914,10 +3921,13 @@ namespace Waystation.UI
                         _swapTargetExpertiseId = eid;
                         _expertisePanelOpen    = true;
                     }
-                    string reqLabel = !string.IsNullOrEmpty(exp.requiredSkillId)
-                        ? $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel}"
-                        : "";
-                    GUI.Label(new Rect(6f, y + 16f, w - 14f, 20f),
+                    if (!string.IsNullOrEmpty(exp.requiredSkillId))
+                    {
+                        GUI.Label(new Rect(w - 74f, y + 18f, 68f, 14f),
+                                  $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel}",
+                                  _sSub);
+                    }
+                    GUI.Label(new Rect(6f, y + 16f, w - 80f, 20f),
                               exp.description.Length > ExpertiseDescShortMaxChars + 3
                                   ? exp.description.Substring(0, ExpertiseDescShortMaxChars) + "..."
                                   : exp.description,

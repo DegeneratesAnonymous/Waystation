@@ -56,6 +56,9 @@ namespace Waystation.Systems
         {
             if (npc == null) return false;
 
+            // Treat null/empty task as not capability-locked
+            if (string.IsNullOrEmpty(taskType)) return true;
+
             // Crisis blocks all tasks
             if (npc.inCrisis) return false;
 
