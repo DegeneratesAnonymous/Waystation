@@ -59,8 +59,16 @@ namespace Waystation.NPC
 
         private void Awake()
         {
+            AutoResolveRenderers();
             EnforceSortingOrders();
         }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ValidateRendererReferences();
+        }
+#endif
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -82,15 +90,15 @@ namespace Waystation.NPC
                 return;
             }
 
-            backRenderer.sprite    = registry.GetBack(appearance.backItemType, appearance.backItemColor);
-            bodyRenderer.sprite    = registry.GetBody(appearance.bodyType, appearance.skinTone);
-            shoesRenderer.sprite   = registry.GetShoes(appearance.shoeType, appearance.shoeColor);
-            pantsRenderer.sprite   = registry.GetPants(appearance.pantsType, appearance.pantsColor);
-            shirtRenderer.sprite   = registry.GetShirt(appearance.shirtType, appearance.shirtColor);
-            faceRenderer.sprite    = registry.GetFace(appearance.faceType);
-            hairRenderer.sprite    = registry.GetHair(appearance.hairStyle, appearance.hairColor);
-            hatRenderer.sprite     = registry.GetHat(appearance.hatType, appearance.hatColor);
-            weaponRenderer.sprite  = registry.GetWeapon(appearance.weaponType);
+            AssignSprite(backRenderer,   "backRenderer",   registry.GetBack(appearance.backItemType, appearance.backItemColor));
+            AssignSprite(bodyRenderer,   "bodyRenderer",   registry.GetBody(appearance.bodyType, appearance.skinTone));
+            AssignSprite(shoesRenderer,  "shoesRenderer",  registry.GetShoes(appearance.shoeType, appearance.shoeColor));
+            AssignSprite(pantsRenderer,  "pantsRenderer",  registry.GetPants(appearance.pantsType, appearance.pantsColor));
+            AssignSprite(shirtRenderer,  "shirtRenderer",  registry.GetShirt(appearance.shirtType, appearance.shirtColor));
+            AssignSprite(faceRenderer,   "faceRenderer",   registry.GetFace(appearance.faceType));
+            AssignSprite(hairRenderer,   "hairRenderer",   registry.GetHair(appearance.hairStyle, appearance.hairColor));
+            AssignSprite(hatRenderer,    "hatRenderer",    registry.GetHat(appearance.hatType, appearance.hatColor));
+            AssignSprite(weaponRenderer, "weaponRenderer", registry.GetWeapon(appearance.weaponType));
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -113,6 +121,60 @@ namespace Waystation.NPC
             SetRenderer(hairRenderer,   Layer, 16);
             SetRenderer(hatRenderer,    Layer, 17);
             SetRenderer(weaponRenderer, Layer, 18);
+        }
+
+        /// <summary>
+        /// Attempts to resolve any unassigned renderer fields by searching for
+        /// a child GameObject whose name matches the expected layer name.
+        /// This allows the component to self-configure when added to a prefab.
+        /// </summary>
+        private void AutoResolveRenderers()
+        {
+            backRenderer   = backRenderer   != null ? backRenderer   : FindChildRenderer("Back");
+            bodyRenderer   = bodyRenderer   != null ? bodyRenderer   : FindChildRenderer("Body");
+            shoesRenderer  = shoesRenderer  != null ? shoesRenderer  : FindChildRenderer("Shoes");
+            pantsRenderer  = pantsRenderer  != null ? pantsRenderer  : FindChildRenderer("Pants");
+            shirtRenderer  = shirtRenderer  != null ? shirtRenderer  : FindChildRenderer("Shirt");
+            faceRenderer   = faceRenderer   != null ? faceRenderer   : FindChildRenderer("Face");
+            hairRenderer   = hairRenderer   != null ? hairRenderer   : FindChildRenderer("Hair");
+            hatRenderer    = hatRenderer    != null ? hatRenderer    : FindChildRenderer("Hat");
+            weaponRenderer = weaponRenderer != null ? weaponRenderer : FindChildRenderer("Weapon");
+        }
+
+        private SpriteRenderer FindChildRenderer(string childName)
+        {
+            Transform child = transform.Find(childName);
+            return child != null ? child.GetComponent<SpriteRenderer>() : null;
+        }
+
+        private void AssignSprite(SpriteRenderer sr, string fieldName, Sprite sprite)
+        {
+            if (sr == null)
+            {
+                Debug.LogError($"[NpcSpriteController] '{fieldName}' is not assigned. " +
+                               "Assign it in the Inspector or add a child GameObject with the matching name.", this);
+                return;
+            }
+            sr.sprite = sprite;
+        }
+
+        private void ValidateRendererReferences()
+        {
+            CheckRenderer(backRenderer,   "backRenderer");
+            CheckRenderer(bodyRenderer,   "bodyRenderer");
+            CheckRenderer(shoesRenderer,  "shoesRenderer");
+            CheckRenderer(pantsRenderer,  "pantsRenderer");
+            CheckRenderer(shirtRenderer,  "shirtRenderer");
+            CheckRenderer(faceRenderer,   "faceRenderer");
+            CheckRenderer(hairRenderer,   "hairRenderer");
+            CheckRenderer(hatRenderer,    "hatRenderer");
+            CheckRenderer(weaponRenderer, "weaponRenderer");
+        }
+
+        private void CheckRenderer(SpriteRenderer sr, string fieldName)
+        {
+            if (sr == null)
+                Debug.LogWarning($"[NpcSpriteController] '{fieldName}' is not assigned on '{name}'.", this);
         }
 
         private static void SetRenderer(SpriteRenderer sr, string layerName, int order)
