@@ -617,10 +617,11 @@
         "required_tags": [],
         "size": 1,
         "max_health": 120,
-        "requires_power": true,
-        "power_draw": 10.0,
         "idle_power_draw": 2.0,
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 10.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.access_terminal",
@@ -638,11 +639,12 @@
         "required_tags": [],
         "size": 1,
         "max_health": 80,
-        "requires_power": true,
-        "power_draw": 2.0,
         "idle_power_draw": 0.5,
         "furniture_tag": "terminal",
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 2.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.shuttle_landing_pad",
@@ -703,9 +705,10 @@
         "workbench_skill_bonuses": {
             "research": 1.2
         },
-        "requires_power": true,
-        "power_draw": 2.0,
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 2.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.economic_terminal",
@@ -729,9 +732,10 @@
         "workbench_skill_bonuses": {
             "research": 1.2
         },
-        "requires_power": true,
-        "power_draw": 1.5,
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 1.5,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.science_terminal",
@@ -755,9 +759,10 @@
         "workbench_skill_bonuses": {
             "research": 1.25
         },
-        "requires_power": true,
-        "power_draw": 2.5,
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 2.5,
+        "network_type": "electric",
+        "node_role": "consumer"
     },
     {
         "id": "buildable.data_storage_server",
@@ -779,8 +784,9 @@
         "cargo_capacity": 16,
         "beauty_score": 1,
         "furniture_tag": "storage",
-        "requires_power": true,
-        "power_draw": 1.0,
-        "schema_version": "1"
+        "schema_version": "1",
+        "demand_watts": 1.0,
+        "network_type": "electric",
+        "node_role": "consumer"
     }
 ]

@@ -51,7 +51,6 @@ namespace Waystation.Systems
         {
             if (!Enabled) return;
 
-            UpdateEnergisedStatus(station);
             UpdateLightLevels(station);
             UpdateWaterStatus(station);
             RunGrowthTicks(station);
@@ -59,36 +58,7 @@ namespace Waystation.Systems
             ProcessFarmingTasks(station);
         }
 
-        // ── Step 1 — energisation ─────────────────────────────────────────────
-
-        /// <summary>
-        /// Mark GrowLights, Heaters, Coolers, and Vents as energised when they are
-        /// adjacent to at least one complete electric wire conduit (buildable.wire).
-        /// Only complete wire foundations are counted; non-complete foundations are skipped.
-        /// </summary>
-        private void UpdateEnergisedStatus(StationState station)
-        {
-            // Build position lookup of complete wire conduit foundations only.
-            // We match buildable.wire (networkType=="electric", not a powered device) to
-            // avoid counting devices themselves as their own power source.
-            var wirePositions = new HashSet<(int, int)>();
-            foreach (var f in station.foundations.Values)
-            {
-                if (f.status != "complete") continue;
-                if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
-                // Only count actual wire conduits, not powered consumers
-                if (def.networkType == "electric" && !def.requiresPower)
-                    wirePositions.Add((f.tileCol, f.tileRow));
-            }
-
-            foreach (var f in station.foundations.Values)
-            {
-                if (!IsClimatOrLightDevice(f.buildableId)) continue;
-                f.isEnergised = IsAdjacentOrSame(wirePositions, f.tileCol, f.tileRow);
-            }
-        }
-
-        // ── Step 2 — light levels ─────────────────────────────────────────────
+        // ── Step 1 — light levels ─────────────────────────────────────────────
 
         /// <summary>
         /// Reset all planter light levels to 0, then apply GrowLightOutput from
@@ -114,7 +84,7 @@ namespace Waystation.Systems
             }
         }
 
-        // ── Step 3 — water status ─────────────────────────────────────────────
+        // ── Step 2 — water status ─────────────────────────────────────────────
 
         /// <summary>
         /// A planter is watered when any complete pipe conduit foundation (buildable.pipe)
@@ -141,7 +111,7 @@ namespace Waystation.Systems
             }
         }
 
-        // ── Step 4 — growth ticks ─────────────────────────────────────────────
+        // ── Step 3 — growth ticks ─────────────────────────────────────────────
 
         private void RunGrowthTicks(StationState station)
         {
@@ -186,7 +156,7 @@ namespace Waystation.Systems
             }
         }
 
-        // ── Step 5 — task generation ──────────────────────────────────────────
+        // ── Step 4 — task generation ──────────────────────────────────────────
 
         private void GenerateFarmingTasks(StationState station)
         {
@@ -484,11 +454,6 @@ namespace Waystation.Systems
 
         // ── Utility helpers ───────────────────────────────────────────────────
 
-        private static bool IsClimatOrLightDevice(string buildableId)
-            => buildableId == "buildable.grow_light" ||
-               buildableId == "buildable.heater"     ||
-               buildableId == "buildable.cooler"     ||
-               buildableId == "buildable.vent";
 
         private static bool IsAdjacentOrSame(HashSet<(int, int)> positions, int col, int row)
             => positions.Contains((col,     row    ))
