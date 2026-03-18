@@ -182,6 +182,12 @@ namespace Waystation.Systems
             return total;
         }
 
+        /// <summary>
+        /// Minimum XP required to reach the given level.
+        /// Formula: level^2 * 100.
+        /// </summary>
+        public static float GetXPForLevel(int level) => level * level * 100f;
+
         // ── Expertise management ──────────────────────────────────────────────
 
         /// <summary>

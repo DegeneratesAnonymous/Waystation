@@ -98,8 +98,10 @@ namespace Waystation.UI
         private string _renamingDeptUid  = "";
         private string _renameDeptBuffer = "";
 
-        // ── Skills sub-panel state ────────────────────────────────────────────
-        private Vector2 _skillsScroll;
+        // ── Skills UI constants ───────────────────────────────────────────────
+        private const int MaxNpcNameDisplayLength    = 9;
+        private const int ExpertiseDescShortMaxChars = 57;   // card view (max 60 visible)
+        private const int ExpertiseDescLongMaxChars  = 67;   // selection panel (max 70 visible)
         private string  _skillsSelectedNpcUid  = "";
         private bool    _expertisePanelOpen     = false;
         private string  _swapTargetExpertiseId  = "";   // expertise being replaced (empty = spend slot)
@@ -3795,7 +3797,8 @@ namespace Waystation.UI
             {
                 bool sel = n.uid == _skillsSelectedNpcUid;
                 if (GUI.Button(new Rect(sx, sy, btnW - 2f, SelectorH),
-                               n.name.Length > 9 ? n.name.Substring(0, 9) : n.name,
+                               n.name.Length > MaxNpcNameDisplayLength
+                                   ? n.name.Substring(0, MaxNpcNameDisplayLength) : n.name,
                                sel ? _sTabOn : _sTabOff))
                 {
                     _skillsSelectedNpcUid  = n.uid;
@@ -3867,8 +3870,8 @@ namespace Waystation.UI
                 float xp  = inst?.currentXP ?? 0f;
 
                 // XP within current level band
-                float levelFloorXP = level * level * 100f;
-                float levelCeilXP  = (level + 1) * (level + 1) * 100f;
+                float levelFloorXP = SkillSystem.GetXPForLevel(level);
+                float levelCeilXP  = SkillSystem.GetXPForLevel(level + 1);
                 float withinLevel  = Mathf.Clamp01(levelCeilXP > levelFloorXP
                     ? (xp - levelFloorXP) / (levelCeilXP - levelFloorXP)
                     : 1f);
@@ -3915,8 +3918,8 @@ namespace Waystation.UI
                         ? $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel}"
                         : "";
                     GUI.Label(new Rect(6f, y + 16f, w - 14f, 20f),
-                              exp.description.Length > 60
-                                  ? exp.description.Substring(0, 57) + "..."
+                              exp.description.Length > ExpertiseDescShortMaxChars + 3
+                                  ? exp.description.Substring(0, ExpertiseDescShortMaxChars) + "..."
                                   : exp.description,
                               _sSub);
                     y += 42f;
@@ -3999,8 +4002,8 @@ namespace Waystation.UI
                 }
 
                 GUI.Label(new Rect(6f, y + 16f, w - 20f, 18f),
-                          exp.description.Length > 70
-                              ? exp.description.Substring(0, 67) + "..."
+                          exp.description.Length > ExpertiseDescLongMaxChars + 3
+                              ? exp.description.Substring(0, ExpertiseDescLongMaxChars) + "..."
                               : exp.description,
                           _sSub);
                 GUI.color = prev;

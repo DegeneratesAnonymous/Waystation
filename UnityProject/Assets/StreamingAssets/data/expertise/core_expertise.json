@@ -202,7 +202,7 @@
     "required_skill_id": "skill.piloting",
     "required_skill_level": 5,
     "passive_bonuses": [
-      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.piloting", "value": 0.85 }
+      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.piloting", "value": 1.15 }
     ],
     "capability_unlocks": []
   },
