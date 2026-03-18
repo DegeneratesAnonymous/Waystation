@@ -733,6 +733,136 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // ResearchBranchState / ResearchState
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ResearchBranchState
+    {
+        public float          points          = 0f;
+        public HashSet<string> unlockedNodeIds = new HashSet<string>();
+
+        public static ResearchBranchState Create() => new ResearchBranchState();
+    }
+
+    [Serializable]
+    public class ResearchState
+    {
+        public Dictionary<ResearchBranch, ResearchBranchState> branches =
+            new Dictionary<ResearchBranch, ResearchBranchState>();
+
+        // Datachips produced by completed research but not yet housed in a
+        // Data Storage Server (no capacity available at the time of unlock).
+        // Each represents one homeless chip awaiting storage.
+        public int pendingDatachips = 0;
+
+        public float TotalPoints(ResearchBranch branch)
+            => branches.TryGetValue(branch, out var s) ? s.points : 0f;
+
+        public bool IsUnlocked(string nodeId)
+        {
+            foreach (var b in branches.Values)
+                if (b.unlockedNodeIds.Contains(nodeId)) return true;
+            return false;
+        }
+
+        public static ResearchState Create()
+        {
+            var rs = new ResearchState();
+            foreach (ResearchBranch b in Enum.GetValues(typeof(ResearchBranch)))
+                rs.branches[b] = ResearchBranchState.Create();
+            return rs;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // PointOfInterest
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class PointOfInterest
+    {
+        public string uid;
+        public string poiType;      // "Asteroid" | "TradePost" | "AbandonedStation" | "NebulaPocket"
+        public string displayName;
+        public float  posX;
+        public float  posY;
+        public bool   discovered;
+        public bool   visited;
+        public Dictionary<string, int> resourceYield = new Dictionary<string, int>();
+        public int    seed;
+
+        public static PointOfInterest Create(string type, string name,
+                                             float x, float y, int seed)
+        {
+            return new PointOfInterest
+            {
+                uid         = Guid.NewGuid().ToString("N")[..8],
+                poiType     = type,
+                displayName = name,
+                posX        = x,
+                posY        = y,
+                seed        = seed,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // AsteroidMapState
+    // -------------------------------------------------------------------------
+
+    // Tile values stored in AsteroidMapState.tiles (byte[]).
+    public enum AsteroidTile : byte { Empty = 0, Rock = 1, Ore = 2, Ice = 3, Wall = 4 }
+
+    [Serializable]
+    public class AsteroidMapState
+    {
+        public string uid;
+        public string poiUid;
+        public int    width;
+        public int    height;
+        public int    seed;
+        public byte[] tiles;     // width × height, row-major
+        public Dictionary<string, int> extractedResources = new Dictionary<string, int>();
+        public List<string>            assignedNpcUids    = new List<string>();
+        public string                  missionUid;
+        public string                  status    = "active";  // "active" | "complete"
+        public int                     startTick;
+        public int                     endTick;
+
+        public byte GetTile(int x, int y)
+        {
+            if (x < 0 || x >= width || y < 0 || y >= height) return (byte)AsteroidTile.Wall;
+            return tiles[y * width + x];
+        }
+
+        public void SetTile(int x, int y, byte val)
+        {
+            if (x < 0 || x >= width || y < 0 || y >= height) return;
+            tiles[y * width + x] = val;
+        }
+
+        public static AsteroidMapState Create(string poiUid, string missionUid,
+                                              int seed, int width, int height,
+                                              int startTick, int durationTicks)
+        {
+            return new AsteroidMapState
+            {
+                uid         = Guid.NewGuid().ToString("N")[..8],
+                poiUid      = poiUid,
+                missionUid  = missionUid,
+                seed        = seed,
+                width       = width,
+                height      = height,
+                tiles       = new byte[width * height],
+                status      = "active",
+                startTick   = startTick,
+                endTick     = startTick + durationTicks,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Station State
     // -------------------------------------------------------------------------
 
@@ -813,6 +943,15 @@ namespace Waystation.Models
         // Active away missions
         public Dictionary<string, MissionInstance>  missions = new Dictionary<string, MissionInstance>();
 
+        // Research progression
+        public ResearchState research = null;
+
+        // Map — points of interest
+        public Dictionary<string, PointOfInterest> pointsOfInterest = new Dictionary<string, PointOfInterest>();
+
+        // Asteroid away-mission maps
+        public Dictionary<string, AsteroidMapState> asteroidMaps = new Dictionary<string, AsteroidMapState>();
+
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();
 
@@ -836,6 +975,7 @@ namespace Waystation.Models
                 { "credits", 500f }, { "food", 100f }, { "power", 100f },
                 { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f }
             };
+            research = ResearchState.Create();
             InitDefaultDepartments();
         }
 

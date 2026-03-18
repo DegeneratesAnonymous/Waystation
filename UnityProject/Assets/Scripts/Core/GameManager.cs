@@ -55,6 +55,9 @@ namespace Waystation.Core
         public NetworkSystem     Networks       { get; private set; }
         public MissionSystem     Missions       { get; private set; }
         public RoomSystem        Rooms          { get; private set; }
+        public ResearchSystem    Research       { get; private set; }
+        public MapSystem         Map            { get; private set; }
+        public AsteroidMissionSystem AsteroidMissions { get; private set; }
 
         // ── Visitor pipeline systems ──────────────────────────────────────────
         public AntennaSystem           Antenna         { get; private set; }
@@ -134,6 +137,9 @@ namespace Waystation.Core
             Networks  = new NetworkSystem(Registry);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+            Research  = new ResearchSystem(Registry);
+            Map       = new MapSystem();
+            AsteroidMissions = new AsteroidMissionSystem();
 
             // Visitor pipeline systems
             Antenna    = new AntennaSystem(Registry);
@@ -233,6 +239,9 @@ namespace Waystation.Core
             Comms.Tick(Station);
             Missions.Tick(Station);
             Rooms.Tick(Station);
+            Research.Tick(Station);
+            Map.Tick(Station);
+            AsteroidMissions.Tick(Station);
 
             // Visitor pipeline (antenna detection → state machine → comms tasks)
             Antenna.Tick(Station);
@@ -336,7 +345,24 @@ namespace Waystation.Core
         {
             if (Station == null) return;
             string path = Path.Combine(Application.persistentDataPath, saveFileName);
-            var data    = new Dictionary<string, object>
+
+            // Serialise ResearchState: one entry per branch with points + unlocked node ids.
+            // Also captures pending_datachips (chips produced but awaiting storage space).
+            var researchData = new Dictionary<string, object>();
+            if (Station.research != null)
+            {
+                foreach (var kv in Station.research.branches)
+                {
+                    researchData[kv.Key.ToString()] = new Dictionary<string, object>
+                    {
+                        { "points",   kv.Value.points },
+                        { "unlocked", new List<string>(kv.Value.unlockedNodeIds) },
+                    };
+                }
+                researchData["pending_datachips"] = Station.research.pendingDatachips;
+            }
+
+            var data = new Dictionary<string, object>
             {
                 { "station_name",         Station.stationName },
                 { "tick",                 Station.tick },
@@ -346,7 +372,8 @@ namespace Waystation.Core
                 { "policy",               Station.policy },
                 { "event_cooldowns",      Station.eventCooldowns },
                 { "log",                  Station.log },
-                { "custom_room_names",    Station.customRoomNames }
+                { "custom_room_names",    Station.customRoomNames },
+                { "research",             researchData },
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));

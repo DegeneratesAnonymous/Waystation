@@ -22,9 +22,9 @@ namespace Waystation.Systems
         private static readonly Dictionary<string, List<string>> ClassDayJobs =
             new Dictionary<string, List<string>>
         {
-            { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection" } },
-            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support", "job.haul", "job.refine", "job.craft" } },
-            { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul" } }
+            { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection", "job.research_military" } },
+            { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support", "job.haul", "job.refine", "job.craft", "job.research_science" } },
+            { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul", "job.research_economic", "job.research_military", "job.research_science" } }
         };
 
         // Category priority for wander fallback: lower index = preferred

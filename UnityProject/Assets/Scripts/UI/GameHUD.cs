@@ -43,7 +43,7 @@ namespace Waystation.UI
         private static readonly Color ColSummaryBg = new Color(0.07f, 0.09f, 0.15f, 0.85f);
 
         // ── Tab enum ──────────────────────────────────────────────────────────
-        private enum Tab { None, Build, Crew, Station, Comms, AwayMission, Rooms, Views, Settings }
+        private enum Tab { None, Build, Crew, Station, Comms, AwayMission, Rooms, Research, Map, Views, Settings }
 
         private static readonly (Tab tab, string label)[] Tabs =
         {
@@ -53,6 +53,8 @@ namespace Waystation.UI
             (Tab.Comms,       "Comms"),
             (Tab.AwayMission, "Away"),
             (Tab.Rooms,       "Rooms"),
+            (Tab.Research,    "Research"),
+            (Tab.Map,         "Map"),
             (Tab.Views,       "Views"),
             (Tab.Settings,    "Settings"),
         };
@@ -101,6 +103,17 @@ namespace Waystation.UI
         private readonly HashSet<string> _selectedMissionCrew = new HashSet<string>();
         private Vector2              _missionScroll;
         private string               _missionMsg = "";
+
+        // ── Research tab state ────────────────────────────────────────────────
+        private Vector2 _researchScroll;
+        private enum ResearchBranchFilter { All, Military, Economics, Sciences }
+        private ResearchBranchFilter _researchFilter = ResearchBranchFilter.All;
+
+        // ── Map tab state ─────────────────────────────────────────────────────
+        private Vector2              _mapScroll;
+        private string               _selectedPoiUid  = "";
+        private readonly HashSet<string> _selectedMapCrew = new HashSet<string>();
+        private string               _mapMissionMsg   = "";
 
         // Job columns shown in Work Assignment grid
         private static readonly (string id, string label)[] WorkJobCols =
@@ -592,6 +605,8 @@ namespace Waystation.UI
                 Tab.Comms       => "Comms",
                 Tab.AwayMission => "Away Mission",
                 Tab.Rooms       => "Room Designations",
+                Tab.Research    => "Research",
+                Tab.Map         => "Station Map",
                 Tab.Views       => "Views",
                 Tab.Settings    => "Settings",
                 _               => "",
@@ -625,6 +640,8 @@ namespace Waystation.UI
                 case Tab.Comms:       DrawComms(area, cw, contentH);       break;
                 case Tab.AwayMission: DrawAwayMission(area, cw, contentH); break;
                 case Tab.Rooms:       DrawRooms(area, cw, contentH);       break;
+                case Tab.Research:    DrawResearch(area, cw, contentH);    break;
+                case Tab.Map:         DrawMap(area, cw, contentH);         break;
                 case Tab.Views:       DrawViews(area, cw, contentH);       break;
                 case Tab.Settings:    DrawSettings(area, cw, contentH);    break;
             }
@@ -3009,6 +3026,367 @@ namespace Waystation.UI
             GUI.DrawTexture(new Rect(gx,          gy,          b,  px), _white);
             GUI.DrawTexture(new Rect(gx + px - b, gy,          b,  px), _white);
             GUI.color = prev;
+        }
+
+        // ── Research tab ──────────────────────────────────────────────────────
+        private void DrawResearch(Rect area, float w, float h)
+        {
+            if (_gm?.Station == null || _gm.Research == null)
+            { GUI.Label(new Rect(area.x, area.y, w, 20f), "Research not available.", _sSub); return; }
+
+            var s = _gm.Station;
+            if (s.research == null) { GUI.Label(new Rect(area.x, area.y, w, 20f), "Initialising...", _sSub); return; }
+
+            // ── Datachip storage summary bar ──────────────────────────────────
+            const float ChipBarH = 28f; // 26px content + 2px bottom margin
+            float fy = area.y;
+            {
+                int chipsStored  = _gm.Research.GetStoredDatachipCount(s);
+                int chipCapacity = _gm.Research.GetDatachipCapacity(s);
+                int pending      = s.research.pendingDatachips;
+
+                DrawSolid(new Rect(area.x, fy, w, ChipBarH - 2f), new Color(0.07f, 0.10f, 0.18f, 0.95f));
+
+                string chipLabel = chipCapacity > 0
+                    ? $"💾 Datachips: {chipsStored}/{chipCapacity}"
+                    : "💾 Datachips: — (no Data Storage Server)";
+                var prevChip = GUI.color;
+                GUI.color = (chipCapacity == 0 || pending > 0) ? ColBarWarn : ColBarGreen;
+                GUI.Label(new Rect(area.x + 4f, fy + 4f, w * 0.65f, 18f), chipLabel, _sSub);
+                GUI.color = prevChip;
+
+                if (pending > 0)
+                {
+                    GUI.color = ColBarWarn;
+                    GUI.Label(new Rect(area.x + w * 0.67f, fy + 4f, w * 0.33f - 4f, 18f),
+                              $"⚠ {pending} pending", _sSub);
+                    GUI.color = prevChip;
+                }
+                fy += ChipBarH;
+            }
+
+            // ── Branch filter buttons ─────────────────────────────────────────
+            const float FBtnH = 24f;
+            float fbw = (w - 6f) / 4f;
+            var   filters = new[] { (ResearchBranchFilter.All,       "All"),
+                                    (ResearchBranchFilter.Military,  "Military"),
+                                    (ResearchBranchFilter.Economics, "Economics"),
+                                    (ResearchBranchFilter.Sciences,  "Sciences") };
+            var prevC = GUI.color;
+            for (int i = 0; i < filters.Length; i++)
+            {
+                var (f, lbl) = filters[i];
+                bool active = _researchFilter == f;
+                GUI.color = active ? ColAccent : new Color(0.55f, 0.60f, 0.70f, 1f);
+                if (GUI.Button(new Rect(area.x + i * (fbw + 2f), fy, fbw, FBtnH), lbl, _sBtnSmall))
+                    _researchFilter = f;
+            }
+            GUI.color = prevC;
+            fy += FBtnH + 4f;
+
+            // ── Scrollable content ────────────────────────────────────────────
+            float innerH = 0f;
+            var branches = new[] { ResearchBranch.Military, ResearchBranch.Economics, ResearchBranch.Sciences };
+            foreach (var branch in branches)
+            {
+                if (_researchFilter != ResearchBranchFilter.All &&
+                    _researchFilter.ToString() != branch.ToString()) continue;
+                var unlocked  = _gm.Research.GetUnlockedNodes(branch, s);
+                var available = _gm.Research.GetAvailableNodes(branch, s);
+                // Count locked nodes (prereqs not met)
+                int lockedCount = 0;
+                foreach (var n in _gm.Registry.ResearchNodes.Values)
+                {
+                    if (n.branch != branch) continue;
+                    if (s.research.IsUnlocked(n.id)) continue;
+                    bool prereqsMet = true;
+                    foreach (var p in n.prerequisites)
+                        if (!s.research.IsUnlocked(p)) { prereqsMet = false; break; }
+                    if (!prereqsMet) lockedCount++;
+                }
+                innerH += 38f + unlocked.Length * 20f + available.Length * 48f + lockedCount * 18f + 10f;
+            }
+            float scrollH = h - ChipBarH - FBtnH - 4f;
+            innerH = Mathf.Max(innerH, scrollH);
+
+            _researchScroll = GUI.BeginScrollView(
+                new Rect(area.x, fy, w, scrollH),
+                _researchScroll, new Rect(0, 0, w - 14f, innerH));
+
+            float y = 4f;
+            foreach (var branch in branches)
+            {
+                if (_researchFilter != ResearchBranchFilter.All &&
+                    _researchFilter.ToString() != branch.ToString()) continue;
+
+                var bState    = s.research.branches[branch];
+                var unlocked  = _gm.Research.GetUnlockedNodes(branch, s);
+                var available = _gm.Research.GetAvailableNodes(branch, s);
+
+                // Branch header
+                DrawSolid(new Rect(0, y, w - 14f, 28f), new Color(0.10f, 0.13f, 0.22f, 0.95f));
+                GUI.Label(new Rect(4f, y + 2f, w * 0.55f, 18f), branch.ToString(), _sLabel);
+                GUI.Label(new Rect(w * 0.57f, y + 4f, w * 0.43f - 14f, 16f),
+                          $"{bState.points:F0} pts", _sSub);
+                y += 32f;
+
+                // Unlocked nodes (green)
+                foreach (var node in unlocked)
+                {
+                    var prev2 = GUI.color; GUI.color = ColBarGreen;
+                    GUI.Label(new Rect(8f, y, w - 22f, 18f), $"✓ {node.displayName}", _sSub);
+                    GUI.color = prev2;
+                    y += 20f;
+                }
+
+                // Available nodes (can research — progress bar)
+                foreach (var node in available)
+                {
+                    DrawSolid(new Rect(0, y, w - 14f, 44f), new Color(0.08f, 0.11f, 0.20f, 0.85f));
+                    GUI.Label(new Rect(4f, y + 2f, w * 0.70f - 14f, 16f), node.displayName, _sSub);
+                    GUI.Label(new Rect(w * 0.72f, y + 2f, w * 0.28f - 14f, 16f),
+                              $"{node.pointCost} pts", _sSub);
+                    // Progress bar
+                    float pct = node.pointCost > 0 ? Mathf.Clamp01(bState.points / node.pointCost) : 1f;
+                    DrawSolid(new Rect(4f, y + 22f, w - 22f, 8f), ColBarBg);
+                    Color barCol = pct >= 1f ? ColBarGreen : ColBarFill;
+                    DrawSolid(new Rect(4f, y + 22f, (w - 22f) * pct, 8f), barCol);
+                    string desc = node.description.Length > 50 ? node.description[..47] + "…" : node.description;
+                    GUI.Label(new Rect(4f, y + 32f, w - 18f, 12f), desc, _sSub);
+                    y += 48f;
+                }
+
+                // Locked nodes (grey, prereqs not met)
+                foreach (var node in _gm.Registry.ResearchNodes.Values)
+                {
+                    if (node.branch != branch) continue;
+                    if (s.research.IsUnlocked(node.id)) continue;
+                    bool prereqsMet = true;
+                    foreach (var p in node.prerequisites)
+                        if (!s.research.IsUnlocked(p)) { prereqsMet = false; break; }
+                    if (prereqsMet) continue; // already shown above
+                    var prev3 = GUI.color;
+                    GUI.color = new Color(0.40f, 0.43f, 0.52f, 1f);
+                    GUI.Label(new Rect(8f, y, w - 22f, 16f), $"🔒 {node.displayName}", _sSub);
+                    GUI.color = prev3;
+                    y += 18f;
+                }
+
+                y += 10f;
+                DrawSolid(new Rect(0, y - 5f, w - 14f, 1f), ColDivider);
+            }
+
+            GUI.EndScrollView();
+        }
+
+        // ── Map tab ───────────────────────────────────────────────────────────
+        private void DrawMap(Rect area, float w, float h)
+        {
+            if (_gm?.Station == null || _gm.Map == null)
+            { GUI.Label(new Rect(area.x, area.y, w, 20f), "Map not available.", _sSub); return; }
+
+            var s     = _gm.Station;
+            var level = _gm.Map.GetMapViewLevel(s);
+            var pois  = _gm.Map.GetDiscoveredPois(s);
+
+            float y = area.y;
+
+            // Map view level + range
+            string lvlLabel = level switch
+            {
+                MapViewLevel.System   => "System View",
+                MapViewLevel.Sector   => "Sector View",
+                MapViewLevel.Quadrant => "Quadrant View",
+                MapViewLevel.Galaxy   => "Galaxy View",
+                _                    => "System View",
+            };
+            GUI.Label(new Rect(area.x, y, w, 20f), $"Map: {lvlLabel}", _sLabel);
+            y += 22f;
+            float range = _gm.Map.GetDetectionRange(s);
+            GUI.Label(new Rect(area.x, y, w, 16f),
+                      $"Detection range: {range:F0} u  |  {pois.Count} POIs discovered", _sSub);
+            y += 20f;
+            DrawSolid(new Rect(area.x, y, w, 1f), ColDivider);
+            y += 8f;
+
+            // ── Active asteroid missions ──────────────────────────────────────
+            bool hasActiveMissions = false;
+            foreach (var kv in s.asteroidMaps)
+                if (kv.Value.status == "active") hasActiveMissions = true;
+
+            if (hasActiveMissions)
+            {
+                GUI.Label(new Rect(area.x, y, w, 16f), "Active Mining Missions:", _sLabel);
+                y += 20f;
+                foreach (var kv in s.asteroidMaps)
+                {
+                    var am = kv.Value;
+                    if (am.status != "active") continue;
+                    int remaining = Mathf.Max(0, am.endTick - s.tick);
+                    s.pointsOfInterest.TryGetValue(am.poiUid, out var poi2);
+                    string poiName = poi2 != null ? poi2.displayName : am.poiUid;
+                    DrawSolid(new Rect(area.x, y, w, 28f), new Color(0.09f, 0.12f, 0.20f, 0.9f));
+                    GUI.Label(new Rect(area.x + 4f, y + 2f, w * 0.65f, 16f), poiName, _sSub);
+                    GUI.Label(new Rect(area.x + w * 0.67f, y + 4f, w * 0.33f, 14f),
+                              $"{remaining}t left", _sSub);
+                    y += 32f;
+                }
+                DrawSolid(new Rect(area.x, y, w, 1f), ColDivider);
+                y += 8f;
+            }
+
+            // ── POI list ──────────────────────────────────────────────────────
+            if (pois.Count == 0)
+            { GUI.Label(new Rect(area.x, y, w, 18f), "No POIs discovered yet.", _sSub); return; }
+
+            float listH = h - (y - area.y) - 4f;
+            float innerH2 = 0f;
+            foreach (var poi in pois)
+                innerH2 += ComputePoiRowHeight(poi, s);
+            innerH2 = Mathf.Max(innerH2, listH);
+
+            _mapScroll = GUI.BeginScrollView(
+                new Rect(area.x, y, w, listH),
+                _mapScroll, new Rect(0, 0, w - 14f, innerH2));
+
+            float ly = 0f;
+            foreach (var poi in pois)
+            {
+                bool sel = _selectedPoiUid == poi.uid;
+                float rowH   = ComputePoiRowHeight(poi, s);
+                float startLy = ly;
+                DrawSolid(new Rect(0, ly, w - 14f, rowH - 4f),
+                          sel ? ColTabHl : new Color(0.09f, 0.11f, 0.18f, 0.9f));
+
+                // Type icon
+                string icon = poi.poiType switch
+                {
+                    "Asteroid"         => "★",
+                    "TradePost"        => "◆",
+                    "AbandonedStation" => "◉",
+                    "NebulaPocket"     => "◈",
+                    _                 => "·",
+                };
+                GUI.Label(new Rect(4f, ly + 4f, 18f, 18f), icon, _sSub);
+                GUI.Label(new Rect(22f, ly + 4f, w * 0.65f - 36f, 18f), poi.displayName, _sLabel);
+                GUI.Label(new Rect(w * 0.68f, ly + 6f, w * 0.32f - 14f, 14f),
+                          poi.poiType, _sSub);
+
+                // Distance
+                float dist = Mathf.Sqrt(poi.posX * poi.posX + poi.posY * poi.posY);
+                GUI.Label(new Rect(22f, ly + 24f, w * 0.65f - 36f, 14f),
+                          $"Dist: {dist:F0} u", _sSub);
+
+                // Select / expand
+                if (GUI.Button(new Rect(w * 0.72f, ly + 22f, w * 0.28f - 14f, 18f),
+                               sel ? "▲ Close" : "▼ Detail", _sBtnSmall))
+                {
+                    _selectedPoiUid = sel ? "" : poi.uid;
+                    _selectedMapCrew.Clear();
+                    _mapMissionMsg = "";
+                }
+
+                // Expanded panel — asteroid mining dispatch
+                if (sel && poi.poiType == "Asteroid")
+                {
+                    ly += 44f;
+                    // Yield preview
+                    string yieldStr = "";
+                    foreach (var kv in poi.resourceYield) yieldStr += $"{kv.Key.Replace("item.","")}×{kv.Value} ";
+                    GUI.Label(new Rect(4f, ly, w - 18f, 14f), $"Yield: {yieldStr.Trim()}", _sSub);
+                    ly += 16f;
+
+                    // Check if already on a mission
+                    bool alreadyDispatched = false;
+                    foreach (var am in s.asteroidMaps.Values)
+                        if (am.poiUid == poi.uid && am.status == "active") { alreadyDispatched = true; break; }
+
+                    if (alreadyDispatched)
+                    {
+                        var prev4 = GUI.color; GUI.color = ColBarWarn;
+                        GUI.Label(new Rect(4f, ly, w - 18f, 16f), "Mission in progress.", _sSub);
+                        GUI.color = prev4;
+                        ly += 18f;
+                    }
+                    else
+                    {
+                        // Crew picker
+                        var crew = s.GetCrew();
+                        foreach (var npc in crew)
+                        {
+                            if (npc.missionUid != null) continue;
+                            bool npcSel = _selectedMapCrew.Contains(npc.uid);
+                            var prevN = GUI.color;
+                            GUI.color = npcSel ? ColBarGreen : new Color(0.55f, 0.60f, 0.70f);
+                            if (GUI.Button(new Rect(4f, ly, w - 18f, 16f),
+                                           (npcSel ? "✓ " : "  ") + npc.name, _sBtnSmall))
+                            {
+                                if (npcSel) _selectedMapCrew.Remove(npc.uid);
+                                else        _selectedMapCrew.Add(npc.uid);
+                                _mapMissionMsg = "";
+                            }
+                            GUI.color = prevN;
+                            ly += 18f;
+                        }
+
+                        if (_selectedMapCrew.Count > 0)
+                        {
+                            if (GUI.Button(new Rect(4f, ly, w - 18f, 22f), "Send Mining Team", _sBtnWide))
+                            {
+                                var result = _gm.AsteroidMissions.DispatchAsteroidMission(
+                                    poi.uid, new List<string>(_selectedMapCrew), s);
+                                _mapMissionMsg = result.ok ? "Mission dispatched!" : result.reason;
+                                if (result.ok) _selectedMapCrew.Clear();
+                            }
+                            ly += 24f;
+                        }
+                        if (!string.IsNullOrEmpty(_mapMissionMsg))
+                        {
+                            GUI.Label(new Rect(4f, ly, w - 18f, 14f), _mapMissionMsg, _sSub);
+                            ly += 16f;
+                        }
+                    }
+                    // Snap to the pre-computed row boundary for clean alignment.
+                    ly = startLy + rowH;
+                }
+                else
+                {
+                    ly += rowH;
+                }
+            }
+            GUI.EndScrollView();
+        }
+
+        /// <summary>
+        /// Computes the actual pixel height for a POI row, accounting for the variable
+        /// number of crew lines and optional controls in the expanded asteroid panel.
+        /// </summary>
+        private float ComputePoiRowHeight(PointOfInterest poi, StationState s)
+        {
+            if (_selectedPoiUid != poi.uid || poi.poiType != "Asteroid")
+                return 52f;
+
+            // 44px header section + 16px yield line
+            float h = 44f + 16f;
+
+            bool alreadyDispatched = false;
+            foreach (var am in s.asteroidMaps.Values)
+                if (am.poiUid == poi.uid && am.status == "active") { alreadyDispatched = true; break; }
+
+            if (alreadyDispatched)
+            {
+                h += 18f; // "Mission in progress." label
+            }
+            else
+            {
+                var crew = s.GetCrew();
+                foreach (var npc in crew)
+                    if (npc.missionUid == null) h += 18f; // one row per available crew member
+                if (_selectedMapCrew.Count > 0) h += 24f; // "Send Mining Team" button
+                if (!string.IsNullOrEmpty(_mapMissionMsg)) h += 16f; // feedback message
+            }
+
+            return h + 4f; // 4px gap between rows
         }
 
         // ── Style setup ───────────────────────────────────────────────────────

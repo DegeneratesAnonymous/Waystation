@@ -205,7 +205,9 @@
         "is_workbench": true,
         "beauty_score": 2,
         "workbench_room_type": "general_workshop",
-        "workbench_skill_bonuses": { "engineering": 1.10 },
+        "workbench_skill_bonuses": {
+            "engineering": 1.1
+        },
         "schema_version": "1"
     },
     {
@@ -227,7 +229,9 @@
         "is_workbench": true,
         "beauty_score": 0,
         "workbench_room_type": "refinery",
-        "workbench_skill_bonuses": { "engineering": 1.15 },
+        "workbench_skill_bonuses": {
+            "engineering": 1.15
+        },
         "schema_version": "1"
     },
     {
@@ -368,7 +372,9 @@
         "category": "object",
         "description": "A standard station chair. Required as basic seating in furnished rooms. Contributes to room bonus requirements when placed alongside workbenches.",
         "build_time_ticks": 6,
-        "required_materials": { "item.steel_plate": 1 },
+        "required_materials": {
+            "item.steel_plate": 1
+        },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
@@ -383,7 +389,9 @@
         "category": "object",
         "description": "A work or dining table. Provides a surface for crew activities and contributes to room bonus requirements.",
         "build_time_ticks": 8,
-        "required_materials": { "item.steel_plate": 2 },
+        "required_materials": {
+            "item.steel_plate": 2
+        },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
@@ -398,8 +406,13 @@
         "category": "electrical",
         "description": "A ceiling-mounted light fixture. Required for functional work areas. Contributes to room bonus requirements.",
         "build_time_ticks": 8,
-        "required_materials": { "item.wiring": 2, "item.parts": 1 },
-        "required_skills": { "electrical": 1 },
+        "required_materials": {
+            "item.wiring": 2,
+            "item.parts": 1
+        },
+        "required_skills": {
+            "electrical": 1
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 50,
@@ -487,6 +500,107 @@
         "size": 1,
         "max_health": 100,
         "schema_version": "1"
+    },
+    {
+        "id": "buildable.military_terminal",
+        "display_name": "Military Research Terminal",
+        "category": "object",
+        "description": "A hardened research station for military technologies. Crew assigned here generate Military research points.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 8,
+            "item.wiring": 4
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "beauty_score": 2,
+        "is_workbench": true,
+        "workbench_room_type": "research_lab",
+        "workbench_skill_bonuses": {
+            "research": 1.2
+        },
+        "requires_power": true,
+        "power_draw": 2.0,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.economic_terminal",
+        "display_name": "Economic Research Terminal",
+        "category": "object",
+        "description": "An analytics workstation for economic research. Crew assigned here generate Economics research points.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 5
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "beauty_score": 2,
+        "is_workbench": true,
+        "workbench_room_type": "research_lab",
+        "workbench_skill_bonuses": {
+            "research": 1.2
+        },
+        "requires_power": true,
+        "power_draw": 1.5,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.science_terminal",
+        "display_name": "Science Research Terminal",
+        "category": "object",
+        "description": "A multi-purpose science workstation for theoretical research. Crew assigned here generate Sciences research points.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 6
+        },
+        "required_skills": {
+            "engineering": 3
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "beauty_score": 3,
+        "is_workbench": true,
+        "workbench_room_type": "research_lab",
+        "workbench_skill_bonuses": {
+            "research": 1.25
+        },
+        "requires_power": true,
+        "power_draw": 2.5,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.data_storage_server",
+        "display_name": "Data Storage Server",
+        "category": "object",
+        "description": "A secure rack-mounted server unit for storing research datachips. Each server holds up to 16 datachips. Requires power \u2014 a loss of power or structural integrity risks the research stored within.",
+        "build_time_ticks": 25,
+        "required_materials": {
+            "item.steel_plate": 4,
+            "item.wiring": 6,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 100,
+        "cargo_capacity": 16,
+        "beauty_score": 1,
+        "furniture_tag": "storage",
+        "requires_power": true,
+        "power_draw": 1.0,
+        "schema_version": "1"
     }
 ]
-
