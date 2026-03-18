@@ -208,7 +208,7 @@ namespace Waystation.UI
                 var toUndo = _undoStack.Pop();
                 foreach (var uid in toUndo)
                     _gm.Building.UndoFoundation(_gm.Station, uid);
-                _gm.Networks.RebuildNetworks(_gm.Station);
+                _gm.UtilityNetworks.RebuildAll(_gm.Station);
                 StationRoomView.Instance?.ForceRefreshFoundations();
             }
 
@@ -310,7 +310,7 @@ namespace Waystation.UI
                     if (!beforeUids.Contains(k)) allNew.Add(k);
                 if (allNew.Count > 0) _undoStack.Push(allNew);
 
-                _gm.Networks.RebuildNetworks(_gm.Station);
+                _gm.UtilityNetworks.RebuildAll(_gm.Station);
                 _isDragging = false;
                 _dragLine.Clear();
                 _dragBlocked.Clear();
@@ -1275,7 +1275,7 @@ namespace Waystation.UI
                 if (GUI.Button(new Rect(cw * 0.68f, y + 2f, cw * 0.32f, 17f), "Cancel", _sBtnDanger))
                 {
                     _gm.Building.CancelFoundation(s, f.uid, refund: true);
-                    _gm.Networks.RebuildNetworks(s);
+                    _gm.UtilityNetworks.RebuildAll(s);
                 }
             }
             else if (isCabinet)
@@ -1494,7 +1494,7 @@ namespace Waystation.UI
             // members (wires, pipes), and cancelled pending foundations may also have
             // been part of a partial network segment.
             if (toRemove.Count > 0 || hadCancels)
-                _gm.Networks.RebuildNetworks(s);
+                _gm.UtilityNetworks.RebuildAll(s);
         }
 
         // ── Crew tab ──────────────────────────────────────────────────────────

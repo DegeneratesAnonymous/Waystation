@@ -125,7 +125,11 @@
         ],
         "size": 2,
         "max_health": 90,
-        "schema_version": "1"
+        "schema_version": "1",
+        "layer": 2,
+        "network_type": "electric",
+        "node_role": "producer",
+        "output_watts": 50.0
     },
     {
         "id": "buildable.generator",
@@ -147,7 +151,10 @@
         "tile_height": 2,
         "max_health": 150,
         "power_output": 20,
-        "schema_version": "1"
+        "schema_version": "1",
+        "network_type": "electric",
+        "node_role": "producer",
+        "output_watts": 200.0
     },
     {
         "id": "buildable.power_wire",
@@ -185,7 +192,10 @@
         "size": 1,
         "max_health": 120,
         "power_capacity": 100,
-        "schema_version": "1"
+        "schema_version": "1",
+        "network_type": "electric",
+        "node_role": "storage",
+        "storage_capacity_wh": 500.0
     },
     {
         "id": "buildable.workbench",
@@ -305,7 +315,8 @@
         "required_tags": [],
         "size": 1,
         "max_health": 40,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "conduit"
     },
     {
         "id": "buildable.pipe",
@@ -323,7 +334,8 @@
         "required_tags": [],
         "size": 1,
         "max_health": 60,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "conduit"
     },
     {
         "id": "buildable.duct",
@@ -341,7 +353,8 @@
         "required_tags": [],
         "size": 1,
         "max_health": 60,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "conduit"
     },
     {
         "id": "buildable.ice_refiner",
@@ -364,7 +377,13 @@
         "required_tags": [],
         "size": 2,
         "max_health": 200,
-        "schema_version": "1"
+        "schema_version": "1",
+        "node_role": "producer",
+        "fluid_type": "water",
+        "fluid_produce_per_tick": 10.0,
+        "gas_type": "oxygen",
+        "gas_produce_per_tick": 5.0,
+        "demand_watts": 15.0
     },
     {
         "id": "buildable.chair",
@@ -418,6 +437,167 @@
         "max_health": 50,
         "beauty_score": 3,
         "furniture_tag": "lighting",
+        "schema_version": "1",
+        "node_role": "consumer",
+        "demand_watts": 5.0,
+        "requires_power": true,
+        "network_type": "electric"
+    },
+    {
+        "id": "buildable.switch",
+        "display_name": "Electrical Switch",
+        "category": "electrical",
+        "layer": 1,
+        "description": "An inline electrical switch. Toggle open/closed to connect or disconnect wire segments. Open = network connected; closed = network split.",
+        "build_time_ticks": 8,
+        "network_type": "electric",
+        "node_role": "isolator",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.wiring": 2
+        },
+        "required_skills": {
+            "electrical": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 60,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.water_extractor",
+        "display_name": "Water Extractor",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "Extracts water from station ice reserves and pumps it into the connected pipe network. Requires electrical power.",
+        "build_time_ticks": 40,
+        "network_type": "pipe",
+        "node_role": "producer",
+        "fluid_type": "water",
+        "fluid_produce_per_tick": 10.0,
+        "requires_power": true,
+        "demand_watts": 20.0,
+        "required_materials": {
+            "item.steel_plate": 4,
+            "item.wiring": 2
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.water_tank",
+        "display_name": "Water Tank",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "A pressurised storage tank for Water. Connects to fluid pipe networks. Capacity: 500 L.",
+        "build_time_ticks": 30,
+        "network_type": "pipe",
+        "node_role": "storage",
+        "fluid_type": "water",
+        "fluid_storage_capacity": 500.0,
+        "required_materials": {
+            "item.steel_plate": 6
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.valve",
+        "display_name": "Pipe Valve",
+        "category": "plumbing",
+        "layer": 1,
+        "description": "An inline pipe valve. Toggle open/closed to connect or isolate fluid pipe segments.",
+        "build_time_ticks": 10,
+        "network_type": "pipe",
+        "node_role": "isolator",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.steel_plate": 1
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.oxygen_generator",
+        "display_name": "Oxygen Generator",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "Electrolyses water to produce oxygen gas for distribution through duct networks. Requires electrical power and a connected water supply.",
+        "build_time_ticks": 60,
+        "network_type": "duct",
+        "node_role": "producer",
+        "gas_type": "oxygen",
+        "gas_produce_per_tick": 5.0,
+        "requires_power": true,
+        "demand_watts": 30.0,
+        "required_materials": {
+            "item.steel_plate": 5,
+            "item.wiring": 4,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 3
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.gas_tank",
+        "display_name": "Gas Tank",
+        "category": "plumbing",
+        "layer": 2,
+        "description": "A high-pressure storage vessel for gas duct networks. Configurable for Oxygen, CarbonDioxide, or Nitrogen. Capacity: 1000 L.",
+        "build_time_ticks": 35,
+        "network_type": "duct",
+        "node_role": "storage",
+        "gas_storage_capacity": 1000.0,
+        "required_materials": {
+            "item.steel_plate": 8
+        },
+        "required_skills": {
+            "engineering": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 180,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.breaker",
+        "display_name": "Duct Breaker",
+        "category": "plumbing",
+        "layer": 1,
+        "description": "An inline duct breaker. Toggle open/closed to connect or isolate gas duct segments.",
+        "build_time_ticks": 10,
+        "network_type": "duct",
+        "node_role": "isolator",
+        "under_wall_allowed": true,
+        "required_materials": {
+            "item.steel_plate": 1
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
         "schema_version": "1"
     },
     {
