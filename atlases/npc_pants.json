@@ -1,0 +1,257 @@
+{
+  "atlas": "npc_pants.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc",
+  "tiles": [
+    {
+      "id": "npc_pants_casual_grey",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_casual_blue",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_casual_green",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_casual_red",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_casual_brown",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_cargo_grey",
+      "col": 5,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_cargo_blue",
+      "col": 6,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_cargo_green",
+      "col": 7,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_cargo_red",
+      "col": 8,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_cargo_brown",
+      "col": 9,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_uniform_grey",
+      "col": 10,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_uniform_blue",
+      "col": 11,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_uniform_green",
+      "col": 12,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_uniform_red",
+      "col": 13,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_uniform_brown",
+      "col": 14,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_shorts_grey",
+      "col": 15,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_shorts_blue",
+      "col": 16,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "color:blue",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_shorts_green",
+      "col": 17,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "color:green",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_shorts_red",
+      "col": 18,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "color:red",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_pants_shorts_brown",
+      "col": 19,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "color:brown",
+        "state:normal"
+      ]
+    }
+  ]
+}

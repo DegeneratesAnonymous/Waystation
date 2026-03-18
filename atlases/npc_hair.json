@@ -1,0 +1,377 @@
+{
+  "atlas": "npc_hair.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc",
+  "tiles": [
+    {
+      "id": "npc_hair_short_blonde",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "color:blonde",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_short_auburn",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "color:auburn",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_short_brown",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_short_black",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "color:black",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_short_grey",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_short_white",
+      "col": 5,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "color:white",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_long_blonde",
+      "col": 6,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "color:blonde",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_long_auburn",
+      "col": 7,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "color:auburn",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_long_brown",
+      "col": 8,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_long_black",
+      "col": 9,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "color:black",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_long_grey",
+      "col": 10,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_long_white",
+      "col": 11,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "color:white",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_blonde",
+      "col": 12,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "color:blonde",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_auburn",
+      "col": 13,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "color:auburn",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_brown",
+      "col": 14,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_black",
+      "col": 15,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "color:black",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_grey",
+      "col": 16,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_white",
+      "col": 17,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "color:white",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_blonde",
+      "col": 18,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "color:blonde",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_auburn",
+      "col": 19,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "color:auburn",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_brown",
+      "col": 20,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_black",
+      "col": 21,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "color:black",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_grey",
+      "col": 22,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_white",
+      "col": 23,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "color:white",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_blonde",
+      "col": 24,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "color:blonde",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_auburn",
+      "col": 25,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "color:auburn",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_brown",
+      "col": 26,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "color:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_black",
+      "col": 27,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "color:black",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_grey",
+      "col": 28,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "color:grey",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_white",
+      "col": 29,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "color:white",
+        "state:normal"
+      ]
+    }
+  ]
+}

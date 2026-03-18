@@ -1,0 +1,233 @@
+{
+  "atlas": "npc_body.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc",
+  "tiles": [
+    {
+      "id": "npc_body_slim_pale",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:slim",
+        "skin:pale",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_slim_fair",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:slim",
+        "skin:fair",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_slim_medium",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:slim",
+        "skin:medium",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_slim_olive",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:slim",
+        "skin:olive",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_slim_brown",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:slim",
+        "skin:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_slim_dark",
+      "col": 5,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:slim",
+        "skin:dark",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_average_pale",
+      "col": 6,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:average",
+        "skin:pale",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_average_fair",
+      "col": 7,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:average",
+        "skin:fair",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_average_medium",
+      "col": 8,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:average",
+        "skin:medium",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_average_olive",
+      "col": 9,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:average",
+        "skin:olive",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_average_brown",
+      "col": 10,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:average",
+        "skin:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_average_dark",
+      "col": 11,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:average",
+        "skin:dark",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_stocky_pale",
+      "col": 12,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:stocky",
+        "skin:pale",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_stocky_fair",
+      "col": 13,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:stocky",
+        "skin:fair",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_stocky_medium",
+      "col": 14,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:stocky",
+        "skin:medium",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_stocky_olive",
+      "col": 15,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:stocky",
+        "skin:olive",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_stocky_brown",
+      "col": 16,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:stocky",
+        "skin:brown",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "npc_body_stocky_dark",
+      "col": 17,
+      "row": 0,
+      "tags": [
+        "npc",
+        "body",
+        "type:stocky",
+        "skin:dark",
+        "state:normal"
+      ]
+    }
+  ]
+}

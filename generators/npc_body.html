@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NPC Body Atlas Generator</title>
+<style>
+*{box-sizing:border-box}
+body{background:#0a0b0e;color:#c8d0e0;font-family:'Courier New',Courier,monospace;padding:20px;margin:0}
+h2{color:#7090b0;margin:0 0 4px}
+p{color:#4a5870;font-size:.85em;margin:0 0 12px}
+canvas{display:block;image-rendering:pixelated;margin:8px 0}
+.prv-wrap{overflow-x:auto;margin:8px 0;background:#06070a;padding:4px}
+button{background:#151e30;color:#6099cc;border:1px solid #253550;padding:8px 18px;
+        margin:4px;cursor:pointer;font-family:inherit;font-size:.9em;letter-spacing:.05em}
+button:hover{background:#1e2e48}
+</style>
+</head>
+<body>
+<h2>NPC Body Atlas Generator</h2>
+<p>18 variants · 3 body types × 6 skin tones · 612×50px</p>
+<canvas id="atl"></canvas>
+<div class="prv-wrap"><canvas id="prv"></canvas></div>
+<div>
+  <button id="dlP">&#x2193; download PNG</button>
+  <button id="dlJ">&#x2193; download JSON</button>
+</div>
+<script>
+
+const TW=32,TH=48,SW=34,SH=50,PAD=1;
+const C={
+  tBase:'#2d3040',tDeep:'#222530',tHi:'#424858',
+  tLo:'#1c1f2c',tGrout:'#1a1d28',
+  fBase:'#383c50',fLit:'#434860',fDark:'#252838',
+  fShadow:'#141618',fBevel:'#4e5470',fGrout:'#161920',
+  rHi:'#565e7a',rLo:'#2c3048',
+  acc:'#4880aa',accG:'#111e30',accD:'#1a3a60',
+};
+function h2r(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+function sp(d,x,y,col,a=255){if(x<0||y<0||x>=TW||y>=TH)return;const[r,g,b]=h2r(col),i=(y*TW+x)*4;d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=a;}
+function hl(d,x1,x2,y,col,a=255){for(let x=Math.max(0,x1);x<=Math.min(TW-1,x2);x++)sp(d,x,y,col,a);}
+function vl(d,x,y1,y2,col,a=255){for(let y=Math.max(0,y1);y<=Math.min(TH-1,y2);y++)sp(d,x,y,col,a);}
+function fr(d,x1,y1,x2,y2,col,a=255){for(let y=Math.max(0,y1);y<=Math.min(TH-1,y2);y++)hl(d,x1,x2,y,col,a);}
+function dk(h,f){const[r,g,b]=h2r(h);return'#'+[r,g,b].map(c=>Math.max(0,Math.round(c*f)).toString(16).padStart(2,'0')).join('');}
+function lt(h,f){const[r,g,b]=h2r(h);return'#'+[r,g,b].map(c=>Math.min(255,Math.round(c*f)).toString(16).padStart(2,'0')).join('');}
+function outline(d){
+  const t=new Uint8ClampedArray(d.length);
+  for(let i=0;i<d.length;i++)t[i]=d[i];
+  for(let y=0;y<TH;y++)for(let x=0;x<TW;x++){
+    if(t[(y*TW+x)*4+3]>0)continue;
+    const nb=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+    for(const[nx,ny]of nb)if(nx>=0&&nx<TW&&ny>=0&&ny<TH&&t[(ny*TW+nx)*4+3]>0){sp(d,x,y,'#080a0c');break;}
+  }
+}
+
+
+const SKIN_NAMES=['pale','fair','medium','olive','brown','dark'];
+const SKIN_HEX  =['#f5e8d8','#e8cba8','#c8a070','#a07848','#785028','#402810'];
+const BTYPE_NAMES=['slim','average','stocky'];
+// Per-bodytype layout config: [hx1,hx2, nx1,nx2, sx1,sx2, tx1,tx2, lax1,lax2,rax1,rax2, lhx1,lhx2,rhx1,rhx2, hpx1,hpx2, llx1,llx2,rlx1,rlx2, lfx1,lfx2,rfx1,rfx2]
+const BC=[
+  [12,19, 14,17, 10,21, 12,19, 9,11,20,22, 8,12,19,23, 11,20, 12,15,16,19, 11,16,15,20],
+  [11,20, 13,18, 8,23,  11,20, 8,10,21,23, 7,11,20,24, 10,21, 11,15,16,20, 10,16,15,21],
+  [10,21, 12,19, 7,24,  9,22,  7,9, 22,24, 6,10,21,25, 9,22,  10,15,16,21, 9,16, 15,22],
+];
+function drawBody(d,bt,skin){
+  const[hx1,hx2,nx1,nx2,sx1,sx2,tx1,tx2,lax1,lax2,rax1,rax2,lhx1,lhx2,rhx1,rhx2,hpx1,hpx2,llx1,llx2,rlx1,rlx2,lfx1,lfx2,rfx1,rfx2]=BC[bt];
+  const sh=dk(skin,0.70),hi=lt(skin,1.18);
+  // HEAD
+  hl(d,hx1+1,hx2-1,3,skin);
+  for(let y=4;y<=12;y++)hl(d,hx1,hx2,y,skin);
+  hl(d,hx1+1,hx2-1,13,skin);
+  vl(d,hx1+1,5,11,hi); vl(d,hx2-1,5,11,sh);
+  // NECK
+  for(let y=14;y<=16;y++)hl(d,nx1,nx2,y,skin);
+  // SHOULDERS
+  for(let y=16;y<=18;y++)hl(d,sx1,sx2,y,skin);
+  // TORSO
+  for(let y=17;y<=31;y++)hl(d,tx1,tx2,y,skin);
+  vl(d,tx1+1,18,30,hi); vl(d,tx2-1,18,30,sh);
+  // ARMS
+  for(let y=17;y<=31;y++){hl(d,lax1,lax2,y,skin);hl(d,rax1,rax2,y,skin);}
+  // HANDS
+  for(let y=30;y<=34;y++){hl(d,lhx1,lhx2,y,skin);hl(d,rhx1,rhx2,y,skin);}
+  // HIPS
+  for(let y=31;y<=35;y++)hl(d,hpx1,hpx2,y,skin);
+  // LEGS
+  for(let y=35;y<=44;y++){hl(d,llx1,llx2,y,skin);hl(d,rlx1,rlx2,y,skin);}
+  vl(d,llx2,36,43,sh); vl(d,rlx1,36,43,sh);
+  // FEET
+  for(let y=44;y<=47;y++){hl(d,lfx1,lfx2,y,skin);hl(d,rfx1,rfx2,y,skin);}
+  outline(d);
+}
+const COLS=18, AW=COLS*SW, AH=SH;
+const atl=document.getElementById('atl');
+atl.width=AW; atl.height=AH;
+const ctx=atl.getContext('2d');
+const tiles=[];
+for(let bt=0;bt<3;bt++)for(let st=0;st<6;st++){
+  const col=bt*6+st;
+  const id=ctx.createImageData(TW,TH);
+  drawBody(id.data,bt,SKIN_HEX[st]);
+  ctx.putImageData(id,col*SW+PAD,PAD);
+  tiles.push({id:`npc_body_${BTYPE_NAMES[bt]}_${SKIN_NAMES[st]}`,col,row:0,
+    tags:['npc','body',`type:${BTYPE_NAMES[bt]}`,`skin:${SKIN_NAMES[st]}`,'state:normal']});
+}
+const META={atlas:'npc_body.png',tile_size:{w:TW,h:TH},slot_size:{w:SW,h:SH},
+  padding:PAD,pivot:'center',perspective:'top-down-north-fixed',category:'npc',tiles};
+
+// ── preview 4× ──
+const prv=document.getElementById('prv');
+prv.width=AW*4;prv.height=AH*4;
+const pc=prv.getContext('2d');
+for(let py=0;py<AH*4;py+=8)for(let px=0;px<AW*4;px+=8){
+  pc.fillStyle=((Math.floor(px/8)+Math.floor(py/8))%2===0)?'#14162a':'#0c0e1c';
+  pc.fillRect(px,py,8,8);
+}
+pc.imageSmoothingEnabled=false;
+pc.drawImage(atl,0,0,AW*4,AH*4);
+// ── downloads ──
+document.getElementById('dlP').onclick=()=>atl.toBlob(b=>{
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download='npc_body.png';a.click();
+});
+document.getElementById('dlJ').onclick=()=>{
+  const b=new Blob([JSON.stringify(META,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download='npc_body.json';a.click();
+};
+</script>
+</body>
+</html>

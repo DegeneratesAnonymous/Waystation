@@ -1,0 +1,35 @@
+name: NPC Atlas Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'atlases/**'
+      - 'generators/**'
+      - '.github/scripts/validate_npc_atlases.py'
+  pull_request:
+    paths:
+      - 'atlases/**'
+      - 'generators/**'
+      - '.github/scripts/validate_npc_atlases.py'
+  workflow_dispatch:
+
+jobs:
+  validate-atlases:
+    name: Validate NPC Sprite Atlases
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pillow
+        run: pip install Pillow
+
+      - name: Validate PNG dimensions and JSON sidecars
+        run: python3 .github/scripts/validate_npc_atlases.py
