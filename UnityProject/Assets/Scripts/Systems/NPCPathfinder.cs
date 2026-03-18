@@ -37,6 +37,11 @@ namespace Waystation.Systems
             (0,  1), (0, -1), (1, 0), (-1, 0)  // N S E W — no diagonals
         };
 
+        // Per-tick walkability cache — rebuilt once per tick, shared across all path queries
+        private static int                  _cachedTick    = -1;
+        private static HashSet<(int, int)>  _cachedWalkable;
+        private static HashSet<(int, int)>  _cachedBlocked;
+
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
@@ -55,9 +60,16 @@ namespace Waystation.Systems
             if (startCol == goalCol && startRow == goalRow)
                 return new List<PathStep>();
 
-            // Build walkability sets from the station foundations
-            var walkable  = BuildWalkableSet(station);
-            var blocked   = BuildBlockedSet(station);
+            // Use cached walkability sets for this tick; rebuild only when tick advances
+            if (_cachedTick != station.tick)
+            {
+                _cachedWalkable = BuildWalkableSet(station);
+                _cachedBlocked  = BuildBlockedSet(station);
+                _cachedTick     = station.tick;
+            }
+
+            var walkable = _cachedWalkable;
+            var blocked  = _cachedBlocked;
 
             // A tile is passable if it is in the walkable set AND not blocked
             bool IsPassable(int c, int r)

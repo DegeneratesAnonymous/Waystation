@@ -319,6 +319,9 @@ namespace Waystation.Models
         public string landingPadUid;    // target ShuttleLandingPadInstance uid
         public List<string> visitorNpcUids = new List<string>();
 
+        // Visitor count captured at departure time (before visitorNpcUids is cleared)
+        public int peakVisitorCount = 0;
+
         // Animation state: "inbound" | "docked" | "departing"
         public string state = "inbound";
 
@@ -355,9 +358,9 @@ namespace Waystation.Models
     public class ShuttleLandingPadState
     {
         public string foundationUid;  // uid of the FoundationInstance for this pad
-        public string occupiedByShuttleUid = null;  // null = vacant
-        // Uids of shuttles waiting to land when pad was occupied
-        public List<string> waitingShuttleUids = new List<string>();
+        public string occupiedByShuttleUid = null;  // null = vacant; set at dispatch time to reserve
+        // UIDs of ships waiting for this pad to free up
+        public List<string> waitingShipUids = new List<string>();
 
         public bool IsOccupied => occupiedByShuttleUid != null;
     }
@@ -824,10 +827,6 @@ namespace Waystation.Models
         public Dictionary<string, ShuttleLandingPadState> landingPads  = new Dictionary<string, ShuttleLandingPadState>();
         // Hail cooldowns per ship uid (player must wait before re-hailing)
         public List<HailCooldownRecord>   hailCooldowns  = new List<HailCooldownRecord>();
-        // Ships currently tracked in antenna range (keyed by ship uid)
-        // This mirrors the ships dict but scoped to visitor-system ships only.
-        // Keys: ship uid, Value: ShipVisitState (serialised as string to avoid enum issues)
-        public Dictionary<string, string> inRangeShipStates = new Dictionary<string, string>();
 
         public StationState(string name)
         {

@@ -486,9 +486,6 @@
         "required_tags": [],
         "size": 1,
         "max_health": 100,
-        "requires_power": true,
-        "power_draw": 5.0,
-        "idle_power_draw": 1.0,
         "schema_version": "1"
     }
 ]

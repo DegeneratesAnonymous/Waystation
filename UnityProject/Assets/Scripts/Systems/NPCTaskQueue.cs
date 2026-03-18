@@ -119,15 +119,12 @@ namespace Waystation.Systems
 
             if (_pathIndex < _path.Count)
             {
-                var step = _path[_pathIndex++];
-                npc.location = $"{step.Col}_{step.Row}";
+                var step = _path[_pathIndex];
 
-                // Re-check obstruction each step
-                int c = step.Col, r = step.Row;
-                if (IsBlocked(station, c, r))
+                // Check obstruction BEFORE moving — NPC must never step onto a blocked tile
+                if (IsBlocked(station, step.Col, step.Row))
                 {
-                    // Recalculate path from current position
-                    ParseLocation(npc.location, out npcCol, out npcRow);
+                    // Tile became blocked mid-path; replan from current (uncommitted) position
                     _path = NPCPathfinder.FindPath(station, npcCol, npcRow,
                                                     terminal.tileCol, terminal.tileRow);
                     _pathIndex = 0;
@@ -136,7 +133,12 @@ namespace Waystation.Systems
                         Status = NPCTaskStatus.Failed;
                         _onResult?.Invoke(false);
                     }
+                    return;
                 }
+
+                // Safe to move
+                _pathIndex++;
+                npc.location = $"{step.Col}_{step.Row}";
             }
         }
 
@@ -184,7 +186,10 @@ namespace Waystation.Systems
             {
                 if (f.status != "complete" || f.tileLayer < 2) continue;
                 if (f.buildableId.Contains("door")) continue;
-                if (f.tileCol == col && f.tileRow == row) return true;
+                // Check all tiles in the foundation's footprint (multi-tile aware)
+                for (int dc = 0; dc < f.tileWidth;  dc++)
+                for (int dr = 0; dr < f.tileHeight; dr++)
+                    if (f.tileCol + dc == col && f.tileRow + dr == row) return true;
             }
             return false;
         }
@@ -248,11 +253,20 @@ namespace Waystation.Systems
         private readonly Dictionary<string, string> _terminalLocks
             = new Dictionary<string, string>();  // terminalFoundationUid → npcUid
 
-        private readonly ContentRegistry _registry;
-
-        public NPCTaskQueueManager(ContentRegistry registry) { _registry = registry; }
+        public NPCTaskQueueManager() { }
 
         // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>Returns true if no NPC currently holds a lock on this terminal.</summary>
+        public bool IsTerminalFree(string terminalFoundationUid)
+            => !_terminalLocks.ContainsKey(terminalFoundationUid);
+
+        /// <summary>
+        /// Lock a terminal to a specific NPC. Called by CommunicationsSystem when assigning
+        /// a CommunicationsTask so no other hail can claim the same terminal.
+        /// </summary>
+        public void LockTerminal(string terminalFoundationUid, string npcUid)
+            => _terminalLocks[terminalFoundationUid] = npcUid;
 
         /// <summary>Enqueue a task for the given NPC.</summary>
         public void Enqueue(string npcUid, NPCTask task)
@@ -328,16 +342,10 @@ namespace Waystation.Systems
 
             if (bestTerminal == null) return;
 
-            // Lock terminal
-            _terminalLocks[bestTerminal.uid] = npc.uid;
-
-            // Check the terminal's accepted job types (stored in foundation metadata)
+            // Do not lock the terminal — only lock when a concrete task is assigned.
             // For this work order we don't persist job type lists on foundations,
             // so we treat all Access Terminals as accepting JobType.Communications.
-            // TODO: load accepted job types from foundation custom data once that API exists.
-
-            // No task to claim right now — just occupy the terminal
-            // (in a full implementation, the task registry would be queried here)
+            // TODO: query task registry and lock only when a task is actually claimed.
         }
 
         internal void ReleaseTerminalLock(string npcUid)

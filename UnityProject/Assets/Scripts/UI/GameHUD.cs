@@ -183,6 +183,10 @@ namespace Waystation.UI
             IsMouseOverDrawer = overRight || overLeft;
             InBuildMode       = _ghostBuildableId != null || _deconstructMode;
 
+            // Tick the hail toast timer in Update so it decays at real-time speed
+            // (OnGUI can fire multiple times per frame; Update fires exactly once)
+            if (_hailToastTimer > 0f) _hailToastTimer -= Time.deltaTime;
+
             // ── Ctrl+Z — undo last placement ────────────────────────────────────────────────
             if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
                 && Input.GetKeyDown(KeyCode.Z)
@@ -2043,9 +2047,6 @@ namespace Waystation.UI
             float Pad   = 6f;
             float y     = area.y + tabH + Pad;
             float dw    = w - Pad * 2f;
-
-            // Tick toast timer
-            if (_hailToastTimer > 0f) _hailToastTimer -= Time.deltaTime;
 
             // Antenna status header
             bool hasAntenna = _gm?.Antenna?.HasPoweredAntenna(s) ?? false;

@@ -119,7 +119,13 @@ namespace Waystation.Systems
             var pad = station.GetFreeLandingPad();
             if (pad == null)
             {
-                // No free pad — stay Inbound and queue (shuttle dispatched when pad frees)
+                // No free pad — add this ship to the first available pad's waiting queue
+                foreach (var p in station.landingPads.Values)
+                {
+                    if (!p.waitingShipUids.Contains(ship.uid))
+                        p.waitingShipUids.Add(ship.uid);
+                    break;
+                }
                 return;
             }
 
@@ -166,7 +172,10 @@ namespace Waystation.Systems
                         shuttle.state = "docked";
                         shuttle.worldX = targetWx;
                         shuttle.worldY = targetWy;
-                        pad.occupiedByShuttleUid = shuttle.uid;
+                        // pad.occupiedByShuttleUid was already set at dispatch time;
+                        // confirm it is still pointing at this shuttle
+                        if (pad.occupiedByShuttleUid != shuttle.uid)
+                            pad.occupiedByShuttleUid = shuttle.uid;
                         OnShuttleLanded(shuttle, ship, station);
                     }
                     else
@@ -220,8 +229,11 @@ namespace Waystation.Systems
             station.shuttles[shuttle.uid] = shuttle;
             ship.shuttleUid = shuttle.uid;
 
+            // Reserve the pad immediately so no other ship can claim it during approach
+            pad.occupiedByShuttleUid = shuttle.uid;
+
             station.LogEvent($"{ship.name} dispatched a shuttle to landing pad.");
-            Debug.Log($"[SVSM] {ship.name}: shuttle {shuttle.uid} dispatched → pad {pad.foundationUid}");
+            Debug.Log($"[SVSM] {ship.name}: shuttle {shuttle.uid} dispatched → pad {pad.foundationUid} (reserved)");
         }
 
         private void OnShuttleLanded(ShuttleInstance shuttle, ShipInstance ship,
@@ -254,6 +266,9 @@ namespace Waystation.Systems
             // Remove visitor NPCs
             if (ship.shuttleUid != null && station.shuttles.TryGetValue(ship.shuttleUid, out var shuttle))
             {
+                // Capture count before clearing so OnShuttleReturned can record it
+                shuttle.peakVisitorCount = shuttle.visitorNpcUids.Count;
+
                 foreach (var npcUid in new List<string>(shuttle.visitorNpcUids))
                     station.RemoveNpc(npcUid);
                 shuttle.visitorNpcUids.Clear();
@@ -284,7 +299,7 @@ namespace Waystation.Systems
             ship.visitState = ShipVisitState.OutOfRange;
             station.RemoveShip(ship.uid);
 
-            // Record visit history
+            // Record visit history (use peakVisitorCount captured at departure time)
             station.visitHistory.Add(new ShipVisitRecord
             {
                 shipUid      = ship.uid,
@@ -292,7 +307,7 @@ namespace Waystation.Systems
                 shipRole     = ship.role,
                 arrivedTick  = ship.inRangeSinceTick,
                 departedTick = station.tick,
-                visitorCount = shuttle.visitorNpcUids.Count,
+                visitorCount = shuttle.peakVisitorCount,
             });
 
             station.LogEvent($"{ship.name} departed — shuttle returned. Ship out of range.");
@@ -315,7 +330,8 @@ namespace Waystation.Systems
                                     StationState station)
         {
             if (!_registry.Ships.TryGetValue(ship.templateId, out var template)) return;
-            int count = Mathf.Max(1, template.visitorCount);
+            int count = Mathf.Max(0, template.visitorCount);
+            if (count == 0) return;  // ship template specifies no visitors (e.g. raider_corvette)
 
             string npcTemplateId = PickVisitorTemplate(ship);
             if (npcTemplateId == null) return;
@@ -360,15 +376,16 @@ namespace Waystation.Systems
 
         private void ProcessPadQueue(ShuttleLandingPadState pad, StationState station)
         {
-            if (pad.waitingShuttleUids.Count == 0) return;
+            if (pad.waitingShipUids.Count == 0) return;
 
-            string nextUid = pad.waitingShuttleUids[0];
-            pad.waitingShuttleUids.RemoveAt(0);
+            string nextShipUid = pad.waitingShipUids[0];
+            pad.waitingShipUids.RemoveAt(0);
 
-            if (!station.shuttles.TryGetValue(nextUid, out var nextShuttle)) return;
-            pad.occupiedByShuttleUid = nextUid;
-            nextShuttle.state = "inbound";  // will be ticked normally next frame
-            Debug.Log($"[SVSM] Queued shuttle {nextUid} now landing on freed pad {pad.foundationUid}");
+            if (!station.ships.TryGetValue(nextShipUid, out var nextShip)) return;
+            if (nextShip.shuttleUid != null) return; // already dispatched somehow
+
+            DispatchShuttle(nextShip, pad, station);
+            Debug.Log($"[SVSM] Queued ship {nextShip.name} now dispatching to freed pad {pad.foundationUid}");
         }
 
         // ── Validation ────────────────────────────────────────────────────────

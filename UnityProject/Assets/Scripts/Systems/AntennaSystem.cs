@@ -38,12 +38,10 @@ namespace Waystation.Systems
         private const int PowerLossDriftTicks = 30;
 
         private readonly ContentRegistry _registry;
-        private readonly NPCSystem       _npcSystem;
 
-        public AntennaSystem(ContentRegistry registry, NPCSystem npcSystem)
+        public AntennaSystem(ContentRegistry registry)
         {
             _registry  = registry;
-            _npcSystem = npcSystem;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -95,7 +93,7 @@ namespace Waystation.Systems
             {
                 int current = CountInRangeShips(station);
                 if (current < maxShips)
-                    TrySpawnShip(station);
+                    TrySpawnShip(station, range);
             }
 
             // Tick drift for each in-range ship
@@ -116,7 +114,7 @@ namespace Waystation.Systems
             return count;
         }
 
-        private void TrySpawnShip(StationState station)
+        private void TrySpawnShip(StationState station, float range)
         {
             if (_registry.Ships.Count == 0) return;
 
@@ -124,9 +122,9 @@ namespace Waystation.Systems
             var templates = new List<ShipTemplate>(_registry.Ships.Values);
             var template  = templates[UnityEngine.Random.Range(0, templates.Count)];
 
-            // Spawn in a random position on the edge of the antenna range
+            // Spawn in a random position on the edge of the computed antenna range
             float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
-            float radius = BaseRange * 0.8f;
+            float radius = range * 0.8f;
             float wx = Mathf.Cos(angle) * radius;
             float wy = Mathf.Sin(angle) * radius;
 

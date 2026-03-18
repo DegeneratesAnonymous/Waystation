@@ -136,9 +136,9 @@ namespace Waystation.Core
             Rooms     = new RoomSystem(Registry);
 
             // Visitor pipeline systems
-            Antenna    = new AntennaSystem(Registry, Npcs);
+            Antenna    = new AntennaSystem(Registry);
             ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
-            TaskQueue  = new NPCTaskQueueManager(Registry);
+            TaskQueue  = new NPCTaskQueueManager();
             CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
 
             // Register external effect handlers on the event system

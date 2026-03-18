@@ -89,6 +89,8 @@ namespace Waystation.Systems
                 _registry,
                 pass => OnHailResult(pass, shipUid, npc.uid, station));
 
+            // Lock the terminal before enqueuing so no concurrent hail can claim it
+            _taskQueue.LockTerminal(terminal.uid, npc.uid);
             _taskQueue.Enqueue(npc.uid, task);
             npc.currentTaskId = task.Id;
 
@@ -130,16 +132,21 @@ namespace Waystation.Systems
 
         private FoundationInstance FindNearestFreeCommsTerminal(StationState station)
         {
-            FoundationInstance best = null;
+            FoundationInstance best     = null;
+            int                bestDist = int.MaxValue;
+
             // We don't yet persist per-terminal job-type config on foundations,
             // so we treat all Access Terminals as accepting Communications.
             foreach (var f in station.foundations.Values)
             {
                 if (f.buildableId != "buildable.access_terminal" || f.status != "complete")
                     continue;
-                // Check not already locked (NPCTaskQueueManager tracks locks internally;
-                // here we use a simple proximity heuristic)
-                if (best == null) best = f;
+                // Skip terminals already locked by another NPC
+                if (!_taskQueue.IsTerminalFree(f.uid)) continue;
+
+                // Use station origin (0,0) as reference — caller has no position context here
+                int dist = f.tileCol * f.tileCol + f.tileRow * f.tileRow;
+                if (dist < bestDist) { bestDist = dist; best = f; }
             }
             return best;
         }
