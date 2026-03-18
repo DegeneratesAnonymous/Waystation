@@ -38,11 +38,13 @@ namespace Waystation.Systems
             // Build positional lookup for O(1) neighbour queries
             _posLookup = BuildPosLookup(station);
 
-            // Collect all network-capable foundations
+            // Collect all network-capable, fully-built foundations.
+            // Non-complete foundations (awaiting_haul, constructing) are excluded
+            // so unbuilt conduits cannot prematurely connect components.
             var netFoundations = new List<FoundationInstance>();
             foreach (var f in station.foundations.Values)
             {
-                if (GetNetworkType(f) != null)
+                if (f.status == "complete" && GetNetworkType(f) != null)
                     netFoundations.Add(f);
             }
 
@@ -488,7 +490,7 @@ namespace Waystation.Systems
         {
             if (!lookup.TryGetValue((col, row), out var list)) return false;
             foreach (var f in list)
-                if (GetNetworkType(f) == netType) return true;
+                if (f.status == "complete" && GetNetworkType(f) == netType) return true;
             return false;
         }
 
@@ -498,6 +500,9 @@ namespace Waystation.Systems
             var lookup = new Dictionary<(int, int), List<FoundationInstance>>();
             foreach (var f in station.foundations.Values)
             {
+                // Only index complete foundations; in-progress tiles must not
+                // contribute to connectivity or topology sprite masks.
+                if (f.status != "complete") continue;
                 var key = (f.tileCol, f.tileRow);
                 if (!lookup.TryGetValue(key, out var list))
                     lookup[key] = list = new List<FoundationInstance>();

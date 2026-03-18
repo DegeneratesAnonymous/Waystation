@@ -853,8 +853,10 @@ namespace Waystation.View
         /// </summary>
         private static Color ApplyNetworkHue(NetworkInstance net, Color baseColor)
         {
-            // Use the low 8 bits of the UID's hash to get a ±15° hue shift.
-            int hash     = net.uid.GetHashCode();
+            // Use a stable FNV-1a hash (not string.GetHashCode which varies per
+            // runtime / platform) to get a ±15° hue shift that is deterministic
+            // across sessions and all Unity target platforms.
+            int hash     = StableHash(net.uid);
             float offset = ((hash & 0xFF) / 255f - 0.5f) * 0.083f; // ≈ ±15° / 360°
             Color.RGBToHSV(baseColor, out float h, out float s, out float v);
             h = (h + offset + 1f) % 1f;
@@ -878,6 +880,25 @@ namespace Waystation.View
                 "pipe"     => TileAtlas.GetPipe(mask, "normal"),
                 _          => TileAtlas.GetDuct(mask),
             };
+        }
+
+        /// <summary>
+        /// FNV-1a hash over the UTF-16 characters of <paramref name="s"/>.
+        /// Stable across all .NET runtime versions and Unity platforms,
+        /// unlike <c>string.GetHashCode()</c>.
+        /// </summary>
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                foreach (char c in s)
+                {
+                    hash ^= c;
+                    hash *= 16777619u;
+                }
+                return (int)(hash & int.MaxValue);
+            }
         }
 
         private bool IsIsolator(FoundationInstance f)
