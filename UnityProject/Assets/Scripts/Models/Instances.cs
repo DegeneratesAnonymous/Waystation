@@ -160,6 +160,41 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // SkillInstance — runtime per-NPC per-skill state
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Runtime XP and level state for one skill on one NPC.
+    /// Serialised into StationData as skillId + currentXP; level is derived on load.
+    /// </summary>
+    [Serializable]
+    public class SkillInstance
+    {
+        /// <summary>Matches SkillDefinition.skillId.</summary>
+        public string skillId;
+
+        /// <summary>Cumulative XP in this skill. Never decreases.</summary>
+        public float currentXP = 0f;
+
+        /// <summary>
+        /// Derived skill level: floor(sqrt(currentXP / 100)).
+        /// Range 0–20.
+        /// </summary>
+        public int Level => Mathf.Clamp(Mathf.FloorToInt(Mathf.Sqrt(currentXP / 100f)), 0, 20);
+
+        // ── Daily soft cap (diminishing returns above 500 XP/day) ─────────────
+
+        /// <summary>XP accumulated in the current in-game day for this skill.</summary>
+        public float dailyXPAccumulated = 0f;
+
+        /// <summary>In-game day index when dailyXPAccumulated was last reset.</summary>
+        public int   dailyXPDay = -1;
+
+        public static SkillInstance Create(string skillId) =>
+            new SkillInstance { skillId = skillId };
+    }
+
+    // -------------------------------------------------------------------------
     // NPC Instance
     // -------------------------------------------------------------------------
 
@@ -216,8 +251,22 @@ namespace Waystation.Models
         public bool   isSleeping    = false;
         public string missionUid    = null;   // null when not on an away mission
 
-        // Social skill used for hailing ships (1–10, default 1, not levelled this work order)
+        // Social skill used for hailing ships (1–10, default 1).
+        // Migrated to SkillInstance for skill.social on first load.
         public int socialSkill = 1;
+
+        // ── Skill & Expertise System ──────────────────────────────────────────
+        // Serialised: list of SkillInstance entries (one per defined skill).
+        // Missing entries default to currentXP = 0 (level 0).
+        public List<SkillInstance> skillInstances = new List<SkillInstance>();
+
+        // IDs of chosen expertise (ExpertiseDefinition.expertiseId).
+        // An NPC can hold up to ExpertiseSlotCount entries simultaneously.
+        public List<string> chosenExpertise = new List<string>();
+
+        // Multiplicative modifier applied on top of workModifier from expertise passive bonuses.
+        // Evaluated by SkillSystem.RebuildExpertiseModifier(); default 1.0.
+        public float expertiseModifier = 1.0f;
 
         // Pathfinding state — managed by AntennaSystem/ShipVisitStateMachine
         // Tile position target when actively walking

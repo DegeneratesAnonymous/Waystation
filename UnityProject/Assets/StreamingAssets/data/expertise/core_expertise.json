@@ -1,0 +1,219 @@
+[
+  {
+    "id": "expertise.hydroponics_specialist",
+    "display_name": "Hydroponics Specialist",
+    "description": "+20% plant growth speed and +10% water efficiency.",
+    "flavour_text": "They talk to the plants. The plants listen.",
+    "required_skill_id": "skill.farming",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.farming", "value": 1.2 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.master_harvester",
+    "display_name": "Master Harvester",
+    "description": "+25% harvest yield multiplier. HarvestTask completes 15% faster.",
+    "flavour_text": "Never wastes a single leaf.",
+    "required_skill_id": "skill.farming",
+    "required_skill_level": 8,
+    "passive_bonuses": [
+      { "bonus_type": "YieldMultiplier", "target_skill_id": "skill.farming", "value": 1.25 },
+      { "bonus_type": "WorkSpeed",       "target_skill_id": "skill.farming", "value": 1.15 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.crop_whisperer",
+    "display_name": "Crop Whisperer",
+    "description": "Unlocks CriticalCropRescue — can reverse plant damage in Critical condition.",
+    "flavour_text": "Where others see a dying plant, they see a patient.",
+    "required_skill_id": "skill.farming",
+    "required_skill_level": 12,
+    "passive_bonuses": [],
+    "capability_unlocks": ["CriticalCropRescue"]
+  },
+  {
+    "id": "expertise.botanist",
+    "display_name": "Botanist",
+    "description": "+15% XP from Farming tasks. Unlocks AdvancedPlanting for faster germination.",
+    "flavour_text": "A walking botanical encyclopedia.",
+    "required_skill_id": "skill.farming",
+    "required_skill_level": 15,
+    "passive_bonuses": [
+      { "bonus_type": "XPGain", "target_skill_id": "skill.farming", "value": 1.15 }
+    ],
+    "capability_unlocks": ["AdvancedPlanting"]
+  },
+  {
+    "id": "expertise.utility_technician",
+    "display_name": "Utility Technician",
+    "description": "+15% speed on utility repair tasks.",
+    "flavour_text": "If it hums, sparks or leaks, they can fix it.",
+    "required_skill_id": "skill.engineering",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.engineering", "value": 1.15 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.structural_expert",
+    "display_name": "Structural Expert",
+    "description": "+20% construction speed.",
+    "flavour_text": "Measures once, builds perfectly.",
+    "required_skill_id": "skill.engineering",
+    "required_skill_level": 8,
+    "passive_bonuses": [
+      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.engineering", "value": 1.20 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.systems_engineer",
+    "display_name": "Systems Engineer",
+    "description": "Unlocks NetworkDiagnosis — automatically highlights broken network segments.",
+    "flavour_text": "Can read a circuit the way others read a book.",
+    "required_skill_id": "skill.engineering",
+    "required_skill_level": 12,
+    "passive_bonuses": [],
+    "capability_unlocks": ["NetworkDiagnosis"]
+  },
+  {
+    "id": "expertise.research_prodigy",
+    "display_name": "Research Prodigy",
+    "description": "+20% research point output at Science Terminal.",
+    "flavour_text": "Publishes papers most people can't even read.",
+    "required_skill_id": "skill.science",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "ResearchOutput", "target_skill_id": "skill.science", "value": 1.20 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.theorist",
+    "display_name": "Theorist",
+    "description": "+15% XP gain from Science skill.",
+    "flavour_text": "Thinks three solutions ahead.",
+    "required_skill_id": "skill.science",
+    "required_skill_level": 10,
+    "passive_bonuses": [
+      { "bonus_type": "XPGain", "target_skill_id": "skill.science", "value": 1.15 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.lead_researcher",
+    "display_name": "Lead Researcher",
+    "description": "Unlocks MentorTask — can mentor another NPC for +30% XP at a terminal.",
+    "flavour_text": "Knowledge shared is knowledge multiplied.",
+    "required_skill_id": "skill.science",
+    "required_skill_level": 15,
+    "passive_bonuses": [],
+    "capability_unlocks": ["MentorTask"]
+  },
+  {
+    "id": "expertise.negotiator",
+    "display_name": "Negotiator",
+    "description": "+15% Social skill check success rate. Conversation cooldown reduced.",
+    "flavour_text": "Wins arguments before they start.",
+    "required_skill_id": "skill.social",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "SocialChance", "target_skill_id": "skill.social", "value": 1.15 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.diplomat",
+    "display_name": "Diplomat",
+    "description": "Unlocks TradeNegotiation — generates a 10% price discount on trade visits.",
+    "flavour_text": "Every handshake is an investment.",
+    "required_skill_id": "skill.social",
+    "required_skill_level": 8,
+    "passive_bonuses": [],
+    "capability_unlocks": ["TradeNegotiation"]
+  },
+  {
+    "id": "expertise.colony_advocate",
+    "display_name": "Colony Advocate",
+    "description": "Proximity mood bonus for nearby NPCs increases from +1 to +2.",
+    "flavour_text": "Their presence makes everyone feel more at home.",
+    "required_skill_id": "skill.social",
+    "required_skill_level": 12,
+    "passive_bonuses": [
+      { "bonus_type": "MoodModifier", "target_skill_id": "skill.social", "value": 2.0 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.logistics_coordinator",
+    "display_name": "Logistics Coordinator",
+    "description": "+20% haul speed on shuttle tasks.",
+    "flavour_text": "Everything in exactly the right place at exactly the right time.",
+    "required_skill_id": "skill.economics",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.economics", "value": 1.20 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.trade_savant",
+    "display_name": "Trade Savant",
+    "description": "+10% to all resource quantities when trading (stub — future trade system).",
+    "flavour_text": "Buys low, sells high, always.",
+    "required_skill_id": "skill.economics",
+    "required_skill_level": 10,
+    "passive_bonuses": [
+      { "bonus_type": "YieldMultiplier", "target_skill_id": "skill.economics", "value": 1.10 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.tactician",
+    "display_name": "Tactician",
+    "description": "+20% research output at Military Terminal. Unlocks TacticalBriefing.",
+    "flavour_text": "Plans for every contingency.",
+    "required_skill_id": "skill.combat",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "ResearchOutput", "target_skill_id": "skill.combat", "value": 1.20 }
+    ],
+    "capability_unlocks": ["TacticalBriefing"]
+  },
+  {
+    "id": "expertise.weapons_specialist",
+    "display_name": "Weapons Specialist",
+    "description": "Future combat hook — passive registered, no functional effect yet.",
+    "flavour_text": "Knows every weapon's story.",
+    "required_skill_id": "skill.combat",
+    "required_skill_level": 10,
+    "passive_bonuses": [],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.ace_pilot",
+    "display_name": "Ace Pilot",
+    "description": "Shuttle travel time to POIs reduced by 15%.",
+    "flavour_text": "Gravity is merely a suggestion.",
+    "required_skill_id": "skill.piloting",
+    "required_skill_level": 5,
+    "passive_bonuses": [
+      { "bonus_type": "WorkSpeed", "target_skill_id": "skill.piloting", "value": 0.85 }
+    ],
+    "capability_unlocks": []
+  },
+  {
+    "id": "expertise.deep_space_navigator",
+    "display_name": "Deep Space Navigator",
+    "description": "Unlocks ExtendedRange — away missions can target POIs beyond current Antenna range.",
+    "flavour_text": "The void holds no secrets from them.",
+    "required_skill_id": "skill.piloting",
+    "required_skill_level": 10,
+    "passive_bonuses": [],
+    "capability_unlocks": ["ExtendedRange"]
+  }
+]

@@ -446,6 +446,122 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Skill and Expertise definitions — loaded from data/skills/ and data/expertise/
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Bonus type used by ExpertiseBonusDefinition.
+    /// </summary>
+    public enum ExpertiseBonusType
+    {
+        WorkSpeed,
+        YieldMultiplier,
+        XPGain,
+        MoodModifier,
+        SocialChance,
+        ResearchOutput,
+    }
+
+    /// <summary>
+    /// A single passive bonus granted by an expertise choice.
+    /// </summary>
+    [Serializable]
+    public class ExpertiseBonusDefinition
+    {
+        /// <summary>Type of bonus applied.</summary>
+        public ExpertiseBonusType bonusType;
+        /// <summary>Skill this bonus targets (empty = all skills / global).</summary>
+        public string targetSkillId = "";
+        /// <summary>Bonus magnitude. For multiplicative bonuses, 1.2 = +20%.</summary>
+        public float value = 1.0f;
+
+        public static ExpertiseBonusDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var b = new ExpertiseBonusDefinition
+            {
+                targetSkillId = raw.GetString("target_skill_id", ""),
+                value         = raw.GetFloat("value", 1.0f),
+            };
+            b.bonusType = Enum.TryParse<ExpertiseBonusType>(raw.GetString("bonus_type"),
+                          true, out var bt) ? bt : ExpertiseBonusType.WorkSpeed;
+            return b;
+        }
+    }
+
+    /// <summary>
+    /// Static definition of a skill, loaded from data/skills/*.json.
+    /// </summary>
+    [Serializable]
+    public class SkillDefinition
+    {
+        public string       skillId;
+        public string       displayName;
+        public string       description       = "";
+        /// <summary>Task type strings (from FarmingTaskInstance.taskType / job id) that award XP.</summary>
+        public List<string> associatedTaskTypes = new List<string>();
+        /// <summary>XP awarded per task completion.</summary>
+        public float        xpPerTaskCompletion = 10f;
+        /// <summary>XP awarded per active second (for workstation-based skills).</summary>
+        public float        xpPerActiveSecond   = 0f;
+
+        public static SkillDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var s = new SkillDefinition
+            {
+                skillId             = raw.GetString("id"),
+                displayName         = raw.GetString("display_name", raw.GetString("id")),
+                description         = raw.GetString("description", ""),
+                xpPerTaskCompletion = raw.GetFloat("xp_per_task_completion", 10f),
+                xpPerActiveSecond   = raw.GetFloat("xp_per_active_second",   0f),
+            };
+            foreach (var t in raw.GetStringList("associated_task_types"))
+                s.associatedTaskTypes.Add(t);
+            return s;
+        }
+    }
+
+    /// <summary>
+    /// Static definition of an expertise choice, loaded from data/expertise/*.json.
+    /// </summary>
+    [Serializable]
+    public class ExpertiseDefinition
+    {
+        public string       expertiseId;
+        public string       displayName;
+        public string       description   = "";
+        public string       flavourText   = "";
+        /// <summary>The skill that must be levelled to qualify (skill.skillId).</summary>
+        public string       requiredSkillId    = "";
+        /// <summary>Minimum level of the required skill to unlock this expertise.</summary>
+        public int          requiredSkillLevel = 0;
+        /// <summary>Passive bonuses applied while this expertise is active.</summary>
+        public List<ExpertiseBonusDefinition> passiveBonuses = new List<ExpertiseBonusDefinition>();
+        /// <summary>
+        /// Task types (string IDs) that are locked behind this expertise.
+        /// An NPC without the expertise cannot be assigned these task types.
+        /// </summary>
+        public List<string> capabilityUnlocks = new List<string>();
+
+        public static ExpertiseDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var e = new ExpertiseDefinition
+            {
+                expertiseId        = raw.GetString("id"),
+                displayName        = raw.GetString("display_name", raw.GetString("id")),
+                description        = raw.GetString("description", ""),
+                flavourText        = raw.GetString("flavour_text", ""),
+                requiredSkillId    = raw.GetString("required_skill_id", ""),
+                requiredSkillLevel = raw.GetInt("required_skill_level", 0),
+            };
+            foreach (var item in raw.GetList("passive_bonuses"))
+                e.passiveBonuses.Add(ExpertiseBonusDefinition.FromDict(item.AsStringDict()));
+            foreach (var cap in raw.GetStringList("capability_unlocks"))
+                e.capabilityUnlocks.Add(cap);
+            return e;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers — dictionary extension methods used by all From* factory methods
     // -------------------------------------------------------------------------
 

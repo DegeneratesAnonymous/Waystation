@@ -90,13 +90,20 @@ namespace Waystation.UI
         private float    _hailToastTimer = 0f;
 
         // ── Crew / Work sub-panel state ───────────────────────────────────────
-        private enum CrewSubPanel { Roster, Work, Departments, Ranks, Relationships }
+        private enum CrewSubPanel { Roster, Work, Departments, Ranks, Relationships, Skills }
         private CrewSubPanel _crewSub = CrewSubPanel.Roster;
         private Vector2      _workScroll;
         private Vector2      _deptScroll;
         // ── Rename flow: uid of department being renamed, text buffer
         private string _renamingDeptUid  = "";
         private string _renameDeptBuffer = "";
+
+        // ── Skills sub-panel state ────────────────────────────────────────────
+        private Vector2 _skillsScroll;
+        private string  _skillsSelectedNpcUid  = "";
+        private bool    _expertisePanelOpen     = false;
+        private string  _swapTargetExpertiseId  = "";   // expertise being replaced (empty = spend slot)
+        private Vector2 _expertisePanelScroll;
 
         // ── Relationships sub-panel state ─────────────────────────────────────
         private Vector2 _relScroll;
@@ -1617,12 +1624,12 @@ namespace Waystation.UI
             // ── Sub-panel selector ────────────────────────────────────────────
             const float SubTabH = 28f;
             float subY = area.y;
-            float subBw = (w - 16f) / 5f;
+            float subBw = (w - 20f) / 6f;
 
-            if (GUI.Button(new Rect(area.x,                   subY, subBw, SubTabH),
+            if (GUI.Button(new Rect(area.x,                     subY, subBw, SubTabH),
                            "Roster",  _crewSub == CrewSubPanel.Roster        ? _sTabOn : _sTabOff))
                 _crewSub = CrewSubPanel.Roster;
-            if (GUI.Button(new Rect(area.x + (subBw + 4f),    subY, subBw, SubTabH),
+            if (GUI.Button(new Rect(area.x + (subBw + 4f),      subY, subBw, SubTabH),
                            "Work",    _crewSub == CrewSubPanel.Work          ? _sTabOn : _sTabOff))
                 _crewSub = CrewSubPanel.Work;
             if (GUI.Button(new Rect(area.x + (subBw + 4f) * 2f, subY, subBw, SubTabH),
@@ -1634,6 +1641,9 @@ namespace Waystation.UI
             if (GUI.Button(new Rect(area.x + (subBw + 4f) * 4f, subY, subBw, SubTabH),
                            "Social",  _crewSub == CrewSubPanel.Relationships ? _sTabOn : _sTabOff))
                 _crewSub = CrewSubPanel.Relationships;
+            if (GUI.Button(new Rect(area.x + (subBw + 4f) * 5f, subY, subBw, SubTabH),
+                           "Skills",  _crewSub == CrewSubPanel.Skills        ? _sTabOn : _sTabOff))
+                _crewSub = CrewSubPanel.Skills;
 
             Rect subArea = new Rect(area.x, area.y + SubTabH + 6f, w, h - SubTabH - 6f);
             float subH   = h - SubTabH - 6f;
@@ -1645,6 +1655,7 @@ namespace Waystation.UI
                 case CrewSubPanel.Departments:   DrawDepartments(subArea, w, subH);      break;
                 case CrewSubPanel.Ranks:         DrawRanks(subArea, w, subH);            break;
                 case CrewSubPanel.Relationships: DrawRelationships(subArea, w, subH);    break;
+                case CrewSubPanel.Skills:        DrawCrewSkills(subArea, w, subH);       break;
             }
         }
 
@@ -3744,6 +3755,282 @@ namespace Waystation.UI
                 fontSize = 11,
                 normal   = { textColor = new Color(0.85f, 0.90f, 1.00f) },
             };
+        }
+
+        // ── Skills Sub-Panel ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Skills tab: NPC selector on the left, skill details on the right.
+        /// Shows character level, total XP, expertise slots, skill list with XP bars,
+        /// and chosen expertise cards.
+        /// </summary>
+        private void DrawCrewSkills(Rect area, float w, float h)
+        {
+            if (_gm?.Station == null) return;
+            if (_gm.Skills == null)
+            {
+                GUI.Label(new Rect(area.x + 8f, area.y + 8f, w, 18f),
+                          "Skill system not initialised.", _sSub);
+                return;
+            }
+
+            var crew = _gm.Station.GetCrew();
+            if (crew.Count == 0)
+            {
+                GUI.Label(new Rect(area.x + 8f, area.y + 8f, w, 18f), "No crew.", _sSub);
+                return;
+            }
+
+            // Ensure we have a selected NPC
+            if (string.IsNullOrEmpty(_skillsSelectedNpcUid) ||
+                !_gm.Station.npcs.ContainsKey(_skillsSelectedNpcUid))
+                _skillsSelectedNpcUid = crew[0].uid;
+
+            // ── NPC selector strip ────────────────────────────────────────────
+            const float SelectorH = 24f;
+            float sx = area.x;
+            float sy = area.y;
+            float btnW = Mathf.Min((w - 8f) / Mathf.Max(1, crew.Count), 80f);
+            foreach (var n in crew)
+            {
+                bool sel = n.uid == _skillsSelectedNpcUid;
+                if (GUI.Button(new Rect(sx, sy, btnW - 2f, SelectorH),
+                               n.name.Length > 9 ? n.name.Substring(0, 9) : n.name,
+                               sel ? _sTabOn : _sTabOff))
+                {
+                    _skillsSelectedNpcUid  = n.uid;
+                    _expertisePanelOpen    = false;
+                }
+                sx += btnW;
+            }
+
+            // ── Detail area ───────────────────────────────────────────────────
+            if (!_gm.Station.npcs.TryGetValue(_skillsSelectedNpcUid, out var npc)) return;
+
+            Rect detailRect = new Rect(area.x, area.y + SelectorH + 4f, w, h - SelectorH - 4f);
+            float detailH   = h - SelectorH - 4f;
+
+            if (_expertisePanelOpen)
+            {
+                DrawExpertiseSelectionPanel(detailRect, w, detailH, npc);
+                return;
+            }
+
+            DrawNpcSkillDetail(detailRect, w, detailH, npc);
+        }
+
+        private void DrawNpcSkillDetail(Rect area, float w, float h, NPCInstance npc)
+        {
+            var skillSys = _gm.Skills;
+            int charLevel   = SkillSystem.GetCharacterLevel(npc);
+            int slotCount   = SkillSystem.GetExpertiseSlotCount(npc);
+            int unspent     = SkillSystem.GetUnspentSlots(npc);
+            float totalXP   = SkillSystem.GetTotalXP(npc);
+            int nextThreshold = (charLevel / SkillSystem.SlotEveryNLevels + 1)
+                                * SkillSystem.SlotEveryNLevels
+                                * SkillSystem.CharLevelDivisor;
+
+            float innerH = Mathf.Max(h, 600f);
+            _skillsScroll = GUI.BeginScrollView(
+                new Rect(area.x, area.y, w, h),
+                _skillsScroll,
+                new Rect(0, 0, w - 14f, innerH));
+
+            float y = 4f;
+
+            // ── Character level summary ───────────────────────────────────────
+            DrawSolid(new Rect(0, y, w - 14f, 54f), ColSummaryBg);
+            GUI.Label(new Rect(4f, y + 2f, 80f, 28f),
+                      $"Lv {charLevel}", _sHeader);
+            GUI.Label(new Rect(84f, y + 4f, w - 100f, 16f),
+                      $"Character Level", _sSub);
+            GUI.Label(new Rect(84f, y + 18f, w - 100f, 14f),
+                      $"Total XP: {totalXP:F0}   Slots: {slotCount}   Unspent: {unspent}", _sSub);
+            // XP bar toward next slot threshold
+            float xpPct = Mathf.Clamp01(totalXP / Mathf.Max(1, nextThreshold));
+            float barW  = w - 18f;
+            DrawSolid(new Rect(4f, y + 38f, barW, 8f), ColBarBg);
+            DrawSolid(new Rect(4f, y + 38f, barW * xpPct, 8f), ColAccent);
+            GUI.Label(new Rect(4f, y + 38f, barW, 8f),
+                      $"  {totalXP:F0} / {nextThreshold} XP (next slot at Lv {(charLevel / SkillSystem.SlotEveryNLevels + 1) * SkillSystem.SlotEveryNLevels})",
+                      _sSub);
+            y += 60f;
+
+            // ── Skill list ────────────────────────────────────────────────────
+            GUI.Label(new Rect(4f, y, w - 14f, 16f), "Skills", _sLabel);
+            y += 18f;
+
+            foreach (var skillDef in _gm.Registry.Skills.Values)
+            {
+                var inst  = SkillSystem.GetSkillInstance(npc, skillDef.skillId);
+                int level = inst?.Level ?? 0;
+                float xp  = inst?.currentXP ?? 0f;
+
+                // XP within current level band
+                float levelFloorXP = level * level * 100f;
+                float levelCeilXP  = (level + 1) * (level + 1) * 100f;
+                float withinLevel  = Mathf.Clamp01(levelCeilXP > levelFloorXP
+                    ? (xp - levelFloorXP) / (levelCeilXP - levelFloorXP)
+                    : 1f);
+
+                // Skill name + level
+                GUI.Label(new Rect(4f, y, w * 0.55f, 14f), skillDef.displayName, _sSub);
+                GUI.Label(new Rect(w * 0.56f, y, 30f, 14f), $"L{level}", _sSub);
+
+                // XP bar
+                float bw = w - 90f;
+                DrawSolid(new Rect(88f, y + 2f, bw, 8f), ColBarBg);
+                Color barCol = level >= 15 ? new Color(0.92f, 0.75f, 0.20f) :
+                               level >= 8  ? ColBarGreen : ColBarFill;
+                DrawSolid(new Rect(88f, y + 2f, bw * withinLevel, 8f), barCol);
+
+                y += 16f;
+            }
+            y += 6f;
+
+            // ── Chosen expertise cards ────────────────────────────────────────
+            GUI.Label(new Rect(4f, y, w - 14f, 16f), "Expertise", _sLabel);
+            y += 18f;
+
+            if (npc.chosenExpertise.Count == 0)
+            {
+                GUI.Label(new Rect(4f, y, w - 14f, 14f), "None chosen.", _sSub);
+                y += 18f;
+            }
+            else
+            {
+                foreach (var eid in npc.chosenExpertise)
+                {
+                    if (!_gm.Registry.Expertises.TryGetValue(eid, out var exp)) continue;
+                    DrawSolid(new Rect(2f, y, w - 16f, 38f), new Color(0.12f, 0.15f, 0.22f, 0.9f));
+                    GUI.Label(new Rect(6f, y + 2f, w * 0.65f, 14f), exp.displayName, _sSub);
+
+                    // Replace button
+                    if (GUI.Button(new Rect(w - 74f, y + 2f, 58f, 14f), "Replace", _sBtnSmall))
+                    {
+                        _swapTargetExpertiseId = eid;
+                        _expertisePanelOpen    = true;
+                    }
+                    string reqLabel = !string.IsNullOrEmpty(exp.requiredSkillId)
+                        ? $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel}"
+                        : "";
+                    GUI.Label(new Rect(6f, y + 16f, w - 14f, 20f),
+                              exp.description.Length > 60
+                                  ? exp.description.Substring(0, 57) + "..."
+                                  : exp.description,
+                              _sSub);
+                    y += 42f;
+                }
+            }
+            y += 4f;
+
+            // ── Spend slot button ─────────────────────────────────────────────
+            bool canSpend = unspent > 0;
+            var  prevCol  = GUI.color;
+            if (!canSpend) GUI.color = new Color(0.5f, 0.5f, 0.5f);
+            if (GUI.Button(new Rect(4f, y, w - 18f, 22f),
+                           canSpend ? $"Spend Expertise Slot ({unspent} available)" : "No Slots Available",
+                           _sBtnWide) && canSpend)
+            {
+                _swapTargetExpertiseId = "";
+                _expertisePanelOpen    = true;
+            }
+            GUI.color = prevCol;
+
+            GUI.EndScrollView();
+        }
+
+        private void DrawExpertiseSelectionPanel(Rect area, float w, float h, NPCInstance npc)
+        {
+            bool isSwap = !string.IsNullOrEmpty(_swapTargetExpertiseId);
+            string title = isSwap ? "Select Replacement Expertise" : "Select Expertise";
+            GUI.Label(new Rect(area.x + 4f, area.y, w - 8f, 18f), title, _sLabel);
+
+            if (isSwap && _gm.Registry.Expertises.TryGetValue(_swapTargetExpertiseId, out var swapDef))
+            {
+                var wp = GUI.color; GUI.color = ColBarWarn;
+                GUI.Label(new Rect(area.x + 4f, area.y + 18f, w - 8f, 14f),
+                          $"Replacing: {swapDef.displayName}", _sSub);
+                GUI.color = wp;
+            }
+
+            if (GUI.Button(new Rect(area.x + 4f, area.y + 34f, 60f, 18f), "← Back", _sBtnSmall))
+            {
+                _expertisePanelOpen = false;
+                return;
+            }
+
+            float listTop = area.y + 56f;
+            float listH   = h - 56f;
+            var allExp    = _gm.Registry.Expertises.Values;
+            float innerH  = Mathf.Max(listH, allExp.Count * 54f);
+
+            _expertisePanelScroll = GUI.BeginScrollView(
+                new Rect(area.x, listTop, w, listH),
+                _expertisePanelScroll,
+                new Rect(0, 0, w - 14f, innerH));
+
+            float y = 0f;
+            foreach (var exp in allExp)
+            {
+                // Skip already-chosen (unless it's the one being swapped out)
+                bool isChosenAlready = npc.chosenExpertise.Contains(exp.expertiseId) &&
+                                       exp.expertiseId != _swapTargetExpertiseId;
+                if (isChosenAlready) continue;
+
+                // Check qualification
+                bool qualified = string.IsNullOrEmpty(exp.requiredSkillId)
+                    || SkillSystem.GetSkillLevel(npc, exp.requiredSkillId) >= exp.requiredSkillLevel;
+
+                DrawSolid(new Rect(2f, y, w - 16f, 48f),
+                          qualified ? new Color(0.12f, 0.15f, 0.22f, 0.9f)
+                                    : new Color(0.08f, 0.09f, 0.14f, 0.9f));
+
+                var prev = GUI.color;
+                if (!qualified) GUI.color = new Color(0.5f, 0.5f, 0.5f);
+                GUI.Label(new Rect(6f, y + 2f, w * 0.65f, 14f), exp.displayName, _sSub);
+
+                if (!string.IsNullOrEmpty(exp.requiredSkillId))
+                {
+                    string reqText = qualified
+                        ? $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel} ✓"
+                        : $"Requires {exp.requiredSkillId.Replace("skill.", "")} level {exp.requiredSkillLevel}";
+                    GUI.Label(new Rect(w * 0.66f, y + 2f, w * 0.34f - 4f, 14f), reqText, _sSub);
+                }
+
+                GUI.Label(new Rect(6f, y + 16f, w - 20f, 18f),
+                          exp.description.Length > 70
+                              ? exp.description.Substring(0, 67) + "..."
+                              : exp.description,
+                          _sSub);
+                GUI.color = prev;
+
+                if (qualified)
+                {
+                    if (GUI.Button(new Rect(6f, y + 34f, 60f, 14f), "Select", _sBtnSmall))
+                    {
+                        (bool ok, string msg) result;
+                        if (isSwap)
+                            result = _gm.Skills.SwapExpertise(npc, _swapTargetExpertiseId,
+                                                              exp.expertiseId, _gm.Station);
+                        else
+                            result = _gm.Skills.ChooseExpertise(npc, exp.expertiseId, _gm.Station);
+
+                        if (result.ok)
+                        {
+                            _expertisePanelOpen = false;
+                        }
+                        else
+                        {
+                            _gm.Station.LogEvent($"[Skills] {result.msg}");
+                        }
+                    }
+                }
+
+                y += 52f;
+            }
+
+            GUI.EndScrollView();
         }
     }
 }
