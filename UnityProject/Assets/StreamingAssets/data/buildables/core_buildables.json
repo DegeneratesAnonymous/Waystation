@@ -205,7 +205,9 @@
         "is_workbench": true,
         "beauty_score": 2,
         "workbench_room_type": "general_workshop",
-        "workbench_skill_bonuses": { "engineering": 1.10 },
+        "workbench_skill_bonuses": {
+            "engineering": 1.1
+        },
         "schema_version": "1"
     },
     {
@@ -227,7 +229,9 @@
         "is_workbench": true,
         "beauty_score": 0,
         "workbench_room_type": "refinery",
-        "workbench_skill_bonuses": { "engineering": 1.15 },
+        "workbench_skill_bonuses": {
+            "engineering": 1.15
+        },
         "schema_version": "1"
     },
     {
@@ -368,7 +372,9 @@
         "category": "object",
         "description": "A standard station chair. Required as basic seating in furnished rooms. Contributes to room bonus requirements when placed alongside workbenches.",
         "build_time_ticks": 6,
-        "required_materials": { "item.steel_plate": 1 },
+        "required_materials": {
+            "item.steel_plate": 1
+        },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
@@ -383,7 +389,9 @@
         "category": "object",
         "description": "A work or dining table. Provides a surface for crew activities and contributes to room bonus requirements.",
         "build_time_ticks": 8,
-        "required_materials": { "item.steel_plate": 2 },
+        "required_materials": {
+            "item.steel_plate": 2
+        },
         "required_skills": {},
         "required_tags": [],
         "size": 1,
@@ -398,8 +406,13 @@
         "category": "electrical",
         "description": "A ceiling-mounted light fixture. Required for functional work areas. Contributes to room bonus requirements.",
         "build_time_ticks": 8,
-        "required_materials": { "item.wiring": 2, "item.parts": 1 },
-        "required_skills": { "electrical": 1 },
+        "required_materials": {
+            "item.wiring": 2,
+            "item.parts": 1
+        },
+        "required_skills": {
+            "electrical": 1
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 50,
@@ -408,20 +421,108 @@
         "schema_version": "1"
     },
     {
+        "id": "buildable.antenna",
+        "display_name": "Antenna Array",
+        "category": "object",
+        "description": "A directional antenna array that detects ships within range. Base stats: range=500, maxShips=3. Each Astrometrics Lab on station adds +150 range and +2 ship cap. Requires power to operate.",
+        "build_time_ticks": 30,
+        "required_materials": {
+            "item.steel_plate": 8,
+            "item.wiring": 4
+        },
+        "required_skills": {
+            "engineering": 2,
+            "electrical": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 120,
+        "requires_power": true,
+        "power_draw": 10.0,
+        "idle_power_draw": 2.0,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.access_terminal",
+        "display_name": "Access Terminal",
+        "category": "object",
+        "description": "A computer terminal where crew can claim station tasks. Job types accepted can be configured via the inspect menu. A communications-enabled terminal is required for hailing passing ships.",
+        "build_time_ticks": 20,
+        "required_materials": {
+            "item.steel_plate": 3,
+            "item.wiring": 2
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 80,
+        "requires_power": true,
+        "power_draw": 2.0,
+        "idle_power_draw": 0.5,
+        "furniture_tag": "terminal",
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.shuttle_landing_pad",
+        "display_name": "Shuttle Landing Pad",
+        "category": "object",
+        "description": "A floor-level marker tile that designates a landing zone for visitor shuttles. A room containing at least one landing pad is classified as a Hangar. Multiple pads allow simultaneous dockings.",
+        "build_time_ticks": 15,
+        "required_materials": {
+            "item.steel_plate": 4
+        },
+        "required_skills": {
+            "engineering": 1
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 150,
+        "layer": 1,
+        "schema_version": "1"
+    },
+    {
+        "id": "buildable.astrometrics_lab",
+        "display_name": "Astrometrics Lab",
+        "category": "object",
+        "description": "A specialised sensor suite for tracking distant objects. Each lab on station adds +150 to Antenna range and +2 to maximum tracked ships. Works passively once built.",
+        "build_time_ticks": 40,
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 3
+        },
+        "required_skills": {
+            "engineering": 3,
+            "electrical": 2
+        },
+        "required_tags": [],
+        "size": 1,
+        "max_health": 100,
+        "schema_version": "1"
+    },
+    {
         "id": "buildable.military_terminal",
         "display_name": "Military Research Terminal",
         "category": "object",
         "description": "A hardened research station for military technologies. Crew assigned here generate Military research points.",
         "build_time_ticks": 30,
-        "required_materials": { "item.steel_plate": 8, "item.wiring": 4 },
-        "required_skills": { "engineering": 2 },
+        "required_materials": {
+            "item.steel_plate": 8,
+            "item.wiring": 4
+        },
+        "required_skills": {
+            "engineering": 2
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 150,
         "beauty_score": 2,
         "is_workbench": true,
         "workbench_room_type": "research_lab",
-        "workbench_skill_bonuses": { "research": 1.2 },
+        "workbench_skill_bonuses": {
+            "research": 1.2
+        },
         "requires_power": true,
         "power_draw": 2.0,
         "schema_version": "1"
@@ -432,15 +533,22 @@
         "category": "object",
         "description": "An analytics workstation for economic research. Crew assigned here generate Economics research points.",
         "build_time_ticks": 30,
-        "required_materials": { "item.steel_plate": 6, "item.wiring": 5 },
-        "required_skills": { "engineering": 2 },
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 5
+        },
+        "required_skills": {
+            "engineering": 2
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 120,
         "beauty_score": 2,
         "is_workbench": true,
         "workbench_room_type": "research_lab",
-        "workbench_skill_bonuses": { "research": 1.2 },
+        "workbench_skill_bonuses": {
+            "research": 1.2
+        },
         "requires_power": true,
         "power_draw": 1.5,
         "schema_version": "1"
@@ -451,15 +559,22 @@
         "category": "object",
         "description": "A multi-purpose science workstation for theoretical research. Crew assigned here generate Sciences research points.",
         "build_time_ticks": 30,
-        "required_materials": { "item.steel_plate": 6, "item.wiring": 6 },
-        "required_skills": { "engineering": 3 },
+        "required_materials": {
+            "item.steel_plate": 6,
+            "item.wiring": 6
+        },
+        "required_skills": {
+            "engineering": 3
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 120,
         "beauty_score": 3,
         "is_workbench": true,
         "workbench_room_type": "research_lab",
-        "workbench_skill_bonuses": { "research": 1.25 },
+        "workbench_skill_bonuses": {
+            "research": 1.25
+        },
         "requires_power": true,
         "power_draw": 2.5,
         "schema_version": "1"
@@ -468,10 +583,16 @@
         "id": "buildable.data_storage_server",
         "display_name": "Data Storage Server",
         "category": "object",
-        "description": "A secure rack-mounted server unit for storing research datachips. Each server holds up to 16 datachips. Requires power — a loss of power or structural integrity risks the research stored within.",
+        "description": "A secure rack-mounted server unit for storing research datachips. Each server holds up to 16 datachips. Requires power \u2014 a loss of power or structural integrity risks the research stored within.",
         "build_time_ticks": 25,
-        "required_materials": { "item.steel_plate": 4, "item.wiring": 6, "item.parts": 2 },
-        "required_skills": { "engineering": 2 },
+        "required_materials": {
+            "item.steel_plate": 4,
+            "item.wiring": 6,
+            "item.parts": 2
+        },
+        "required_skills": {
+            "engineering": 2
+        },
         "required_tags": [],
         "size": 1,
         "max_health": 100,
@@ -481,30 +602,5 @@
         "requires_power": true,
         "power_draw": 1.0,
         "schema_version": "1"
-    },
-    {
-        "id": "buildable.antenna",
-        "display_name": "Antenna Array",
-        "category": "structure",
-        "description": "A directional antenna array. Each complete, powered antenna extends the station's POI detection range by 150 units, allowing discovery of more distant Points of Interest on the Map.",
-        "build_time_ticks": 40,
-        "required_materials": {
-            "item.steel_plate": 3,
-            "item.wiring": 4,
-            "item.parts": 2
-        },
-        "required_skills": {
-            "engineering": 2,
-            "electrical": 1
-        },
-        "required_tags": [
-            "exterior_hull"
-        ],
-        "size": 2,
-        "max_health": 80,
-        "requires_power": true,
-        "power_draw": 1.0,
-        "schema_version": "1"
     }
 ]
-
