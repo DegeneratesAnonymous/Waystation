@@ -136,6 +136,17 @@ namespace Waystation.Models
         public bool   isSleeping    = false;
         public string missionUid    = null;   // null when not on an away mission
 
+        // Social skill used for hailing ships (1–10, default 1, not levelled this work order)
+        public int socialSkill = 1;
+
+        // Pathfinding state — managed by AntennaSystem/ShipVisitStateMachine
+        // Tile position target when actively walking
+        public int  pathTargetCol   = -1;
+        public int  pathTargetRow   = -1;
+        public bool isPathing       = false;
+        // ID of the current NPCTask in progress (null = idle)
+        public string currentTaskId = null;
+
         public static NPCInstance Create(string templateId, string name,
                                          string classId, string subclassId = null)
         {
@@ -200,6 +211,20 @@ namespace Waystation.Models
     // Ship Instance
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// State machine for the full ship visit lifecycle.
+    /// OutOfRange → InRange → Passing | Inbound → Docked → Departing → OutOfRange
+    /// </summary>
+    public enum ShipVisitState
+    {
+        OutOfRange,   // beyond antenna detection radius
+        InRange,      // detected — not yet committed
+        Passing,      // drifting through, no reason to stop
+        Inbound,      // committed to docking; shuttle in transit
+        Docked,       // shuttle landed, visitors aboard
+        Departing,    // visit timer expired; shuttle returning to ship
+    }
+
     [Serializable]
     public class ShipInstance
     {
@@ -215,12 +240,29 @@ namespace Waystation.Models
         public int                 threatLevel   = 0;
         public List<string>        behaviorTags  = new List<string>();
 
-        // Docking state
+        // Docking state (legacy — kept for backward compatibility)
         public string status    = "incoming";  // incoming / docked / departing / hostile / destroyed
         public string dockedAt;
         public int    ticksDocked = 0;
         // Set when the ship docks; used by VisitorSystem to avoid re-rolling departure each tick.
         public int    plannedDepartureTick = -1;
+
+        // ── Visitor-system state ──────────────────────────────────────────
+        // Full visit lifecycle state (replaces/mirrors the legacy string status)
+        public ShipVisitState visitState = ShipVisitState.OutOfRange;
+
+        // World position outside station (simulated — no Unity Transform)
+        public float worldX = 0f;
+        public float worldY = 0f;
+        // Drift target position while in range
+        public float driftTargetX = 0f;
+        public float driftTargetY = 0f;
+
+        // Tick at which the ship entered antenna range
+        public int   inRangeSinceTick = -1;
+
+        // Shuttle currently dispatched from this ship (uid of ShuttleInstance)
+        public string shuttleUid = null;
 
         public static ShipInstance Create(string templateId, string name, string role,
                                           string intent = "unknown", string factionId = null,
@@ -248,6 +290,105 @@ namespace Waystation.Models
             if (threatLevel <= 8) return "high";
             return "extreme";
         }
+
+        /// <summary>Human-readable display status for the Communications Menu.</summary>
+        public string VisitStateLabel()
+        {
+            switch (visitState)
+            {
+                case ShipVisitState.OutOfRange:  return "Out of Range";
+                case ShipVisitState.InRange:     return "In Range";
+                case ShipVisitState.Passing:     return "Passing";
+                case ShipVisitState.Inbound:     return "Inbound";
+                case ShipVisitState.Docked:      return "Docked";
+                case ShipVisitState.Departing:   return "Departing";
+                default:                         return "Unknown";
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shuttle Instance — spawned by a ShipInstance when transitioning to Inbound
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ShuttleInstance
+    {
+        public string uid;
+        public string shipUid;          // parent ship
+        public string landingPadUid;    // target ShuttleLandingPadInstance uid
+        public List<string> visitorNpcUids = new List<string>();
+
+        // Visitor count captured at departure time (before visitorNpcUids is cleared)
+        public int peakVisitorCount = 0;
+
+        // Animation state: "inbound" | "docked" | "departing"
+        public string state = "inbound";
+
+        // Simulated world position (mirrors parent ship at spawn, then moves toward pad)
+        public float worldX = 0f;
+        public float worldY = 0f;
+
+        // Target tile coordinates (landing pad tile)
+        public int targetCol = 0;
+        public int targetRow = 0;
+
+        public static ShuttleInstance Create(string shipUid, string landingPadUid,
+                                             int targetCol, int targetRow,
+                                             float startX, float startY)
+        {
+            return new ShuttleInstance
+            {
+                uid          = Guid.NewGuid().ToString("N").Substring(0, 8),
+                shipUid      = shipUid,
+                landingPadUid = landingPadUid,
+                targetCol    = targetCol,
+                targetRow    = targetRow,
+                worldX       = startX,
+                worldY       = startY,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shuttle Landing Pad — runtime state for a landing pad foundation
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ShuttleLandingPadState
+    {
+        public string foundationUid;  // uid of the FoundationInstance for this pad
+        public string occupiedByShuttleUid = null;  // null = vacant; set at dispatch time to reserve
+        // UIDs of ships waiting for this pad to free up
+        public List<string> waitingShipUids = new List<string>();
+
+        public bool IsOccupied => occupiedByShuttleUid != null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Hail Cooldown — tracks when a player may re-attempt hailing a ship
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class HailCooldownRecord
+    {
+        public string shipUid;
+        public int    cooldownUntilTick;  // player may re-hail at/after this tick
+    }
+
+    // -------------------------------------------------------------------------
+    // Ship Visit Record — appended to visitHistory for analytics
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ShipVisitRecord
+    {
+        public string shipUid;
+        public string shipName;
+        public string shipRole;
+        public int    arrivedTick;
+        public int    departedTick;
+        public int    visitorCount;
     }
 
     // -------------------------------------------------------------------------
@@ -675,6 +816,18 @@ namespace Waystation.Models
         // Log of recent events / messages (most recent first)
         public List<string>               log            = new List<string>();
 
+        // ── Visitor / Shuttle system state ──────────────────────────────────
+
+        // Append-only visit history for analytics (not loaded back into runtime state)
+        public List<ShipVisitRecord>      visitHistory   = new List<ShipVisitRecord>();
+
+        // Active shuttles (keyed by shuttle uid)
+        public Dictionary<string, ShuttleInstance>  shuttles     = new Dictionary<string, ShuttleInstance>();
+        // Landing pad states (keyed by foundation uid of the landing pad)
+        public Dictionary<string, ShuttleLandingPadState> landingPads  = new Dictionary<string, ShuttleLandingPadState>();
+        // Hail cooldowns per ship uid (player must wait before re-hailing)
+        public List<HailCooldownRecord>   hailCooldowns  = new List<HailCooldownRecord>();
+
         public StationState(string name)
         {
             stationName = name;
@@ -759,14 +912,29 @@ namespace Waystation.Models
         public List<ShipInstance> GetDockedShips()
         {
             var list = new List<ShipInstance>();
-            foreach (var s in ships.Values) if (s.status == "docked")    list.Add(s);
+            foreach (var s in ships.Values) if (s.status == "docked" ||
+                s.visitState == ShipVisitState.Docked) list.Add(s);
             return list;
         }
 
         public List<ShipInstance> GetIncomingShips()
         {
             var list = new List<ShipInstance>();
-            foreach (var s in ships.Values) if (s.status == "incoming")  list.Add(s);
+            foreach (var s in ships.Values) if (s.status == "incoming" ||
+                s.visitState == ShipVisitState.Inbound) list.Add(s);
+            return list;
+        }
+
+        public List<ShipInstance> GetInRangeShips()
+        {
+            var list = new List<ShipInstance>();
+            foreach (var s in ships.Values)
+                if (s.visitState == ShipVisitState.InRange  ||
+                    s.visitState == ShipVisitState.Passing  ||
+                    s.visitState == ShipVisitState.Inbound  ||
+                    s.visitState == ShipVisitState.Docked   ||
+                    s.visitState == ShipVisitState.Departing)
+                    list.Add(s);
             return list;
         }
 
@@ -775,6 +943,93 @@ namespace Waystation.Models
             foreach (var m in modules.Values)
                 if (m.IsAvailableDock()) return m;
             return null;
+        }
+
+        // -- Landing pad helpers ─────────────────────────────────────────────
+
+        /// <summary>Count complete foundations with buildableId == "buildable.shuttle_landing_pad".</summary>
+        public int CountLandingPads()
+        {
+            int count = 0;
+            foreach (var f in foundations.Values)
+                if (f.buildableId == "buildable.shuttle_landing_pad" && f.status == "complete")
+                    count++;
+            return count;
+        }
+
+        /// <summary>
+        /// Returns the first unoccupied landing pad, or null if all are occupied or none exist.
+        /// </summary>
+        public ShuttleLandingPadState GetFreeLandingPad()
+        {
+            foreach (var f in foundations.Values)
+            {
+                if (f.buildableId != "buildable.shuttle_landing_pad" || f.status != "complete")
+                    continue;
+                if (!landingPads.TryGetValue(f.uid, out var pad))
+                {
+                    // Auto-register pad state on first query
+                    pad = new ShuttleLandingPadState { foundationUid = f.uid };
+                    landingPads[f.uid] = pad;
+                }
+                if (!pad.IsOccupied) return pad;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns true if a sealed room containing at least one Shuttle Landing Pad exists.
+        /// For this work order, any complete landing pad foundation is treated as being in a
+        /// valid Hangar (full room-sealing check is left to RoomSystem in a future pass).
+        /// </summary>
+        public bool HasFunctionalHangar() => CountLandingPads() > 0;
+
+        /// <summary>Count complete foundations with a given buildableId.</summary>
+        public int GetBuildableCount(string buildableId)
+        {
+            int count = 0;
+            foreach (var f in foundations.Values)
+                if (f.buildableId == buildableId && f.status == "complete")
+                    count++;
+            return count;
+        }
+
+        // -- Hail cooldown helpers ─────────────────────────────────────────────
+
+        /// <summary>True if the player is still in the hail cooldown for the given ship.</summary>
+        public bool IsHailOnCooldown(string shipUid)
+        {
+            foreach (var rec in hailCooldowns)
+                if (rec.shipUid == shipUid && tick < rec.cooldownUntilTick)
+                    return true;
+            return false;
+        }
+
+        /// <summary>Remaining ticks until the hail cooldown for a ship expires.</summary>
+        public int HailCooldownRemaining(string shipUid)
+        {
+            foreach (var rec in hailCooldowns)
+                if (rec.shipUid == shipUid && tick < rec.cooldownUntilTick)
+                    return rec.cooldownUntilTick - tick;
+            return 0;
+        }
+
+        /// <summary>Set or refresh a 60-tick hail cooldown for the given ship.</summary>
+        public void SetHailCooldown(string shipUid, int durationTicks = 60)
+        {
+            for (int i = 0; i < hailCooldowns.Count; i++)
+            {
+                if (hailCooldowns[i].shipUid == shipUid)
+                {
+                    hailCooldowns[i].cooldownUntilTick = tick + durationTicks;
+                    return;
+                }
+            }
+            hailCooldowns.Add(new HailCooldownRecord
+            {
+                shipUid            = shipUid,
+                cooldownUntilTick  = tick + durationTicks,
+            });
         }
 
         // -- Logging ----------------------------------------------------------

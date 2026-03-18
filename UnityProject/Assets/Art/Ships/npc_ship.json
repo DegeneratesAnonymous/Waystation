@@ -1,0 +1,41 @@
+{
+    "name": "npc_ship",
+    "image": "npc_ship.png",
+    "image_width": 264,
+    "image_height": 66,
+    "slot_width": 66,
+    "slot_height": 66,
+    "padding": 1,
+    "sprite_width": 64,
+    "sprite_height": 64,
+    "variants": [
+        {
+            "index": 0,
+            "id": "small_freighter",
+            "display_name": "Small Freighter",
+            "x": 0,
+            "y": 0
+        },
+        {
+            "index": 1,
+            "id": "medium_trader",
+            "display_name": "Medium Trader",
+            "x": 66,
+            "y": 0
+        },
+        {
+            "index": 2,
+            "id": "large_hauler",
+            "display_name": "Large Hauler",
+            "x": 132,
+            "y": 0
+        },
+        {
+            "index": 3,
+            "id": "unknown_alien",
+            "display_name": "Unknown / Alien",
+            "x": 198,
+            "y": 0
+        }
+    ]
+}

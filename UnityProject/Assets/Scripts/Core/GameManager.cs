@@ -56,6 +56,12 @@ namespace Waystation.Core
         public MissionSystem     Missions       { get; private set; }
         public RoomSystem        Rooms          { get; private set; }
 
+        // ── Visitor pipeline systems ──────────────────────────────────────────
+        public AntennaSystem           Antenna         { get; private set; }
+        public ShipVisitStateMachine   ShipVisits      { get; private set; }
+        public NPCTaskQueueManager     TaskQueue       { get; private set; }
+        public CommunicationsSystem    CommSystem      { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -128,6 +134,12 @@ namespace Waystation.Core
             Networks  = new NetworkSystem(Registry);
             Missions  = new MissionSystem(Registry);
             Rooms     = new RoomSystem(Registry);
+
+            // Visitor pipeline systems
+            Antenna    = new AntennaSystem(Registry);
+            ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
+            TaskQueue  = new NPCTaskQueueManager();
+            CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -222,6 +234,11 @@ namespace Waystation.Core
             Missions.Tick(Station);
             Rooms.Tick(Station);
 
+            // Visitor pipeline (antenna detection → state machine → comms tasks)
+            Antenna.Tick(Station);
+            ShipVisits.Tick(Station);
+            CommSystem.Tick(Station);
+
             // Process events
             var newEvents = Events.Tick(Station);
             foreach (var ev in newEvents)
@@ -239,6 +256,12 @@ namespace Waystation.Core
         public void DenyShip(string shipUid)   => Visitors.DenyShip(shipUid, Station);
         public void ResolveEventChoice(PendingEvent pending, string choiceId)
             => Events.ResolveChoice(pending, choiceId, Station);
+
+        /// <summary>
+        /// Attempt to hail a ship via the Communications Menu Call button.
+        /// Returns a message to display in the UI (success, failure reason, or cooldown).
+        /// </summary>
+        public string TryHailShip(string shipUid) => CommSystem.TryHailShip(shipUid, Station);
 
         public (bool ok, string msg) RecruitVisitor(string npcUid)
         {

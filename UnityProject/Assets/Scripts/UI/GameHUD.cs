@@ -77,11 +77,15 @@ namespace Waystation.UI
             { "Material", "Equipment", "Biological", "Valuables", "Waste" };
 
         // ── Comms panel state ─────────────────────────────────────────────────
-        private enum CommsTab { Unread, Read, All }
+        private enum CommsTab { Unread, Read, All, Ships }
         private CommsTab _commsTab       = CommsTab.Unread;
         private string   _selectedMsgUid = "";
         private Vector2  _commsListScroll;
         private Vector2  _commsBodyScroll;
+        // Ships sub-tab state
+        private Vector2  _commsShipListScroll;
+        private string   _hailToastMsg   = "";
+        private float    _hailToastTimer = 0f;
 
         // ── Crew / Work sub-panel state ───────────────────────────────────────
         private enum CrewSubPanel { Roster, Work, Departments, Ranks }
@@ -178,6 +182,10 @@ namespace Waystation.UI
             bool overLeft  = Input.mousePosition.x <= DevDrawerW * _devDrawerT;
             IsMouseOverDrawer = overRight || overLeft;
             InBuildMode       = _ghostBuildableId != null || _deconstructMode;
+
+            // Tick the hail toast timer in Update so it decays at real-time speed
+            // (OnGUI can fire multiple times per frame; Update fires exactly once)
+            if (_hailToastTimer > 0f) _hailToastTimer -= Time.deltaTime;
 
             // ── Ctrl+Z — undo last placement ────────────────────────────────────────────────
             if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
@@ -1851,18 +1859,27 @@ namespace Waystation.UI
             if (_gm?.Station == null) return;
             var s = _gm.Station;
 
-            // ── Tab selector ──────────────────────────────────────────────────
+            // ── Tab selector (4 tabs) ─────────────────────────────────────────
             const float TabH = 26f;
-            float tbw = (w - 8f) / 3f;
-            if (GUI.Button(new Rect(area.x,               area.y, tbw, TabH),
+            float tbw = (w - 12f) / 4f;
+            if (GUI.Button(new Rect(area.x,                  area.y, tbw, TabH),
                            "Unread", _commsTab == CommsTab.Unread ? _sTabOn : _sTabOff))
             { _commsTab = CommsTab.Unread; _selectedMsgUid = ""; }
-            if (GUI.Button(new Rect(area.x + tbw + 4f,    area.y, tbw, TabH),
+            if (GUI.Button(new Rect(area.x + (tbw + 4f),     area.y, tbw, TabH),
                            "Read",   _commsTab == CommsTab.Read   ? _sTabOn : _sTabOff))
             { _commsTab = CommsTab.Read; _selectedMsgUid = ""; }
-            if (GUI.Button(new Rect(area.x + (tbw + 4f)*2f, area.y, tbw, TabH),
+            if (GUI.Button(new Rect(area.x + (tbw + 4f)*2f,  area.y, tbw, TabH),
                            "All",    _commsTab == CommsTab.All    ? _sTabOn : _sTabOff))
             { _commsTab = CommsTab.All; _selectedMsgUid = ""; }
+            if (GUI.Button(new Rect(area.x + (tbw + 4f)*3f,  area.y, tbw, TabH),
+                           "Ships",  _commsTab == CommsTab.Ships  ? _sTabOn : _sTabOff))
+            { _commsTab = CommsTab.Ships; }
+
+            if (_commsTab == CommsTab.Ships)
+            {
+                DrawCommsShips(area, w, h, TabH, s);
+                return;
+            }
 
             // Filter messages
             var msgs = new List<CommMessage>();
@@ -2022,6 +2039,120 @@ namespace Waystation.UI
                 GUI.Label(new Rect(detX + 4f, listTop + h * 0.4f, detW - 8f, 20f),
                           "Select a message to read.", _sSub);
             }
+        }
+
+        // ── Ships sub-tab ─────────────────────────────────────────────────────
+        private void DrawCommsShips(Rect area, float w, float h, float tabH, StationState s)
+        {
+            float Pad   = 6f;
+            float y     = area.y + tabH + Pad;
+            float dw    = w - Pad * 2f;
+
+            // Antenna status header
+            bool hasAntenna = _gm?.Antenna?.HasPoweredAntenna(s) ?? false;
+            if (!hasAntenna)
+            {
+                var prev = GUI.color;
+                GUI.color = new Color(0.8f, 0.5f, 0.2f, 1f);
+                GUI.Label(new Rect(area.x + Pad, y, dw, 20f),
+                          "No Antenna installed — place and power an Antenna Array.", _sSub);
+                GUI.color = prev;
+                return;
+            }
+
+            var (range, maxShips) = _gm.Antenna.GetAntennaStats(s);
+            GUI.Label(new Rect(area.x + Pad, y, dw, 16f),
+                      $"Antenna: range {range:F0} u  |  cap {maxShips} ships", _sSub);
+            y += 18f;
+
+            bool hasHangar = s.HasFunctionalHangar();
+            if (!hasHangar)
+            {
+                var prev2 = GUI.color;
+                GUI.color = new Color(0.8f, 0.5f, 0.2f, 1f);
+                GUI.Label(new Rect(area.x + Pad, y, dw, 16f),
+                          "⚠ No functional Hangar (place Shuttle Landing Pad).", _sSub);
+                GUI.color = prev2;
+            }
+            y += 20f;
+
+            // Toast notification for hail results
+            if (_hailToastTimer > 0f)
+            {
+                DrawSolid(new Rect(area.x + Pad, y, dw, 22f),
+                          new Color(0.1f, 0.25f, 0.15f, 0.95f));
+                GUI.Label(new Rect(area.x + Pad + 4f, y + 3f, dw - 8f, 16f),
+                          _hailToastMsg, _sSub);
+                y += 26f;
+            }
+
+            // Ship list
+            var ships = s.GetInRangeShips();
+            if (ships.Count == 0)
+            {
+                GUI.Label(new Rect(area.x + Pad, y, dw, 20f), "No ships in range.", _sSub);
+                return;
+            }
+
+            const float RowH = 40f;
+            float listH  = h - (y - area.y) - Pad;
+            float innerH = Mathf.Max(listH, ships.Count * RowH);
+
+            _commsShipListScroll = GUI.BeginScrollView(
+                new Rect(area.x, y, w, listH),
+                _commsShipListScroll,
+                new Rect(0, 0, w - 14f, innerH));
+
+            float ly = 0f;
+            foreach (var ship in ships)
+            {
+                DrawSolid(new Rect(0, ly, w - 14f, RowH - 3f),
+                          new Color(0.09f, 0.10f, 0.16f, 0.9f));
+
+                // Ship name
+                GUI.Label(new Rect(Pad, ly + 3f, dw * 0.55f, 14f), ship.name, _sSub);
+
+                // Status label
+                string statusTxt = ship.VisitStateLabel();
+                GUI.Label(new Rect(dw * 0.55f + Pad, ly + 3f, dw * 0.25f, 14f), statusTxt, _sSub);
+
+                // Call button
+                float btnX  = dw * 0.80f + Pad;
+                float btnW  = dw * 0.19f;
+                bool  onCooldown   = s.IsHailOnCooldown(ship.uid);
+                bool  alreadyBusy  = ship.visitState == ShipVisitState.Inbound   ||
+                                     ship.visitState == ShipVisitState.Docked     ||
+                                     ship.visitState == ShipVisitState.Departing;
+                bool  btnEnabled   = hasHangar && !onCooldown && !alreadyBusy;
+
+                string btnLabel;
+                if (alreadyBusy)
+                    btnLabel = statusTxt;
+                else if (onCooldown)
+                    btnLabel = $"Wait {s.HailCooldownRemaining(ship.uid)} ticks";
+                else if (!hasHangar)
+                    btnLabel = "No Hangar";
+                else
+                    btnLabel = "Call";
+
+                if (onCooldown || alreadyBusy || !hasHangar)
+                {
+                    var prev3 = GUI.color;
+                    GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.6f);
+                    GUI.Label(new Rect(btnX, ly + 12f, btnW, 16f), btnLabel, _sSub);
+                    GUI.color = prev3;
+                }
+                else if (GUI.Button(new Rect(btnX, ly + 10f, btnW, 20f), btnLabel, _sBtnWide))
+                {
+                    string result = _gm.TryHailShip(ship.uid);
+                    _hailToastMsg   = result;
+                    _hailToastTimer = 4f;
+                }
+
+                DrawSolid(new Rect(0, ly + RowH - 4f, w - 14f, 1f), ColDivider);
+                ly += RowH;
+            }
+            GUI.EndScrollView();
         }
 
 
