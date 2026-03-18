@@ -39,8 +39,12 @@ namespace Waystation.Systems
         private const float GrowLightOutput = 1.0f;
 
         private readonly ContentRegistry _registry;
+        private SkillSystem              _skillSystem;
 
         public FarmingSystem(ContentRegistry registry) => _registry = registry;
+
+        /// <summary>Wire up SkillSystem after construction (called from GameManager).</summary>
+        public void SetSkillSystem(SkillSystem skillSystem) => _skillSystem = skillSystem;
 
         // ── Condition tier (used for inspect display and growth logic) ────────
         public enum ConditionTier { Ideal, Acceptable, Critical }
@@ -294,7 +298,11 @@ namespace Waystation.Systems
                     if (planter.growthStage == 3 && planter.cropId != null
                         && _registry.Crops.TryGetValue(planter.cropId, out var hvCrop))
                     {
-                        int qty = Random.Range(hvCrop.harvestQtyMin, hvCrop.harvestQtyMax + 1);
+                        int baseQty = Random.Range(hvCrop.harvestQtyMin, hvCrop.harvestQtyMax + 1);
+                        // Apply expertise yield multiplier (Master Harvester +25%)
+                        float yieldMult = _skillSystem != null
+                            ? _skillSystem.GetYieldMultiplier(npc, "skill.farming") : 1.0f;
+                        int qty = Mathf.RoundToInt(baseQty * yieldMult);
                         bool stored = AddItemToStorage(station, hvCrop.harvestItemId, qty);
                         if (!stored)
                         {
@@ -314,6 +322,9 @@ namespace Waystation.Systems
                     // Stub — no gameplay effect. TODO: fertiliser / pruning mechanics.
                     break;
             }
+
+            // Award Farming skill XP for task completion
+            _skillSystem?.AwardXP(npc, task.taskType, station);
 
             task.status  = "complete";
             npc.jobTimer = 0;   // let JobSystem reassign next tick

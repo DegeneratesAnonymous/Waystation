@@ -75,6 +75,9 @@ namespace Waystation.Core
         public RelationshipRegistry     Relationships { get; private set; }
         public ConversationSystem       Conversations { get; private set; }
         public ProximitySystem          Proximity     { get; private set; }
+
+        // ── Skill & Expertise system ────────────────────────────────────────────────────────────
+        public SkillSystem              Skills        { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -168,6 +171,17 @@ namespace Waystation.Core
             Conversations = new ConversationSystem();
             Proximity     = new ProximitySystem();
 
+            // Skill & Expertise system
+            Skills = new SkillSystem(Registry);
+            Skills.SetMoodSystem(Mood);
+            // Register capability unlocks from all loaded ExpertiseDefinitions.
+            Skills.RegisterAllCapabilities();
+            // Wire skill system into systems that need to award XP.
+            Research.SetSkillSystem(Skills);
+            Research.SetSecondsPerTick(secondsPerTick);
+            Farming.SetSkillSystem(Skills);
+            Conversations.SetSkillSystem(Skills);
+
             // Wire sleep/wake events from NPCSystem → MoodSystem
             Npcs.OnNPCSleeps += npc => Mood.OnNPCSleeps(npc);
             Npcs.OnNPCWakes  += npc => Mood.OnNPCWakes(npc);
@@ -178,6 +192,15 @@ namespace Waystation.Core
                 $"{npc.name} is in crisis and has abandoned their duties.");
             Mood.OnNpcRecoveredFromCrisis += npc => Station?.LogEvent(
                 $"{npc.name} has recovered from crisis and returned to work.");
+
+            // Log skill level-up and slot-earned notifications
+            Skills.OnCharacterLevelUp += (npc, level) => Station?.LogEvent(
+                $"{npc.name} reached character level {level}.");
+            Skills.OnSlotEarned += (npc, level) =>
+            {
+                Station?.LogEvent(
+                    $"{npc.name} has grown as a person. A new expertise slot is available.");
+            };
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -195,6 +218,10 @@ namespace Waystation.Core
             SetupStartingCrew();
             SetupStartingPolicies();
             Factions.Initialize(Station);
+
+            // Initialise skill instances for all starting crew.
+            Skills.InitialiseNpcSkills(Station);
+
             Log($"Waystation '{stationName}' operational. All systems nominal.");
 
             IsPaused = false;
@@ -299,6 +326,9 @@ namespace Waystation.Core
             Conversations.Tick(Station, Mood, Relationships);
             Relationships.Tick(Station, Mood);
 
+            // Skill system
+            Skills.Tick(Station);
+
             // Process events
             var newEvents = Events.Tick(Station);
             foreach (var ev in newEvents)
@@ -335,6 +365,8 @@ namespace Waystation.Core
             Station.ModifyResource("credits", -RecruitCost);
             npc.statusTags.Remove("visitor");
             npc.statusTags.Add("crew");
+            // Initialise skill instances for the newly recruited crew member.
+            Skills?.InitialiseNpcSkills(npc);
             Log($"{npc.name} recruited as crew ({RecruitCost:F0} credits).");
             return (true, $"{npc.name} is now crew.");
         }

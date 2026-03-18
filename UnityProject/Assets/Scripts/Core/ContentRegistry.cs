@@ -26,6 +26,8 @@ namespace Waystation.Core
         public Dictionary<string, RoomTypeDefinition> RoomTypes  { get; private set; } = new Dictionary<string, RoomTypeDefinition>();
         public Dictionary<string, ResearchNodeDefinition> ResearchNodes { get; private set; } = new Dictionary<string, ResearchNodeDefinition>();
         public Dictionary<string, CropDataDefinition> Crops    { get; private set; } = new Dictionary<string, CropDataDefinition>();
+        public Dictionary<string, SkillDefinition>   Skills    { get; private set; } = new Dictionary<string, SkillDefinition>();
+        public Dictionary<string, ExpertiseDefinition> Expertises { get; private set; } = new Dictionary<string, ExpertiseDefinition>();
 
         public bool   IsLoaded  { get; private set; }
         public int    ErrorCount => _errors.Count;
@@ -61,12 +63,15 @@ namespace Waystation.Core
             yield return StartCoroutine(LoadFolder(dataRoot, "rooms",      LoadRoomType));
             yield return StartCoroutine(LoadFolder(dataRoot, "research",   LoadResearchNode));
             yield return StartCoroutine(LoadFolder(dataRoot, "crops",      LoadCrop));
+            yield return StartCoroutine(LoadFolder(dataRoot, "skills",     LoadSkill));
+            yield return StartCoroutine(LoadFolder(dataRoot, "expertise",  LoadExpertise));
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
                       $"ships:{Ships.Count} classes:{Classes.Count} factions:{Factions.Count} " +
                       $"modules:{Modules.Count} items:{Items.Count} jobs:{Jobs.Count} " +
                       $"buildables:{Buildables.Count} missions:{Missions.Count} " +
-                      $"roomTypes:{RoomTypes.Count} researchNodes:{ResearchNodes.Count} crops:{Crops.Count}");
+                      $"roomTypes:{RoomTypes.Count} researchNodes:{ResearchNodes.Count} " +
+                      $"crops:{Crops.Count} skills:{Skills.Count} expertises:{Expertises.Count}");
         }
 
         // ── Folder loader ────────────────────────────────────────────────────
@@ -115,6 +120,8 @@ namespace Waystation.Core
         private void LoadMission  (Dictionary<string, object> d) => Missions  [d.GetString("id")] = MissionDefinition  .FromDict(d);
         private void LoadResearchNode(Dictionary<string, object> d) => ResearchNodes[d.GetString("id")] = ResearchNodeDefinition.FromDict(d);
         private void LoadCrop     (Dictionary<string, object> d) => Crops     [d.GetString("id")] = CropDataDefinition .FromDict(d);
+        private void LoadSkill    (Dictionary<string, object> d) => Skills    [d.GetString("id")] = SkillDefinition    .FromDict(d);
+        private void LoadExpertise(Dictionary<string, object> d) => Expertises[d.GetString("id")] = ExpertiseDefinition.FromDict(d);
         private void LoadRoomType(Dictionary<string, object> d)
         {
             var rt = new RoomTypeDefinition
@@ -156,7 +163,8 @@ namespace Waystation.Core
             $"events:{Events.Count} npcs:{Npcs.Count} ships:{Ships.Count} " +
             $"classes:{Classes.Count} factions:{Factions.Count} modules:{Modules.Count} " +
             $"items:{Items.Count} jobs:{Jobs.Count} buildables:{Buildables.Count} " +
-            $"researchNodes:{ResearchNodes.Count} crops:{Crops.Count}" +
+            $"researchNodes:{ResearchNodes.Count} crops:{Crops.Count} " +
+            $"skills:{Skills.Count} expertises:{Expertises.Count}" +
             (_errors.Count > 0 ? $" | errors:{_errors.Count}" : "");
 
         public IReadOnlyList<string> Errors() => _errors;

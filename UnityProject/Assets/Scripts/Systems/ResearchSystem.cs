@@ -15,6 +15,8 @@ namespace Waystation.Systems
     public class ResearchSystem
     {
         private readonly ContentRegistry _registry;
+        private SkillSystem              _skillSystem;
+        private float                    _secondsPerTick = 0.5f;
 
         private const string DatachipItemId      = "item.datachip";
         private const string DataStorageBuildable = "buildable.data_storage_server";
@@ -28,7 +30,7 @@ namespace Waystation.Systems
                 { "buildable.science_terminal",   ResearchBranch.Sciences   },
             };
 
-        // Research job-id → branch mapping
+        // Research job-id → branch + skill mapping
         private static readonly Dictionary<string, ResearchBranch> JobBranch =
             new Dictionary<string, ResearchBranch>
             {
@@ -37,7 +39,22 @@ namespace Waystation.Systems
                 { "job.research_science",   ResearchBranch.Sciences   },
             };
 
+        // Research job-id → skill.id for XP awards
+        private static readonly Dictionary<string, string> JobSkill =
+            new Dictionary<string, string>
+            {
+                { "job.research_military",  "skill.combat"     },
+                { "job.research_economic",  "skill.economics"  },
+                { "job.research_science",   "skill.science"    },
+            };
+
         public ResearchSystem(ContentRegistry registry) => _registry = registry;
+
+        /// <summary>Wire up SkillSystem after construction (called from GameManager).</summary>
+        public void SetSkillSystem(SkillSystem skillSystem) => _skillSystem = skillSystem;
+
+        /// <summary>Set the real-time seconds per game tick so XP rates stay consistent when game speed changes.</summary>
+        public void SetSecondsPerTick(float secondsPerTick) => _secondsPerTick = secondsPerTick;
 
         // ── Tick ──────────────────────────────────────────────────────────────
 
@@ -61,7 +78,19 @@ namespace Waystation.Systems
                 // Apply room bonus from any complete terminal of matching branch.
                 pts *= GetTerminalMultiplier(branch, station);
 
+                // Apply expertise ResearchOutput bonus (e.g. Research Prodigy +20%)
+                if (_skillSystem != null && JobSkill.TryGetValue(npc.currentJobId, out var skillId))
+                    pts *= _skillSystem.GetResearchOutputMultiplier(npc, skillId);
+
                 station.research.branches[branch].points += pts;
+
+                // Award skill XP for time at terminal (1 tick ≈ 1 second)
+                if (_skillSystem != null && JobSkill.TryGetValue(npc.currentJobId, out var xpSkillId))
+                {
+                    if (_registry.Skills.TryGetValue(xpSkillId, out var skillDef))
+                        _skillSystem.AwardXPOverTime(npc, xpSkillId,
+                            skillDef.xpPerActiveSecond, _secondsPerTick, station);
+                }
             }
 
             // Auto-unlock nodes whose prerequisites are satisfied and cost is met.

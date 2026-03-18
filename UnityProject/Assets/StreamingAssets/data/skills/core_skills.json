@@ -1,0 +1,58 @@
+[
+  {
+    "id": "skill.farming",
+    "display_name": "Farming",
+    "description": "Proficiency in growing and harvesting crops in hydroponics bays.",
+    "associated_task_types": ["sow", "harvest", "tend"],
+    "xp_per_task_completion": 15.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.engineering",
+    "display_name": "Engineering",
+    "description": "Skill in construction, block placement, and utility repair.",
+    "associated_task_types": ["job.build", "job.module_maintenance", "job.power_management"],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.science",
+    "display_name": "Science",
+    "description": "Research aptitude gained from time at Science Terminals.",
+    "associated_task_types": ["job.research_science"],
+    "xp_per_task_completion": 0.0,
+    "xp_per_active_second": 0.5
+  },
+  {
+    "id": "skill.economics",
+    "display_name": "Economics",
+    "description": "Business acumen built through Economic Terminal work and trade.",
+    "associated_task_types": ["job.research_economic"],
+    "xp_per_task_completion": 0.0,
+    "xp_per_active_second": 0.5
+  },
+  {
+    "id": "skill.combat",
+    "display_name": "Combat",
+    "description": "Military readiness developed at Military Terminals.",
+    "associated_task_types": ["job.research_military"],
+    "xp_per_task_completion": 0.0,
+    "xp_per_active_second": 0.5
+  },
+  {
+    "id": "skill.social",
+    "display_name": "Social",
+    "description": "Interpersonal skill improved through conversations and hail attempts.",
+    "associated_task_types": ["conversation_positive", "hail_success"],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.piloting",
+    "display_name": "Piloting",
+    "description": "Shuttle operation expertise from away missions and departures.",
+    "associated_task_types": ["shuttle_depart", "shuttle_return"],
+    "xp_per_task_completion": 20.0,
+    "xp_per_active_second": 0.0
+  }
+]

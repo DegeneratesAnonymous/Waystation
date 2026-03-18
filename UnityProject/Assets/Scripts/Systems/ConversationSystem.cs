@@ -57,10 +57,16 @@ namespace Waystation.Systems
         // Shared Random for deterministic rolling (seeded externally if needed)
         private readonly System.Random _rng;
 
+        // Skill system reference for awarding Social XP
+        private SkillSystem _skillSystem;
+
         public ConversationSystem(int? seed = null)
         {
             _rng = seed.HasValue ? new System.Random(seed.Value) : new System.Random();
         }
+
+        /// <summary>Wire up SkillSystem after construction (called from GameManager).</summary>
+        public void SetSkillSystem(SkillSystem skillSystem) => _skillSystem = skillSystem;
 
         // ── Tick ──────────────────────────────────────────────────────────────
 
@@ -206,6 +212,13 @@ namespace Waystation.Systems
 
             // Affinity update
             RelationshipRegistry.ModifyAffinity(station, initiator.uid, partner.uid, affinityDelta, station.tick);
+
+            // Social skill XP on positive outcome (both participants learn from good conversations)
+            if (positive && _skillSystem != null)
+            {
+                _skillSystem.AwardXP(initiator, "conversation_positive", station);
+                _skillSystem.AwardXP(partner,   "conversation_positive", station);
+            }
         }
     }
 }
