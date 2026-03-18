@@ -3,11 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>NPC Weapon Atlas Generator</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box}
-body{background:#0a0b0e;color:#c8d0e0;font-family:'Share Tech Mono',monospace;padding:20px;margin:0}
+body{background:#0a0b0e;color:#c8d0e0;font-family:'Courier New',Courier,monospace;padding:20px;margin:0}
 h2{color:#7090b0;margin:0 0 4px}
 p{color:#4a5870;font-size:.85em;margin:0 0 12px}
 canvas{display:block;image-rendering:pixelated;margin:8px 0}
@@ -167,7 +165,7 @@ for(let i=0;i<WPN_TOTAL;i++){
   } else {
     // reserved – leave transparent
     ctx.putImageData(id,i*SW+PAD,PAD);
-    tiles.push({id:`npc_weapon_reserved_${i-8}`,col:i,row:0,
+    tiles.push({id:`npc_weapon_reserved_${String(i-8).padStart(2,'0')}`,col:i,row:0,
       tags:['npc','weapon','reserved','state:normal']});
   }
 }

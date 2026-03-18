@@ -43,6 +43,13 @@ namespace Waystation.NPC.Editor
         [MenuItem("Waystation/NPC/Import NPC Atlases")]
         public static void ImportAtlases()
         {
+            // Ensure Assets/Resources directory exists
+            if (!AssetDatabase.IsValidFolder("Assets/Resources"))
+            {
+                AssetDatabase.CreateFolder("Assets", "Resources");
+                Debug.Log("[NpcAtlasImporter] Created Assets/Resources folder.");
+            }
+
             // Load or create registry asset
             var registry = AssetDatabase.LoadAssetAtPath<NpcAtlasRegistry>(RegistryOutputPath);
             if (registry == null)
@@ -54,24 +61,41 @@ namespace Waystation.NPC.Editor
 
             bool anyError = false;
 
-            registry.bodySprites   = SliceAtlas("npc_body.png",   AtlasCounts["npc_body.png"],   ref anyError);
-            registry.faceSprites   = SliceAtlas("npc_face.png",   AtlasCounts["npc_face.png"],   ref anyError);
-            registry.hairSprites   = SliceAtlas("npc_hair.png",   AtlasCounts["npc_hair.png"],   ref anyError);
-            registry.hatSprites    = SliceAtlas("npc_hat.png",    AtlasCounts["npc_hat.png"],    ref anyError);
-            registry.shirtSprites  = SliceAtlas("npc_shirt.png",  AtlasCounts["npc_shirt.png"],  ref anyError);
-            registry.pantsSprites  = SliceAtlas("npc_pants.png",  AtlasCounts["npc_pants.png"],  ref anyError);
-            registry.shoeSprites   = SliceAtlas("npc_shoes.png",  AtlasCounts["npc_shoes.png"],  ref anyError);
-            registry.backSprites   = SliceAtlas("npc_back.png",   AtlasCounts["npc_back.png"],   ref anyError);
-            registry.weaponSprites = SliceAtlas("npc_weapon.png", AtlasCounts["npc_weapon.png"], ref anyError);
+            var bodySprites   = SliceAtlas("npc_body.png",   AtlasCounts["npc_body.png"],   ref anyError);
+            var faceSprites   = SliceAtlas("npc_face.png",   AtlasCounts["npc_face.png"],   ref anyError);
+            var hairSprites   = SliceAtlas("npc_hair.png",   AtlasCounts["npc_hair.png"],   ref anyError);
+            var hatSprites    = SliceAtlas("npc_hat.png",    AtlasCounts["npc_hat.png"],    ref anyError);
+            var shirtSprites  = SliceAtlas("npc_shirt.png",  AtlasCounts["npc_shirt.png"],  ref anyError);
+            var pantsSprites  = SliceAtlas("npc_pants.png",  AtlasCounts["npc_pants.png"],  ref anyError);
+            var shoeSprites   = SliceAtlas("npc_shoes.png",  AtlasCounts["npc_shoes.png"],  ref anyError);
+            var backSprites   = SliceAtlas("npc_back.png",   AtlasCounts["npc_back.png"],   ref anyError);
+            var weaponSprites = SliceAtlas("npc_weapon.png", AtlasCounts["npc_weapon.png"], ref anyError);
+
+            if (anyError)
+            {
+                // Don't overwrite existing registry arrays when an atlas is missing/invalid;
+                // fail fast so the developer sees the error without a partially-broken registry.
+                Debug.LogError("[NpcAtlasImporter] Import aborted due to errors — " +
+                               "registry arrays have NOT been updated. Check the console above.");
+                return;
+            }
+
+            // All atlases loaded successfully — commit to registry
+            registry.bodySprites   = bodySprites;
+            registry.faceSprites   = faceSprites;
+            registry.hairSprites   = hairSprites;
+            registry.hatSprites    = hatSprites;
+            registry.shirtSprites  = shirtSprites;
+            registry.pantsSprites  = pantsSprites;
+            registry.shoeSprites   = shoeSprites;
+            registry.backSprites   = backSprites;
+            registry.weaponSprites = weaponSprites;
 
             EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            if (anyError)
-                Debug.LogError("[NpcAtlasImporter] Finished with errors — check the console above.");
-            else
-                Debug.Log("[NpcAtlasImporter] All NPC atlases imported successfully.");
+            Debug.Log("[NpcAtlasImporter] All NPC atlases imported successfully.");
         }
 
         // ── Internal helpers ──────────────────────────────────────────────────
@@ -84,7 +108,7 @@ namespace Waystation.NPC.Editor
                 Debug.LogError($"[NpcAtlasImporter] Could not find {filename} under {NpcArtFolder}. " +
                                "Copy the PNG from atlases/ into the Unity project first.");
                 anyError = true;
-                return new Sprite[0];
+                return null;
             }
 
             // Configure import settings
@@ -93,22 +117,18 @@ namespace Waystation.NPC.Editor
             {
                 Debug.LogError($"[NpcAtlasImporter] No TextureImporter for {assetPath}.");
                 anyError = true;
-                return new Sprite[0];
+                return null;
             }
 
-            bool settingsChanged = false;
-
-            if (importer.spriteImportMode != SpriteImportMode.Multiple)
-            { importer.spriteImportMode = SpriteImportMode.Multiple; settingsChanged = true; }
-
-            if (importer.filterMode != FilterMode.Point)
-            { importer.filterMode = FilterMode.Point; settingsChanged = true; }
-
-            if (importer.spritePivot != new Vector2(0.5f, 0.5f))
-            { importer.spritePivot = new Vector2(0.5f, 0.5f); settingsChanged = true; }
-
-            if ((int)importer.spritePixelsPerUnit != 32)
-            { importer.spritePixelsPerUnit = 32f; settingsChanged = true; }
+            // ── Pixel-art texture settings (aligned with TileAtlasImporter) ──
+            importer.textureType        = TextureImporterType.Sprite;
+            importer.spriteImportMode   = SpriteImportMode.Multiple;
+            importer.filterMode         = FilterMode.Point;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.isReadable         = false;
+            importer.maxTextureSize     = 8192;
+            importer.spritePivot        = new Vector2(0.5f, 0.5f);
+            importer.spritePixelsPerUnit = 32f;
 
             // Build sprite meta-data (one per column, row always 0)
             var metas = new List<SpriteMetaData>();
@@ -134,10 +154,8 @@ namespace Waystation.NPC.Editor
 
             importer.spritesheet = metas.ToArray();
 
-            if (settingsChanged || true) // always re-import to pick up new sprite rects
-            {
-                AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
-            }
+            // Always re-import to apply all settings and pick up new sprite rects
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
 
             // Load sprites from asset database
             var all = AssetDatabase.LoadAllAssetsAtPath(assetPath);

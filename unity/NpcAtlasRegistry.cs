@@ -52,13 +52,13 @@ namespace Waystation.NPC
         public Sprite GetBody(BodyType type, SkinTone tone)
         {
             int col = (int)type * 6 + (int)tone;
-            return bodySprites[col];
+            return SafeGet(bodySprites, col, "body");
         }
 
         /// <summary>Returns the face sprite for the given expression.</summary>
         public Sprite GetFace(FaceType type)
         {
-            return faceSprites[(int)type];
+            return SafeGet(faceSprites, (int)type, "face");
         }
 
         /// <summary>
@@ -69,52 +69,71 @@ namespace Waystation.NPC
         public Sprite GetHair(HairStyle style, int colorIndex)
         {
             int col = (int)style * 6 + colorIndex;
-            return hairSprites[col];
+            return SafeGet(hairSprites, col, "hair");
         }
 
         /// <summary>
         /// Returns the hat sprite.
-        /// Layout is colour-major: col = colorIndex * 5 + (int)type.
+        /// Layout is color-major: col = colorIndex * 5 + (int)type.
         /// HatType.Helmet=1, colorIndex=0 → col 1, rect.x = 1*34+1.
         /// </summary>
         public Sprite GetHat(HatType type, int colorIndex)
         {
             int col = colorIndex * 5 + (int)type;
-            return hatSprites[col];
+            return SafeGet(hatSprites, col, "hat");
         }
 
         /// <summary>Returns the shirt sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
         public Sprite GetShirt(ShirtType type, int colorIndex)
         {
             int col = (int)type * 5 + colorIndex;
-            return shirtSprites[col];
+            return SafeGet(shirtSprites, col, "shirt");
         }
 
         /// <summary>Returns the pants sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
         public Sprite GetPants(PantsType type, int colorIndex)
         {
             int col = (int)type * 5 + colorIndex;
-            return pantsSprites[col];
+            return SafeGet(pantsSprites, col, "pants");
         }
 
         /// <summary>Returns the shoes sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
         public Sprite GetShoes(ShoeType type, int colorIndex)
         {
             int col = (int)type * 5 + colorIndex;
-            return shoeSprites[col];
+            return SafeGet(shoeSprites, col, "shoes");
         }
 
         /// <summary>Returns the back-item sprite. Layout is type-major: col = type*2 + colorIndex.</summary>
         public Sprite GetBack(BackItemType type, int colorIndex)
         {
             int col = (int)type * 2 + colorIndex;
-            return backSprites[col];
+            return SafeGet(backSprites, col, "back");
         }
 
         /// <summary>Returns the weapon sprite. Direct index: col = (int)weaponType.</summary>
         public Sprite GetWeapon(WeaponType type)
         {
-            return weaponSprites[(int)type];
+            return SafeGet(weaponSprites, (int)type, "weapon");
+        }
+
+        // ── Private helpers ───────────────────────────────────────────────────
+
+        private Sprite SafeGet(Sprite[] array, int col, string layerName)
+        {
+            if (array == null || array.Length == 0)
+            {
+                Debug.LogError($"[NpcAtlasRegistry] '{layerName}' sprite array is null or empty. " +
+                               "Run Waystation → NPC → Import NPC Atlases first.", this);
+                return null;
+            }
+            if (col < 0 || col >= array.Length)
+            {
+                Debug.LogError($"[NpcAtlasRegistry] '{layerName}' col {col} is out of range " +
+                               $"(array length {array.Length}).", this);
+                return null;
+            }
+            return array[col];
         }
     }
 }
