@@ -66,6 +66,16 @@ namespace Waystation.Core
         public NPCTaskQueueManager     TaskQueue       { get; private set; }
         public CommunicationsSystem    CommSystem      { get; private set; }
 
+        // ── Visitor pipeline systems ──────────────────────────────────────────
+        public AntennaSystem           Antenna         { get; private set; }
+        public ShipVisitStateMachine   ShipVisits      { get; private set; }
+        public NPCTaskQueueManager     TaskQueue       { get; private set; }
+        public CommunicationsSystem    CommSystem      { get; private set; }
+
+        // ── Farming / climate systems ─────────────────────────────────────────
+        public FarmingSystem     Farming        { get; private set; }
+        public TemperatureSystem Temperature    { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -148,6 +158,16 @@ namespace Waystation.Core
             ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
             TaskQueue  = new NPCTaskQueueManager();
             CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
+
+            // Visitor pipeline systems
+            Antenna    = new AntennaSystem(Registry);
+            ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
+            TaskQueue  = new NPCTaskQueueManager();
+            CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
+
+            // Farming / climate systems
+            Farming   = new FarmingSystem(Registry);
+            Temperature = new TemperatureSystem(Registry);
 
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
@@ -257,6 +277,15 @@ namespace Waystation.Core
             Antenna.Tick(Station);
             ShipVisits.Tick(Station);
             CommSystem.Tick(Station);
+
+            // Visitor pipeline (antenna detection → state machine → comms tasks)
+            Antenna.Tick(Station);
+            ShipVisits.Tick(Station);
+            CommSystem.Tick(Station);
+
+            // Farming / climate (temperature before farming so planter temps are fresh)
+            Temperature.Tick(Station);
+            Farming.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);

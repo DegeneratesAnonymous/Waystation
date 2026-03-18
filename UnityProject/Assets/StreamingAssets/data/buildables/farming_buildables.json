@@ -1,0 +1,107 @@
+[
+  {
+    "id": "buildable.hydroponics_planter",
+    "display_name": "Hydroponics Planter",
+    "category": "production",
+    "description": "A water-fed growing tray for hydroponic crops. Requires pipe water connection, a Grow Light directly above, and climate control for optimal growth.",
+    "build_time_ticks": 15,
+    "required_materials": {
+      "item.steel_plate": 3,
+      "item.wiring": 1
+    },
+    "required_skills": {
+      "engineering": 1
+    },
+    "required_tags": [],
+    "layer": 1,
+    "size": 1,
+    "max_health": 80,
+    "schema_version": "1"
+  },
+  {
+    "id": "buildable.grow_light",
+    "display_name": "Grow Light",
+    "category": "utility",
+    "description": "A ceiling-mounted light strip tuned for plant growth. Energised by an adjacent electric wire. Illuminates the tile directly below it.",
+    "build_time_ticks": 8,
+    "required_materials": {
+      "item.wiring": 3,
+      "item.parts": 1
+    },
+    "required_skills": {
+      "engineering": 1
+    },
+    "required_tags": [],
+    "layer": 2,
+    "size": 1,
+    "max_health": 60,
+    "requires_power": true,
+    "power_draw": 30.0,
+    "schema_version": "1"
+  },
+  {
+    "id": "buildable.heater",
+    "display_name": "Space Heater",
+    "category": "utility",
+    "description": "A wall-mounted electric heater. Raises the temperature of its room toward a configurable target. Draws 150 W at full output, 5 W at standby.",
+    "build_time_ticks": 10,
+    "required_materials": {
+      "item.wiring": 2,
+      "item.parts": 2
+    },
+    "required_skills": {
+      "engineering": 1
+    },
+    "required_tags": [],
+    "layer": 2,
+    "size": 1,
+    "max_health": 80,
+    "requires_power": true,
+    "power_draw": 150.0,
+    "idle_power_draw": 5.0,
+    "schema_version": "1"
+  },
+  {
+    "id": "buildable.cooler",
+    "display_name": "Cooling Unit",
+    "category": "utility",
+    "description": "A wall-mounted cooling unit. Lowers the temperature of its room toward a configurable target. Draws 200 W at full output, 5 W at standby.",
+    "build_time_ticks": 10,
+    "required_materials": {
+      "item.wiring": 2,
+      "item.parts": 3
+    },
+    "required_skills": {
+      "engineering": 2
+    },
+    "required_tags": [],
+    "layer": 2,
+    "size": 1,
+    "max_health": 80,
+    "requires_power": true,
+    "power_draw": 200.0,
+    "idle_power_draw": 5.0,
+    "schema_version": "1"
+  },
+  {
+    "id": "buildable.vent",
+    "display_name": "Climate Vent",
+    "category": "utility",
+    "description": "A passive circulation vent. Equalises temperature between adjacent rooms and tiles when energised.",
+    "build_time_ticks": 6,
+    "required_materials": {
+      "item.wiring": 1,
+      "item.parts": 1
+    },
+    "required_skills": {
+      "engineering": 1
+    },
+    "required_tags": [],
+    "layer": 2,
+    "size": 1,
+    "max_health": 60,
+    "requires_power": true,
+    "power_draw": 10.0,
+    "schema_version": "1"
+  }
+]

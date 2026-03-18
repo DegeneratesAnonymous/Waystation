@@ -1,0 +1,21 @@
+[
+  {
+    "id": "job.farming",
+    "display_name": "Farming",
+    "phase": "day",
+    "allowed_classes": [
+      "class.farming"
+    ],
+    "preferred_module_category": "production",
+    "fallback_module_category": "utility",
+    "duration_ticks": 5,
+    "skill_used": "farming",
+    "resource_effects": {},
+    "need_effects": {
+      "rest": -0.02,
+      "hunger": -0.01
+    },
+    "station_effects": {},
+    "schema_version": "1"
+  }
+]
