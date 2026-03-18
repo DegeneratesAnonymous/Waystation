@@ -39,7 +39,11 @@
       "science": 1.5
     },
     "allowed_jobs": [
-      "job.research",
+      "job.research_industry",
+      "job.research_exploration",
+      "job.research_diplomacy",
+      "job.research_security",
+      "job.research_science",
       "job.medical_bay",
       "job.specimen_analysis"
     ],

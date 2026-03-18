@@ -3348,7 +3348,7 @@ namespace Waystation.UI
 
             // ── Branch filter buttons ─────────────────────────────────────────
             const float FBtnH = 24f;
-            float fbw = (w - 6f) / 6f;
+            float fbw = (w - 10f) / 6f;
             var   filters = new[] { (ResearchBranchFilter.All,        "All"),
                                     (ResearchBranchFilter.Industry,    "Industry"),
                                     (ResearchBranchFilter.Exploration, "Exploration"),
