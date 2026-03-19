@@ -264,7 +264,6 @@ namespace Waystation.Systems
             int globalSeed, float radiusLY,
             UnityEngine.Vector2 centreOffsetLY = default)
         {
-            int chunkR = UnityEngine.Mathf.CeilToInt(radiusLY / ChunkLY) + 1;
             int cx0 = UnityEngine.Mathf.FloorToInt((centreOffsetLY.x - radiusLY) / ChunkLY);
             int cx1 = UnityEngine.Mathf.FloorToInt((centreOffsetLY.x + radiusLY) / ChunkLY);
             int cy0 = UnityEngine.Mathf.FloorToInt((centreOffsetLY.y - radiusLY) / ChunkLY);
@@ -293,15 +292,19 @@ namespace Waystation.Systems
 
                         float dx = x - centreOffsetLY.x;
                         float dy = y - centreOffsetLY.y;
+
+                        // Consume RNG unconditionally so results are stable regardless of
+                        // which candidates pass the distance filter.
+                        var starDef    = StarDefs[rng.Next(StarDefs.Length)];
+                        int sysSeed    = (int)((uint)chunkSeed ^ (uint)(i * 2654435769u));
+                        string sysName = $"{PickName(rng)} System";
+
                         if (isHomeChunk && dx * dx + dy * dy < 4f) continue;
                         if (dx * dx + dy * dy > r2) continue;
 
-                        var starDef = StarDefs[rng.Next(StarDefs.Length)];
-                        int sysSeed = (int)((uint)chunkSeed ^ (uint)(i * 2654435769u));
-
                         result.Add(new NeighborSystem
                         {
-                            systemName   = $"{PickName(rng)} System",
+                            systemName   = sysName,
                             seed         = sysSeed,
                             positionLY   = new UnityEngine.Vector2(x, y),
                             starType     = starDef.type,

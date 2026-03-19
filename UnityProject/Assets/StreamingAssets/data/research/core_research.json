@@ -127,7 +127,7 @@
     "subbranch": "Astrometrics",
     "point_cost": 350,
     "prerequisites": ["research.exploration.local_sensors"],
-    "unlock_tags": ["tech.interstellar_sensors"]
+    "unlock_tags": ["tech.interstellar_sensors", "tech.map_sector"]
   },
   {
     "id": "research.diplomacy.open_trade",
@@ -277,7 +277,7 @@
     "subbranch": "Astrometrics",
     "point_cost": 700,
     "prerequisites": ["research.exploration.interstellar_sensors"],
-    "unlock_tags": ["tech.deep_space_sensors"]
+    "unlock_tags": ["tech.deep_space_sensors", "tech.map_galaxy"]
   },
   {
     "id": "research.science.composite_materials",

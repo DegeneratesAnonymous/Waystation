@@ -119,12 +119,12 @@ namespace Waystation.UI
 
         private void Awake()
         {
+            _gm = GameManager.Instance;
             if (closeButton != null) closeButton.onClick.AddListener(Close);
         }
 
         private void Start()
         {
-            _gm = GameManager.Instance;
             if (mapPanel    != null) mapPanel.SetActive(false);
             if (detailPanel != null) detailPanel.SetActive(false);
         }
@@ -154,7 +154,6 @@ namespace Waystation.UI
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) < 0.001f) return;
 
-            float pxPerLY   = (_layer == MapLayer.Sector ? SectorPxPerLY : GalaxyPxPerLY);
             float minZ = _layer == MapLayer.Galaxy ? GalaxyZoomMin : 0.5f;
             float maxZ = _layer == MapLayer.Galaxy ? GalaxyZoomMax : 3f;
 
@@ -473,10 +472,9 @@ namespace Waystation.UI
 
         private bool HasBuiltAntenna()
         {
-            if (_gm?.Station == null) return false;
-            foreach (var f in _gm.Station.foundations.Values)
-                if (f.status == "complete" && f.buildableId == "buildable.antenna") return true;
-            return false;
+            var station = _gm?.Station;
+            if (station == null) return false;
+            return _gm.Antenna.HasPoweredAntenna(station);
         }
 
         // ── Sector map ────────────────────────────────────────────────────────
@@ -518,8 +516,10 @@ namespace Waystation.UI
 
             // Determine which LY rect is visible based on current offset + zoom
             float pxPerLY   = GalaxyPxPerLY * _exploreZoom;
-            float halfW     = 680f / 2f / Mathf.Max(pxPerLY, 0.01f);
-            float halfH     = 680f / 2f / Mathf.Max(pxPerLY, 0.01f);
+            float viewW = (_mapAreaRt != null && _mapAreaRt.rect.width  > 0f) ? _mapAreaRt.rect.width  : 680f;
+            float viewH = (_mapAreaRt != null && _mapAreaRt.rect.height > 0f) ? _mapAreaRt.rect.height : 680f;
+            float halfW = viewW / 2f / Mathf.Max(pxPerLY, 0.01f);
+            float halfH = viewH / 2f / Mathf.Max(pxPerLY, 0.01f);
             // Centre of view in LY coords
             Vector2 centreLY = -_exploreWorld.anchoredPosition / Mathf.Max(pxPerLY, 0.01f);
             float   genRadius = Mathf.Max(halfW, halfH) + 80f;  // add one chunk margin
@@ -582,12 +582,6 @@ namespace Waystation.UI
             // Home gets a bright ring outline
             if (isHome)
             {
-                var ring = go.AddComponent<UIRing>();
-                ring.color     = new Color(1f, 0.95f, 0.50f, 0.55f);
-                ring.thickness = 0.25f;
-                ring.segments  = 32;
-                // Override: actually destroy the ring component; use a separate child ring GO
-                Destroy(ring);
                 var ringGo = new GameObject("HomeRing", typeof(RectTransform), typeof(UIRing));
                 ringGo.transform.SetParent(parent, false);
                 var rrt = ringGo.GetComponent<RectTransform>();
@@ -663,11 +657,10 @@ namespace Waystation.UI
 
         private void ClearExplore()
         {
-            foreach (var (dot, _) in _exploreDots)
-                if (dot != null) Destroy(dot.gameObject);
-            _exploreDots.Clear();
             if (_exploreWorld != null)
-                foreach (Transform child in _exploreWorld) Destroy(child.gameObject);
+                foreach (Transform child in _exploreWorld)
+                    Destroy(child.gameObject);
+            _exploreDots.Clear();
         }
 
         // ── Factory helpers ───────────────────────────────────────────────────
