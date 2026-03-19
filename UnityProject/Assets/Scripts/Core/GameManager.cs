@@ -214,6 +214,7 @@ namespace Waystation.Core
             if (seed.HasValue) UnityEngine.Random.InitState(seed.Value);
 
             Station = new StationState(stationName);
+            Station.solarSystem = SolarSystemGenerator.Generate(stationName, seed);
             SetupStartingModules();
             SetupStartingCrew();
             SetupStartingPolicies();

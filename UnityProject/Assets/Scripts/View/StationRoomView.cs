@@ -1842,7 +1842,7 @@ namespace Waystation.View
                         for (int mi = 0; mi < shown; mi++)
                         {
                             var m        = netInspect.Members[mi];
-                            string bName = m.BuildableId.Contains('.') ? m.BuildableId.Split('.')[^1] : m.BuildableId;
+                            string mName = m.BuildableId.Contains('.') ? m.BuildableId.Split('.')[^1] : m.BuildableId;
                             string stat  = m.Role switch
                             {
                                 "producer" => net.networkType == "electric"
@@ -1857,7 +1857,7 @@ namespace Waystation.View
                                 _          => m.Role,
                             };
                             GUI.Label(new Rect(16, y, PW - 24, 13),
-                                $"\u2022 {bName}  [{m.Role}]  {stat}", _ctxValueStyle);
+                                $"\u2022 {mName}  [{m.Role}]  {stat}", _ctxValueStyle);
                             y += 14;
                         }
                         if (netInspect.Members.Count > MaxMembersShown)
