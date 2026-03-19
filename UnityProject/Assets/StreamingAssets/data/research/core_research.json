@@ -110,24 +110,24 @@
     "unlock_tags": ["tech.deep_core_drilling"]
   },
   {
-    "id": "research.exploration.sector_charts",
-    "display_name": "Sector Charts",
-    "description": "Unlocks sector-level map view.",
+    "id": "research.exploration.local_sensors",
+    "display_name": "Local Sensors",
+    "description": "Basic sensor arrays allow your station to map its local solar system. Requires a built Antenna Array to function.",
     "branch": "Exploration",
     "subbranch": "Astrometrics",
-    "point_cost": 150,
+    "point_cost": 120,
     "prerequisites": [],
-    "unlock_tags": ["tech.map_sector"]
+    "unlock_tags": ["tech.local_sensors"]
   },
   {
-    "id": "research.exploration.quadrant_navigation",
-    "display_name": "Quadrant Navigation",
-    "description": "Long-range navigation protocols, unlocking quadrant-level map view.",
+    "id": "research.exploration.interstellar_sensors",
+    "display_name": "Interstellar Sensors",
+    "description": "Enhanced long-range sensors reveal nearby star systems within 100 light-years, unlocking the Sector Map.",
     "branch": "Exploration",
     "subbranch": "Astrometrics",
-    "point_cost": 400,
-    "prerequisites": ["research.exploration.sector_charts"],
-    "unlock_tags": ["tech.map_quadrant"]
+    "point_cost": 350,
+    "prerequisites": ["research.exploration.local_sensors"],
+    "unlock_tags": ["tech.interstellar_sensors"]
   },
   {
     "id": "research.diplomacy.open_trade",
@@ -270,14 +270,14 @@
     "unlock_tags": ["tech.field_propulsion"]
   },
   {
-    "id": "research.science.galactic_navigation",
-    "display_name": "Galactic Navigation",
-    "description": "Long-range navigation charts, unlocking galaxy-level map view.",
-    "branch": "Science",
-    "subbranch": "Physics",
+    "id": "research.exploration.deep_space_sensors",
+    "display_name": "Deep Space Sensors",
+    "description": "Deep-space sensor arrays pierce interstellar distances, enabling full galaxy-scale exploration. Systems beyond the sector can be charted by panning and zooming the Galaxy Map.",
+    "branch": "Exploration",
+    "subbranch": "Astrometrics",
     "point_cost": 700,
-    "prerequisites": ["research.science.field_propulsion", "research.exploration.quadrant_navigation"],
-    "unlock_tags": ["tech.map_galaxy"]
+    "prerequisites": ["research.exploration.interstellar_sensors"],
+    "unlock_tags": ["tech.deep_space_sensors"]
   },
   {
     "id": "research.science.composite_materials",

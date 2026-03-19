@@ -1170,6 +1170,10 @@ namespace Waystation.Models
         // Research progression
         public ResearchState research = null;
 
+        // Solar system — procedurally generated once per new game, stable across saves.
+        // Populated by SolarSystemGenerator.Generate() in GameManager.NewGame().
+        public SolarSystemState solarSystem = null;
+
         // Map — points of interest
         public Dictionary<string, PointOfInterest> pointsOfInterest = new Dictionary<string, PointOfInterest>();
 

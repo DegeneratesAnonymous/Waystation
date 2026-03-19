@@ -39,6 +39,7 @@ namespace Waystation.View
         private void HandleZoom()
         {
             if (GameHUD.IsMouseOverDrawer) return;
+            if (SystemMapController.IsOpen) return;   // map overlay handles scroll
             float scroll = Input.GetAxis("Mouse ScrollWheel");
             if (Mathf.Abs(scroll) < 0.001f) return;
 

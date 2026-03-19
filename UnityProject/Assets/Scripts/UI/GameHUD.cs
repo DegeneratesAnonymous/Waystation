@@ -125,6 +125,7 @@ namespace Waystation.UI
 
         // ── Map tab state ─────────────────────────────────────────────────────
         private Vector2              _mapScroll;
+        private SystemMapController  _systemMap;
         private string               _selectedPoiUid  = "";
         private readonly HashSet<string> _selectedMapCrew = new HashSet<string>();
         private string               _mapMissionMsg   = "";
@@ -603,9 +604,20 @@ namespace Waystation.UI
             }
 
             if (GUI.Button(r, displayLabel, on ? _sTabOn : _sTabOff))
+            {
+                bool wasOff = !on;
                 _active = on ? Tab.None : tab;
+                if (wasOff && tab == Tab.Map) TryOpenSystemMap();
+            }
 
             y += 58f;
+        }
+
+        private void TryOpenSystemMap()
+        {
+            if (_systemMap == null)
+                _systemMap = UnityEngine.Object.FindFirstObjectByType<SystemMapController>();
+            _systemMap?.Open();
         }
 
         // ── Drawer root ───────────────────────────────────────────────────────
@@ -676,8 +688,7 @@ namespace Waystation.UI
         // ── Room management state (Build > Rooms sub-panel) ───────────────────
         private Vector2 _buildRoomsScroll;
         private Vector2 _buildRoomTypesScroll;
-        private bool    _buildRoomsOverlayActive = false;   // synced with sub-panel visibility
-        private string  _editingRoomTypeId = "";            // "" = none; id = custom type being edited
+
         private bool    _creatingNewRoomType = false;
         // Buffers for custom room type editor
         private string  _newRoomTypeName     = "";
@@ -739,8 +750,6 @@ namespace Waystation.UI
                                label, _sBtnSmall))
                 {
                     _buildSub = panel;
-                    if (panel == BuildSubPanel.Rooms) _buildRoomsOverlayActive = true;
-                    else _buildRoomsOverlayActive = false;
                 }
             }
             GUI.color = navPrev;
@@ -1626,28 +1635,25 @@ namespace Waystation.UI
             if (_gm?.Station == null) return;
 
             // ── Sub-panel selector ────────────────────────────────────────────
-            const float SubTabH = 28f;
-            float subY = area.y;
-            float subBw = (w - 20f) / 6f;
-
-            if (GUI.Button(new Rect(area.x,                     subY, subBw, SubTabH),
-                           "Roster",  _crewSub == CrewSubPanel.Roster        ? _sTabOn : _sTabOff))
-                _crewSub = CrewSubPanel.Roster;
-            if (GUI.Button(new Rect(area.x + (subBw + 4f),      subY, subBw, SubTabH),
-                           "Work",    _crewSub == CrewSubPanel.Work          ? _sTabOn : _sTabOff))
-                _crewSub = CrewSubPanel.Work;
-            if (GUI.Button(new Rect(area.x + (subBw + 4f) * 2f, subY, subBw, SubTabH),
-                           "Depts",   _crewSub == CrewSubPanel.Departments   ? _sTabOn : _sTabOff))
-                _crewSub = CrewSubPanel.Departments;
-            if (GUI.Button(new Rect(area.x + (subBw + 4f) * 3f, subY, subBw, SubTabH),
-                           "Ranks",   _crewSub == CrewSubPanel.Ranks         ? _sTabOn : _sTabOff))
-                _crewSub = CrewSubPanel.Ranks;
-            if (GUI.Button(new Rect(area.x + (subBw + 4f) * 4f, subY, subBw, SubTabH),
-                           "Social",  _crewSub == CrewSubPanel.Relationships ? _sTabOn : _sTabOff))
-                _crewSub = CrewSubPanel.Relationships;
-            if (GUI.Button(new Rect(area.x + (subBw + 4f) * 5f, subY, subBw, SubTabH),
-                           "Skills",  _crewSub == CrewSubPanel.Skills        ? _sTabOn : _sTabOff))
-                _crewSub = CrewSubPanel.Skills;
+            const float SubTabH = 30f;
+            float subY  = area.y;
+            float tabW  = Mathf.Floor(w / 6f);
+            (string lbl, CrewSubPanel panel)[] crewTabs =
+            {
+                ("Roster", CrewSubPanel.Roster),   ("Work",   CrewSubPanel.Work),
+                ("Depts",  CrewSubPanel.Departments), ("Ranks", CrewSubPanel.Ranks),
+                ("Social", CrewSubPanel.Relationships), ("Skills", CrewSubPanel.Skills),
+            };
+            for (int ti = 0; ti < crewTabs.Length; ti++)
+            {
+                float tx = area.x + ti * tabW;
+                bool  on = _crewSub == crewTabs[ti].panel;
+                if (GUI.Button(new Rect(tx, subY, tabW - 1f, SubTabH - 3f),
+                               crewTabs[ti].lbl, on ? _sTabOn : _sTabOff))
+                    _crewSub = crewTabs[ti].panel;
+                if (on)
+                    DrawSolid(new Rect(tx, subY + SubTabH - 3f, tabW - 1f, 3f), ColAccent);
+            }
 
             Rect subArea = new Rect(area.x, area.y + SubTabH + 6f, w, h - SubTabH - 6f);
             float subH   = h - SubTabH - 6f;
@@ -1702,8 +1708,8 @@ namespace Waystation.UI
             GUI.Label(new Rect(area.x + 8f, sy, w - 8f, 16f), healthLine, _sSub);
 
             // ── Scrollable crew list ──────────────────────────────────────────
-            // Each NPC row: name, class, dept, job, mood bar + label, needs, modifiers
-            const float RowH  = 148f;
+            // Each NPC row: name, dept·class, job, mood bar, needs, status
+            const float RowH  = 136f;
             float listTop  = area.y + SumH + 6f;
             float listH    = h - SumH - 6f;
             float innerH   = Mathf.Max(listH, crew.Count * RowH);
@@ -1715,40 +1721,50 @@ namespace Waystation.UI
                 string cls  = (npc.classId ?? "").Replace("class.", "");
                 string job  = _gm.Jobs.GetJobLabel(npc);
                 string rank = npc.rank switch { 1 => "★ Officer", 2 => "★★ Senior", 3 => "★★★ Command", _ => "" };
-                // Name row — rank badge on right when promoted
-                GUI.Label(new Rect(0,        y,        w * 0.60f, 20f), npc.name,        _sLabel);
-                if (rank.Length > 0)
-                {
-                    var rPrev = GUI.color; GUI.color = new Color(1.00f, 0.85f, 0.25f);
-                    GUI.Label(new Rect(w * 0.62f, y + 2f, w * 0.38f, 16f), rank, _sSub);
-                    GUI.color = rPrev;
-                }
-                else
-                {
-                    GUI.Label(new Rect(w * 0.62f, y,      w * 0.38f, 18f), npc.MoodLabel(), _sSub);
-                }
-                GUI.Label(new Rect(0, y + 20f, w, 16f), rank.Length > 0 ? $"{cls}  ·  {npc.MoodLabel()}" : cls, _sSub);
-                // Department label
+
+                // Resolve dept name up front
                 string deptLabel = "Crewman";
                 if (npc.departmentId != null)
                     foreach (var d in _gm.Station.departments)
                         if (d.uid == npc.departmentId) { deptLabel = d.name; break; }
-                GUI.Label(new Rect(0, y + 36f, w * 0.60f, 16f), deptLabel, _sSub);
-                GUI.Label(new Rect(0, y + 52f, w * 0.60f, 16f), $"Job: {job}", _sSub);
-                if (GUI.Button(new Rect(w * 0.62f, y + 50f, w * 0.38f, 18f),
+
+                // Row 0: Name (bold) | rank badge OR mood label (mood-colored)
+                GUI.Label(new Rect(0, y, w * 0.58f, 18f), npc.name, _sLabel);
+                if (rank.Length > 0)
+                {
+                    var rPrev = GUI.color; GUI.color = new Color(1.00f, 0.85f, 0.25f);
+                    GUI.Label(new Rect(w * 0.60f, y + 2f, w * 0.40f, 14f), rank, _sSub);
+                    GUI.color = rPrev;
+                }
+                else
+                {
+                    var mPrev = GUI.color; GUI.color = MoodSystem.GetMoodColor(npc.moodScore);
+                    GUI.Label(new Rect(w * 0.60f, y + 2f, w * 0.40f, 14f), npc.MoodLabel(), _sSub);
+                    GUI.color = mPrev;
+                }
+
+                // Row 1: Dept · Class [· mood if ranked]
+                string subLine = rank.Length > 0
+                    ? $"{deptLabel}  ·  {cls}  ·  {npc.MoodLabel()}"
+                    : $"{deptLabel}  ·  {cls}";
+                GUI.Label(new Rect(0, y + 18f, w, 13f), subLine, _sSub);
+
+                // Row 2: Job label | Reassign button
+                GUI.Label(new Rect(0, y + 31f, w * 0.58f, 14f), $"Job: {job}", _sSub);
+                if (GUI.Button(new Rect(w * 0.60f, y + 30f, w * 0.40f, 20f),
                                "Reassign", _sBtnSmall))
                     _gm.Jobs.InterruptNpc(npc);
 
-                // ── Mood score bar (new) ──────────────────────────────────────
-                DrawMoodBar(npc, w, y + 70f);
+                // ── Mood bar ─────────────────────────────────────────────────
+                DrawMoodBar(npc, w, y + 52f);
 
-                NeedBar("Hunger", GetNeed(npc, "hunger"), w, y + 102f);
-                NeedBar("Rest",   GetNeed(npc, "rest"),   w, y + 118f);
-                NeedBar("Sleep",  GetNeed(npc, "sleep"),  w, y + 134f);
+                NeedBar("Hunger", GetNeed(npc, "hunger"), w - 14f, y + 76f);
+                NeedBar("Rest",   GetNeed(npc, "rest"),   w - 14f, y + 90f);
+                NeedBar("Sleep",  GetNeed(npc, "sleep"),  w - 14f, y + 104f);
                 if (npc.missionUid != null)
                 {
                     var prev2 = GUI.color; GUI.color = new Color(0.4f, 0.8f, 1f);
-                    GUI.Label(new Rect(0, y + RowH - 16f, w - 14f, 14f), "\u2708 On away mission", _sSub);
+                    GUI.Label(new Rect(0, y + 118f, w - 14f, 13f), "\u2708 On away mission", _sSub);
                     GUI.color = prev2;
                 }
                 else if (npc.statusTags.Count > 0 || npc.injuries > 0)
@@ -1758,7 +1774,7 @@ namespace Waystation.UI
                         tags += (tags.Length > 0 ? ", " : "") +
                                 $"{npc.injuries} injur{(npc.injuries == 1 ? "y" : "ies")}";
                     var prev2 = GUI.color; GUI.color = ColBarWarn;
-                    GUI.Label(new Rect(0, y + RowH - 16f, w - 14f, 14f), tags, _sSub);
+                    GUI.Label(new Rect(0, y + 118f, w - 14f, 13f), tags, _sSub);
                     GUI.color = prev2;
                 }
                 DrawSolid(new Rect(0, y + RowH - 4f, w - 14f, 1f), ColDivider);
@@ -1770,70 +1786,47 @@ namespace Waystation.UI
         }
 
         /// <summary>
-        /// Draws the MoodScore bar with threshold label and active modifier list
-        /// for a single NPC starting at the given local y position inside a scroll view.
+        /// Draws a single-section mood bar: label row (threshold + score/work-mod) plus fill bar.
+        /// Fixed height: 22px (14 label + 8 bar). No dynamic modifier list.
         /// </summary>
         private void DrawMoodBar(NPCInstance npc, float w, float y)
         {
-            float score          = npc.moodScore;
-            string threshLabel   = MoodSystem.GetThresholdLabel(score);
-            Color  barColor      = MoodSystem.GetMoodColor(score);
+            float  score    = npc.moodScore;
+            string thresh   = MoodSystem.GetThresholdLabel(score);
+            Color  barColor = MoodSystem.GetMoodColor(score);
+            float  bw       = w - 14f;
 
             // Crisis flash overlay
             if (npc.inCrisis)
             {
-                var cp = GUI.color; GUI.color = new Color(0.86f, 0.26f, 0.26f, 0.25f);
-                DrawSolid(new Rect(0, y - 2f, w - 14f, 30f), GUI.color);
+                var cp = GUI.color; GUI.color = new Color(0.86f, 0.26f, 0.26f, 0.20f);
+                DrawSolid(new Rect(0, y - 2f, bw, 22f), GUI.color);
                 GUI.color = cp;
             }
 
-            // Label row: "Mood" on left, threshold on right
-            GUI.Label(new Rect(0, y, w * 0.45f, 14f), "Mood", _sSub);
-            var prev = GUI.color;
-            GUI.color = barColor;
-            GUI.Label(new Rect(w * 0.50f, y, w * 0.50f, 14f),
-                      npc.inCrisis ? "⚠ Crisis" : threshLabel, _sSub);
+            // Label row: "Mood" | threshold (colored) | score% OR work modifier (right)
+            GUI.Label(new Rect(0, y, 38f, 13f), "Mood", _sSub);
+            var prev = GUI.color; GUI.color = barColor;
+            GUI.Label(new Rect(40f, y, 72f, 13f), npc.inCrisis ? "\u26a0 Crisis" : thresh, _sSub);
             GUI.color = prev;
-
-            // Bar
-            float barY = y + 15f;
-            float bw   = w - 14f;
-            DrawSolid(new Rect(0, barY, bw, 7f), ColBarBg);
-            DrawSolid(new Rect(0, barY, bw * (score / 100f), 7f), barColor);
-
-            // WorkModifier badge (skip when at baseline 1.0)
             if (System.Math.Abs(npc.workModifier - 1.0f) > 0.005f)
             {
                 string wm = npc.workModifier > 1f
-                    ? $"+{(npc.workModifier - 1f) * 100f:F0}% spd"
-                    : $"-{(1f - npc.workModifier) * 100f:F0}% spd";
+                    ? $"+{(npc.workModifier - 1f) * 100f:F0}% work"
+                    : $"-{(1f - npc.workModifier) * 100f:F0}% work";
                 var wmPrev = GUI.color;
                 GUI.color = npc.workModifier > 1f ? ColBarGreen : ColBarWarn;
-                GUI.Label(new Rect(bw * (score / 100f) + 2f, barY - 1f, 60f, 12f), wm, _sSub);
+                GUI.Label(new Rect(bw - 60f, y, 60f, 13f), wm, _sSub);
                 GUI.color = wmPrev;
             }
-
-            // Active modifiers list (up to 3 shown, with countdown)
-            if (npc.moodModifiers != null && npc.moodModifiers.Count > 0)
+            else
             {
-                float mx = 0f; float my = barY + 9f;
-                int shown = 0;
-                foreach (var mod in npc.moodModifiers)
-                {
-                    if (shown >= 3) break;
-                    float remaining = mod.expiresAtTick < 0
-                        ? -1f
-                        : Mathf.Max(0f, (mod.expiresAtTick - _gm.Station.tick) * 0.5f); // 0.5s/tick
-                    string countdown = mod.expiresAtTick < 0 ? "∞" : $"{remaining:F0}s";
-                    string sign = mod.delta >= 0 ? "+" : "";
-                    var mc = mod.delta >= 0 ? ColBarGreen : ColBarCrit;
-                    var mp = GUI.color; GUI.color = mc;
-                    GUI.Label(new Rect(mx, my, w - 14f, 11f),
-                              $"  {mod.eventId}  {sign}{mod.delta:F0}  [{countdown}]", _sSub);
-                    GUI.color = mp;
-                    my += 11f; shown++;
-                }
+                GUI.Label(new Rect(bw - 30f, y, 30f, 13f), $"{score:F0}%", _sSub);
             }
+
+            // Fill bar
+            DrawSolid(new Rect(0, y + 14f, bw, 8f), ColBarBg);
+            DrawSolid(new Rect(0, y + 14f, bw * (score / 100f), 8f), barColor);
         }
 
         // ── Work Assignment grid ──────────────────────────────────────────────
@@ -2886,8 +2879,7 @@ namespace Waystation.UI
         // ── Rooms tab ─────────────────────────────────────────────────────────
         private Vector2 _roomsScroll;
         private string  _roomHoveredKey  = null;  // canonical key of flood-filled hovered room
-        private string  _roomSelectedKey = null;  // canonical key of room for role picker
-        private bool    _roomPickerOpen  = false;
+
 
         private static readonly (string id, string label, Color col)[] RoomRoles =
         {
@@ -3048,6 +3040,17 @@ namespace Waystation.UI
             GUI.color = Color.white;
             y += 34f;
 
+            // Telescope Mode toggle (bypass map layer research / equipment requirements)
+            bool teleMode = Waystation.UI.SystemMapController.TelescopeMode;
+            GUI.color = teleMode
+                ? new Color(0.40f, 0.82f, 1.00f, 1f)
+                : new Color(0.55f, 0.60f, 0.70f, 0.95f);
+            if (GUI.Button(new Rect(Pad, y, cw, 28f),
+                           teleMode ? "🔭 Telescope Mode  ON" : "🔭 Telescope Mode  OFF", _sBtnWide))
+                Waystation.UI.SystemMapController.TelescopeMode = !teleMode;
+            GUI.color = Color.white;
+            y += 34f;
+
             DrawSolid(new Rect(Pad, y, cw, 1f), ColDivider); y += 14f;
 
             // Ships section
@@ -3056,6 +3059,27 @@ namespace Waystation.UI
             {
                 if (GUI.Button(new Rect(Pad, y, cw, 28f), "\u25b6 Call Trade Ship", _sBtnWide))
                     _gm.Visitors.SpawnTradeShip(_gm.Station);
+                y += 34f;
+            }
+
+            DrawSolid(new Rect(Pad, y, cw, 1f), ColDivider); y += 14f;
+
+            // Research section
+            GUI.Label(new Rect(Pad, y, cw, 18f), "Research", _sLabel); y += 24f;
+            if (_ready && _gm != null)
+            {
+                if (GUI.Button(new Rect(Pad, y, cw, 28f), "Unlock All Research", _sBtnWide))
+                {
+                    foreach (var kv in _gm.Registry.ResearchNodes)
+                    {
+                        var node   = kv.Value;
+                        var bState = _gm.Station.research.branches[node.branch];
+                        if (bState.unlockedNodeIds.Contains(node.id)) continue;
+                        bState.unlockedNodeIds.Add(node.id);
+                        foreach (var tag in node.unlockTags)
+                            _gm.Station.SetTag(tag);
+                    }
+                }
                 y += 34f;
             }
 
@@ -3796,13 +3820,12 @@ namespace Waystation.UI
             const float SelectorH = 24f;
             float sx = area.x;
             float sy = area.y;
-            float btnW = Mathf.Min((w - 8f) / Mathf.Max(1, crew.Count), 80f);
+            float btnW = w / Mathf.Max(1, crew.Count);
             foreach (var n in crew)
             {
                 bool sel = n.uid == _skillsSelectedNpcUid;
-                if (GUI.Button(new Rect(sx, sy, btnW - 2f, SelectorH),
-                               n.name.Length > MaxNpcNameDisplayLength
-                                   ? n.name.Substring(0, MaxNpcNameDisplayLength) : n.name,
+                if (GUI.Button(new Rect(sx, sy, btnW - 1f, SelectorH),
+                               n.name,
                                sel ? _sTabOn : _sTabOff))
                 {
                     _skillsSelectedNpcUid  = n.uid;
