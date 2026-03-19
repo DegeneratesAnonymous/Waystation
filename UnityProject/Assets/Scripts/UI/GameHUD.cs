@@ -23,11 +23,19 @@ namespace Waystation.UI
     public class GameHUD : MonoBehaviour
     {
         // ── Sizing ────────────────────────────────────────────────────────────
-        private const float TabW       = 68f;
-        private const float DrawerW    = 360f;
+        private const float TabW       = 80f;
+        private const float DrawerW    = 400f;
         private const float DevDrawerW = 220f;
         private const float Pad        = 12f;
         private const float AnimK      = 12f;
+
+        // ── Font & layout scale ───────────────────────────────────────────────
+        // Change FontSize here to resize the whole UI. Everything derives from it.
+        private const int   FontSize    = 10;   // body text (px) — use multiples of 8 for crispest rendering
+        private const int   FontSizeHdr = 16;   // panel / section headers
+        private static float LineH  => FontSize + 6f;    // one text row: glyph + descenders + gap
+        private static float BtnH   => FontSize + 12f;   // standard button height
+        private static float CharW  => FontSize * 0.80f; // approx char width for label-width math
 
         // ── Palette ───────────────────────────────────────────────────────────
         private static readonly Color ColBar      = new Color(0.08f, 0.09f, 0.14f, 0.97f);
@@ -52,13 +60,15 @@ namespace Waystation.UI
             (Tab.Crew,        "Crew"),
             (Tab.Station,     "Station"),
             (Tab.Comms,       "Comms"),
-            (Tab.AwayMission, "Away"),
-            (Tab.Rooms,       "Rooms"),
             (Tab.Research,    "Research"),
             (Tab.Map,         "Map"),
             (Tab.Views,       "Views"),
             (Tab.Settings,    "Settings"),
         };
+
+        // ── Map sub-panel ─────────────────────────────────────────────────────
+        private enum MapSubPanel { Map, Away }
+        private MapSubPanel _mapSub = MapSubPanel.Map;
 
         // ── State ─────────────────────────────────────────────────────────────
         private GameManager _gm;
@@ -91,13 +101,17 @@ namespace Waystation.UI
         private float    _hailToastTimer = 0f;
 
         // ── Crew / Work sub-panel state ───────────────────────────────────────
-        private enum CrewSubPanel { Roster, Work, Departments, Ranks, Relationships, Skills }
-        private CrewSubPanel _crewSub = CrewSubPanel.Roster;
+        private enum CrewSubPanel { Crew, Work, Ranks, Relationships }
+        private CrewSubPanel _crewSub = CrewSubPanel.Crew;
         private Vector2      _workScroll;
         private Vector2      _deptScroll;
         // ── Rename flow: uid of department being renamed, text buffer
         private string _renamingDeptUid  = "";
         private string _renameDeptBuffer = "";
+        // ── Crew detail view ──────────────────────────────────────────────────
+        private string  _crewDetailNpcUid = "";   // non-empty = showing detail page for this NPC
+        private Vector2 _crewListScroll;
+        private bool    _crewDeptConfigMode = false; // true = dept rename/delete controls visible
 
         // ── Skills UI constants ───────────────────────────────────────────────
         private const int MaxNpcNameDisplayLength    = 9;
@@ -134,13 +148,13 @@ namespace Waystation.UI
         private static readonly (string id, string label)[] WorkJobCols =
         {
             ("job.haul",                "Haul"),
-            ("job.refine",              "Refine"),
-            ("job.craft",               "Craft"),
-            ("job.guard_post",          "Guard"),
-            ("job.patrol",              "Patrol"),
-            ("job.build",               "Build"),
-            ("job.module_maintenance",  "Maint."),
-            ("job.resource_management", "ResMgmt"),
+            ("job.refine",              "Rfn"),
+            ("job.craft",               "Crft"),
+            ("job.guard_post",          "Grd"),
+            ("job.patrol",              "Ptrl"),
+            ("job.build",               "Bld"),
+            ("job.module_maintenance",  "Mnt"),
+            ("job.resource_management", "Mgmt"),
         };
 
         // ── Dev tool fill amounts ─────────────────────────────────────────────
@@ -160,6 +174,7 @@ namespace Waystation.UI
         private GUIStyle  _sBtnSmall, _sBtnWide, _sBtnDanger;
         private GUIStyle  _sTextField;
         private bool      _stylesReady;
+        private Font      _gameFont;
 
         // ── Auto-install ──────────────────────────────────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -410,6 +425,7 @@ namespace Waystation.UI
         private void OnGUI()
         {
             EnsureStyles();
+            if (_gameFont != null) GUI.skin.font = _gameFont;
 
             float sw = Screen.width;
             float sh = Screen.height;
@@ -493,8 +509,8 @@ namespace Waystation.UI
                 }
             }
 
-            // ── Rooms tab overlay ─────────────────────────────────────────────
-            if (_active == Tab.Rooms && _white != null)
+            // ── Rooms tab overlay (triggered from Build → Rooms sub-panel) ────────
+            if (_active == Tab.Build && _buildSub == BuildSubPanel.Rooms && _white != null)
             {
                 var roomCam = Camera.main;
                 if (roomCam != null) DrawRoomsOverlay(roomCam);
@@ -645,7 +661,7 @@ namespace Waystation.UI
                 _active = Tab.None;
             GUI.color = cbPrev;
 
-            GUI.Label(new Rect(Pad, 18f, w - 36f, 26f), title, _sHeader);
+            GUI.Label(new Rect(Pad, 18f, w - 36f, 22f), title, _sHeader);
             DrawSolid(new Rect(Pad, 50f, w - Pad * 2f, 1f), ColDivider);
 
             float cw      = w - Pad * 2f;
@@ -789,7 +805,7 @@ namespace Waystation.UI
             {
                 DrawSolid(new Rect(area.x, area.y + TBH, w, 18f), new Color(0.4f, 0.1f, 0.1f, 0.5f));
                 GUI.color = new Color(1f, 0.6f, 0.6f);
-                GUI.Label(new Rect(area.x + 6f, area.y + TBH + 2f, w - 12f, 14f),
+                GUI.Label(new Rect(area.x + 6f, area.y + TBH + 2f, w - 12f, LineH),
                           "Click a tile to deconstruct it.  RMB / Esc to cancel.", _sSub);
                 GUI.color = tbPrev;
                 tbH += 18f;
@@ -900,7 +916,7 @@ namespace Waystation.UI
             foreach (var catGroup in byCategory)
             {
                 DrawSolid(new Rect(0, y, cw, 20f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
-                GUI.Label(new Rect(4f, y + 3f, cw - 8f, 14f), CategoryDisplayName(catGroup.Key), _sSub);
+                GUI.Label(new Rect(4f, y + 3f, cw - 8f, LineH), CategoryDisplayName(catGroup.Key), _sSub);
                 y += 22f;
 
                 foreach (var defn in catGroup.Value)
@@ -1091,14 +1107,14 @@ namespace Waystation.UI
                         GUI.color = new Color(0.90f, 0.78f, 0.20f, 1f);
                         GUI.Label(new Rect(10f, y + 4f, cw - 90f, 16f), $"\u2605 {typeName}", _sLabel);
                         GUI.color = new Color(0.85f, 0.72f, 0.18f, 0.9f);
-                        GUI.Label(new Rect(cw - 86f, y + 5f, 80f, 14f), "BONUS ACTIVE", _sSub);
+                        GUI.Label(new Rect(cw - 86f, y + 5f, 80f, LineH), "BONUS ACTIVE", _sSub);
                     }
                     else
                     {
                         GUI.color = new Color(0.65f, 0.65f, 0.75f, 1f);
                         GUI.Label(new Rect(10f, y + 4f, cw - 90f, 16f), $"\u25c7 {typeName}", _sLabel);
                         GUI.color = new Color(0.50f, 0.50f, 0.60f, 0.9f);
-                        GUI.Label(new Rect(cw - 68f, y + 5f, 62f, 14f), "inactive", _sSub);
+                        GUI.Label(new Rect(cw - 68f, y + 5f, 62f, LineH), "inactive", _sSub);
                     }
                     GUI.color = colPrev;
 
@@ -1109,7 +1125,7 @@ namespace Waystation.UI
                     string wbLabel = bs.workbenchCount > cap
                         ? $"Workbenches: {bs.workbenchCount} (cap {cap} earn bonus)"
                         : $"Workbenches: {bs.workbenchCount}/{cap}";
-                    GUI.Label(new Rect(10f, y + 22f, cw - 14f, 14f), wbLabel, _sSub);
+                    GUI.Label(new Rect(10f, y + 22f, cw - 14f, LineH), wbLabel, _sSub);
 
                     float ry2 = y + 28f;
 
@@ -1274,7 +1290,7 @@ namespace Waystation.UI
                 "complete"      => "Complete",
                 _               => f.status
             };
-            GUI.Label(new Rect(4f, y + 20f, cw - 8f, 14f), statusLabel, _sSub);
+            GUI.Label(new Rect(4f, y + 20f, cw - 8f, LineH), statusLabel, _sSub);
 
             if (f.status == "constructing" || f.status == "awaiting_haul")
             {
@@ -1291,7 +1307,7 @@ namespace Waystation.UI
                     int have = f.hauledMaterials.ContainsKey(m.Key) ? f.hauledMaterials[m.Key] : 0;
                     sb.Append($"{ItemDisplayName(m.Key)} {have}/{m.Value}  ");
                 }
-                GUI.Label(new Rect(4f, y + 44f, cw - 8f, 14f), sb.ToString(), _sSub);
+                GUI.Label(new Rect(4f, y + 44f, cw - 8f, LineH), sb.ToString(), _sSub);
             }
 
             if (f.status != "complete")
@@ -1310,7 +1326,7 @@ namespace Waystation.UI
                     _foundSettingsOpen = settingsOpen ? "" : f.uid;
 
                 // Rotation reminder label
-                GUI.Label(new Rect(4f, y + 38f, cw - 8f, 14f),
+                GUI.Label(new Rect(4f, y + 38f, cw - 8f, LineH),
                     $"{f.cargoCapacity} items  ·  {f.tileRotation}° rotation", _sSub);
             }
             else if (isPlanter)
@@ -1329,7 +1345,7 @@ namespace Waystation.UI
                     3 => "Mature — ready to harvest",
                     _ => "Unknown"
                 };
-                GUI.Label(new Rect(4f, y + 38f, cw - 8f, 14f), stageLabel, _sSub);
+                GUI.Label(new Rect(4f, y + 38f, cw - 8f, LineH), stageLabel, _sSub);
             }
 
             y += 70f;
@@ -1391,7 +1407,7 @@ namespace Waystation.UI
                 // Crop picker — only when empty
                 if (f.growthStage == 0 && _gm.Registry.Crops.Count > 0)
                 {
-                    GUI.Label(new Rect(4f, y, cw - 8f, 14f), "Assign crop:", _sSub);
+                    GUI.Label(new Rect(4f, y, cw - 8f, LineH), "Assign crop:", _sSub);
                     y += 16f;
                     foreach (var kv in _gm.Registry.Crops)
                     {
@@ -1483,7 +1499,7 @@ namespace Waystation.UI
                 _buildInfoOpen = infoOpen ? "" : defn.id;
             GUI.color = new Color(1f, 1f, 1f, alpha);
 
-            GUI.Label(new Rect(4f, y + 26f, cw * 0.60f, 14f),
+            GUI.Label(new Rect(4f, y + 26f, cw * 0.60f, LineH),
                       $"{CategoryDisplayName(defn.category).Replace("\u2500\u2500 ","").Replace(" \u2500\u2500","")}  \u00b7  {defn.buildTimeTicks}t", _sSub);
 
             if (!canPlace && reason != null)
@@ -1524,14 +1540,14 @@ namespace Waystation.UI
                 iy += 22f;
                 if (defn.requiredMaterials.Count == 0)
                 {
-                    GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
+                    GUI.Label(new Rect(14f, iy, cw - 20f, LineH), "None", _sSub);
                     iy += 18f;
                 }
                 else
                 {
                     foreach (var m in defn.requiredMaterials)
                     {
-                        GUI.Label(new Rect(14f, iy, cw - 20f, 14f),
+                        GUI.Label(new Rect(14f, iy, cw - 20f, LineH),
                                   $"\u2022 {ItemDisplayName(m.Key)}  \u00d7{m.Value}", _sSub);
                         iy += 18f;
                     }
@@ -1543,7 +1559,7 @@ namespace Waystation.UI
                 iy += 22f;
                 if (defn.requiredSkills.Count == 0)
                 {
-                    GUI.Label(new Rect(14f, iy, cw - 20f, 14f), "None", _sSub);
+                    GUI.Label(new Rect(14f, iy, cw - 20f, LineH), "None", _sSub);
                     iy += 18f;
                 }
                 else
@@ -1558,9 +1574,9 @@ namespace Waystation.UI
                         Color skillCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
                         var pc = GUI.color;
                         GUI.color = skillCol;
-                        GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "\u2713" : "\u2715", _sSub);
+                        GUI.Label(new Rect(14f, iy, 18f, LineH), met ? "\u2713" : "\u2715", _sSub);
                         GUI.color = prevCol;
-                        GUI.Label(new Rect(32f, iy, cw - 38f, 14f),
+                        GUI.Label(new Rect(32f, iy, cw - 38f, LineH),
                                   $"{sk.Key}  (level {sk.Value}+)", _sSub);
                         iy += 18f;
                     }
@@ -1577,9 +1593,9 @@ namespace Waystation.UI
                         Color tagCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
                         var pc = GUI.color;
                         GUI.color = tagCol;
-                        GUI.Label(new Rect(14f, iy, 18f, 14f), met ? "\u2713" : "\u2715", _sSub);
+                        GUI.Label(new Rect(14f, iy, 18f, LineH), met ? "\u2713" : "\u2715", _sSub);
                         GUI.color = prevCol;
-                        GUI.Label(new Rect(32f, iy, cw - 38f, 14f), tag, _sSub);
+                        GUI.Label(new Rect(32f, iy, cw - 38f, LineH), tag, _sSub);
                         iy += 18f;
                     }
                 }
@@ -1634,15 +1650,27 @@ namespace Waystation.UI
         {
             if (_gm?.Station == null) return;
 
+            // If a detail view is open, show it instead of the list.
+            if (!string.IsNullOrEmpty(_crewDetailNpcUid))
+            {
+                if (_gm.Station.npcs.TryGetValue(_crewDetailNpcUid, out var detailNpc))
+                {
+                    DrawCrewDetail(area, w, h, detailNpc);
+                    return;
+                }
+                _crewDetailNpcUid = "";
+            }
+
             // ── Sub-panel selector ────────────────────────────────────────────
-            const float SubTabH = 30f;
+            float SubTabH = BtnH + 10f;
             float subY  = area.y;
-            float tabW  = Mathf.Floor(w / 6f);
+            float tabW  = Mathf.Floor(w / 4f);
             (string lbl, CrewSubPanel panel)[] crewTabs =
             {
-                ("Roster", CrewSubPanel.Roster),   ("Work",   CrewSubPanel.Work),
-                ("Depts",  CrewSubPanel.Departments), ("Ranks", CrewSubPanel.Ranks),
-                ("Social", CrewSubPanel.Relationships), ("Skills", CrewSubPanel.Skills),
+                ("Crew",   CrewSubPanel.Crew),
+                ("Work",   CrewSubPanel.Work),
+                ("Ranks",  CrewSubPanel.Ranks),
+                ("Social", CrewSubPanel.Relationships),
             };
             for (int ti = 0; ti < crewTabs.Length; ti++)
             {
@@ -1660,129 +1688,329 @@ namespace Waystation.UI
 
             switch (_crewSub)
             {
-                case CrewSubPanel.Roster:        DrawCrewRoster(subArea, w, subH);       break;
+                case CrewSubPanel.Crew:          DrawCrewList(subArea, w, subH);         break;
                 case CrewSubPanel.Work:          DrawCrewWork(subArea, w, subH);         break;
-                case CrewSubPanel.Departments:   DrawDepartments(subArea, w, subH);      break;
                 case CrewSubPanel.Ranks:         DrawRanks(subArea, w, subH);            break;
                 case CrewSubPanel.Relationships: DrawRelationships(subArea, w, subH);    break;
-                case CrewSubPanel.Skills:        DrawCrewSkills(subArea, w, subH);       break;
             }
         }
 
-        private void DrawCrewRoster(Rect area, float w, float h)
+        // ── Crew list (departments + roster merged) ───────────────────────────
+        // Compact cards grouped by department. Clicking a card opens the detail view.
+        // Department headers have inline rename / add / remove controls.
+        private void DrawCrewList(Rect area, float w, float h)
         {
-            var crew = _gm.Station.GetCrew();
+            var s    = _gm.Station;
+            var crew = s.GetCrew();
 
-            // ── Summary strip ─────────────────────────────────────────────────
-            const float SumH = 78f;
+            // ── Summary strip + toolbar ───────────────────────────────────────
+            float SumH = LineH * 2f + BtnH + 20f;
             DrawSolid(new Rect(area.x, area.y, w, SumH), ColSummaryBg);
-
-            // Use MoodScore (0–100) for the happiness bar; fall back to legacy mood if needed
-            float avgMoodScore = 50f;
-            int   sickCount = 0, injCount = 0, crisisCount = 0;
+            float avgMood = 50f; int sickC = 0, injC = 0;
             foreach (var n in crew)
             {
-                avgMoodScore += n.moodScore;
-                if (n.statusTags.Contains("sick")) sickCount++;
-                if (n.injuries > 0)                injCount++;
-                if (n.inCrisis)                    crisisCount++;
+                avgMood += n.moodScore;
+                if (n.statusTags.Contains("sick")) sickC++;
+                if (n.injuries > 0) injC++;
             }
-            if (crew.Count > 0) avgMoodScore /= crew.Count;
-            float happinessPct = avgMoodScore;  // already 0–100
-
-            float sy = area.y + 7f;
-            string crisisStr = crisisCount > 0 ? $"   Crisis: {crisisCount}" : "";
+            if (crew.Count > 0) avgMood /= crew.Count;
+            float sy = area.y + 6f;
             GUI.Label(new Rect(area.x + 8f, sy, w - 8f, 16f),
-                $"Crew: {crew.Count}   Mood: {happinessPct:F0}%{crisisStr}   Sick: {sickCount}   Injured: {injCount}",
-                _sSub);
-            sy += 20f;
+                $"Crew: {crew.Count}  ·  Mood: {avgMood:F0}%  ·  Sick: {sickC}  ·  Injured: {injC}", _sSub);
+            sy += 18f;
             float bw = w - 16f;
             DrawSolid(new Rect(area.x + 8f, sy, bw, 8f), ColBarBg);
-            Color hc = happinessPct >= 60f ? ColBarGreen
-                     : happinessPct >= 35f ? ColBarWarn : ColBarCrit;
-            DrawSolid(new Rect(area.x + 8f, sy, bw * (happinessPct / 100f), 8f), hc);
+            Color hc = avgMood >= 60f ? ColBarGreen : avgMood >= 35f ? ColBarWarn : ColBarCrit;
+            DrawSolid(new Rect(area.x + 8f, sy, bw * (avgMood / 100f), 8f), hc);
             sy += 14f;
-            string healthLine = (sickCount == 0 && injCount == 0)
-                ? "All crew healthy"
-                : $"{sickCount} sick · {injCount} injured  —  check Medical Bay";
-            GUI.Label(new Rect(area.x + 8f, sy, w - 8f, 16f), healthLine, _sSub);
 
-            // ── Scrollable crew list ──────────────────────────────────────────
-            // Each NPC row: name, dept·class, job, mood bar, needs, status
-            const float RowH  = 136f;
-            float listTop  = area.y + SumH + 6f;
-            float listH    = h - SumH - 6f;
-            float innerH   = Mathf.Max(listH, crew.Count * RowH);
-            _crewScroll = GUI.BeginScrollView(new Rect(area.x, listTop, w, listH),
-                          _crewScroll, new Rect(0, 0, w - 14f, innerH));
-            float y = 0f;
-            foreach (var npc in crew)
-            {
-                string cls  = (npc.classId ?? "").Replace("class.", "");
-                string job  = _gm.Jobs.GetJobLabel(npc);
-                string rank = npc.rank switch { 1 => "★ Officer", 2 => "★★ Senior", 3 => "★★★ Command", _ => "" };
-
-                // Resolve dept name up front
-                string deptLabel = "Crewman";
-                if (npc.departmentId != null)
-                    foreach (var d in _gm.Station.departments)
-                        if (d.uid == npc.departmentId) { deptLabel = d.name; break; }
-
-                // Row 0: Name (bold) | rank badge OR mood label (mood-colored)
-                GUI.Label(new Rect(0, y, w * 0.58f, 18f), npc.name, _sLabel);
-                if (rank.Length > 0)
+            // Toolbar row — add more buttons here freely; widths auto-distribute
+            Color cfgCol = _crewDeptConfigMode
+                ? new Color(0.30f, 0.62f, 1.00f, 1f)
+                : new Color(0.55f, 0.60f, 0.70f, 1f);
+            sy = ButtonRow(area.x + 8f, sy, w - 16f, 0f,
+                ("⚙ Config Depts", cfgCol, () => _crewDeptConfigMode = !_crewDeptConfigMode),
+                ("+ New Dept", null, () =>
                 {
-                    var rPrev = GUI.color; GUI.color = new Color(1.00f, 0.85f, 0.25f);
-                    GUI.Label(new Rect(w * 0.60f, y + 2f, w * 0.40f, 14f), rank, _sSub);
-                    GUI.color = rPrev;
+                    var nd = Department.Create(
+                        $"dept.custom_{System.Guid.NewGuid().ToString("N")[..4]}",
+                        "New Department");
+                    s.departments.Add(nd);
+                    _renamingDeptUid    = nd.uid;
+                    _renameDeptBuffer   = nd.name;
+                    _crewDeptConfigMode = true;
+                }));
+
+            // ── Scrollable body ───────────────────────────────────────────────
+            float CardH   = LineH * 4f + 10f;   // compact card height
+            float DeptHdH = LineH * 2f;          // department header height
+
+            // Group crew by dept (null dept → "Unassigned")
+            var depts      = s.departments;
+            var unassigned = crew.FindAll(n => n.departmentId == null
+                || !depts.Exists(d => d.uid == n.departmentId));
+
+            // Calculate virtual scroll height
+            float innerH = 8f;
+            foreach (var dept in depts)
+            {
+                int cnt = crew.FindAll(n => n.departmentId == dept.uid).Count;
+                innerH += DeptHdH + cnt * CardH;
+            }
+            if (unassigned.Count > 0) innerH += DeptHdH + unassigned.Count * CardH;
+            innerH = Mathf.Max(innerH, h - SumH - 4f);
+
+            float listTop = area.y + SumH + 4f;
+            float listH   = h - SumH - 4f;
+            _crewListScroll = GUI.BeginScrollView(
+                new Rect(area.x, listTop, w, listH),
+                _crewListScroll,
+                new Rect(0, 0, w - 22f, innerH));
+
+            float y = 0f;
+            float cw = w - 22f;
+
+            // ── Helper: draw one compact crew card ────────────────────────────
+            void DrawCrewCard(NPCInstance npc)
+            {
+                string rankLbl  = npc.rank switch { 1 => "★", 2 => "★★", 3 => "★★★", _ => "·" };
+                string taskLbl  = npc.missionUid != null ? "✈ Away"
+                                : string.IsNullOrEmpty(npc.currentJobId) ? "Idle"
+                                : _gm.Jobs.GetJobLabel(npc);
+                float  mood     = npc.moodScore;
+                float  hunger   = GetNeed(npc, "hunger");
+                float  health01 = npc.injuries > 0
+                    ? Mathf.Clamp01(1f - npc.injuries * 0.2f)
+                    : (npc.statusTags.Contains("sick") ? 0.5f : 1f);
+
+                bool  crisis   = npc.inCrisis;
+                Color cardBg   = crisis
+                    ? new Color(0.20f, 0.06f, 0.06f, 0.92f)
+                    : new Color(0.09f, 0.11f, 0.19f, 0.90f);
+                DrawSolid(new Rect(2f, y, cw - 2f, CardH - 3f), cardBg);
+
+                // Portrait placeholder (42×42 grey square with initials)
+                const float PW = 42f;
+                DrawSolid(new Rect(4f, y + 3f, PW, PW), new Color(0.18f, 0.22f, 0.32f, 1f));
+                string initials = npc.name.Length >= 2
+                    ? $"{npc.name[0]}{npc.name[npc.name.LastIndexOf(' ') + 1]}"
+                    : npc.name[..1];
+                GUI.Label(new Rect(4f, y + 13f, PW, 20f),
+                          initials, new GUIStyle(_sSub) { fontSize = 14, alignment = TextAnchor.MiddleCenter });
+
+                float tx = PW + 10f;
+                float tw = cw - tx - 4f;
+
+                // Name + rank
+                GUI.Label(new Rect(tx, y + 3f, tw * 0.70f, 16f), npc.name, _sLabel);
+                var rankPrev = GUI.color;
+                GUI.color = npc.rank > 0 ? new Color(1f, 0.85f, 0.25f) : new Color(0.45f, 0.50f, 0.62f);
+                GUI.Label(new Rect(tx + tw * 0.72f, y + 4f, tw * 0.28f, 16f), rankLbl, _sSub);
+                GUI.color = rankPrev;
+
+                // Task
+                GUI.Label(new Rect(tx, y + 19f, tw, 16f), taskLbl, _sSub);
+
+                // Mini bars: Mood / Health — label + 8px bar
+                void MiniBar(string lbl, float val, float yOff, Color col)
+                {
+                    float lw2 = 46f, bx2 = tx + lw2 + 2f, bw2 = tw - lw2 - 4f;
+                    GUI.Label(new Rect(tx, y + yOff, lw2, 16f), lbl, _sSub);
+                    DrawSolid(new Rect(bx2, y + yOff + 4f, bw2, 8f), ColBarBg);
+                    DrawSolid(new Rect(bx2, y + yOff + 4f, bw2 * Mathf.Clamp01(val), 8f), col);
+                }
+                Color moodCol = MoodSystem.GetMoodColor(mood);
+                MiniBar("Mood",   mood / 100f, 37f, moodCol);
+                MiniBar("Health", health01,     54f,
+                        health01 > 0.6f ? ColBarGreen : health01 > 0.3f ? ColBarWarn : ColBarCrit);
+
+                // Invisible click target over the full card → detail view
+                if (GUI.Button(new Rect(0f, y, cw, CardH - 3f), "", GUIStyle.none))
+                    _crewDetailNpcUid = npc.uid;
+
+                // Crisis badge
+                if (crisis)
+                {
+                    var cp2 = GUI.color; GUI.color = ColBarCrit;
+                    GUI.Label(new Rect(cw - 52f, y + 3f, 50f, LineH), "⚠ Crisis", _sSub);
+                    GUI.color = cp2;
+                }
+
+                y += CardH;
+            }
+
+            // ── Draw departments ──────────────────────────────────────────────
+            for (int di = 0; di < depts.Count; di++)
+            {
+                var dept     = depts[di];
+                var deptCrew = crew.FindAll(n => n.departmentId == dept.uid);
+
+                // Department header
+                DrawSolid(new Rect(0f, y, cw, DeptHdH - 2f), new Color(0.12f, 0.15f, 0.25f, 1f));
+
+                if (_crewDeptConfigMode && _renamingDeptUid == dept.uid)
+                {
+                    _renameDeptBuffer = GUI.TextField(
+                        new Rect(4f, y + 4f, cw - 74f, 20f), _renameDeptBuffer, 30, _sTextField);
+                    if (GUI.Button(new Rect(cw - 68f, y + 4f, 32f, 20f), "OK", _sBtnSmall))
+                    {
+                        string t = _renameDeptBuffer.Trim();
+                        if (t.Length > 0) dept.name = t;
+                        _renamingDeptUid = "";
+                    }
+                    if (GUI.Button(new Rect(cw - 34f, y + 4f, 28f, 20f), "✕", _sBtnSmall))
+                        _renamingDeptUid = "";
+                }
+                else if (_crewDeptConfigMode)
+                {
+                    // Config mode: show name + Rename + Delete
+                    GUI.Label(new Rect(6f, y + 5f, cw * 0.48f, 18f),
+                              $"{dept.name}  ({deptCrew.Count})", _sLabel);
+                    if (GUI.Button(new Rect(cw * 0.52f, y + 4f, 48f, 20f), "Rename", _sBtnSmall))
+                    {
+                        _renamingDeptUid  = dept.uid;
+                        _renameDeptBuffer = dept.name;
+                    }
+                    bool canRemove = deptCrew.Count == 0;
+                    var  rmPrev   = GUI.color;
+                    if (!canRemove) GUI.color = new Color(0.4f, 0.4f, 0.4f);
+                    if (GUI.Button(new Rect(cw * 0.52f + 52f, y + 4f, 42f, 20f), "✕ Del", _sBtnSmall)
+                        && canRemove)
+                    {
+                        s.departments.RemoveAt(di);
+                        di--;
+                        y += DeptHdH;
+                        continue;
+                    }
+                    GUI.color = rmPrev;
                 }
                 else
                 {
-                    var mPrev = GUI.color; GUI.color = MoodSystem.GetMoodColor(npc.moodScore);
-                    GUI.Label(new Rect(w * 0.60f, y + 2f, w * 0.40f, 14f), npc.MoodLabel(), _sSub);
-                    GUI.color = mPrev;
+                    // Normal mode: name + count only
+                    GUI.Label(new Rect(6f, y + 5f, cw - 8f, 18f),
+                              $"{dept.name}  ({deptCrew.Count})", _sLabel);
                 }
+                y += DeptHdH;
 
-                // Row 1: Dept · Class [· mood if ranked]
-                string subLine = rank.Length > 0
-                    ? $"{deptLabel}  ·  {cls}  ·  {npc.MoodLabel()}"
-                    : $"{deptLabel}  ·  {cls}";
-                GUI.Label(new Rect(0, y + 18f, w, 13f), subLine, _sSub);
-
-                // Row 2: Job label | Reassign button
-                GUI.Label(new Rect(0, y + 31f, w * 0.58f, 14f), $"Job: {job}", _sSub);
-                if (GUI.Button(new Rect(w * 0.60f, y + 30f, w * 0.40f, 20f),
-                               "Reassign", _sBtnSmall))
-                    _gm.Jobs.InterruptNpc(npc);
-
-                // ── Mood bar ─────────────────────────────────────────────────
-                DrawMoodBar(npc, w, y + 52f);
-
-                NeedBar("Hunger", GetNeed(npc, "hunger"), w - 14f, y + 76f);
-                NeedBar("Rest",   GetNeed(npc, "rest"),   w - 14f, y + 90f);
-                NeedBar("Sleep",  GetNeed(npc, "sleep"),  w - 14f, y + 104f);
-                if (npc.missionUid != null)
-                {
-                    var prev2 = GUI.color; GUI.color = new Color(0.4f, 0.8f, 1f);
-                    GUI.Label(new Rect(0, y + 118f, w - 14f, 13f), "\u2708 On away mission", _sSub);
-                    GUI.color = prev2;
-                }
-                else if (npc.statusTags.Count > 0 || npc.injuries > 0)
-                {
-                    string tags = string.Join(", ", npc.statusTags);
-                    if (npc.injuries > 0)
-                        tags += (tags.Length > 0 ? ", " : "") +
-                                $"{npc.injuries} injur{(npc.injuries == 1 ? "y" : "ies")}";
-                    var prev2 = GUI.color; GUI.color = ColBarWarn;
-                    GUI.Label(new Rect(0, y + 118f, w - 14f, 13f), tags, _sSub);
-                    GUI.color = prev2;
-                }
-                DrawSolid(new Rect(0, y + RowH - 4f, w - 14f, 1f), ColDivider);
-                y += RowH;
+                foreach (var npc in deptCrew)
+                    DrawCrewCard(npc);
             }
-            if (crew.Count == 0)
-                GUI.Label(new Rect(0, 0, w - 14f, 20f), "No crew assigned.", _sSub);
+
+            // ── Unassigned ────────────────────────────────────────────────────
+            if (unassigned.Count > 0)
+            {
+                DrawSolid(new Rect(0f, y, cw, DeptHdH - 2f), new Color(0.12f, 0.15f, 0.25f, 1f));
+                GUI.Label(new Rect(6f, y + 5f, cw - 8f, 18f),
+                          $"Unassigned  ({unassigned.Count})", _sLabel);
+                y += DeptHdH;
+                foreach (var npc in unassigned)
+                    DrawCrewCard(npc);
+            }
+
+            if (crew.Count == 0 && depts.Count == 0)
+                GUI.Label(new Rect(4f, y, cw, 20f), "No crew assigned.", _sSub);
+
             GUI.EndScrollView();
+        }
+
+        // ── NPC Detail view ───────────────────────────────────────────────────
+        // Shows full stats, skills, expertise, medical for one NPC.
+        private void DrawCrewDetail(Rect area, float w, float h, NPCInstance npc)
+        {
+            // Back button
+            if (GUI.Button(new Rect(area.x + 4f, area.y + 4f, 64f, 22f), "← Back", _sBtnSmall))
+            {
+                _crewDetailNpcUid  = "";
+                _expertisePanelOpen = false;
+                return;
+            }
+
+            // Name + rank header
+            string rankLbl = npc.rank switch { 1 => "★ Officer", 2 => "★★ Senior", 3 => "★★★ Command", _ => "Crew" };
+            string cls     = (npc.classId ?? "").Replace("class.", "");
+            string deptName = "Unassigned";
+            foreach (var d in _gm.Station.departments)
+                if (d.uid == npc.departmentId) { deptName = d.name; break; }
+
+            GUI.Label(new Rect(area.x + 72f, area.y + 4f, w - 76f, 18f), npc.name, _sHeader);
+            GUI.Label(new Rect(area.x + 72f, area.y + 22f, w - 76f, 16f),
+                      $"{rankLbl}  ·  {cls}  ·  {deptName}", _sSub);
+
+            _skillsSelectedNpcUid = npc.uid;
+
+            float sy = area.y + 42f;   // screen-space Y cursor
+            float cw = w - 8f;         // usable content width (4px margin each side)
+
+            if (_expertisePanelOpen)
+            {
+                DrawExpertiseSelectionPanel(new Rect(area.x, sy, w, h - 42f), w, h - 42f, npc);
+                return;
+            }
+
+            // ── Vitals — drawn directly at screen coordinates (no scroll view) ─
+            DrawSolid(new Rect(area.x, sy, w, 2f), ColDivider); sy += 6f;
+            GUI.Label(new Rect(area.x + 4f, sy, cw, 16f), "Vitals", _sLabel); sy += 20f;
+
+            void StatBar(string lbl, float val, Color col)
+            {
+                float lw2 = CharW * 18f;   // fits "Mood (Distressed)" — longest possible label
+                float bx  = area.x + lw2 + 6f;
+                float bw  = cw - lw2 - 40f;
+                GUI.Label(new Rect(area.x + 4f, sy, lw2, 16f), lbl, _sSub);
+                DrawSolid(new Rect(bx, sy + 4f, bw, 8f), ColBarBg);
+                DrawSolid(new Rect(bx, sy + 4f, bw * Mathf.Clamp01(val), 8f), col);
+                GUI.Label(new Rect(bx + bw + 4f, sy, 34f, 16f),
+                          $"{Mathf.RoundToInt(val * 100f)}%", _sSub);
+                sy += 18f;
+            }
+
+            Color moodCol = MoodSystem.GetMoodColor(npc.moodScore);
+            StatBar($"Mood ({MoodSystem.GetThresholdLabel(npc.moodScore)})", npc.moodScore / 100f, moodCol);
+            StatBar("Hunger",  GetNeed(npc, "hunger"),
+                    GetNeed(npc, "hunger") > 0.5f ? ColBarGreen : ColBarWarn);
+            StatBar("Rest",    GetNeed(npc, "rest"),
+                    GetNeed(npc, "rest") > 0.5f ? ColBarGreen : ColBarWarn);
+            StatBar("Sleep",   GetNeed(npc, "sleep"),
+                    GetNeed(npc, "sleep") > 0.5f ? ColBarGreen : ColBarWarn);
+
+            int   injuries  = npc.injuries;
+            bool  sick      = npc.statusTags.Contains("sick");
+            float health01  = injuries > 0 ? Mathf.Clamp01(1f - injuries * 0.2f)
+                            : (sick ? 0.5f : 1f);
+            StatBar("Health", health01,
+                    health01 > 0.6f ? ColBarGreen : health01 > 0.3f ? ColBarWarn : ColBarCrit);
+
+            if (injuries > 0 || sick || npc.inCrisis)
+            {
+                var cp = GUI.color;
+                GUI.color = ColBarWarn;
+                string statusStr = "";
+                if (npc.inCrisis)  statusStr += "⚠ Morale Crisis  ";
+                if (sick)          statusStr += "Sick  ";
+                if (injuries > 0)  statusStr += $"{injuries} injur{(injuries == 1 ? "y" : "ies")}";
+                GUI.Label(new Rect(area.x + 4f, sy, cw, 16f), statusStr.Trim(), _sSub);
+                GUI.color = cp;
+                sy += 18f;
+            }
+            sy += 4f;
+
+            // ── Current job ───────────────────────────────────────────────────
+            string jobLbl = npc.missionUid != null ? "✈ On away mission"
+                          : _gm.Jobs.GetJobLabel(npc);
+            GUI.Label(new Rect(area.x + 4f, sy, cw * 0.55f, 16f), $"Task: {jobLbl}", _sSub);
+            if (npc.missionUid == null)
+            {
+                if (GUI.Button(new Rect(area.x + cw * 0.57f, sy - 1f, cw * 0.43f, 18f), "Reassign", _sBtnSmall))
+                    _gm.Jobs.InterruptNpc(npc);
+            }
+            sy += 22f;
+
+            DrawSolid(new Rect(area.x, sy, w, 2f), ColDivider); sy += 4f;
+
+            // ── Skills section — positioned exactly where vitals ended ─────────
+            Rect skillsArea = new Rect(area.x, sy, w, area.y + h - sy);
+            if (skillsArea.height > 40f)
+                DrawNpcSkillDetail(skillsArea, w, skillsArea.height, npc);
         }
 
         /// <summary>
@@ -1805,9 +2033,9 @@ namespace Waystation.UI
             }
 
             // Label row: "Mood" | threshold (colored) | score% OR work modifier (right)
-            GUI.Label(new Rect(0, y, 38f, 13f), "Mood", _sSub);
+            GUI.Label(new Rect(0, y, 38f, 16f), "Mood", _sSub);
             var prev = GUI.color; GUI.color = barColor;
-            GUI.Label(new Rect(40f, y, 72f, 13f), npc.inCrisis ? "\u26a0 Crisis" : thresh, _sSub);
+            GUI.Label(new Rect(40f, y, 72f, 16f), npc.inCrisis ? "\u26a0 Crisis" : thresh, _sSub);
             GUI.color = prev;
             if (System.Math.Abs(npc.workModifier - 1.0f) > 0.005f)
             {
@@ -1816,17 +2044,17 @@ namespace Waystation.UI
                     : $"-{(1f - npc.workModifier) * 100f:F0}% work";
                 var wmPrev = GUI.color;
                 GUI.color = npc.workModifier > 1f ? ColBarGreen : ColBarWarn;
-                GUI.Label(new Rect(bw - 60f, y, 60f, 13f), wm, _sSub);
+                GUI.Label(new Rect(bw - 60f, y, 60f, 16f), wm, _sSub);
                 GUI.color = wmPrev;
             }
             else
             {
-                GUI.Label(new Rect(bw - 30f, y, 30f, 13f), $"{score:F0}%", _sSub);
+                GUI.Label(new Rect(bw - 30f, y, 30f, 16f), $"{score:F0}%", _sSub);
             }
 
             // Fill bar
-            DrawSolid(new Rect(0, y + 14f, bw, 8f), ColBarBg);
-            DrawSolid(new Rect(0, y + 14f, bw * (score / 100f), 8f), barColor);
+            DrawSolid(new Rect(0, y + LineH, bw, 8f), ColBarBg);
+            DrawSolid(new Rect(0, y + LineH, bw * (score / 100f), 8f), barColor);
         }
 
         // ── Work Assignment grid ──────────────────────────────────────────────
@@ -1838,9 +2066,9 @@ namespace Waystation.UI
             GUI.Label(new Rect(area.x, area.y, w, 18f),
                 "Toggle cells to allow/restrict jobs per crew member.", _sSub);
 
-            const float HeaderH = 38f;
-            const float RowH    = 26f;
-            const float NameW   = 80f;
+            float HeaderH = LineH + BtnH + 8f;
+            float RowH    = LineH + 10f;
+            float NameW   = CharW * 12f;
             float colW = (w - NameW - 14f) / WorkJobCols.Length;
 
             // Header row
@@ -1867,7 +2095,7 @@ namespace Waystation.UI
 
                 // NPC name
                 GUI.Label(new Rect(0, y + 5f, NameW - 4f, 16f),
-                          npc.name.Length > 9 ? npc.name[..9] : npc.name, _sSub);
+                          npc.name.Length > 11 ? npc.name[..11] : npc.name, _sSub);
 
                 for (int ci = 0; ci < WorkJobCols.Length; ci++)
                 {
@@ -1912,82 +2140,6 @@ namespace Waystation.UI
             }
             if (crew.Count == 0)
                 GUI.Label(new Rect(0, 0, w - 14f, 20f), "No crew to assign.", _sSub);
-            GUI.EndScrollView();
-        }
-
-        // ── Departments panel ─────────────────────────────────────────────────
-        private void DrawDepartments(Rect area, float w, float h)
-        {
-            var s    = _gm.Station;
-            var deps = s.departments;
-
-            GUI.Label(new Rect(area.x, area.y, w, 18f),
-                "Departments group crew and jobs. Rename or create custom ones.", _sSub);
-
-            // "+ New" button
-            if (GUI.Button(new Rect(area.x, area.y + 22f, w, 24f), "+ New Department", _sBtnWide))
-            {
-                var nd = Department.Create(
-                    $"dept.custom_{System.Guid.NewGuid().ToString("N")[..4]}",
-                    "New Department");
-                s.departments.Add(nd);
-                _renamingDeptUid  = nd.uid;
-                _renameDeptBuffer = nd.name;
-            }
-
-            float listTop = area.y + 52f;
-            const float RowH = 48f;
-            float innerH = Mathf.Max(h - 52f, deps.Count * RowH);
-            _deptScroll = GUI.BeginScrollView(
-                new Rect(area.x, listTop, w, h - 52f),
-                _deptScroll, new Rect(0, 0, w - 14f, innerH));
-
-            float y = 0f;
-            for (int di = 0; di < deps.Count; di++)
-            {
-                var dept = deps[di];
-                DrawSolid(new Rect(0, y, w - 14f, RowH - 4f),
-                          new Color(0.10f, 0.12f, 0.20f, 0.85f));
-
-                if (_renamingDeptUid == dept.uid)
-                {
-                    // Inline rename field
-                    _renameDeptBuffer = GUI.TextField(
-                        new Rect(4f, y + 6f, w - 80f, 20f),
-                        _renameDeptBuffer, 30, _sTextField);
-
-                    if (GUI.Button(new Rect(w - 72f, y + 6f, 34f, 20f), "OK", _sBtnSmall))
-                    {
-                        string trimmed = _renameDeptBuffer.Trim();
-                        if (trimmed.Length > 0) dept.name = trimmed;
-                        _renamingDeptUid = "";
-                    }
-                    if (GUI.Button(new Rect(w - 34f, y + 6f, 24f, 20f), "✕", _sBtnSmall))
-                        _renamingDeptUid = "";
-                }
-                else
-                {
-                    GUI.Label(new Rect(4f, y + 4f,  w * 0.6f, 18f), dept.name, _sLabel);
-
-                    // Rename button
-                    if (GUI.Button(new Rect(w * 0.65f, y + 4f, 46f, 18f), "Rename", _sBtnSmall))
-                    {
-                        _renamingDeptUid  = dept.uid;
-                        _renameDeptBuffer = dept.name;
-                    }
-
-                    // Jobs preview
-                    string preview = dept.allowedJobs.Count > 0
-                        ? string.Join(", ", dept.allowedJobs.ConvertAll(j => j.Replace("job.", "")))
-                        : "(all jobs)";
-                    if (preview.Length > 38) preview = preview[..35] + "…";
-                    GUI.Label(new Rect(4f, y + 26f, w - 8f, 14f), preview, _sSub);
-                }
-
-                y += RowH;
-            }
-            if (deps.Count == 0)
-                GUI.Label(new Rect(0, 0, w - 14f, 20f), "No departments defined.", _sSub);
             GUI.EndScrollView();
         }
 
@@ -2060,12 +2212,12 @@ namespace Waystation.UI
 
         private void NeedBar(string label, float value, float w, float y)
         {
-            float lw = w * 0.30f, bx = w * 0.32f, bw = w * 0.52f, bh = 10f;
-            GUI.Label(new Rect(0, y, lw, bh + 2f), label, _sSub);
-            DrawSolid(new Rect(bx, y + 1f, bw, bh - 2f), ColBarBg);
+            float lw = w * 0.30f, bx = w * 0.32f, bw = w * 0.52f;
+            GUI.Label(new Rect(0, y, lw, LineH), label, _sSub);
+            DrawSolid(new Rect(bx, y + LineH * 0.25f, bw, 8f), ColBarBg);
             Color fc = value > 0.5f ? ColBarGreen : value > 0.25f ? ColBarWarn : ColBarCrit;
-            DrawSolid(new Rect(bx, y + 1f, bw * value, bh - 2f), fc);
-            GUI.Label(new Rect(bx + bw + 4f, y, 30f, bh + 2f),
+            DrawSolid(new Rect(bx, y + LineH * 0.25f, bw * value, 8f), fc);
+            GUI.Label(new Rect(bx + bw + 4f, y, 30f, LineH),
                       Mathf.RoundToInt(value * 100f) + "%", _sSub);
         }
 
@@ -2203,7 +2355,7 @@ namespace Waystation.UI
             const float ListW = 140f;
             float listTop  = area.y + TabH + 6f;
             float listH    = h - TabH - 6f;
-            const float ListRowH = 40f;
+            float ListRowH = LineH * 2f + 8f;
             float innerH = Mathf.Max(listH, msgs.Count * ListRowH);
 
             _commsListScroll = GUI.BeginScrollView(
@@ -2224,7 +2376,7 @@ namespace Waystation.UI
                     GUI.color = prev;
                 }
                 string subj = msg.subject.Length > 18 ? msg.subject[..15] + "…" : msg.subject;
-                GUI.Label(new Rect(10f, ly + 3f,  ListW - 24f, 14f), subj,          _sSub);
+                GUI.Label(new Rect(10f, ly + 3f, ListW - 24f, LineH), subj, _sSub);
 
                 // Show expiry countdown or sender name
                 string rowSub;
@@ -2246,7 +2398,7 @@ namespace Waystation.UI
                                 (msg.expiresAtTick - _gm.Station.tick) <= 6;
                 var prevSub = GUI.color;
                 if (expiring) GUI.color = ColBarCrit;
-                GUI.Label(new Rect(10f, ly + 20f, ListW - 24f, 14f), rowSub, _sSub);
+                GUI.Label(new Rect(10f, ly + 3f + LineH, ListW - 24f, LineH), rowSub, _sSub);
                 GUI.color = prevSub;
 
                 if (GUI.Button(new Rect(0, ly, ListW - 14f, ListRowH - 3f), "", GUIStyle.none))
@@ -2415,11 +2567,11 @@ namespace Waystation.UI
                           new Color(0.09f, 0.10f, 0.16f, 0.9f));
 
                 // Ship name
-                GUI.Label(new Rect(Pad, ly + 3f, dw * 0.55f, 14f), ship.name, _sSub);
+                GUI.Label(new Rect(Pad, ly + 3f, dw * 0.55f, LineH), ship.name, _sSub);
 
                 // Status label
                 string statusTxt = ship.VisitStateLabel();
-                GUI.Label(new Rect(dw * 0.55f + Pad, ly + 3f, dw * 0.25f, 14f), statusTxt, _sSub);
+                GUI.Label(new Rect(dw * 0.55f + Pad, ly + 3f, dw * 0.25f, LineH), statusTxt, _sSub);
 
                 // Call button
                 float btnX  = dw * 0.80f + Pad;
@@ -2586,7 +2738,7 @@ namespace Waystation.UI
             // ── Capacity bar ──────────────────────────────────────────────────
             {
                 string capLabel = totalW > 0 ? $"{usedW:F0} / {totalW} units" : "No capacity";
-                GUI.Label(new Rect(0, y, w * 0.50f, 14f), capLabel, _sSub);
+                GUI.Label(new Rect(0, y, w * 0.50f, LineH), capLabel, _sSub);
 
                 if (totalW > 0)
                 {
@@ -2608,7 +2760,7 @@ namespace Waystation.UI
                     badgeText = "Filter: (nothing allowed)";
                 else
                     badgeText = "Filter: " + string.Join(", ", hold.cargoSettings.allowedTypes);
-                GUI.Label(new Rect(0, y, w, 14f), badgeText, _sSub);
+                GUI.Label(new Rect(0, y, w, LineH), badgeText, _sSub);
                 y += 16f;
             }
 
@@ -2633,12 +2785,12 @@ namespace Waystation.UI
             {
                 if (hold.inventory.Count == 0)
                 {
-                    GUI.Label(new Rect(8f, y, w, 14f), "Empty", _sSub);
+                    GUI.Label(new Rect(8f, y, w, LineH), "Empty", _sSub);
                     y += 16f;
                 }
                 else if (filter.Length > 0)
                 {
-                    GUI.Label(new Rect(8f, y, w, 14f), "No matching items.", _sSub);
+                    GUI.Label(new Rect(8f, y, w, LineH), "No matching items.", _sSub);
                     y += 16f;
                 }
             }
@@ -3385,9 +3537,9 @@ namespace Waystation.UI
                 fy += ChipBarH;
             }
 
-            // ── Branch filter buttons ─────────────────────────────────────────
+            // ── Branch filter buttons (2 rows of 3) ──────────────────────────
             const float FBtnH = 24f;
-            float fbw = (w - 10f) / 6f;
+            float fbw = (w - 8f) / 3f;
             var   filters = new[] { (ResearchBranchFilter.All,        "All"),
                                     (ResearchBranchFilter.Industry,    "Industry"),
                                     (ResearchBranchFilter.Exploration, "Exploration"),
@@ -3400,11 +3552,13 @@ namespace Waystation.UI
                 var (f, lbl) = filters[i];
                 bool active = _researchFilter == f;
                 GUI.color = active ? ColAccent : new Color(0.55f, 0.60f, 0.70f, 1f);
-                if (GUI.Button(new Rect(area.x + i * (fbw + 2f), fy, fbw, FBtnH), lbl, _sBtnSmall))
+                int col = i % 3;
+                int row = i / 3;
+                if (GUI.Button(new Rect(area.x + col * (fbw + 4f), fy + row * (FBtnH + 2f), fbw, FBtnH), lbl, _sBtnSmall))
                     _researchFilter = f;
             }
             GUI.color = prevC;
-            fy += FBtnH + 4f;
+            fy += (FBtnH + 2f) * 2f + 4f;
 
             // ── Scrollable content ────────────────────────────────────────────
             float innerH = 0f;
@@ -3426,7 +3580,7 @@ namespace Waystation.UI
                         if (!s.research.IsUnlocked(p)) { prereqsMet = false; break; }
                     if (!prereqsMet) lockedCount++;
                 }
-                innerH += 38f + unlocked.Length * 20f + available.Length * 48f + lockedCount * 18f + 10f;
+                innerH += 38f + unlocked.Length * 20f + available.Length * (LineH * 2f + 30f) + lockedCount * 18f + 10f;
             }
             float scrollH = h - ChipBarH - FBtnH - 4f;
             innerH = Mathf.Max(innerH, scrollH);
@@ -3462,20 +3616,22 @@ namespace Waystation.UI
                 }
 
                 // Available nodes (can research — progress bar)
+                float nodeCardH = LineH * 2f + 26f;
                 foreach (var node in available)
                 {
-                    DrawSolid(new Rect(0, y, w - 14f, 44f), new Color(0.08f, 0.11f, 0.20f, 0.85f));
-                    GUI.Label(new Rect(4f, y + 2f, w * 0.70f - 14f, 16f), node.displayName, _sSub);
-                    GUI.Label(new Rect(w * 0.72f, y + 2f, w * 0.28f - 14f, 16f),
+                    DrawSolid(new Rect(0, y, w - 14f, nodeCardH), new Color(0.08f, 0.11f, 0.20f, 0.85f));
+                    GUI.Label(new Rect(4f, y + 2f, w * 0.70f - 14f, LineH), node.displayName, _sSub);
+                    GUI.Label(new Rect(w * 0.72f, y + 2f, w * 0.28f - 14f, LineH),
                               $"{node.pointCost} pts", _sSub);
                     // Progress bar
                     float pct = node.pointCost > 0 ? Mathf.Clamp01(bState.points / node.pointCost) : 1f;
-                    DrawSolid(new Rect(4f, y + 22f, w - 22f, 8f), ColBarBg);
+                    float barY = y + 2f + LineH + 4f;
+                    DrawSolid(new Rect(4f, barY, w - 22f, 8f), ColBarBg);
                     Color barCol = pct >= 1f ? ColBarGreen : ColBarFill;
-                    DrawSolid(new Rect(4f, y + 22f, (w - 22f) * pct, 8f), barCol);
+                    DrawSolid(new Rect(4f, barY, (w - 22f) * pct, 8f), barCol);
                     string desc = node.description.Length > 50 ? node.description[..47] + "…" : node.description;
-                    GUI.Label(new Rect(4f, y + 32f, w - 18f, 12f), desc, _sSub);
-                    y += 48f;
+                    GUI.Label(new Rect(4f, barY + 10f, w - 18f, LineH), desc, _sSub);
+                    y += nodeCardH + 4f;
                 }
 
                 // Locked nodes (grey, prereqs not met)
@@ -3504,7 +3660,34 @@ namespace Waystation.UI
         // ── Map tab ───────────────────────────────────────────────────────────
         private void DrawMap(Rect area, float w, float h)
         {
-            if (_gm?.Station == null || _gm.Map == null)
+            if (_gm?.Station == null)
+            { GUI.Label(new Rect(area.x, area.y, w, 20f), "Map not available.", _sSub); return; }
+
+            // ── Sub-panel nav (Map | Away) ────────────────────────────────────
+            const float MapNavH   = 28f;
+            const float MapNavPad = 4f;
+            float mapNavBw = (w - MapNavPad * 3f) / 2f;
+            DrawSolid(new Rect(area.x, area.y, w, MapNavH + MapNavPad), new Color(0.05f, 0.07f, 0.12f, 0.97f));
+            Color mapNavPrev = GUI.color;
+            var mapSubPanels = new[] { (MapSubPanel.Map, "\u2b21 Map"), (MapSubPanel.Away, "\u2708 Away") };
+            for (int i = 0; i < mapSubPanels.Length; i++)
+            {
+                var (ms, msl) = mapSubPanels[i];
+                bool msActive = _mapSub == ms;
+                GUI.color = msActive ? new Color(0.35f, 0.62f, 1.00f, 1f) : new Color(0.55f, 0.60f, 0.70f, 1f);
+                if (GUI.Button(new Rect(area.x + MapNavPad + i * (mapNavBw + MapNavPad), area.y + MapNavPad, mapNavBw, MapNavH - MapNavPad * 2f), msl, _sBtnSmall))
+                    _mapSub = ms;
+            }
+            GUI.color = mapNavPrev;
+
+            Rect mapSubArea = new Rect(area.x, area.y + MapNavH + MapNavPad, w, h - MapNavH - MapNavPad);
+
+            if (_mapSub == MapSubPanel.Away)
+            { DrawAwayMission(mapSubArea, w, h - MapNavH - MapNavPad); return; }
+
+            // ── Map sub-panel ─────────────────────────────────────────────────
+            area = mapSubArea;
+            if (_gm.Map == null)
             { GUI.Label(new Rect(area.x, area.y, w, 20f), "Map not available.", _sSub); return; }
 
             var s     = _gm.Station;
@@ -3549,7 +3732,7 @@ namespace Waystation.UI
                     string poiName = poi2 != null ? poi2.displayName : am.poiUid;
                     DrawSolid(new Rect(area.x, y, w, 28f), new Color(0.09f, 0.12f, 0.20f, 0.9f));
                     GUI.Label(new Rect(area.x + 4f, y + 2f, w * 0.65f, 16f), poiName, _sSub);
-                    GUI.Label(new Rect(area.x + w * 0.67f, y + 4f, w * 0.33f, 14f),
+                    GUI.Label(new Rect(area.x + w * 0.67f, y + 4f, w * 0.33f, LineH),
                               $"{remaining}t left", _sSub);
                     y += 32f;
                 }
@@ -3591,12 +3774,12 @@ namespace Waystation.UI
                 };
                 GUI.Label(new Rect(4f, ly + 4f, 18f, 18f), icon, _sSub);
                 GUI.Label(new Rect(22f, ly + 4f, w * 0.65f - 36f, 18f), poi.displayName, _sLabel);
-                GUI.Label(new Rect(w * 0.68f, ly + 6f, w * 0.32f - 14f, 14f),
+                GUI.Label(new Rect(w * 0.68f, ly + 6f, w * 0.32f - 14f, LineH),
                           poi.poiType, _sSub);
 
                 // Distance
                 float dist = Mathf.Sqrt(poi.posX * poi.posX + poi.posY * poi.posY);
-                GUI.Label(new Rect(22f, ly + 24f, w * 0.65f - 36f, 14f),
+                GUI.Label(new Rect(22f, ly + 24f, w * 0.65f - 36f, LineH),
                           $"Dist: {dist:F0} u", _sSub);
 
                 // Select / expand
@@ -3615,7 +3798,7 @@ namespace Waystation.UI
                     // Yield preview
                     string yieldStr = "";
                     foreach (var kv in poi.resourceYield) yieldStr += $"{kv.Key.Replace("item.","")}×{kv.Value} ";
-                    GUI.Label(new Rect(4f, ly, w - 18f, 14f), $"Yield: {yieldStr.Trim()}", _sSub);
+                    GUI.Label(new Rect(4f, ly, w - 18f, LineH), $"Yield: {yieldStr.Trim()}", _sSub);
                     ly += 16f;
 
                     // Check if already on a mission
@@ -3664,7 +3847,7 @@ namespace Waystation.UI
                         }
                         if (!string.IsNullOrEmpty(_mapMissionMsg))
                         {
-                            GUI.Label(new Rect(4f, ly, w - 18f, 14f), _mapMissionMsg, _sSub);
+                            GUI.Label(new Rect(4f, ly, w - 18f, LineH), _mapMissionMsg, _sSub);
                             ly += 16f;
                         }
                     }
@@ -3723,7 +3906,7 @@ namespace Waystation.UI
 
             _sTabOff = new GUIStyle(GUI.skin.button)
             {
-                fontSize  = 11,
+                fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 normal    = { textColor = new Color(0.70f, 0.78f, 0.92f), background = null },
                 hover     = { textColor = Color.white,                     background = null },
@@ -3740,51 +3923,91 @@ namespace Waystation.UI
 
             _sHeader = new GUIStyle(GUI.skin.label)
             {
-                fontSize  = 16,
+                fontSize  = FontSizeHdr,
                 fontStyle = FontStyle.Bold,
                 normal    = { textColor = Color.white },
             };
 
             _sLabel = new GUIStyle(GUI.skin.label)
             {
-                fontSize  = 13,
+                fontSize  = FontSize,
                 fontStyle = FontStyle.Bold,
+                wordWrap  = false,
                 normal    = { textColor = new Color(0.85f, 0.92f, 1.00f) },
             };
 
             _sSub = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 11,
+                fontSize = FontSize,
+                wordWrap = false,
                 normal   = { textColor = new Color(0.62f, 0.70f, 0.84f) },
-                wordWrap = true,
             };
 
             _sBtnSmall = new GUIStyle(GUI.skin.button)
             {
-                fontSize  = 10,
+                fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 normal    = { textColor = new Color(0.80f, 0.88f, 1.00f) },
             };
 
             _sBtnWide = new GUIStyle(GUI.skin.button)
             {
-                fontSize  = 12,
+                fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 normal    = { textColor = new Color(0.85f, 0.92f, 1.00f) },
             };
 
             _sBtnDanger = new GUIStyle(GUI.skin.button)
             {
-                fontSize  = 12,
+                fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 normal    = { textColor = new Color(1.00f, 0.55f, 0.55f) },
             };
 
             _sTextField = new GUIStyle(GUI.skin.textField)
             {
-                fontSize = 11,
+                fontSize = FontSize,
                 normal   = { textColor = new Color(0.85f, 0.90f, 1.00f) },
             };
+
+            _gameFont = Resources.Load<Font>("Fonts/Early GameBoy");
+            if (_gameFont != null)
+            {
+                _sTabOff.font    = _gameFont;
+                _sTabOn.font     = _gameFont;
+                _sHeader.font    = _gameFont;
+                _sLabel.font     = _gameFont;
+                _sSub.font       = _gameFont;
+                _sBtnSmall.font  = _gameFont;
+                _sBtnWide.font   = _gameFont;
+                _sBtnDanger.font = _gameFont;
+                _sTextField.font = _gameFont;
+            }
+        }
+
+        // ── Layout helpers ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Draws a row of evenly-spaced buttons and advances sy by BtnH + gap.
+        /// Add or remove entries freely — widths recalculate automatically.
+        /// Each entry: (label, color override or null, action).
+        /// Returns the new sy after the row.
+        /// </summary>
+        private float ButtonRow(float x, float sy, float rowW, float gap,
+            params (string label, Color? tint, System.Action onClick)[] buttons)
+        {
+            float spacing = 4f;
+            float bw = (rowW - spacing * (buttons.Length - 1)) / buttons.Length;
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                var (label, tint, onClick) = buttons[i];
+                var prev = GUI.color;
+                if (tint.HasValue) GUI.color = tint.Value;
+                if (GUI.Button(new Rect(x + i * (bw + spacing), sy, bw, BtnH), label, _sBtnSmall))
+                    onClick?.Invoke();
+                GUI.color = prev;
+            }
+            return sy + BtnH + gap;
         }
 
         // ── Skills Sub-Panel ──────────────────────────────────────────────────
@@ -3869,12 +4092,13 @@ namespace Waystation.UI
             float y = 4f;
 
             // ── Character level summary ───────────────────────────────────────
-            DrawSolid(new Rect(0, y, w - 14f, 54f), ColSummaryBg);
+            float summaryH = 4f + LineH * 2f + 4f + 8f + LineH + 4f;
+            DrawSolid(new Rect(0, y, w - 14f, summaryH), ColSummaryBg);
             GUI.Label(new Rect(4f, y + 2f, 80f, 28f),
                       $"Lv {charLevel}", _sHeader);
-            GUI.Label(new Rect(84f, y + 4f, w - 100f, 16f),
+            GUI.Label(new Rect(84f, y + 4f, w - 100f, LineH),
                       $"Character Level", _sSub);
-            GUI.Label(new Rect(84f, y + 18f, w - 100f, 14f),
+            GUI.Label(new Rect(84f, y + 4f + LineH, w - 100f, LineH),
                       $"Total XP: {totalXP:F0}   Slots: {slotCount}   Unspent: {unspent}", _sSub);
             // XP bar toward next slot — progress within the current interval [currentThreshold, nextThreshold]
             int currentThreshold = (charLevel / SkillSystem.SlotEveryNLevels)
@@ -3883,12 +4107,14 @@ namespace Waystation.UI
             float xpPct = Mathf.Clamp01((totalXP - currentThreshold)
                           / Mathf.Max(1, nextThreshold - currentThreshold));
             float barW  = w - 18f;
-            DrawSolid(new Rect(4f, y + 38f, barW, 8f), ColBarBg);
-            DrawSolid(new Rect(4f, y + 38f, barW * xpPct, 8f), ColAccent);
-            GUI.Label(new Rect(4f, y + 38f, barW, 8f),
-                      $"  {totalXP:F0} / {nextThreshold} XP (next slot at Lv {(charLevel / SkillSystem.SlotEveryNLevels + 1) * SkillSystem.SlotEveryNLevels})",
+            float xpBarY = y + 4f + LineH * 2f + 4f;
+            DrawSolid(new Rect(4f, xpBarY, barW, 8f), ColBarBg);
+            DrawSolid(new Rect(4f, xpBarY, barW * xpPct, 8f), ColAccent);
+            // Label drawn AFTER bar so it renders on top
+            GUI.Label(new Rect(4f, xpBarY + 10f, barW, LineH),
+                      $"  {totalXP:F0} / {nextThreshold} XP  ·  next slot: Lv {(charLevel / SkillSystem.SlotEveryNLevels + 1) * SkillSystem.SlotEveryNLevels}",
                       _sSub);
-            y += 60f;
+            y += summaryH + 4f;
 
             // ── Skill list ────────────────────────────────────────────────────
             GUI.Label(new Rect(4f, y, w - 14f, 16f), "Skills", _sLabel);
@@ -3908,18 +4134,22 @@ namespace Waystation.UI
                     ? (xp - levelFloorXP) / (levelCeilXP - levelFloorXP)
                     : 1f);
 
-                // Skill name + level
-                GUI.Label(new Rect(4f, y, w * 0.55f, 14f), skillDef.displayName, _sSub);
-                GUI.Label(new Rect(w * 0.56f, y, 30f, 14f), $"L{level}", _sSub);
+                // Skill name | L{level} | XP bar — level label drawn before bar so it isn't covered
+                float cw2     = w - 14f;
+                float snameW  = CharW * 14f;   // fits "Engineering" (11 ch) + buffer
+                float slevW   = CharW * 4f;
+                float sbarX   = snameW + slevW + 8f;
+                GUI.Label(new Rect(4f, y, snameW, LineH), skillDef.displayName, _sSub);
+                GUI.Label(new Rect(snameW + 4f, y, slevW, LineH), $"L{level}", _sSub);
 
-                // XP bar
-                float bw = w - 90f;
-                DrawSolid(new Rect(88f, y + 2f, bw, 8f), ColBarBg);
+                // XP bar (starts after level badge, stays within content boundary)
+                float bx = sbarX, bw = cw2 - sbarX - 2f;
+                DrawSolid(new Rect(bx, y + LineH * 0.25f, bw, 8f), ColBarBg);
                 Color barCol = level >= 15 ? new Color(0.92f, 0.75f, 0.20f) :
                                level >= 8  ? ColBarGreen : ColBarFill;
-                DrawSolid(new Rect(88f, y + 2f, bw * withinLevel, 8f), barCol);
+                DrawSolid(new Rect(bx, y + LineH * 0.25f, bw * withinLevel, 8f), barCol);
 
-                y += 16f;
+                y += LineH;
             }
             y += 6f;
 
@@ -3929,35 +4159,37 @@ namespace Waystation.UI
 
             if (npc.chosenExpertise.Count == 0)
             {
-                GUI.Label(new Rect(4f, y, w - 14f, 14f), "None chosen.", _sSub);
-                y += 18f;
+                GUI.Label(new Rect(4f, y, w - 14f, LineH), "None chosen.", _sSub);
+                y += LineH + 2f;
             }
             else
             {
+                float chosenCardH = LineH * 2f + 6f;
                 foreach (var eid in npc.chosenExpertise)
                 {
                     if (!_gm.Registry.Expertises.TryGetValue(eid, out var exp)) continue;
-                    DrawSolid(new Rect(2f, y, w - 16f, 38f), new Color(0.12f, 0.15f, 0.22f, 0.9f));
-                    GUI.Label(new Rect(6f, y + 2f, w * 0.65f, 14f), exp.displayName, _sSub);
+                    DrawSolid(new Rect(2f, y, w - 16f, chosenCardH), new Color(0.12f, 0.15f, 0.22f, 0.9f));
+                    GUI.Label(new Rect(6f, y + 2f, w * 0.65f, LineH), exp.displayName, _sSub);
 
                     // Replace button
-                    if (GUI.Button(new Rect(w - 74f, y + 2f, 58f, 14f), "Replace", _sBtnSmall))
+                    if (GUI.Button(new Rect(w - 74f, y + 2f, 58f, LineH), "Replace", _sBtnSmall))
                     {
                         _swapTargetExpertiseId = eid;
                         _expertisePanelOpen    = true;
                     }
+                    float row2Y = y + 2f + LineH + 2f;
                     if (!string.IsNullOrEmpty(exp.requiredSkillId))
                     {
-                        GUI.Label(new Rect(w - 74f, y + 18f, 68f, 14f),
+                        GUI.Label(new Rect(w - 74f, row2Y, 68f, LineH),
                                   $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel}",
                                   _sSub);
                     }
-                    GUI.Label(new Rect(6f, y + 16f, w - 80f, 20f),
+                    GUI.Label(new Rect(6f, row2Y, w - 80f, LineH),
                               exp.description.Length > ExpertiseDescShortMaxChars + 3
                                   ? exp.description.Substring(0, ExpertiseDescShortMaxChars) + "..."
                                   : exp.description,
                               _sSub);
-                    y += 42f;
+                    y += chosenCardH + 4f;
                 }
             }
             y += 4f;
@@ -3987,21 +4219,23 @@ namespace Waystation.UI
             if (isSwap && _gm.Registry.Expertises.TryGetValue(_swapTargetExpertiseId, out var swapDef))
             {
                 var wp = GUI.color; GUI.color = ColBarWarn;
-                GUI.Label(new Rect(area.x + 4f, area.y + 18f, w - 8f, 14f),
+                GUI.Label(new Rect(area.x + 4f, area.y + LineH + 2f, w - 8f, LineH),
                           $"Replacing: {swapDef.displayName}", _sSub);
                 GUI.color = wp;
             }
 
-            if (GUI.Button(new Rect(area.x + 4f, area.y + 34f, 60f, 18f), "← Back", _sBtnSmall))
+            float hdrH = LineH * 2f + BtnH + 10f;
+            if (GUI.Button(new Rect(area.x + 4f, area.y + LineH * 2f + 4f, 60f, BtnH), "← Back", _sBtnSmall))
             {
                 _expertisePanelOpen = false;
                 return;
             }
 
-            float listTop = area.y + 56f;
-            float listH   = h - 56f;
+            float listTop = area.y + hdrH;
+            float listH   = h - hdrH;
             var allExp    = _gm.Registry.Expertises.Values;
-            float innerH  = Mathf.Max(listH, allExp.Count * 54f);
+            float expCardH = LineH * 2f + BtnH + 14f;
+            float innerH  = Mathf.Max(listH, allExp.Count * expCardH);
 
             _expertisePanelScroll = GUI.BeginScrollView(
                 new Rect(area.x, listTop, w, listH),
@@ -4020,23 +4254,23 @@ namespace Waystation.UI
                 bool qualified = string.IsNullOrEmpty(exp.requiredSkillId)
                     || SkillSystem.GetSkillLevel(npc, exp.requiredSkillId) >= exp.requiredSkillLevel;
 
-                DrawSolid(new Rect(2f, y, w - 16f, 48f),
+                DrawSolid(new Rect(2f, y, w - 16f, expCardH),
                           qualified ? new Color(0.12f, 0.15f, 0.22f, 0.9f)
                                     : new Color(0.08f, 0.09f, 0.14f, 0.9f));
 
                 var prev = GUI.color;
                 if (!qualified) GUI.color = new Color(0.5f, 0.5f, 0.5f);
-                GUI.Label(new Rect(6f, y + 2f, w * 0.65f, 14f), exp.displayName, _sSub);
+                GUI.Label(new Rect(6f, y + 2f, w * 0.65f, LineH), exp.displayName, _sSub);
 
                 if (!string.IsNullOrEmpty(exp.requiredSkillId))
                 {
                     string reqText = qualified
                         ? $"Req {exp.requiredSkillId.Replace("skill.", "")} L{exp.requiredSkillLevel} ✓"
                         : $"Requires {exp.requiredSkillId.Replace("skill.", "")} level {exp.requiredSkillLevel}";
-                    GUI.Label(new Rect(w * 0.66f, y + 2f, w * 0.34f - 4f, 14f), reqText, _sSub);
+                    GUI.Label(new Rect(w * 0.66f, y + 2f, w * 0.34f - 4f, LineH), reqText, _sSub);
                 }
 
-                GUI.Label(new Rect(6f, y + 16f, w - 20f, 18f),
+                GUI.Label(new Rect(6f, y + 2f + LineH + 2f, w - 20f, LineH),
                           exp.description.Length > ExpertiseDescLongMaxChars + 3
                               ? exp.description.Substring(0, ExpertiseDescLongMaxChars) + "..."
                               : exp.description,
@@ -4045,7 +4279,8 @@ namespace Waystation.UI
 
                 if (qualified)
                 {
-                    if (GUI.Button(new Rect(6f, y + 34f, 60f, 14f), "Select", _sBtnSmall))
+                    float selBtnY = y + 2f + LineH * 2f + 4f;
+                    if (GUI.Button(new Rect(6f, selBtnY, 60f, BtnH), "Select", _sBtnSmall))
                     {
                         (bool ok, string msg) result;
                         if (isSwap)
@@ -4065,7 +4300,7 @@ namespace Waystation.UI
                     }
                 }
 
-                y += 52f;
+                y += expCardH + 4f;
             }
 
             GUI.EndScrollView();

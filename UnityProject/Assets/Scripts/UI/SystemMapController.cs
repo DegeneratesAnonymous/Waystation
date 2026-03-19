@@ -205,6 +205,9 @@ namespace Waystation.UI
         {
             EnsureCanvas();
             _gm  = _gm != null ? _gm : GameManager.Instance;
+            // Register tick handler here — OnEnable fires before Start sets _gm,
+            // so the subscription in OnEnable is a no-op on first load.
+            if (_gm != null) { _gm.OnTick -= HandleTick; _gm.OnTick += HandleTick; }
             _sys = _gm?.Station?.solarSystem;
             if (_sys == null)
             {
@@ -214,19 +217,13 @@ namespace Waystation.UI
             }
             _viewedSystem = _sys;
 
-            bool hasSensor  = TelescopeMode || (_gm.Station?.HasTag("tech.local_sensors") == true);
-            bool hasAntenna = TelescopeMode || HasBuiltAntenna();
-            bool hasSector  = TelescopeMode || (_gm.Station?.HasTag("tech.interstellar_sensors") == true);
-            bool hasGalaxy  = TelescopeMode || (_gm.Station?.HasTag("tech.deep_space_sensors") == true);
-
-            if (!hasSensor || !hasAntenna)
-            {
-                string msg = !hasSensor
-                    ? "Requires: Local Sensors research"
-                    : "Requires: Antenna Array (built & complete)";
-                ShowLocked(msg);
-                return;
-            }
+            // System layer (home solar system) is always available.
+            // Sector requires Local Sensors research + built antenna.
+            // Galaxy requires Interstellar Sensors research.
+            bool hasSector = TelescopeMode ||
+                             ((_gm.Station?.HasTag("tech.local_sensors") == true) && HasBuiltAntenna());
+            bool hasGalaxy = TelescopeMode ||
+                             (_gm.Station?.HasTag("tech.interstellar_sensors") == true);
 
             _lockedPanel?.SetActive(false);
             mapPanel.SetActive(true);
@@ -973,10 +970,10 @@ namespace Waystation.UI
 
             //   Explore container (fills mapArea, used for Sector & Galaxy)
             {
-                //   Clip mask panel — same size as mapArea
-                var clipRt = MakeImage(_mapAreaRt, "ExploreClip", Color.clear);
-                var mask   = clipRt.gameObject.AddComponent<UnityEngine.UI.Mask>();
-                mask.showMaskGraphic = false;
+                //   Clip panel — RectMask2D clips by bounds (no stencil/sprite needed,
+                //   avoids the alpha=0 Image bug that breaks Mask stencil writes)
+                var clipRt = MakeRect(_mapAreaRt, "ExploreClip");
+                clipRt.gameObject.AddComponent<RectMask2D>();
                 Stretch(clipRt, 0f, 0f, 1f, 1f);
 
                 //   World root — gets translated/scaled for pan+zoom

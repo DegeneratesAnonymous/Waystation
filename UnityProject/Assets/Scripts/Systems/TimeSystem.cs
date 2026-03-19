@@ -7,16 +7,18 @@ namespace Waystation.Systems
 {
     public static class TimeSystem
     {
-        public const int TicksPerDay  = 24;
-        public const int DayStartTick = 6;   // 06:00 — day shift begins
-        public const int DayEndTick   = 18;  // 18:00 — night shift begins
+        public const int TicksPerDay      = 360;           // 1 tick = 15 in-game minutes
+        public const int TicksPerHour     = 4;             // 4 × 15 min = 1 hour
+        public const int DayStartTick     = 6  * TicksPerHour;  // 06:00
+        public const int DayEndTick       = 18 * TicksPerHour;  // 18:00
 
         public static int TickOfDay(StationState station) => station.tick % TicksPerDay;
         public static int DayNumber(StationState station) => station.tick / TicksPerDay + 1;
-        public static int HourOfDay(StationState station) => TickOfDay(station);
+        public static int HourOfDay(StationState station) => TickOfDay(station) / TicksPerHour;
+        public static int MinuteOfHour(StationState station) => (TickOfDay(station) % TicksPerHour) * 15;
 
         public static string TimeLabel(StationState station)
-            => $"Day {DayNumber(station)}  {HourOfDay(station):D2}:00";
+            => $"Day {DayNumber(station)}  {HourOfDay(station):D2}:{MinuteOfHour(station):D2}";
 
         public static bool IsDayPhase(StationState station)
         {

@@ -37,7 +37,7 @@ namespace Waystation.Systems
         // Mood modifier magnitudes
         private const float MoodPositive   = 6f;
         private const float MoodNegative   = -5f;
-        private const int   MoodDuration   = 24;   // ticks
+        private const int   MoodDuration   = TimeSystem.TicksPerDay;   // 1 in-game day
 
         // Feature flag
         public bool Enabled = true;

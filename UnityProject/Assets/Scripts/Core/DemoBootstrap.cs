@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
+using Waystation.Systems;
 
 namespace Waystation.Demo
 {
@@ -99,7 +100,7 @@ namespace Waystation.Demo
             GUI.Box(new Rect(x, y, w, 210), "  Waystation Demo");
             y += 26;
             Row(ref y, x + 8, w - 16, "Station   " + s.stationName);
-            Row(ref y, x + 8, w - 16, "Tick      " + s.tick + "   Day " + (s.tick / 24 + 1) + "   Hour " + (s.tick % 24));
+            Row(ref y, x + 8, w - 16, "Tick      " + s.tick + "   " + TimeSystem.TimeLabel(s));
             Row(ref y, x + 8, w - 16, "Credits   " + s.GetResource("credits").ToString("F0"));
             Row(ref y, x + 8, w - 16, "Food      " + s.GetResource("food").ToString("F0") + "   Power   " + s.GetResource("power").ToString("F0"));
             Row(ref y, x + 8, w - 16, "Oxygen    " + s.GetResource("oxygen").ToString("F0") + "   Parts   " + s.GetResource("parts").ToString("F0"));

@@ -17,8 +17,7 @@ namespace Waystation.Systems
     public class CommsSystem
     {
         // ── Constants ─────────────────────────────────────────────────────────
-        private const int   TicksPerDay             = 24;
-        private const int   PassingShipCheckInterval = TicksPerDay * 2;  // every 2 days
+        private const int   PassingShipCheckInterval = TimeSystem.TicksPerDay * 2;  // every 2 days
         private const float PassingShipChance        = 0.30f;
 
         private const int   IceQtyMin   = 50;
@@ -111,7 +110,7 @@ namespace Waystation.Systems
                 senderType:   "trade_ship",
                 shipUid:      ship.uid,
                 tick:         station.tick,
-                expiresAtTick: station.tick + TicksPerDay);  // expires after 1 in-game day
+                expiresAtTick: station.tick + TimeSystem.TicksPerDay);  // expires after 1 in-game day
 
             msg.responseOptions.Add(new Dictionary<string, object>
             {
