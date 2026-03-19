@@ -99,6 +99,23 @@ namespace Waystation.UI
         private readonly Dictionary<(int, int), List<NeighborSystem>> _galaxyChunks
             = new Dictionary<(int, int), List<NeighborSystem>>();
 
+        // Sector designation dot/label tracking
+        private readonly List<GameObject> _sectorObjects = new List<GameObject>();
+        // Currently selected sector (for detail panel)
+        private SectorData _selectedSector;
+        // Sector detail UI refs (assigned in EnsureCanvas)
+        private TMP_Text _sectorDesignationLabel;
+        private TMP_Text _sectorPhenomLabel;
+        private TMP_Text _sectorCoordsLabel;
+        private TMP_Text _sectorDiscoveryLabel;
+        private TMP_Text _sectorRenamedLabel;
+        private Button   _sectorRenameBtn;
+        // Designation colour constants matching design spec
+        private static readonly Color ColUnvisited = new Color(0.176f, 0.188f, 0.251f); // tBase #2d3040
+        private static readonly Color ColDetected  = new Color(0.306f, 0.329f, 0.439f); // fBevel #4e5470
+        private static readonly Color ColVisited   = new Color(0.282f, 0.502f, 0.667f); // acc   #4880aa
+        private static readonly Color ColUncharted = new Color(0.25f,  0.28f,  0.32f,  0.45f);
+
         // ── Header / Layer UI ────────────────────────────────────────
 
         private Button   _tabSystemBtn, _tabSectorBtn, _tabGalaxyBtn;
@@ -174,6 +191,13 @@ namespace Waystation.UI
 
             if (_layer == MapLayer.Galaxy)
                 RefreshGalaxyChunks();
+            else if (_layer == MapLayer.Sector)
+            {
+                // For Sector view, refresh sector label format on zoom threshold crossing.
+                foreach (var go in _sectorObjects) if (go != null) Destroy(go);
+                _sectorObjects.Clear();
+                RenderSectorDots(SectorPxPerLY, _exploreZoom < 0.8f);
+            }
         }
 
         private void HandleExplorePan()
@@ -498,6 +522,9 @@ namespace Waystation.UI
                 CreateExploreDot(_exploreWorld, pos, Mathf.Clamp(n.starSize * 9f, 5f, 14f),
                     ParseColor(n.starColorHex), neighbor: n);
             }
+
+            // Overlay sector designation labels on the sector map.
+            RenderSectorDots(SectorPxPerLY, zoomedOut: false);
         }
 
         // ── Galaxy map ────────────────────────────────────────────────────────
@@ -560,6 +587,215 @@ namespace Waystation.UI
             if (_exploreDots.Count(t => t.sys == null) == 0)
                 CreateExploreDot(_exploreWorld, Vector2.zero, 12f,
                     new Color(1f, 0.95f, 0.50f), _sys, isHome: true);
+
+            // Overlay sector designation dots/labels on the galaxy map.
+            bool zoomedOut = _exploreZoom < 0.8f;
+            // Clear previous sector objects before re-rendering to avoid duplicates.
+            foreach (var go in _sectorObjects) if (go != null) Destroy(go);
+            _sectorObjects.Clear();
+            RenderSectorDots(GalaxyPxPerLY, zoomedOut);
+        }
+
+        // ── Sector designation rendering ──────────────────────────────────────
+
+        /// <summary>
+        /// Renders sector designation dots and labels on the explore map.
+        /// Home sector is at (22, 51) in galaxy coordinate space; all other sector
+        /// positions are converted to LY offsets from home and then to screen pixels.
+        /// <para>
+        /// Uncharted sectors render as dim grey dots with no label.
+        /// Detected sectors show the Short designation format (or Minimal when zoomed out).
+        /// Visited sectors show the same labels but in the accent colour.
+        /// </para>
+        /// </summary>
+        private void RenderSectorDots(float pxPerUnit, bool zoomedOut)
+        {
+            var station = _gm?.Station;
+            if (station == null || station.sectors.Count == 0) return;
+
+            foreach (var sector in station.sectors.Values)
+            {
+                // Convert galaxy coordinates to LY offset from home sector.
+                float offsetX = (sector.coordinates.x - GalaxyGenerator.HomeX) * pxPerUnit;
+                float offsetY = (sector.coordinates.y - GalaxyGenerator.HomeY) * pxPerUnit;
+                var   pos     = new Vector2(offsetX, offsetY);
+
+                Color dotColor;
+                string labelText = null;
+
+                switch (sector.discoveryState)
+                {
+                    case SectorDiscoveryState.Uncharted:
+                        dotColor  = ColUncharted;
+                        labelText = null; // no label for uncharted
+                        break;
+                    case SectorDiscoveryState.Detected:
+                        dotColor  = ColDetected;
+                        labelText = zoomedOut
+                            ? sector.MinimalDesignation()
+                            : sector.ShortDesignation();
+                        break;
+                    case SectorDiscoveryState.Visited:
+                    default:
+                        dotColor  = ColVisited;
+                        labelText = zoomedOut
+                            ? sector.MinimalDesignation()
+                            : sector.ShortDesignation();
+                        break;
+                }
+
+                // ── Sector dot ────────────────────────────────────────────────
+                var goName  = $"Sector_{sector.uid}";
+                var dotGo   = new GameObject(goName, typeof(RectTransform), typeof(Image));
+                dotGo.transform.SetParent(_exploreWorld, false);
+                var dotRt   = dotGo.GetComponent<RectTransform>();
+                dotRt.anchorMin = dotRt.anchorMax = new Vector2(0.5f, 0.5f);
+                dotRt.sizeDelta        = new Vector2(8f, 8f);
+                dotRt.anchoredPosition = pos;
+                var img = dotGo.GetComponent<Image>();
+                img.sprite = GetCircleSprite();
+                img.color  = dotColor;
+
+                // Click handler on the dot
+                var captured = sector;
+                var btn = dotGo.AddComponent<Button>();
+                btn.onClick.AddListener(() => ShowSectorDetail(captured));
+                _sectorObjects.Add(dotGo);
+
+                // ── Designation label ─────────────────────────────────────────
+                if (!string.IsNullOrEmpty(labelText))
+                {
+                    var lblGo = new GameObject(goName + "_Lbl",
+                        typeof(RectTransform), typeof(TextMeshProUGUI));
+                    lblGo.transform.SetParent(_exploreWorld, false);
+                    var lblRt = lblGo.GetComponent<RectTransform>();
+                    lblRt.anchorMin = lblRt.anchorMax = new Vector2(0.5f, 0.5f);
+                    lblRt.sizeDelta        = new Vector2(160f, 18f);
+                    lblRt.anchoredPosition = pos + new Vector2(0f, 10f);
+                    var lbl = lblGo.GetComponent<TMP_Text>();
+                    lbl.text      = labelText;
+                    lbl.fontSize  = 7f;
+                    lbl.alignment = TextAlignmentOptions.Center;
+                    lbl.color     = dotColor;
+                    lbl.raycastTarget = false;
+                    _sectorObjects.Add(lblGo);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Show the sector detail panel for a clicked <see cref="SectorData"/>.
+        /// </summary>
+        private void ShowSectorDetail(SectorData sector)
+        {
+            _selectedSector = sector;
+            if (detailPanel == null) return;
+            detailPanel.SetActive(true);
+
+            // ── Reuse existing detail panel labels for sector data ─────────────
+            // The detail panel labels are shared between solar body and sector detail.
+            // We populate each one with sector-specific content here.
+
+            if (detailNameLabel != null)
+            {
+                switch (sector.discoveryState)
+                {
+                    case SectorDiscoveryState.Uncharted:
+                        detailNameLabel.text = "Uncharted Sector";
+                        break;
+                    default:
+                        detailNameLabel.text = sector.properName
+                            + (sector.isRenamed ? "  (renamed)" : "");
+                        break;
+                }
+            }
+
+            if (detailTypeLabel != null)
+            {
+                switch (sector.discoveryState)
+                {
+                    case SectorDiscoveryState.Uncharted:
+                        detailTypeLabel.text = "Uncharted — extend Antenna range to detect.";
+                        break;
+                    default:
+                        detailTypeLabel.text = sector.FullDesignation();
+                        break;
+                }
+            }
+
+            if (detailTagsLabel != null)
+            {
+                if (sector.discoveryState == SectorDiscoveryState.Uncharted)
+                {
+                    detailTagsLabel.text = "";
+                }
+                else
+                {
+                    var phenomParts = new System.Collections.Generic.List<string>();
+                    foreach (var code in sector.phenomenonCodes)
+                        phenomParts.Add(PhenomenonCodeLabel(code));
+                    detailTagsLabel.text = string.Join(" · ", phenomParts);
+                }
+            }
+
+            if (detailMoonsLabel != null)
+            {
+                detailMoonsLabel.text = sector.discoveryState != SectorDiscoveryState.Uncharted
+                    ? $"Position: {sector.CoordString()}"
+                    : "";
+            }
+
+            if (detailStationLabel != null)
+            {
+                // Show the station-present label for the home sector specifically
+                // (identified by canonical home coordinates). Visited state alone is
+                // insufficient once multi-station founding ships (future work order).
+                bool isHomeSector =
+                    Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                    Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+                detailStationLabel.text = isHomeSector ? "Your station is in this sector" : "";
+            }
+
+            // Hide the "View System Map" button; it's for NeighborSystem clicks only.
+            if (_detailViewBtn != null) _detailViewBtn.gameObject.SetActive(false);
+
+            // Show rename button only for Detected or Visited sectors.
+            if (_sectorRenameBtn != null)
+                _sectorRenameBtn.gameObject.SetActive(sector.CanRename());
+
+            // Show "(renamed)" indicator via the _sectorRenamedLabel if available.
+            if (_sectorRenamedLabel != null)
+                _sectorRenamedLabel.gameObject.SetActive(sector.isRenamed);
+        }
+
+        private static string PhenomenonCodeLabel(PhenomenonCode code) => code switch
+        {
+            PhenomenonCode.NB => "Nebula",
+            PhenomenonCode.PL => "Pulsar",
+            PhenomenonCode.BH => "Black Hole",
+            PhenomenonCode.DW => "Dwarf Stars",
+            PhenomenonCode.GI => "Giant Stars",
+            PhenomenonCode.MS => "Main Sequence",
+            PhenomenonCode.OR => "Ore-Rich",
+            PhenomenonCode.IC => "Ice-Rich",
+            PhenomenonCode.GS => "Gas-Rich",
+            PhenomenonCode.VD => "Void",
+            PhenomenonCode.RD => "Radiation",
+            PhenomenonCode.GV => "Gravitational",
+            PhenomenonCode.DK => "Dark Matter",
+            PhenomenonCode.ST => "Storm",
+            _                 => code.ToString(),
+        };
+
+        private void TryRenameSelectedSector(string newName)
+        {
+            if (_selectedSector == null) return;
+            if (!_selectedSector.TryRename(newName)) return;
+            // Refresh the detail panel with updated info.
+            ShowSectorDetail(_selectedSector);
+            // Refresh sector label in world (clear and re-render).
+            if (_layer == MapLayer.Sector) RebuildSector();
+            else if (_layer == MapLayer.Galaxy) RefreshGalaxyChunks();
         }
 
         // ── Explore dot factory ───────────────────────────────────────────────
@@ -661,6 +897,8 @@ namespace Waystation.UI
                 foreach (Transform child in _exploreWorld)
                     Destroy(child.gameObject);
             _exploreDots.Clear();
+            _sectorObjects.Clear();
+            _selectedSector = null;
         }
 
         // ── Factory helpers ───────────────────────────────────────────────────
@@ -1026,6 +1264,51 @@ namespace Waystation.UI
                 rt.anchoredPosition = new Vector2(0f, dy);
                 btn.gameObject.SetActive(false);  // shown only for explore-layer selections
                 _detailViewBtn = btn;
+                dy -= 38f;
+            }
+
+            // "Rename" button — shown only for Detected/Visited sectors
+            {
+                dy -= 4f;
+                var btn = MakeButton(detailBgRt, "RenameSectorBtn",
+                    new Color(0.18f, 0.28f, 0.42f, 0.95f), "✎  Rename Sector", 11f, () =>
+                    {
+                        if (_selectedSector == null) return;
+                        // NOTE: A full rename flow requires a TMP_InputField overlay (future UI
+                        // polish pass). This stub shows the button is wired; integrate with an
+                        // input dialog before shipping the map screen.
+                        // For now, toggle a placeholder to verify the rename pipeline works.
+                        if (!_selectedSector.isRenamed)
+                            TryRenameSelectedSector(_selectedSector.properName + " *");
+                    });
+                _sectorRenameBtn = btn;
+                var rt = (RectTransform)btn.transform;
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot     = new Vector2(0.5f, 1f);
+                rt.sizeDelta        = new Vector2(-24f, 28f);
+                rt.anchoredPosition = new Vector2(0f, dy);
+                btn.gameObject.SetActive(false);
+                dy -= 34f;
+            }
+
+            // "(renamed)" indicator label
+            {
+                var rt = MakeRect(detailBgRt, "RenamedIndicator");
+                rt.gameObject.AddComponent<TextMeshProUGUI>();
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot     = new Vector2(0.5f, 1f);
+                rt.sizeDelta        = new Vector2(0f, 16f);
+                rt.anchoredPosition = new Vector2(0f, dy);
+                _sectorRenamedLabel = rt.GetComponent<TMP_Text>();
+                _sectorRenamedLabel.text      = "(renamed)";
+                _sectorRenamedLabel.fontSize  = 10f;
+                _sectorRenamedLabel.alignment = TextAlignmentOptions.Center;
+                _sectorRenamedLabel.color     = new Color(0.60f, 0.75f, 0.50f);
+                _sectorRenamedLabel.fontStyle  = FontStyles.Italic;
+                _sectorRenamedLabel.raycastTarget = false;
+                _sectorRenamedLabel.gameObject.SetActive(false);
             }
 
             // ── Locked overlay ────────────────────────────────────────────────

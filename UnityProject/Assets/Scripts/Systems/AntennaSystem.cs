@@ -50,6 +50,8 @@ namespace Waystation.Systems
         /// Calculate current antenna stats based on powered Antenna foundations and
         /// the number of AstrometricsLab foundations on the station.
         /// Returns (0, 0) if no powered Antenna exists.
+        /// DK (Dark Matter) phenomenon code in the player's home sector reduces
+        /// effective range by 15 %.
         /// </summary>
         public (float range, int maxShips) GetAntennaStats(StationState station)
         {
@@ -58,6 +60,12 @@ namespace Waystation.Systems
             int labCount  = station.GetBuildableCount("buildable.astrometrics_lab");
             float range   = BaseRange   + labCount * LabRangeBonus;
             int   maxShips= BaseMaxShips + labCount * LabShipBonus;
+
+            // Dark Matter interference: if the station's home sector has the DK code,
+            // effective antenna range is reduced by 15 %.
+            if (GalaxyGenerator.PhenomenonInfluenceEnabled && IsInDarkMatterSector(station))
+                range *= 0.85f;
+
             return (range, maxShips);
         }
 
@@ -105,6 +113,23 @@ namespace Waystation.Systems
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns true if the player's home sector (the Visited sector at the
+        /// canonical home coordinates 22,51) carries the DK phenomenon code.
+        /// Only the home sector affects antenna range (multi-station founding is future work).
+        /// </summary>
+        private static bool IsInDarkMatterSector(StationState station)
+        {
+            foreach (var s in station.sectors.Values)
+            {
+                // Identify the home sector by its canonical coordinates.
+                if (Mathf.Approximately(s.coordinates.x, GalaxyGenerator.HomeX) &&
+                    Mathf.Approximately(s.coordinates.y, GalaxyGenerator.HomeY))
+                    return s.HasDarkMatter();
+            }
+            return false;
+        }
 
         private int CountInRangeShips(StationState station)
         {
