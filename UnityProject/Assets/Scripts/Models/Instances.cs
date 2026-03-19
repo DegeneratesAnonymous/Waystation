@@ -1198,6 +1198,18 @@ namespace Waystation.Models
         // Runtime only — not serialised into saves.
         public Dictionary<string, string> tileToRoomKey = new Dictionary<string, string>();
 
+        // ── Galaxy / Sector state ───────────────────────────────────────────
+
+        // Seed used to generate the galaxy layout. Stored here so it can be serialised
+        // with the save and passed back to GalaxyGenerator if the sector list is absent
+        // (forward-compatibility for saves created before sector generation shipped).
+        public int galaxySeed = 0;
+
+        // All sectors in the galaxy, keyed by SectorData.uid.
+        // Populated by GalaxyGenerator.Generate() in GameManager.NewGame().
+        // On load: populated directly from SaveData; GalaxyGenerator is NOT re-run.
+        public Dictionary<string, SectorData> sectors = new Dictionary<string, SectorData>();
+
         // ── Visitor / Shuttle system state ──────────────────────────────────
 
         // Append-only visit history for analytics (not loaded back into runtime state)

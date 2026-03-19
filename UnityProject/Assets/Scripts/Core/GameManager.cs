@@ -220,6 +220,10 @@ namespace Waystation.Core
             SetupStartingPolicies();
             Factions.Initialize(Station);
 
+            // Generate the galaxy sector map. Uses the same seed as solar system generation.
+            int galaxySeed = seed.HasValue ? seed.Value : SolarSystemGenerator.StableHashPublic(stationName);
+            GalaxyGenerator.Generate(galaxySeed, Station);
+
             // Initialise skill instances for all starting crew.
             Skills.InitialiseNpcSkills(Station);
 
@@ -446,6 +450,28 @@ namespace Waystation.Core
                 researchData["pending_datachips"] = Station.research.pendingDatachips;
             }
 
+            // Serialise galaxy sector mutable state: seed + per-sector (properName, isRenamed, discoveryState)
+            // The permanent designation code/coordinates are re-generated from the seed on load
+            // if the sector list is missing, but for completeness we persist the mutable fields.
+            var sectorSaveData = new Dictionary<string, object>();
+            sectorSaveData["galaxy_seed"] = Station.galaxySeed;
+            var sectorList = new List<object>();
+            foreach (var s in Station.sectors.Values)
+            {
+                sectorList.Add(new Dictionary<string, object>
+                {
+                    { "uid",              s.uid },
+                    { "proper_name",      s.properName },
+                    { "is_renamed",       s.isRenamed },
+                    { "discovery",        s.discoveryState.ToString() },
+                    { "coordinates_x",    s.coordinates.x },
+                    { "coordinates_y",    s.coordinates.y },
+                    { "designation_code", s.designationCode },
+                    { "prefix",           s.surveyPrefix.ToString() },
+                });
+            }
+            sectorSaveData["sectors"] = sectorList;
+
             var data = new Dictionary<string, object>
             {
                 { "station_name",         Station.stationName },
@@ -458,6 +484,7 @@ namespace Waystation.Core
                 { "log",                  Station.log },
                 { "custom_room_names",    Station.customRoomNames },
                 { "research",             researchData },
+                { "galaxy",               sectorSaveData },
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));
