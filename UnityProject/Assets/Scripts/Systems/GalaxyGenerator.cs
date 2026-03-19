@@ -184,6 +184,36 @@ namespace Waystation.Systems
                 Debug.LogWarning("[GalaxyGenerator] Poisson disc hit max attempts; " +
                                  $"generated {positions.Count - 1}/{SectorCount} sectors.");
 
+            // Grid fallback: if Poisson disc still underfilled the quota, place remaining
+            // sectors on a uniform grid (skipping cells that violate the min-distance rule).
+            if (positions.Count < SectorCount + 1)
+            {
+                float gridSide = Mathf.Ceil(Mathf.Sqrt(SectorCount - (positions.Count - 1)));
+                float step     = (CoordMax - CoordMin) / gridSide;
+                for (float gy = CoordMin + step * 0.5f; gy < CoordMax && positions.Count < SectorCount + 1; gy += step)
+                {
+                    for (float gx = CoordMin + step * 0.5f; gx < CoordMax && positions.Count < SectorCount + 1; gx += step)
+                    {
+                        var candidate = new Vector2(gx, gy);
+                        if (!IsFarEnoughFromAll(candidate, positions)) continue;
+                        var prefix     = AssignPrefix(gx, rng);
+                        var codes      = AssignPhenomenonCodes(rng);
+                        string name    = ProperNameGenerationEnabled ? GenerateProperName(rng) : "";
+                        var sectorData = SectorData.Create(
+                            uid:         $"sector_{seed:x8}_{index}",
+                            coordinates: candidate,
+                            prefix:      prefix,
+                            codes:       codes,
+                            properName:  name);
+                        positions.Add(candidate);
+                        station.sectors[sectorData.uid] = sectorData;
+                        index++;
+                    }
+                }
+                Debug.LogWarning("[GalaxyGenerator] Grid fallback finished; " +
+                                 $"total sectors placed: {positions.Count - 1}/{SectorCount}.");
+            }
+
             // ── Step 3: Handle quadrant name collisions ───────────────────────
             if (ProperNameGenerationEnabled)
                 ResolveNameCollisions(station);
@@ -210,8 +240,8 @@ namespace Waystation.Systems
 
             if (x < 40f) return SurveyPrefix.GSC;
             if (x <= 70f) return SurveyPrefix.FRN;
-            if (x > 85f) return SurveyPrefix.UNK;
-            return SurveyPrefix.FRN;  // 70 < x ≤ 85 treated as frontier (no UNK qualifier)
+            if (x > 85f) return SurveyPrefix.UNK; // outer fringe — density threshold not yet implemented
+            return SurveyPrefix.FRN;  // 70 < x ≤ 85 treated as frontier
         }
 
         private static List<PhenomenonCode> AssignPhenomenonCodes(Random rng)
@@ -298,7 +328,8 @@ namespace Waystation.Systems
             var groups = new Dictionary<string, List<SectorData>>();
             foreach (var s in station.sectors.Values)
             {
-                if (string.IsNullOrEmpty(s.properName)) continue;
+                // The Cradle is unique by design — never suffix the home sector.
+                if (string.IsNullOrEmpty(s.properName) || s.properName == "The Cradle") continue;
                 string key = $"{s.QuadrantKey()}:{s.properName}";
                 if (!groups.TryGetValue(key, out var list))
                     groups[key] = list = new List<SectorData>();

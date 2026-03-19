@@ -241,9 +241,10 @@ namespace Waystation.Systems
         /// <summary>
         /// FNV-1a hash — stable across .NET runtime versions, matching MapSystem.
         /// </summary>
+        [Obsolete("Use StableHash(string) directly.")]
         public static int StableHashPublic(string s) => StableHash(s);
 
-        private static int StableHash(string s)
+        public static int StableHash(string s)
         {
             unchecked
             {

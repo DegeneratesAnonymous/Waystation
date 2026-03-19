@@ -460,10 +460,14 @@ namespace Waystation.Core
             {
                 sectorList.Add(new Dictionary<string, object>
                 {
-                    { "uid",            s.uid },
-                    { "proper_name",    s.properName },
-                    { "is_renamed",     s.isRenamed },
-                    { "discovery",      s.discoveryState.ToString() },
+                    { "uid",              s.uid },
+                    { "proper_name",      s.properName },
+                    { "is_renamed",       s.isRenamed },
+                    { "discovery",        s.discoveryState.ToString() },
+                    { "coordinates_x",    s.coordinates.x },
+                    { "coordinates_y",    s.coordinates.y },
+                    { "designation_code", s.designationCode },
+                    { "prefix",           s.surveyPrefix.ToString() },
                 });
             }
             sectorSaveData["sectors"] = sectorList;

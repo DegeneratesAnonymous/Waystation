@@ -103,7 +103,10 @@ namespace Waystation.Models
 
         /// <summary>Full format: GSC-NB·OR 22.51 "The Cradle"</summary>
         public string FullDesignation()
-            => $"{designationCode} {CoordString()} \"{properName}\"";
+        {
+            if (string.IsNullOrEmpty(properName)) return $"{designationCode} {CoordString()}";
+            return $"{designationCode} {CoordString()} \"{properName}\"";
+        }
 
         /// <summary>Short format: NB·OR 22.51 "The Cradle"  (strip survey prefix)</summary>
         public string ShortDesignation()
@@ -111,12 +114,16 @@ namespace Waystation.Models
             // designationCode is e.g. "GSC-NB·OR"; strip the prefix up to and including '-'
             int dash = designationCode.IndexOf('-');
             string codes = dash >= 0 ? designationCode[(dash + 1)..] : designationCode;
+            if (string.IsNullOrEmpty(properName)) return $"{codes} {CoordString()}";
             return $"{codes} {CoordString()} \"{properName}\"";
         }
 
         /// <summary>Minimal format: 22.51 "The Cradle"</summary>
         public string MinimalDesignation()
-            => $"{CoordString()} \"{properName}\"";
+        {
+            if (string.IsNullOrEmpty(properName)) return CoordString();
+            return $"{CoordString()} \"{properName}\"";
+        }
 
         /// <summary>Code-only format: GSC-NB·OR 22.51  (no proper name, for comms/logs)</summary>
         public string CodeOnlyDesignation()

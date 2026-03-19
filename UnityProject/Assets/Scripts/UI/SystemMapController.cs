@@ -101,17 +101,14 @@ namespace Waystation.UI
 
         // Sector designation dot/label tracking
         private readonly List<GameObject> _sectorObjects = new List<GameObject>();
+        // Cached zoom-threshold state — used to skip needless sector-dot rebuilds in Sector layer.
+        private bool _prevZoomedOut;
         // Currently selected sector (for detail panel)
         private SectorData _selectedSector;
         // Sector detail UI refs (assigned in EnsureCanvas)
-        private TMP_Text _sectorDesignationLabel;
-        private TMP_Text _sectorPhenomLabel;
-        private TMP_Text _sectorCoordsLabel;
-        private TMP_Text _sectorDiscoveryLabel;
         private TMP_Text _sectorRenamedLabel;
         private Button   _sectorRenameBtn;
         // Designation colour constants matching design spec
-        private static readonly Color ColUnvisited = new Color(0.176f, 0.188f, 0.251f); // tBase #2d3040
         private static readonly Color ColDetected  = new Color(0.306f, 0.329f, 0.439f); // fBevel #4e5470
         private static readonly Color ColVisited   = new Color(0.282f, 0.502f, 0.667f); // acc   #4880aa
         private static readonly Color ColUncharted = new Color(0.25f,  0.28f,  0.32f,  0.45f);
@@ -193,10 +190,15 @@ namespace Waystation.UI
                 RefreshGalaxyChunks();
             else if (_layer == MapLayer.Sector)
             {
-                // For Sector view, refresh sector label format on zoom threshold crossing.
-                foreach (var go in _sectorObjects) if (go != null) Destroy(go);
-                _sectorObjects.Clear();
-                RenderSectorDots(SectorPxPerLY, _exploreZoom < 0.8f);
+                // Only rebuild sector dots when the label-detail threshold (0.8x) actually changes.
+                bool zoomedOut = _exploreZoom < 0.8f;
+                if (zoomedOut != _prevZoomedOut)
+                {
+                    _prevZoomedOut = zoomedOut;
+                    foreach (var go in _sectorObjects) if (go != null) Destroy(go);
+                    _sectorObjects.Clear();
+                    RenderSectorDots(SectorPxPerLY, zoomedOut);
+                }
             }
         }
 
@@ -588,12 +590,9 @@ namespace Waystation.UI
                 CreateExploreDot(_exploreWorld, Vector2.zero, 12f,
                     new Color(1f, 0.95f, 0.50f), _sys, isHome: true);
 
-            // Overlay sector designation dots/labels on the galaxy map.
-            bool zoomedOut = _exploreZoom < 0.8f;
-            // Clear previous sector objects before re-rendering to avoid duplicates.
-            foreach (var go in _sectorObjects) if (go != null) Destroy(go);
-            _sectorObjects.Clear();
-            RenderSectorDots(GalaxyPxPerLY, zoomedOut);
+            // Overlay sector designation dots/labels on the galaxy map (created once; no per-pan churn).
+            if (_sectorObjects.Count == 0)
+                RenderSectorDots(GalaxyPxPerLY, _exploreZoom < 0.8f);
         }
 
         // ── Sector designation rendering ──────────────────────────────────────
@@ -1271,16 +1270,9 @@ namespace Waystation.UI
             {
                 dy -= 4f;
                 var btn = MakeButton(detailBgRt, "RenameSectorBtn",
-                    new Color(0.18f, 0.28f, 0.42f, 0.95f), "✎  Rename Sector", 11f, () =>
-                    {
-                        if (_selectedSector == null) return;
-                        // NOTE: A full rename flow requires a TMP_InputField overlay (future UI
-                        // polish pass). This stub shows the button is wired; integrate with an
-                        // input dialog before shipping the map screen.
-                        // For now, toggle a placeholder to verify the rename pipeline works.
-                        if (!_selectedSector.isRenamed)
-                            TryRenameSelectedSector(_selectedSector.properName + " *");
-                    });
+                    new Color(0.18f, 0.28f, 0.42f, 0.95f), "✎  Rename Sector", 11f, () => { });
+                // Disabled until a proper TMP_InputField rename dialog is implemented.
+                btn.interactable = false;
                 _sectorRenameBtn = btn;
                 var rt = (RectTransform)btn.transform;
                 rt.anchorMin = new Vector2(0f, 1f);
