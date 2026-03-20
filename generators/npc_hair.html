@@ -148,8 +148,7 @@ const prv=document.getElementById('prv');
 prv.width=AW*4; prv.height=AH*4;
 const pc=prv.getContext('2d');
 for(let py=0;py<AH*4;py+=8)for(let px=0;px<AW*4;px+=8){
-  pc.fillStyle=((Math.floor(px/8)+Math.floor(py/8))%2===0)?'#14162a':'#0c0e1c';
-  pc.fillRect(px,py,8,8);
+  pc.fillStyle=((Math.floor(px/8)+Math.floor(py/8))%2===0)?'#14162a':'#0c0e1c';pc.fillRect(px,py,8,8);
 }
 pc.imageSmoothingEnabled=false; pc.drawImage(atl,0,0,AW*4,AH*4);
 

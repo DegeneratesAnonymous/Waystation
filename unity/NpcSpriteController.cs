@@ -1,5 +1,5 @@
 // NpcSpriteController — MonoBehaviour that applies an NpcAppearance to the
-// 9 child SpriteRenderer components that make up a layered NPC sprite stack.
+// 9 base layer SpriteRenderers + 7 mask SpriteRenderers that make up a layered NPC sprite stack.
 //
 // Sorting layer  : "NPCs"
 // SortingOrder assignment (higher = rendered on top):
@@ -15,6 +15,7 @@
 //
 // Child hierarchy expected under the NPC root GameObject:
 //   Back / Body / Shoes / Pants / Shirt / Face / Hair / Hat / Weapon
+//   BackMask / ShoesMask / PantsMask / ShirtMask / HairMask / HatMask / WeaponMask
 // (order in hierarchy does not matter — sortingOrder drives draw order)
 //
 // Clothing and hair layers use NpcApparel.shader for mask-keyed runtime tinting.
@@ -259,6 +260,15 @@ namespace Waystation.NPC
             SetRenderer(hairRenderer,   Layer, 16);
             SetRenderer(hatRenderer,    Layer, 17);
             SetRenderer(weaponRenderer, Layer, 18);
+
+            // Mask renderers share the same sorting order as their base layer
+            SetRenderer(backMaskRenderer,   Layer, 10);
+            SetRenderer(shoesMaskRenderer,  Layer, 12);
+            SetRenderer(pantsMaskRenderer,  Layer, 13);
+            SetRenderer(shirtMaskRenderer,  Layer, 14);
+            SetRenderer(hairMaskRenderer,   Layer, 16);
+            SetRenderer(hatMaskRenderer,    Layer, 17);
+            SetRenderer(weaponMaskRenderer, Layer, 18);
         }
 
         /// <summary>
@@ -277,6 +287,14 @@ namespace Waystation.NPC
             hairRenderer   = hairRenderer   != null ? hairRenderer   : FindChildRenderer("Hair");
             hatRenderer    = hatRenderer    != null ? hatRenderer    : FindChildRenderer("Hat");
             weaponRenderer = weaponRenderer != null ? weaponRenderer : FindChildRenderer("Weapon");
+
+            backMaskRenderer   = backMaskRenderer   != null ? backMaskRenderer   : FindChildRenderer("BackMask");
+            shoesMaskRenderer  = shoesMaskRenderer  != null ? shoesMaskRenderer  : FindChildRenderer("ShoesMask");
+            pantsMaskRenderer  = pantsMaskRenderer  != null ? pantsMaskRenderer  : FindChildRenderer("PantsMask");
+            shirtMaskRenderer  = shirtMaskRenderer  != null ? shirtMaskRenderer  : FindChildRenderer("ShirtMask");
+            hairMaskRenderer   = hairMaskRenderer   != null ? hairMaskRenderer   : FindChildRenderer("HairMask");
+            hatMaskRenderer    = hatMaskRenderer    != null ? hatMaskRenderer    : FindChildRenderer("HatMask");
+            weaponMaskRenderer = weaponMaskRenderer != null ? weaponMaskRenderer : FindChildRenderer("WeaponMask");
         }
 
         private void InitPropertyBlocks()
@@ -318,6 +336,14 @@ namespace Waystation.NPC
             CheckRenderer(hairRenderer,   "hairRenderer");
             CheckRenderer(hatRenderer,    "hatRenderer");
             CheckRenderer(weaponRenderer, "weaponRenderer");
+
+            CheckRenderer(backMaskRenderer,   "backMaskRenderer");
+            CheckRenderer(shoesMaskRenderer,  "shoesMaskRenderer");
+            CheckRenderer(pantsMaskRenderer,  "pantsMaskRenderer");
+            CheckRenderer(shirtMaskRenderer,  "shirtMaskRenderer");
+            CheckRenderer(hairMaskRenderer,   "hairMaskRenderer");
+            CheckRenderer(hatMaskRenderer,    "hatMaskRenderer");
+            CheckRenderer(weaponMaskRenderer, "weaponMaskRenderer");
         }
 
         private void CheckRenderer(SpriteRenderer sr, string fieldName)

@@ -80,7 +80,8 @@ namespace Waystation.Models
             {
                 uid         = uid,
                 name        = name,
-                allowedJobs = allowedJobs ?? new List<string>()
+                allowedJobs = allowedJobs ?? new List<string>(),
+                colour      = colour
             };
         }
 

@@ -62,6 +62,18 @@ namespace Waystation.NPC.Editor
             { "npc_weapon_mask.png",  20 },
         };
 
+        // Maps mask atlas filename → expected sprite count
+        private static readonly Dictionary<string, int> MaskAtlasCounts = new Dictionary<string, int>
+        {
+            { "npc_hair_mask.png",    5 },
+            { "npc_hat_mask.png",     5 },
+            { "npc_shirt_mask.png",   5 },
+            { "npc_pants_mask.png",   4 },
+            { "npc_shoes_mask.png",   3 },
+            { "npc_back_mask.png",    5 },
+            { "npc_weapon_mask.png", 20 },
+        };
+
         [MenuItem("Waystation/NPC/Import NPC Atlases")]
         public static void ImportAtlases()
         {
@@ -102,6 +114,15 @@ namespace Waystation.NPC.Editor
             var shoeMaskSprites   = SliceAtlas("npc_shoes_mask.png",  AtlasCounts["npc_shoes_mask.png"],  ref anyError);
             var backMaskSprites   = SliceAtlas("npc_back_mask.png",   AtlasCounts["npc_back_mask.png"],   ref anyError);
             var weaponMaskSprites = SliceAtlas("npc_weapon_mask.png", AtlasCounts["npc_weapon_mask.png"], ref anyError);
+
+            // Mask atlases
+            var hairMaskSprites   = SliceAtlas("npc_hair_mask.png",   MaskAtlasCounts["npc_hair_mask.png"],   ref anyError);
+            var hatMaskSprites    = SliceAtlas("npc_hat_mask.png",    MaskAtlasCounts["npc_hat_mask.png"],    ref anyError);
+            var shirtMaskSprites  = SliceAtlas("npc_shirt_mask.png",  MaskAtlasCounts["npc_shirt_mask.png"],  ref anyError);
+            var pantsMaskSprites  = SliceAtlas("npc_pants_mask.png",  MaskAtlasCounts["npc_pants_mask.png"],  ref anyError);
+            var shoesMaskSprites  = SliceAtlas("npc_shoes_mask.png",  MaskAtlasCounts["npc_shoes_mask.png"],  ref anyError);
+            var backMaskSprites   = SliceAtlas("npc_back_mask.png",   MaskAtlasCounts["npc_back_mask.png"],   ref anyError);
+            var weaponMaskSprites = SliceAtlas("npc_weapon_mask.png", MaskAtlasCounts["npc_weapon_mask.png"], ref anyError);
 
             if (anyError)
             {
