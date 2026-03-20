@@ -1,0 +1,78 @@
+{
+  "atlas": "npc_hair_mask.png",
+  "base_atlas": "npc_hair.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc_mask",
+  "tiles": [
+    {
+      "id": "npc_hair_short_mask",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:short",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hair_long_mask",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:long",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hair_medium_mask",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:medium",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hair_buzz_mask",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:buzz",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hair_ponytail_mask",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hair",
+        "style:ponytail",
+        "state:normal",
+        "mask"
+      ]
+    }
+  ]
+}

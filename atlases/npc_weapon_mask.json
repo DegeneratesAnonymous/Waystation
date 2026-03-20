@@ -1,0 +1,258 @@
+{
+  "atlas": "npc_weapon_mask.png",
+  "base_atlas": "npc_weapon.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc_mask",
+  "tiles": [
+    {
+      "id": "npc_weapon_none_mask",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:none",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_pistol_mask",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:pistol",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_rifle_mask",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:rifle",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_shotgun_mask",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:shotgun",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_knife_mask",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:knife",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_bat_mask",
+      "col": 5,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:bat",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_wrench_mask",
+      "col": 6,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:wrench",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_shield_mask",
+      "col": 7,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:shield",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_0_mask",
+      "col": 8,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_1_mask",
+      "col": 9,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_2_mask",
+      "col": 10,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_3_mask",
+      "col": 11,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_4_mask",
+      "col": 12,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_5_mask",
+      "col": 13,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_6_mask",
+      "col": 14,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_7_mask",
+      "col": 15,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_8_mask",
+      "col": 16,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_9_mask",
+      "col": 17,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_10_mask",
+      "col": 18,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_weapon_reserved_11_mask",
+      "col": 19,
+      "row": 0,
+      "tags": [
+        "npc",
+        "weapon",
+        "type:reserved",
+        "state:normal",
+        "mask"
+      ]
+    }
+  ]
+}

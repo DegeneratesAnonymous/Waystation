@@ -1,12 +1,26 @@
 // NpcAtlasImporter — Editor-only tool that auto-slices the 9 NPC PNG atlases
-// from Assets/Art/NPCs/ and populates (or creates) an NpcAtlasRegistry asset.
+// and their 7 companion mask atlases from Assets/Art/NPCs/ and populates (or
+// creates) an NpcAtlasRegistry asset.
 //
 // Usage:
-//   1. Copy the 9 PNG atlases from atlases/ into Assets/Art/NPCs/ subfolders
-//      (or directly into Assets/Art/NPCs/).
+//   1. Copy base and mask PNGs from atlases/ into Assets/Art/NPCs/.
 //   2. Open the menu Waystation → NPC → Import NPC Atlases.
 //   3. The tool slices each texture at slot_size=34×50, assigns sprites to the
 //      registry arrays, and saves an NpcAtlasRegistry.asset in Assets/Resources/.
+//
+// Atlas layout after the Art Design System pt 2 update:
+//   npc_body.png   : 18 sprites — 3 body types × 6 skin tones (baked, unchanged)
+//   npc_face.png   :  4 sprites — 4 expressions (baked, unchanged)
+//   npc_hair.png   :  5 sprites — one neutral master per hair style
+//   npc_hat.png    :  5 sprites — one neutral master per hat type
+//   npc_shirt.png  :  5 sprites — one neutral master per shirt type
+//   npc_pants.png  :  4 sprites — one neutral master per pants type
+//   npc_shoes.png  :  3 sprites — one neutral master per shoe type
+//   npc_back.png   :  5 sprites — one neutral master per back-item type
+//   npc_weapon.png : 20 sprites — 8 weapon types + 12 reserved (neutral master)
+//
+// Each clothing/hair atlas has a companion mask atlas (*_mask.png) with the
+// same sprite count encoding recolourable regions as flat distinct colours.
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
@@ -29,15 +43,23 @@ namespace Waystation.NPC.Editor
         // Maps atlas filename → expected sprite count
         private static readonly Dictionary<string, int> AtlasCounts = new Dictionary<string, int>
         {
-            { "npc_body.png",   18 },
-            { "npc_face.png",    4 },
-            { "npc_hair.png",   30 },
-            { "npc_hat.png",    25 },
-            { "npc_shirt.png",  25 },
-            { "npc_pants.png",  20 },
-            { "npc_shoes.png",  15 },
-            { "npc_back.png",   10 },
-            { "npc_weapon.png", 20 },
+            { "npc_body.png",         18 },
+            { "npc_face.png",          4 },
+            { "npc_hair.png",          5 },
+            { "npc_hat.png",           5 },
+            { "npc_shirt.png",         5 },
+            { "npc_pants.png",         4 },
+            { "npc_shoes.png",         3 },
+            { "npc_back.png",          5 },
+            { "npc_weapon.png",       20 },
+            // Mask atlases — same counts as their base counterparts
+            { "npc_hair_mask.png",     5 },
+            { "npc_hat_mask.png",      5 },
+            { "npc_shirt_mask.png",    5 },
+            { "npc_pants_mask.png",    4 },
+            { "npc_shoes_mask.png",    3 },
+            { "npc_back_mask.png",     5 },
+            { "npc_weapon_mask.png",  20 },
         };
 
         [MenuItem("Waystation/NPC/Import NPC Atlases")]
@@ -61,20 +83,28 @@ namespace Waystation.NPC.Editor
 
             bool anyError = false;
 
-            var bodySprites   = SliceAtlas("npc_body.png",   AtlasCounts["npc_body.png"],   ref anyError);
-            var faceSprites   = SliceAtlas("npc_face.png",   AtlasCounts["npc_face.png"],   ref anyError);
-            var hairSprites   = SliceAtlas("npc_hair.png",   AtlasCounts["npc_hair.png"],   ref anyError);
-            var hatSprites    = SliceAtlas("npc_hat.png",    AtlasCounts["npc_hat.png"],    ref anyError);
-            var shirtSprites  = SliceAtlas("npc_shirt.png",  AtlasCounts["npc_shirt.png"],  ref anyError);
-            var pantsSprites  = SliceAtlas("npc_pants.png",  AtlasCounts["npc_pants.png"],  ref anyError);
-            var shoeSprites   = SliceAtlas("npc_shoes.png",  AtlasCounts["npc_shoes.png"],  ref anyError);
-            var backSprites   = SliceAtlas("npc_back.png",   AtlasCounts["npc_back.png"],   ref anyError);
-            var weaponSprites = SliceAtlas("npc_weapon.png", AtlasCounts["npc_weapon.png"], ref anyError);
+            // ── Base atlases ──────────────────────────────────────────────────
+            var bodySprites    = SliceAtlas("npc_body.png",        AtlasCounts["npc_body.png"],        ref anyError);
+            var faceSprites    = SliceAtlas("npc_face.png",        AtlasCounts["npc_face.png"],        ref anyError);
+            var hairSprites    = SliceAtlas("npc_hair.png",        AtlasCounts["npc_hair.png"],        ref anyError);
+            var hatSprites     = SliceAtlas("npc_hat.png",         AtlasCounts["npc_hat.png"],         ref anyError);
+            var shirtSprites   = SliceAtlas("npc_shirt.png",       AtlasCounts["npc_shirt.png"],       ref anyError);
+            var pantsSprites   = SliceAtlas("npc_pants.png",       AtlasCounts["npc_pants.png"],       ref anyError);
+            var shoeSprites    = SliceAtlas("npc_shoes.png",       AtlasCounts["npc_shoes.png"],       ref anyError);
+            var backSprites    = SliceAtlas("npc_back.png",        AtlasCounts["npc_back.png"],        ref anyError);
+            var weaponSprites  = SliceAtlas("npc_weapon.png",      AtlasCounts["npc_weapon.png"],      ref anyError);
+
+            // ── Mask atlases ──────────────────────────────────────────────────
+            var hairMaskSprites   = SliceAtlas("npc_hair_mask.png",   AtlasCounts["npc_hair_mask.png"],   ref anyError);
+            var hatMaskSprites    = SliceAtlas("npc_hat_mask.png",    AtlasCounts["npc_hat_mask.png"],    ref anyError);
+            var shirtMaskSprites  = SliceAtlas("npc_shirt_mask.png",  AtlasCounts["npc_shirt_mask.png"],  ref anyError);
+            var pantsMaskSprites  = SliceAtlas("npc_pants_mask.png",  AtlasCounts["npc_pants_mask.png"],  ref anyError);
+            var shoeMaskSprites   = SliceAtlas("npc_shoes_mask.png",  AtlasCounts["npc_shoes_mask.png"],  ref anyError);
+            var backMaskSprites   = SliceAtlas("npc_back_mask.png",   AtlasCounts["npc_back_mask.png"],   ref anyError);
+            var weaponMaskSprites = SliceAtlas("npc_weapon_mask.png", AtlasCounts["npc_weapon_mask.png"], ref anyError);
 
             if (anyError)
             {
-                // Don't overwrite existing registry arrays when an atlas is missing/invalid;
-                // fail fast so the developer sees the error without a partially-broken registry.
                 Debug.LogError("[NpcAtlasImporter] Import aborted due to errors — " +
                                "registry arrays have NOT been updated. Check the console above.");
                 return;
@@ -90,6 +120,14 @@ namespace Waystation.NPC.Editor
             registry.shoeSprites   = shoeSprites;
             registry.backSprites   = backSprites;
             registry.weaponSprites = weaponSprites;
+
+            registry.hairMaskSprites   = hairMaskSprites;
+            registry.hatMaskSprites    = hatMaskSprites;
+            registry.shirtMaskSprites  = shirtMaskSprites;
+            registry.pantsMaskSprites  = pantsMaskSprites;
+            registry.shoeMaskSprites   = shoeMaskSprites;
+            registry.backMaskSprites   = backMaskSprites;
+            registry.weaponMaskSprites = weaponMaskSprites;
 
             EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
@@ -134,13 +172,7 @@ namespace Waystation.NPC.Editor
             var metas = new List<SpriteMetaData>();
             for (int col = 0; col < expectedCount; col++)
             {
-                // Texture coordinates: origin is bottom-left in Unity
-                // Atlas origin is top-left in PNG pixel space, so we flip Y.
-                // Each slot is SlotW×SlotH. Content starts at (1,1) within slot.
-                // PNG height = SlotH = 50.
-                // Unity rect y = atlasHeight - slotY - SlotH
-                //              = 50 - 0 - 50 = 0  (for row 0, only row)
-                int pxLeft = col * SlotW + Padding;
+                int pxLeft   = col * SlotW + Padding;
                 int pxBottom = SlotH - Padding - TileH; // = 50 - 1 - 48 = 1
                 var meta = new SpriteMetaData
                 {
@@ -153,11 +185,8 @@ namespace Waystation.NPC.Editor
             }
 
             importer.spritesheet = metas.ToArray();
-
-            // Always re-import to apply all settings and pick up new sprite rects
             AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
 
-            // Load sprites from asset database
             var all = AssetDatabase.LoadAllAssetsAtPath(assetPath);
             var sprites = new List<Sprite>();
             foreach (var obj in all)
@@ -165,7 +194,6 @@ namespace Waystation.NPC.Editor
                 if (obj is Sprite s) sprites.Add(s);
             }
 
-            // Sort by column order (sprite name ends with _col)
             sprites.Sort((a, b) =>
             {
                 int ca = ExtractColFromName(a.name);
@@ -189,7 +217,6 @@ namespace Waystation.NPC.Editor
 
         private static string FindAsset(string filename)
         {
-            // Search recursively under NpcArtFolder
             string[] guids = AssetDatabase.FindAssets(
                 Path.GetFileNameWithoutExtension(filename),
                 new[] { NpcArtFolder });
@@ -204,7 +231,7 @@ namespace Waystation.NPC.Editor
 
         private static string BuildSpriteName(string atlasFilename, int col)
         {
-            string stem = Path.GetFileNameWithoutExtension(atlasFilename); // e.g. "npc_body"
+            string stem = Path.GetFileNameWithoutExtension(atlasFilename);
             return $"{stem}_col{col:D3}";
         }
 
