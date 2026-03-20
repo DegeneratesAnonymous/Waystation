@@ -2013,6 +2013,20 @@ namespace Waystation.UI
                     GUI.color = cp2;
                 }
 
+                // Tension stage badge (NpcTraits feature)
+                if (FeatureFlags.NpcTraits &&
+                    npc.traitProfile != null &&
+                    npc.traitProfile.tensionStage != TensionStage.Normal)
+                {
+                    Color stageCol = TensionSystem.GetTensionStageColor(npc.traitProfile.tensionStage);
+                    var cp3 = GUI.color; GUI.color = stageCol;
+                    string stageLbl = npc.traitProfile.tensionStage == TensionStage.DepartureRisk
+                        ? "⚠ Leave" : "⚠ Tension";
+                    GUI.Label(new Rect(cw - 58f, y + 3f + (crisis ? LineH : 0f), 56f, LineH),
+                              stageLbl, _sSub);
+                    GUI.color = cp3;
+                }
+
                 y += CardH;
             }
 
@@ -2268,6 +2282,88 @@ namespace Waystation.UI
             sy += 22f;
 
             DrawSolid(new Rect(area.x, sy, w, 2f), ColDivider); sy += 4f;
+
+            // ── Trait display (NpcTraits feature gate) ─────────────────────────
+            if (FeatureFlags.NpcTraits && npc.traitProfile != null &&
+                npc.traitProfile.traits.Count > 0)
+            {
+                // Tension stage badge
+                TensionStage tensionStage = npc.traitProfile.tensionStage;
+                if (tensionStage != TensionStage.Normal)
+                {
+                    string stageLabel = TensionSystem.GetTensionStageLabel(tensionStage);
+                    Color  stageColor = TensionSystem.GetTensionStageColor(tensionStage);
+                    DrawSolid(new Rect(area.x + 4f, sy, cw, 16f),
+                              new Color(stageColor.r, stageColor.g, stageColor.b, 0.18f));
+                    var prev = GUI.color; GUI.color = stageColor;
+                    GUI.Label(new Rect(area.x + 8f, sy, cw - 8f, 16f), stageLabel, _sSub);
+                    GUI.color = prev;
+                    sy += 20f;
+                }
+
+                // Traits header
+                GUI.Label(new Rect(area.x + 4f, sy, cw, 16f), "Traits", _sLabel); sy += 18f;
+
+                // Group traits by category
+                var byCategory = new System.Collections.Generic.SortedDictionary<string,
+                    System.Collections.Generic.List<ActiveTrait>>();
+                foreach (var active in npc.traitProfile.traits)
+                {
+                    NpcTraitDefinition def = null;
+                    _gm.Traits?.TryGetTrait(active.traitId, out def);
+                    string catKey = def != null ? def.category.ToString() : "Unknown";
+                    if (!byCategory.ContainsKey(catKey))
+                        byCategory[catKey] = new System.Collections.Generic.List<ActiveTrait>();
+                    byCategory[catKey].Add(active);
+                }
+
+                foreach (var catKv in byCategory)
+                {
+                    // Category header
+                    var prev = GUI.color; GUI.color = ColAccent;
+                    GUI.Label(new Rect(area.x + 4f, sy, cw, 14f), catKv.Key, _sSub);
+                    GUI.color = prev;
+                    sy += 16f;
+
+                    foreach (var active in catKv.Value)
+                    {
+                        NpcTraitDefinition def = null;
+                        _gm.Traits?.TryGetTrait(active.traitId, out def);
+                        if (def == null) continue;
+
+                        // Valence colour
+                        Color valColor = def.valence switch
+                        {
+                            TraitValence.Positive => ColBarGreen,
+                            TraitValence.Negative => ColBarCrit,
+                            _                     => ColBarWarn,
+                        };
+                        string valenceSymbol = def.valence switch
+                        {
+                            TraitValence.Positive => "▲",
+                            TraitValence.Negative => "▼",
+                            _                     => "●",
+                        };
+
+                        // Trait name + valence symbol
+                        float nameW = cw - 60f;
+                        var cPrev = GUI.color; GUI.color = valColor;
+                        GUI.Label(new Rect(area.x + 8f, sy, 14f, 14f), valenceSymbol, _sSub);
+                        GUI.color = cPrev;
+                        GUI.Label(new Rect(area.x + 22f, sy, nameW, 14f),
+                                  def.displayName, _sSub);
+
+                        // Strength bar
+                        float barX = area.x + 22f + nameW + 2f;
+                        float barW = 36f;
+                        DrawSolid(new Rect(barX, sy + 4f, barW, 6f), ColBarBg);
+                        DrawSolid(new Rect(barX, sy + 4f, barW * active.strength, 6f), valColor);
+
+                        sy += 16f;
+                    }
+                }
+                DrawSolid(new Rect(area.x, sy, w, 2f), ColDivider); sy += 4f;
+            }
 
             // ── Skills section — positioned exactly where vitals ended ─────────
             Rect skillsArea = new Rect(area.x, sy, w, area.y + h - sy);

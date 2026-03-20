@@ -177,9 +177,11 @@ namespace Waystation.Systems
             npc.jobModuleUid  = module?.uid;
             // Apply WorkModifier to job duration: higher mood = shorter duration (faster work).
             // expertiseModifier stacks multiplicatively (from SkillSystem WorkSpeed bonuses).
+            // traitWorkModifier stacks multiplicatively (from TraitSystem trait effects).
             int baseDuration  = job.durationTicks;
-            float modifier    = (npc.workModifier     > 0f ? npc.workModifier     : 1.0f)
-                              * (npc.expertiseModifier > 0f ? npc.expertiseModifier : 1.0f);
+            float modifier    = (npc.workModifier      > 0f ? npc.workModifier      : 1.0f)
+                              * (npc.expertiseModifier  > 0f ? npc.expertiseModifier  : 1.0f)
+                              * (npc.traitWorkModifier  > 0f ? npc.traitWorkModifier  : 1.0f);
             npc.jobTimer      = Mathf.Max(1, Mathf.RoundToInt(baseDuration / modifier));
             if (module != null) npc.location = module.definitionId;
         }

@@ -275,6 +275,204 @@ namespace Waystation.Models
         }
     }
 
+    // =========================================================================
+    // Trait System — types loaded from data/traits/ and data/trait_pools/
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // Trait enums — append-only
+    // -------------------------------------------------------------------------
+
+    /// <summary>High-level category that groups related traits together.
+    /// Used for conflict detection (only same-category traits can conflict)
+    /// and for faction trait aggregation.</summary>
+    public enum TraitCategory { Psychological, Social, Economic, Physical, Ideological }
+
+    /// <summary>Whether a trait has a positive, negative, or neutral connotation.
+    /// Used for display tinting and tension calculation.</summary>
+    public enum TraitValence { Positive, Negative, Neutral }
+
+    /// <summary>Which stat or behaviour a TraitEffect modifies.</summary>
+    public enum TraitEffectTarget
+    {
+        MoodModifier,
+        WorkSpeedModifier,
+        SocialModifier,
+        HostilityModifier,
+        LoyaltyModifier,
+        // Extend as needed — append-only
+    }
+
+    /// <summary>Sustained conditions that push pressure into a trait pool bucket.</summary>
+    public enum TraitConditionCategory
+    {
+        ResourceScarcity,
+        ResourceAbundance,
+        Overcrowding,
+        Isolation,
+        Danger,
+        Stability,
+        LowMood,
+        HighMood,
+        // Extend as needed — append-only
+    }
+
+    // -------------------------------------------------------------------------
+    // TraitEffect — a single stat/behaviour modifier applied by a trait
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public struct TraitEffect
+    {
+        public TraitEffectTarget target;
+        public float             magnitude;
+
+        public static TraitEffect FromDict(Dictionary<string, object> raw)
+        {
+            var targetStr = raw.GetString("target");
+            var target = System.Enum.TryParse<TraitEffectTarget>(targetStr, out var t)
+                ? t : TraitEffectTarget.MoodModifier;
+            return new TraitEffect
+            {
+                target    = target,
+                magnitude = raw.GetFloat("magnitude"),
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // NpcTraitDefinition — static definition of a single trait
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class NpcTraitDefinition
+    {
+        public string        traitId;
+        public string        displayName;
+        public string        description;
+        public TraitCategory category;
+        public TraitValence  valence;
+
+        /// <summary>
+        /// Fraction of trait strength lost per in-game day.
+        /// 0 = no passive decay. Ignored when requiresEventToRemove = true.
+        /// </summary>
+        public float         decayRatePerDay;
+
+        /// <summary>
+        /// When true, passive decay does not apply — removal requires an external
+        /// event trigger via TraitSystem.TriggerEventRemoval().
+        /// </summary>
+        public bool          requiresEventToRemove;
+
+        /// <summary>Trait IDs (same category) that conflict with this one on acquisition.</summary>
+        public List<string>      conflictingTraitIds = new List<string>();
+
+        /// <summary>Stat/behaviour modifiers applied while this trait is active.</summary>
+        public List<TraitEffect> effects             = new List<TraitEffect>();
+
+        public static NpcTraitDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var def = new NpcTraitDefinition
+            {
+                traitId               = raw.GetString("id"),
+                displayName           = raw.GetString("display_name", raw.GetString("id")),
+                description           = raw.GetString("description", ""),
+                decayRatePerDay       = raw.GetFloat("decay_rate_per_day"),
+                requiresEventToRemove = raw.GetBool("requires_event_to_remove"),
+            };
+
+            var catStr = raw.GetString("category");
+            if (System.Enum.TryParse<TraitCategory>(catStr, out var cat)) def.category = cat;
+
+            var valStr = raw.GetString("valence");
+            if (System.Enum.TryParse<TraitValence>(valStr, out var val)) def.valence = val;
+
+            foreach (var s in raw.GetStringList("conflicting_trait_ids"))
+                def.conflictingTraitIds.Add(s);
+
+            if (raw.ContainsKey("effects") && raw["effects"] is List<object> efxList)
+                foreach (var obj in efxList)
+                    if (obj is Dictionary<string, object> efxDict)
+                        def.effects.Add(TraitEffect.FromDict(efxDict));
+
+            return def;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // TraitPool — maps a TraitConditionCategory to a weighted set of traits
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class WeightedTraitEntry
+    {
+        public string traitId;
+        public float  weight;
+    }
+
+    [Serializable]
+    public class TraitPoolDefinition
+    {
+        public string                 poolId;
+        public TraitConditionCategory conditionCategory;
+        public List<WeightedTraitEntry> entries = new List<WeightedTraitEntry>();
+
+        public static TraitPoolDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var pool = new TraitPoolDefinition
+            {
+                poolId = raw.GetString("id"),
+            };
+            var catStr = raw.GetString("condition_category");
+            if (System.Enum.TryParse<TraitConditionCategory>(catStr, out var cat))
+                pool.conditionCategory = cat;
+
+            if (raw.ContainsKey("entries") && raw["entries"] is List<object> entryList)
+            {
+                foreach (var obj in entryList)
+                {
+                    if (obj is Dictionary<string, object> d)
+                        pool.entries.Add(new WeightedTraitEntry
+                        {
+                            traitId = d.GetString("trait_id"),
+                            weight  = d.GetFloat("weight", 1f),
+                        });
+                }
+            }
+            return pool;
+        }
+    }
+
+    // =========================================================================
+    // Faction Government — government type enum and succession state
+    // =========================================================================
+
+    /// <summary>Determines how an NPCs' trait profiles are aggregated into faction behaviour.</summary>
+    public enum GovernmentType
+    {
+        Democracy,
+        Republic,
+        Monarchy,
+        Authoritarian,
+        CorporateVassal,
+        Pirate,        // no aggregation — interactions resolve at individual NPC level (stub)
+        // Extend as needed — append-only
+    }
+
+    /// <summary>Succession health of a faction's leadership.</summary>
+    public enum SuccessionState { Stable, Contested, Vacant }
+
+    // =========================================================================
+    // Region Simulation — enums for region and resource models
+    // =========================================================================
+
+    /// <summary>Discovery/simulation phase of a region.</summary>
+    public enum RegionSimulationState { Undiscovered, OnHorizon, Discovered, FullyMapped }
+
+    /// <summary>Resource types tracked by regional resource history.</summary>
+    public enum ResourceType { Food, Water, Power, Medicine, Materials, Space }
+
     // -------------------------------------------------------------------------
     // Faction Definition
     // -------------------------------------------------------------------------
@@ -293,6 +491,20 @@ namespace Waystation.Models
         public Dictionary<string, object> economicProfile  = new Dictionary<string, object>();
         public string schemaVersion = "1";
 
+        // ── Government System fields ─────────────────────────────────────────
+        public GovernmentType governmentType         = GovernmentType.Democracy;
+
+        /// <summary>UIDs of all NPC members of this faction.</summary>
+        public List<string>   memberNpcIds           = new List<string>();
+
+        /// <summary>UIDs of NPCs holding leadership roles (used by non-democratic aggregation).</summary>
+        public List<string>   leaderNpcIds           = new List<string>();
+
+        /// <summary>For CorporateVassal — ID of the parent faction whose leaders apply top-tier weighting.</summary>
+        public string         vassalParentFactionId  = null;
+
+        public SuccessionState successionState       = SuccessionState.Stable;
+
         public static FactionDefinition FromDict(Dictionary<string, object> raw)
         {
             var f = new FactionDefinition
@@ -308,6 +520,15 @@ namespace Waystation.Models
             if (raw.ContainsKey("relationships") && raw["relationships"] is Dictionary<string, object> rels)
                 foreach (var kv in rels)
                     f.relationships[kv.Key] = Convert.ToSingle(kv.Value);
+
+            var govStr = raw.GetString("government_type");
+            if (System.Enum.TryParse<GovernmentType>(govStr, out var gov)) f.governmentType = gov;
+            foreach (var s in raw.GetStringList("member_npc_ids"))  f.memberNpcIds.Add(s);
+            foreach (var s in raw.GetStringList("leader_npc_ids"))  f.leaderNpcIds.Add(s);
+            f.vassalParentFactionId = raw.GetString("vassal_parent_faction_id", null);
+            var succStr = raw.GetString("succession_state");
+            if (System.Enum.TryParse<SuccessionState>(succStr, out var succ)) f.successionState = succ;
+
             return f;
         }
     }
