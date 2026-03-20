@@ -1,16 +1,22 @@
 // NpcAtlasRegistry — ScriptableObject that holds all NPC Sprite[] arrays
-// and exposes typed Get* accessors that map enum + colour-index to a Sprite.
+// and exposes typed Get* accessors that map enum value to a Sprite.
+//
+// Each clothing/hair atlas is now a neutral-tone master (one column per
+// style/type). Body and face atlases remain baked (unchanged from PR 39).
 //
 // Column layout per atlas:
-//   npc_body   : type-major  col = (int)bodyType * 6 + (int)skinTone
-//   npc_face   : direct      col = (int)faceType
-//   npc_hair   : style-major col = (int)hairStyle * 6 + colorIndex
-//   npc_hat    : color-major  col = colorIndex * 5 + (int)hatType   ← ensures Helmet,0 → col 1
-//   npc_shirt  : type-major  col = (int)shirtType * 5 + colorIndex
-//   npc_pants  : type-major  col = (int)pantsType * 5 + colorIndex
-//   npc_shoes  : type-major  col = (int)shoeType * 5 + colorIndex
-//   npc_back   : type-major  col = (int)backType * 2 + colorIndex
-//   npc_weapon : direct      col = (int)weaponType
+//   npc_body    : type-major  col = (int)bodyType * 6 + (int)skinTone  [18 sprites — baked]
+//   npc_face    : direct      col = (int)faceType                       [ 4 sprites — baked]
+//   npc_hair    : direct      col = (int)hairStyle                      [ 5 sprites — neutral master]
+//   npc_hat     : direct      col = (int)hatType                        [ 5 sprites — neutral master]
+//   npc_shirt   : direct      col = (int)shirtType                      [ 5 sprites — neutral master]
+//   npc_pants   : direct      col = (int)pantsType                      [ 4 sprites — neutral master]
+//   npc_shoes   : direct      col = (int)shoeType                       [ 3 sprites — neutral master]
+//   npc_back    : direct      col = (int)backType                       [ 5 sprites — neutral master]
+//   npc_weapon  : direct      col = (int)weaponType                     [20 sprites — neutral master]
+//
+// Each clothing/hair atlas also ships a companion mask atlas (_mask) of equal
+// dimensions that encodes recolourable regions as distinct flat colours.
 using UnityEngine;
 
 namespace Waystation.NPC
@@ -18,103 +24,157 @@ namespace Waystation.NPC
     [CreateAssetMenu(fileName = "NpcAtlasRegistry", menuName = "Waystation/NPC/AtlasRegistry")]
     public class NpcAtlasRegistry : ScriptableObject
     {
-        // ── Raw sprite arrays (populated by NpcAtlasImporter) ─────────────────
-        [Tooltip("18 sprites — 3 body types × 6 skin tones, type-major")]
+        // ── Base sprite arrays ────────────────────────────────────────────────
+
+        [Tooltip("18 sprites — 3 body types × 6 skin tones, type-major (baked)")]
         public Sprite[] bodySprites;
 
-        [Tooltip("4 sprites — neutral, stern, weary, alert")]
+        [Tooltip("4 sprites — neutral, stern, weary, alert (baked)")]
         public Sprite[] faceSprites;
 
-        [Tooltip("30 sprites — 5 styles × 6 colours, style-major")]
+        [Tooltip("5 sprites — one neutral master per hair style")]
         public Sprite[] hairSprites;
 
-        [Tooltip("25 sprites — 5 types × 5 colors, color-major")]
+        [Tooltip("5 sprites — one neutral master per hat type")]
         public Sprite[] hatSprites;
 
-        [Tooltip("25 sprites — 5 types × 5 colours, type-major")]
+        [Tooltip("5 sprites — one neutral master per shirt type")]
         public Sprite[] shirtSprites;
 
-        [Tooltip("20 sprites — 4 types × 5 colours, type-major")]
+        [Tooltip("4 sprites — one neutral master per pants type")]
         public Sprite[] pantsSprites;
 
-        [Tooltip("15 sprites — 3 types × 5 colours, type-major")]
+        [Tooltip("3 sprites — one neutral master per shoe type")]
         public Sprite[] shoeSprites;
 
-        [Tooltip("10 sprites — 5 types × 2 colours, type-major")]
+        [Tooltip("5 sprites — one neutral master per back-item type")]
         public Sprite[] backSprites;
 
-        [Tooltip("20 sprites — 8 weapon types + 12 reserved transparent slots")]
+        [Tooltip("20 sprites — 8 weapon types + 12 reserved transparent slots (neutral master)")]
         public Sprite[] weaponSprites;
 
-        // ── Typed accessors ───────────────────────────────────────────────────
+        // ── Mask sprite arrays (companion atlases for shader tinting) ─────────
 
-        /// <summary>Returns the body sprite for the given body type and skin tone.</summary>
+        [Tooltip("5 mask sprites for hair (same dimensions as hairSprites)")]
+        public Sprite[] hairMaskSprites;
+
+        [Tooltip("5 mask sprites for hats")]
+        public Sprite[] hatMaskSprites;
+
+        [Tooltip("5 mask sprites for shirts")]
+        public Sprite[] shirtMaskSprites;
+
+        [Tooltip("4 mask sprites for pants")]
+        public Sprite[] pantsMaskSprites;
+
+        [Tooltip("3 mask sprites for shoes")]
+        public Sprite[] shoeMaskSprites;
+
+        [Tooltip("5 mask sprites for back items")]
+        public Sprite[] backMaskSprites;
+
+        [Tooltip("20 mask sprites for weapons")]
+        public Sprite[] weaponMaskSprites;
+
+        // ── Typed accessors — base sprites ────────────────────────────────────
+
+        /// <summary>Returns the body sprite for the given body type and skin tone (baked).</summary>
         public Sprite GetBody(BodyType type, SkinTone tone)
         {
             int col = (int)type * 6 + (int)tone;
             return SafeGet(bodySprites, col, "body");
         }
 
-        /// <summary>Returns the face sprite for the given expression.</summary>
+        /// <summary>Returns the face sprite for the given expression (baked).</summary>
         public Sprite GetFace(FaceType type)
         {
             return SafeGet(faceSprites, (int)type, "face");
         }
 
-        /// <summary>
-        /// Returns the hair sprite.
-        /// Layout is style-major: col = (int)style * 6 + colorIndex.
-        /// HairStyle.Long=1, colorIndex=0 → col 6, rect.x = 6*34+1.
-        /// </summary>
-        public Sprite GetHair(HairStyle style, int colorIndex)
+        /// <summary>Returns the neutral-master hair sprite for the given style.</summary>
+        public Sprite GetHair(HairStyle style)
         {
-            int col = (int)style * 6 + colorIndex;
-            return SafeGet(hairSprites, col, "hair");
+            return SafeGet(hairSprites, (int)style, "hair");
         }
 
-        /// <summary>
-        /// Returns the hat sprite.
-        /// Layout is color-major: col = colorIndex * 5 + (int)type.
-        /// HatType.Helmet=1, colorIndex=0 → col 1, rect.x = 1*34+1.
-        /// </summary>
-        public Sprite GetHat(HatType type, int colorIndex)
+        /// <summary>Returns the neutral-master hat sprite for the given hat type.</summary>
+        public Sprite GetHat(HatType type)
         {
-            int col = colorIndex * 5 + (int)type;
-            return SafeGet(hatSprites, col, "hat");
+            return SafeGet(hatSprites, (int)type, "hat");
         }
 
-        /// <summary>Returns the shirt sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
-        public Sprite GetShirt(ShirtType type, int colorIndex)
+        /// <summary>Returns the neutral-master shirt sprite for the given shirt type.</summary>
+        public Sprite GetShirt(ShirtType type)
         {
-            int col = (int)type * 5 + colorIndex;
-            return SafeGet(shirtSprites, col, "shirt");
+            return SafeGet(shirtSprites, (int)type, "shirt");
         }
 
-        /// <summary>Returns the pants sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
-        public Sprite GetPants(PantsType type, int colorIndex)
+        /// <summary>Returns the neutral-master pants sprite for the given pants type.</summary>
+        public Sprite GetPants(PantsType type)
         {
-            int col = (int)type * 5 + colorIndex;
-            return SafeGet(pantsSprites, col, "pants");
+            return SafeGet(pantsSprites, (int)type, "pants");
         }
 
-        /// <summary>Returns the shoes sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
-        public Sprite GetShoes(ShoeType type, int colorIndex)
+        /// <summary>Returns the neutral-master shoes sprite for the given shoe type.</summary>
+        public Sprite GetShoes(ShoeType type)
         {
-            int col = (int)type * 5 + colorIndex;
-            return SafeGet(shoeSprites, col, "shoes");
+            return SafeGet(shoeSprites, (int)type, "shoes");
         }
 
-        /// <summary>Returns the back-item sprite. Layout is type-major: col = type*2 + colorIndex.</summary>
-        public Sprite GetBack(BackItemType type, int colorIndex)
+        /// <summary>Returns the neutral-master back-item sprite for the given back type.</summary>
+        public Sprite GetBack(BackItemType type)
         {
-            int col = (int)type * 2 + colorIndex;
-            return SafeGet(backSprites, col, "back");
+            return SafeGet(backSprites, (int)type, "back");
         }
 
-        /// <summary>Returns the weapon sprite. Direct index: col = (int)weaponType.</summary>
+        /// <summary>Returns the neutral-master weapon sprite. Direct index: col = (int)weaponType.</summary>
         public Sprite GetWeapon(WeaponType type)
         {
             return SafeGet(weaponSprites, (int)type, "weapon");
+        }
+
+        // ── Typed accessors — mask sprites ────────────────────────────────────
+
+        /// <summary>Returns the hair mask sprite for the given style.</summary>
+        public Sprite GetHairMask(HairStyle style)
+        {
+            return SafeGet(hairMaskSprites, (int)style, "hair_mask");
+        }
+
+        /// <summary>Returns the hat mask sprite for the given hat type.</summary>
+        public Sprite GetHatMask(HatType type)
+        {
+            return SafeGet(hatMaskSprites, (int)type, "hat_mask");
+        }
+
+        /// <summary>Returns the shirt mask sprite for the given shirt type.</summary>
+        public Sprite GetShirtMask(ShirtType type)
+        {
+            return SafeGet(shirtMaskSprites, (int)type, "shirt_mask");
+        }
+
+        /// <summary>Returns the pants mask sprite for the given pants type.</summary>
+        public Sprite GetPantsMask(PantsType type)
+        {
+            return SafeGet(pantsMaskSprites, (int)type, "pants_mask");
+        }
+
+        /// <summary>Returns the shoes mask sprite for the given shoe type.</summary>
+        public Sprite GetShoesMask(ShoeType type)
+        {
+            return SafeGet(shoeMaskSprites, (int)type, "shoes_mask");
+        }
+
+        /// <summary>Returns the back-item mask sprite for the given back type.</summary>
+        public Sprite GetBackMask(BackItemType type)
+        {
+            return SafeGet(backMaskSprites, (int)type, "back_mask");
+        }
+
+        /// <summary>Returns the weapon mask sprite for the given weapon type.</summary>
+        public Sprite GetWeaponMask(WeaponType type)
+        {
+            return SafeGet(weaponMaskSprites, (int)type, "weapon_mask");
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
