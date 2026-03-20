@@ -8,8 +8,7 @@ validate_npc_atlases.py — CI script that asserts:
      unique IDs, and sequential col values.
   3. Base atlas JSONs contain a mask_atlas field pointing to the companion mask.
   4. Each tile in a base atlas JSON has a colour_slots array (may be empty).
-  5. Mask atlas JSONs have the correct structure (base_atlas reference, no
-     colour_slots required).
+  5. Mask atlas JSONs contain a base_atlas field pointing to the base atlas.
 
 Run from the repository root:
     python3 .github/scripts/validate_npc_atlases.py
@@ -167,6 +166,20 @@ def check_json_sidecars(tile_counts, is_mask=False):
                     failures.append(
                         f"MASK_ATLAS MISMATCH in {json_filename}: "
                         f"expected {expected_mask!r}, got {data['mask_atlas']!r}"
+                    )
+
+        # Mask atlas JSONs must have a base_atlas field referencing the base atlas
+        if is_mask:
+            if "base_atlas" not in data:
+                failures.append(
+                    f"MISSING base_atlas field in {json_filename}"
+                )
+            else:
+                expected_base = atlas_filename.replace("_mask.png", ".png")
+                if data["base_atlas"] != expected_base:
+                    failures.append(
+                        f"BASE_ATLAS MISMATCH in {json_filename}: "
+                        f"expected {expected_base!r}, got {data['base_atlas']!r}"
                     )
 
         tiles = data.get("tiles", [])

@@ -19,7 +19,6 @@
 //
 // Clothing and hair layers use NpcApparel.shader for mask-keyed runtime tinting.
 // Body and face layers continue to use the default sprite material (baked).
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Waystation.NPC
@@ -38,9 +37,20 @@ namespace Waystation.NPC
         [Tooltip("Assign the NpcAtlasRegistry ScriptableObject here.")]
         public NpcAtlasRegistry registry;
 
-        [Header("Department Registry")]
-        [Tooltip("Optional; provide when DeptColour sources must be resolved at runtime.")]
-        public DepartmentRegistry departmentRegistry;
+        // DepartmentRegistry is a plain C# class and cannot be serialized by
+        // Unity. Inject it at runtime via SetDepartmentRegistry() (e.g. from a
+        // manager that owns the registry) rather than assigning it in the Inspector.
+        private DepartmentRegistry _departmentRegistry;
+
+        /// <summary>
+        /// Injects the DepartmentRegistry used to resolve DeptColour sources.
+        /// Call this from a manager before calling Apply() on any NPC that has
+        /// DeptColour clothing slots.
+        /// </summary>
+        public void SetDepartmentRegistry(DepartmentRegistry registry)
+        {
+            _departmentRegistry = registry;
+        }
 
         /// <summary>Department UID of the NPC owning this controller (set before Apply).</summary>
         [HideInInspector]
@@ -198,9 +208,13 @@ namespace Waystation.NPC
 
             if (block == null) block = new MaterialPropertyBlock();
 
-            // Mask texture
+            // Mask texture — always write to avoid stale textures from previous Apply calls.
+            // When maskSprite is null (layer has no mask atlas), clear to a black 1×1 texture
+            // so the shader sees no mask and passes all pixels through unmodified.
             if (maskSprite != null)
                 block.SetTexture(PropMaskTex, maskSprite.texture);
+            else
+                block.SetTexture(PropMaskTex, Texture2D.blackTexture);
 
             // Resolve tint colours
             var tints = new Color[MaxTintSlots];
@@ -217,7 +231,7 @@ namespace Waystation.NPC
                     if (src == null || src is ColourSource.MaterialDefault)
                         continue;
 
-                    Color? resolved = src.Resolve(npcDepartmentId, departmentRegistry);
+                    Color? resolved = src.Resolve(npcDepartmentId, _departmentRegistry);
                     if (resolved.HasValue)
                         tints[i] = resolved.Value;
                 }

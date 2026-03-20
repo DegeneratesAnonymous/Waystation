@@ -38,6 +38,12 @@ namespace Waystation.NPC
         /// May be shorter than the defined slot count — missing entries are
         /// treated as <see cref="ColourSource.MaterialDefault"/>.
         /// </summary>
+        /// <remarks>
+        /// <see cref="SerializeReference"/> is required so Unity serializes the
+        /// concrete derived types (<c>ExplicitColour</c>, <c>DeptColour</c>,
+        /// <c>MaterialDefault</c>) rather than dropping them as null.
+        /// </remarks>
+        [SerializeReference]
         public List<ColourSource> slotColours = new List<ColourSource>();
 
         // ── Helpers ───────────────────────────────────────────────────────────

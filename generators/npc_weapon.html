@@ -71,8 +71,8 @@ const WEAPONS=[
   (d)=>{fr(d,14,8,18,40,WMID);hl(d,14,17,8,WLIT);hl(d,14,17,40,WDRK);outline(d);},
   // 6: wrench (metal)
   (d)=>{fr(d,14,10,18,40,MMID);fr(d,12,10,20,16,MMID);hl(d,13,19,10,MLIT);outline(d);},
-  // 7: shield (metal)
-  (d)=>{fr(d,10,10,22,36,MMID);hl(d,11,21,10,MLIT);fr(d,13,14,19,32,MLIT);outline(d);},
+  // 7: shield (metal body + darker emblem region for secondary slot)
+  (d)=>{fr(d,10,10,22,36,MMID);hl(d,11,21,10,MLIT);fr(d,13,14,19,32,MDRK);outline(d);},
 ];
 
 const SLOTS_LIST=[
@@ -101,12 +101,17 @@ for(let c=0;c<20;c++){
   if(c<8&&c>0){
     const[or,og,ob]=h2r(OUTLINE);
     const[wr,wg,wb]=h2r(WMID);
+    const[dr,dg,db]=h2r(MDRK);
     const slots=SLOTS_LIST[c];
     for(let i=0;i<id.data.length;i+=4){
       if(id.data[i+3]===0)continue;
       const r=id.data[i],g=id.data[i+1],b=id.data[i+2];
       if(r===or&&g===og&&b===ob){m.data[i]=0;m.data[i+1]=0;m.data[i+2]=0;m.data[i+3]=255;}
-      else if(slots.length>1&&Math.abs(r-wr)<25&&Math.abs(g-wg)<25&&Math.abs(b-wb)<25){
+      // rifle/shotgun/knife: secondary slot maps wood (WMID) pixels to green
+      else if(slots.length>1&&c!==7&&Math.abs(r-wr)<25&&Math.abs(g-wg)<25&&Math.abs(b-wb)<25){
+        m.data[i]=0;m.data[i+1]=255;m.data[i+2]=0;m.data[i+3]=255;}
+      // shield (c===7): secondary slot maps emblem (MDRK) pixels to green
+      else if(slots.length>1&&c===7&&Math.abs(r-dr)<20&&Math.abs(g-dg)<20&&Math.abs(b-db)<20){
         m.data[i]=0;m.data[i+1]=255;m.data[i+2]=0;m.data[i+3]=255;}
       else{m.data[i]=255;m.data[i+1]=0;m.data[i+2]=0;m.data[i+3]=255;}
     }
