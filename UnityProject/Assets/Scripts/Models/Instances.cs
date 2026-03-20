@@ -67,13 +67,17 @@ namespace Waystation.Models
         public string       name;
         public List<string> allowedJobs = new List<string>();
 
-        public static Department Create(string uid, string name, List<string> allowedJobs = null)
+        /// <summary>Optional department colour token. Null = no colour configured.</summary>
+        public Color? colour = null;
+
+        public static Department Create(string uid, string name, List<string> allowedJobs = null, Color? colour = null)
         {
             return new Department
             {
                 uid         = uid,
                 name        = name,
-                allowedJobs = allowedJobs ?? new List<string>()
+                allowedJobs = allowedJobs ?? new List<string>(),
+                colour      = colour
             };
         }
     }

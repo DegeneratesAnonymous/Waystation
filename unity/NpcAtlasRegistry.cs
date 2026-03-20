@@ -1,16 +1,16 @@
 // NpcAtlasRegistry — ScriptableObject that holds all NPC Sprite[] arrays
-// and exposes typed Get* accessors that map enum + colour-index to a Sprite.
+// and exposes typed Get* accessors that map ClothingLayerAppearance to a Sprite.
 //
-// Column layout per atlas:
-//   npc_body   : type-major  col = (int)bodyType * 6 + (int)skinTone
-//   npc_face   : direct      col = (int)faceType
-//   npc_hair   : style-major col = (int)hairStyle * 6 + colorIndex
-//   npc_hat    : color-major  col = colorIndex * 5 + (int)hatType   ← ensures Helmet,0 → col 1
-//   npc_shirt  : type-major  col = (int)shirtType * 5 + colorIndex
-//   npc_pants  : type-major  col = (int)pantsType * 5 + colorIndex
-//   npc_shoes  : type-major  col = (int)shoeType * 5 + colorIndex
-//   npc_back   : type-major  col = (int)backType * 2 + colorIndex
-//   npc_weapon : direct      col = (int)weaponType
+// Column layout per atlas (shader-driven neutral-master system):
+//   npc_body   : type-major  col = (int)bodyType * 6 + (int)skinTone  (unchanged)
+//   npc_face   : direct      col = (int)faceType                       (unchanged)
+//   npc_hair   : direct      col = atlasVariantIndex  (5 neutral masters)
+//   npc_hat    : direct      col = atlasVariantIndex  (5 neutral masters)
+//   npc_shirt  : direct      col = atlasVariantIndex  (5 neutral masters)
+//   npc_pants  : direct      col = atlasVariantIndex  (4 neutral masters)
+//   npc_shoes  : direct      col = atlasVariantIndex  (3 neutral masters)
+//   npc_back   : direct      col = atlasVariantIndex  (5 neutral masters)
+//   npc_weapon : direct      col = atlasVariantIndex  (20 sprites, unchanged count)
 using UnityEngine;
 
 namespace Waystation.NPC
@@ -25,28 +25,50 @@ namespace Waystation.NPC
         [Tooltip("4 sprites — neutral, stern, weary, alert")]
         public Sprite[] faceSprites;
 
-        [Tooltip("30 sprites — 5 styles × 6 colours, style-major")]
+        [Tooltip("5 sprites — 5 styles, one neutral master each")]
         public Sprite[] hairSprites;
 
-        [Tooltip("25 sprites — 5 types × 5 colors, color-major")]
+        [Tooltip("5 sprites — 5 types, one neutral master each")]
         public Sprite[] hatSprites;
 
-        [Tooltip("25 sprites — 5 types × 5 colours, type-major")]
+        [Tooltip("5 sprites — 5 types, one neutral master each")]
         public Sprite[] shirtSprites;
 
-        [Tooltip("20 sprites — 4 types × 5 colours, type-major")]
+        [Tooltip("4 sprites — 4 types, one neutral master each")]
         public Sprite[] pantsSprites;
 
-        [Tooltip("15 sprites — 3 types × 5 colours, type-major")]
+        [Tooltip("3 sprites — 3 types, one neutral master each")]
         public Sprite[] shoeSprites;
 
-        [Tooltip("10 sprites — 5 types × 2 colours, type-major")]
+        [Tooltip("5 sprites — 5 types, one neutral master each")]
         public Sprite[] backSprites;
 
         [Tooltip("20 sprites — 8 weapon types + 12 reserved transparent slots")]
         public Sprite[] weaponSprites;
 
-        // ── Typed accessors ───────────────────────────────────────────────────
+        // ── Mask sprite arrays (one mask per variant, populated by NpcAtlasImporter) ──
+        [Tooltip("5 sprites — hair mask atlas, one per style")]
+        public Sprite[] hairMaskSprites;
+
+        [Tooltip("5 sprites — hat mask atlas, one per type")]
+        public Sprite[] hatMaskSprites;
+
+        [Tooltip("5 sprites — shirt mask atlas, one per type")]
+        public Sprite[] shirtMaskSprites;
+
+        [Tooltip("4 sprites — pants mask atlas, one per type")]
+        public Sprite[] pantsMaskSprites;
+
+        [Tooltip("3 sprites — shoes mask atlas, one per type")]
+        public Sprite[] shoeMaskSprites;
+
+        [Tooltip("5 sprites — back mask atlas, one per type")]
+        public Sprite[] backMaskSprites;
+
+        [Tooltip("20 sprites — weapon mask atlas")]
+        public Sprite[] weaponMaskSprites;
+
+        // ── Typed accessors — body and face unchanged ─────────────────────────
 
         /// <summary>Returns the body sprite for the given body type and skin tone.</summary>
         public Sprite GetBody(BodyType type, SkinTone tone)
@@ -61,61 +83,28 @@ namespace Waystation.NPC
             return SafeGet(faceSprites, (int)type, "face");
         }
 
-        /// <summary>
-        /// Returns the hair sprite.
-        /// Layout is style-major: col = (int)style * 6 + colorIndex.
-        /// HairStyle.Long=1, colorIndex=0 → col 6, rect.x = 6*34+1.
-        /// </summary>
-        public Sprite GetHair(HairStyle style, int colorIndex)
-        {
-            int col = (int)style * 6 + colorIndex;
-            return SafeGet(hairSprites, col, "hair");
-        }
+        // ── Clothing/hair accessors — take ClothingLayerAppearance ────────────
 
-        /// <summary>
-        /// Returns the hat sprite.
-        /// Layout is color-major: col = colorIndex * 5 + (int)type.
-        /// HatType.Helmet=1, colorIndex=0 → col 1, rect.x = 1*34+1.
-        /// </summary>
-        public Sprite GetHat(HatType type, int colorIndex)
-        {
-            int col = colorIndex * 5 + (int)type;
-            return SafeGet(hatSprites, col, "hat");
-        }
+        public Sprite GetHair(ClothingLayerAppearance app)     => SafeGet(hairSprites,       app.atlasVariantIndex, "hair");
+        public Sprite GetHairMask(ClothingLayerAppearance app) => SafeGet(hairMaskSprites,   app.atlasVariantIndex, "hairMask");
 
-        /// <summary>Returns the shirt sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
-        public Sprite GetShirt(ShirtType type, int colorIndex)
-        {
-            int col = (int)type * 5 + colorIndex;
-            return SafeGet(shirtSprites, col, "shirt");
-        }
+        public Sprite GetHat(ClothingLayerAppearance app)      => SafeGet(hatSprites,        app.atlasVariantIndex, "hat");
+        public Sprite GetHatMask(ClothingLayerAppearance app)  => SafeGet(hatMaskSprites,    app.atlasVariantIndex, "hatMask");
 
-        /// <summary>Returns the pants sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
-        public Sprite GetPants(PantsType type, int colorIndex)
-        {
-            int col = (int)type * 5 + colorIndex;
-            return SafeGet(pantsSprites, col, "pants");
-        }
+        public Sprite GetShirt(ClothingLayerAppearance app)      => SafeGet(shirtSprites,      app.atlasVariantIndex, "shirt");
+        public Sprite GetShirtMask(ClothingLayerAppearance app)  => SafeGet(shirtMaskSprites,  app.atlasVariantIndex, "shirtMask");
 
-        /// <summary>Returns the shoes sprite. Layout is type-major: col = type*5 + colorIndex.</summary>
-        public Sprite GetShoes(ShoeType type, int colorIndex)
-        {
-            int col = (int)type * 5 + colorIndex;
-            return SafeGet(shoeSprites, col, "shoes");
-        }
+        public Sprite GetPants(ClothingLayerAppearance app)      => SafeGet(pantsSprites,      app.atlasVariantIndex, "pants");
+        public Sprite GetPantsMask(ClothingLayerAppearance app)  => SafeGet(pantsMaskSprites,  app.atlasVariantIndex, "pantsMask");
 
-        /// <summary>Returns the back-item sprite. Layout is type-major: col = type*2 + colorIndex.</summary>
-        public Sprite GetBack(BackItemType type, int colorIndex)
-        {
-            int col = (int)type * 2 + colorIndex;
-            return SafeGet(backSprites, col, "back");
-        }
+        public Sprite GetShoes(ClothingLayerAppearance app)      => SafeGet(shoeSprites,       app.atlasVariantIndex, "shoes");
+        public Sprite GetShoesMask(ClothingLayerAppearance app)  => SafeGet(shoeMaskSprites,   app.atlasVariantIndex, "shoesMask");
 
-        /// <summary>Returns the weapon sprite. Direct index: col = (int)weaponType.</summary>
-        public Sprite GetWeapon(WeaponType type)
-        {
-            return SafeGet(weaponSprites, (int)type, "weapon");
-        }
+        public Sprite GetBack(ClothingLayerAppearance app)      => SafeGet(backSprites,       app.atlasVariantIndex, "back");
+        public Sprite GetBackMask(ClothingLayerAppearance app)  => SafeGet(backMaskSprites,   app.atlasVariantIndex, "backMask");
+
+        public Sprite GetWeapon(ClothingLayerAppearance app)      => SafeGet(weaponSprites,     app.atlasVariantIndex, "weapon");
+        public Sprite GetWeaponMask(ClothingLayerAppearance app)  => SafeGet(weaponMaskSprites, app.atlasVariantIndex, "weaponMask");
 
         // ── Private helpers ───────────────────────────────────────────────────
 

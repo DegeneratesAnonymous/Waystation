@@ -1,5 +1,6 @@
 {
   "atlas": "npc_weapon.png",
+  "mask_atlas": "npc_weapon_mask.png",
   "tile_size": {
     "w": 32,
     "h": 48
@@ -20,9 +21,9 @@
       "tags": [
         "npc",
         "weapon",
-        "type:none",
-        "state:normal"
-      ]
+        "type:none"
+      ],
+      "colour_slots": []
     },
     {
       "id": "npc_weapon_pistol",
@@ -31,8 +32,13 @@
       "tags": [
         "npc",
         "weapon",
-        "type:pistol",
-        "state:normal"
+        "type:pistol"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
@@ -42,8 +48,13 @@
       "tags": [
         "npc",
         "weapon",
-        "type:rifle",
-        "state:normal"
+        "type:rifle"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
@@ -53,8 +64,13 @@
       "tags": [
         "npc",
         "weapon",
-        "type:shotgun",
-        "state:normal"
+        "type:shotgun"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
@@ -64,8 +80,13 @@
       "tags": [
         "npc",
         "weapon",
-        "type:knife",
-        "state:normal"
+        "type:knife"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
@@ -75,8 +96,13 @@
       "tags": [
         "npc",
         "weapon",
-        "type:bat",
-        "state:normal"
+        "type:bat"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
@@ -86,152 +112,162 @@
       "tags": [
         "npc",
         "weapon",
-        "type:wrench",
-        "state:normal"
+        "type:wrench"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
-      "id": "npc_weapon_shield_weapon",
+      "id": "npc_weapon_shieldweapon",
       "col": 7,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "type:shield_weapon",
-        "state:normal"
+        "type:shieldweapon"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
-      "id": "npc_weapon_reserved_00",
+      "id": "npc_weapon_reserved_08",
       "col": 8,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_01",
+      "id": "npc_weapon_reserved_09",
       "col": 9,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_02",
+      "id": "npc_weapon_reserved_10",
       "col": 10,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_03",
+      "id": "npc_weapon_reserved_11",
       "col": 11,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_04",
+      "id": "npc_weapon_reserved_12",
       "col": 12,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_05",
+      "id": "npc_weapon_reserved_13",
       "col": 13,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_06",
+      "id": "npc_weapon_reserved_14",
       "col": 14,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_07",
+      "id": "npc_weapon_reserved_15",
       "col": 15,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_08",
+      "id": "npc_weapon_reserved_16",
       "col": 16,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_09",
+      "id": "npc_weapon_reserved_17",
       "col": 17,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_10",
+      "id": "npc_weapon_reserved_18",
       "col": 18,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     },
     {
-      "id": "npc_weapon_reserved_11",
+      "id": "npc_weapon_reserved_19",
       "col": 19,
       "row": 0,
       "tags": [
         "npc",
         "weapon",
-        "reserved",
-        "state:normal"
-      ]
+        "state:reserved"
+      ],
+      "colour_slots": []
     }
   ]
 }

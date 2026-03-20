@@ -16,16 +16,12 @@ namespace Waystation.NPC
     public enum FaceType { Neutral = 0, Stern = 1, Weary = 2, Alert = 3 }
 
     /// <summary>
-    /// Hair style. Maps to the major axis of npc_hair.png (col / 6).
-    /// Long=1 so that GetHair(HairStyle.Long, 0).rect.x == 6*34+1.
+    /// Hair style. atlasVariantIndex in ClothingLayerAppearance maps directly to this enum cast
+    /// (col = (int)style — one neutral master per style).
     /// </summary>
     public enum HairStyle { Short = 0, Long = 1, Medium = 2, Buzz = 3, Ponytail = 4 }
 
-    /// <summary>
-    /// Hat type. Maps to the minor axis of npc_hat.png under colour-major layout
-    /// (col = colorIndex * 5 + hatType). Helmet=1 so that
-    /// GetHat(HatType.Helmet, 0).rect.x == 1*34+1.
-    /// </summary>
+    /// <summary>Hat type. atlasVariantIndex maps directly to this enum cast.</summary>
     public enum HatType { Cap = 0, Helmet = 1, Beret = 2, Visor = 3, None = 4 }
 
     /// <summary>Shirt style. Maps to the major axis of npc_shirt.png (col / 5).</summary>
@@ -56,33 +52,24 @@ namespace Waystation.NPC
         public FaceType faceType   = FaceType.Neutral;
 
         [Header("Hair")]
-        public HairStyle hairStyle = HairStyle.Short;
-        /// <summary>0-5 — matches HAIR_COLORS order: blonde, auburn, brown, black, grey, white.</summary>
-        [Range(0, 5)] public int hairColor = 0;
+        public ClothingLayerAppearance hair = new ClothingLayerAppearance();
 
         [Header("Hat")]
-        public HatType hatType     = HatType.None;
-        /// <summary>0-4 — matches EQUIP_COLORS_5 order: grey, blue, green, red, brown.</summary>
-        [Range(0, 4)] public int hatColor  = 0;
+        public ClothingLayerAppearance hat = new ClothingLayerAppearance();
 
         [Header("Shirt")]
-        public ShirtType shirtType = ShirtType.Tshirt;
-        [Range(0, 4)] public int shirtColor = 0;
+        public ClothingLayerAppearance shirt = new ClothingLayerAppearance();
 
         [Header("Pants")]
-        public PantsType pantsType = PantsType.Casual;
-        [Range(0, 4)] public int pantsColor = 0;
+        public ClothingLayerAppearance pants = new ClothingLayerAppearance();
 
         [Header("Shoes")]
-        public ShoeType shoeType   = ShoeType.Boots;
-        [Range(0, 4)] public int shoeColor  = 0;
+        public ClothingLayerAppearance shoes = new ClothingLayerAppearance();
 
         [Header("Back Item")]
-        public BackItemType backItemType = BackItemType.None;
-        /// <summary>0-1 — matches EQUIP_COLORS_2 order: grey, blue.</summary>
-        [Range(0, 1)] public int backItemColor = 0;
+        public ClothingLayerAppearance back = new ClothingLayerAppearance();
 
         [Header("Weapon")]
-        public WeaponType weaponType = WeaponType.None;
+        public ClothingLayerAppearance weapon = new ClothingLayerAppearance();
     }
 }
