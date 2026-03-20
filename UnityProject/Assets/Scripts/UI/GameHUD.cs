@@ -3,7 +3,7 @@
 // Taskbar: 68 px vertical strip flush to right edge.
 // Drawer:  320 px panel that slides out to the left of the taskbar.
 //
-// Tabs: Build · Crew · Station · Comms · Away Mission · Rooms · Settings
+// Tabs: Designer · Crew · Station · Comms · Away Mission · Rooms · Settings
 //
 // Self-installs via RuntimeInitializeOnLoadMethod; sets DemoBootstrap.HideOverlay
 // so the legacy IMGUI stats box is suppressed.
@@ -56,7 +56,7 @@ namespace Waystation.UI
 
         private static readonly (Tab tab, string label)[] Tabs =
         {
-            (Tab.Build,       "Build"),
+            (Tab.Build,       "Designer"),
             (Tab.Crew,        "Crew"),
             (Tab.Station,     "Station"),
             (Tab.Comms,       "Comms"),
@@ -112,6 +112,16 @@ namespace Waystation.UI
         private string  _crewDetailNpcUid = "";   // non-empty = showing detail page for this NPC
         private Vector2 _crewListScroll;
         private bool    _crewDeptConfigMode = false; // true = dept rename/delete controls visible
+
+        // ── Department colour picker state ────────────────────────────────────
+        // Uid of dept whose inline colour picker is currently open; "" = none.
+        private string  _deptPickerUid      = "";
+        // "primary" or "secondary" — which swatch is being edited.
+        private string  _deptPickerChannel  = "primary";
+        private float   _deptPickerH        = 0f;
+        private float   _deptPickerS        = 0f;
+        private float   _deptPickerV        = 0.8f;
+        private string  _deptPickerHexInput = "#ffffff";
 
         // ── Skills UI constants ───────────────────────────────────────────────
         private const int MaxNpcNameDisplayLength    = 9;
@@ -641,7 +651,7 @@ namespace Waystation.UI
         {
             string title = _active switch
             {
-                Tab.Build       => "Build",
+                Tab.Build       => "Designer",
                 Tab.Crew        => "Crew",
                 Tab.Station     => "Station",
                 Tab.Comms       => "Comms",
@@ -689,7 +699,7 @@ namespace Waystation.UI
             }
         }
 
-        // ── Build tab ─────────────────────────────────────────────────────────
+        // ── Designer tab ──────────────────────────────────────────────────────
         private Vector2 _buildScroll;
         private string  _buildInfoOpen     = "";  // buildable id whose info panel is expanded
         private string  _foundSettingsOpen = "";  // foundation uid whose cargo settings are open
@@ -697,9 +707,15 @@ namespace Waystation.UI
         private bool    _deconstructMode   = false; // deconstruct-mode: click tile to cancel/demolish
         private bool    _showBuildQueue    = false; // toggle inline build-queue panel
 
-        // ── Build sub-panel navigation ────────────────────────────────────────
-        private enum BuildSubPanel { Place, Queue, Rooms }
+        // ── Designer sub-panel navigation ─────────────────────────────────────
+        private enum BuildSubPanel { Place, Queue, Rooms, TemplateLibrary }
         private BuildSubPanel _buildSub = BuildSubPanel.Place;
+
+        // ── Template Library state ────────────────────────────────────────────
+        private Vector2 _templateLibScroll;
+        private string  _templateLibSearch    = "";
+        private string  _templateLibSelected  = "";  // templateId of selected entry
+        private bool    _templateLibConfirmDelete = false;
 
         // ── Room management state (Build > Rooms sub-panel) ───────────────────
         private Vector2 _buildRoomsScroll;
@@ -747,16 +763,22 @@ namespace Waystation.UI
         {
             if (_gm?.Station == null) return;
 
-            // ── Sub-panel nav (Place | Queue | Rooms) ────────────────────────
+            // ── Sub-panel nav (Place | Queue | Rooms | Template Library) ─────
             const float NavH   = 28f;
             const float NavPad = 4f;
-            float navBw = (w - NavPad * 4f) / 3f;
+            float navBw = (w - NavPad * 5f) / 4f;
             float navY  = area.y + NavPad;
 
             DrawSolid(new Rect(area.x, area.y, w, NavH + NavPad), new Color(0.05f, 0.07f, 0.12f, 0.97f));
 
             Color navPrev = GUI.color;
-            var subPanels = new[] { (BuildSubPanel.Place, "\u2692 Place"), (BuildSubPanel.Queue, "\u2261 Queue"), (BuildSubPanel.Rooms, "\u2b21 Rooms") };
+            var subPanels = new[]
+            {
+                (BuildSubPanel.Place,           "\u2692 Place"),
+                (BuildSubPanel.Queue,           "\u2261 Queue"),
+                (BuildSubPanel.Rooms,           "\u2b21 Rooms"),
+                (BuildSubPanel.TemplateLibrary, "\u2605 Templates"),
+            };
             for (int i = 0; i < subPanels.Length; i++)
             {
                 var (panel, label) = subPanels[i];
@@ -772,9 +794,10 @@ namespace Waystation.UI
 
             Rect subArea = new Rect(area.x, area.y + NavH + NavPad, w, h - NavH - NavPad);
 
-            if (_buildSub == BuildSubPanel.Place) DrawBuildPlace(subArea, w, h - NavH - NavPad);
-            else if (_buildSub == BuildSubPanel.Queue) DrawBuildQueue(subArea, w, h - NavH - NavPad);
-            else DrawBuildRooms(subArea, w, h - NavH - NavPad);
+            if (_buildSub == BuildSubPanel.Place)                DrawBuildPlace(subArea, w, h - NavH - NavPad);
+            else if (_buildSub == BuildSubPanel.Queue)           DrawBuildQueue(subArea, w, h - NavH - NavPad);
+            else if (_buildSub == BuildSubPanel.Rooms)           DrawBuildRooms(subArea, w, h - NavH - NavPad);
+            else                                                 DrawTemplateLibrary(subArea, w, h - NavH - NavPad);
         }
 
         private void DrawBuildPlace(Rect area, float w, float h)
@@ -1272,7 +1295,161 @@ namespace Waystation.UI
             GUI.EndScrollView();
         }
 
-        private void DrawFoundationRow(FoundationInstance f, float cw, ref float y, StationState s)
+        // ── Template Library sub-panel ────────────────────────────────────────
+
+        private void DrawTemplateLibrary(Rect area, float w, float h)
+        {
+            var lib = Waystation.Systems.TemplateLibrary.Instance;
+
+            float y  = area.y;
+            float cw = w;
+
+            // ── Search bar + action buttons ───────────────────────────────────
+            const float ToolH = 34f;
+            DrawSolid(new Rect(area.x, y, cw, ToolH), new Color(0.06f, 0.08f, 0.14f, 0.97f));
+
+            float searchW = cw - 180f - Pad * 3f;
+            GUI.Label(new Rect(area.x + Pad, y + 8f, 40f, 18f), "Search", _sSub);
+            _templateLibSearch = GUI.TextField(
+                new Rect(area.x + Pad + 44f, y + 8f, searchW, 20f),
+                _templateLibSearch, 64, _sTextField);
+
+            // "New Asset" button → opens blank Asset Editor
+            Color btnPrev = GUI.color;
+            GUI.color = new Color(0.35f, 0.62f, 1.00f);
+            if (GUI.Button(new Rect(area.x + Pad + 44f + searchW + Pad, y + 7f, 82f, 22f),
+                           "\u2605 New Asset", _sBtnSmall))
+                Waystation.UI.AssetEditorController.Open();
+
+            // "Import" button
+            GUI.color = new Color(0.55f, 0.80f, 0.55f);
+            if (GUI.Button(new Rect(area.x + cw - Pad - 78f, y + 7f, 74f, 22f),
+                           "Import…", _sBtnSmall))
+            {
+                // NOTE: file-dialog integration is platform-specific;
+                // in-game import is triggered by pasting JSON into a
+                // clipboard listener (future enhancement).
+                // For now we stub the action with a log.
+                Debug.Log("[TemplateLibrary] Import: paste JSON here (TODO: file picker)");
+            }
+            GUI.color = btnPrev;
+            y += ToolH + 2f;
+
+            // ── Template list ─────────────────────────────────────────────────
+            var entries = _templateLibSearch.Length > 0
+                ? new System.Collections.Generic.List<Waystation.Models.ClothingTemplate>(
+                      lib.Search(_templateLibSearch))
+                : new System.Collections.Generic.List<Waystation.Models.ClothingTemplate>(lib.All);
+
+            const float EntryH = 72f;
+            float innerH = entries.Count * (EntryH + 4f) + 8f;
+            innerH = Mathf.Max(innerH, h - (y - area.y) - 4f);
+
+            _templateLibScroll = GUI.BeginScrollView(
+                new Rect(area.x, y, cw, h - (y - area.y) - 4f),
+                _templateLibScroll,
+                new Rect(0, 0, cw - 22f, innerH));
+
+            float lw = cw - 22f;
+            float ey = 0f;
+            foreach (var tmpl in entries)
+            {
+                bool selected = (_templateLibSelected == tmpl.templateId);
+                DrawSolid(new Rect(0, ey, lw, EntryH - 2f),
+                          selected ? new Color(0.16f, 0.24f, 0.42f, 1f)
+                                   : new Color(0.10f, 0.12f, 0.20f, 0.90f));
+
+                // Thumbnail placeholder (32×32 grey square)
+                const float ThumbW = 40f;
+                DrawSolid(new Rect(4f, ey + 4f, ThumbW, EntryH - 10f),
+                          new Color(0.18f, 0.22f, 0.34f, 1f));
+                GUI.Label(new Rect(4f, ey + 14f, ThumbW, 20f), "👗",
+                          new GUIStyle(_sSub) { alignment = TextAnchor.MiddleCenter, fontSize = 18 });
+
+                // Template info
+                float tx = ThumbW + 10f;
+                float tw2 = lw - tx - 160f;
+                GUI.Label(new Rect(tx, ey + 4f, tw2, 18f), tmpl.templateName, _sLabel);
+                GUI.Label(new Rect(tx, ey + 22f, tw2, 14f),
+                          $"by {(string.IsNullOrEmpty(tmpl.designerName) ? "Unknown" : tmpl.designerName)}",
+                          _sSub);
+                GUI.Label(new Rect(tx, ey + 38f, tw2, 14f),
+                          string.Join(", ", tmpl.tags), _sSub);
+
+                // Beauty badge
+                GUI.color = new Color(1f, 0.85f, 0.25f);
+                GUI.Label(new Rect(lw - 160f, ey + 4f, 60f, 18f),
+                          $"★ {tmpl.beautyScore:F0}", _sSub);
+                GUI.color = btnPrev;
+
+                // Action buttons: Open / Duplicate / Delete / Export
+                float ax = lw - 154f;
+                float ay = ey + 24f;
+                float abw = 72f;
+
+                if (GUI.Button(new Rect(ax, ay, abw, 20f), "Open Editor", _sBtnSmall))
+                {
+                    _templateLibSelected = tmpl.templateId;
+                    Waystation.UI.AssetEditorController.OpenWithTemplate(tmpl);
+                }
+                if (GUI.Button(new Rect(ax + abw + 4f, ay, 72f, 20f), "Duplicate", _sBtnSmall))
+                {
+                    lib.Duplicate(tmpl.templateId);
+                }
+                ay += 24f;
+
+                GUI.color = new Color(1.00f, 0.55f, 0.55f);
+                if (GUI.Button(new Rect(ax, ay, abw, 20f), "✕ Delete", _sBtnSmall))
+                {
+                    if (_templateLibConfirmDelete && _templateLibSelected == tmpl.templateId)
+                    {
+                        lib.Delete(tmpl.templateId);
+                        if (_templateLibSelected == tmpl.templateId) _templateLibSelected = "";
+                        _templateLibConfirmDelete = false;
+                    }
+                    else
+                    {
+                        _templateLibSelected      = tmpl.templateId;
+                        _templateLibConfirmDelete = true;
+                    }
+                }
+                GUI.color = new Color(0.55f, 0.80f, 0.55f);
+                if (GUI.Button(new Rect(ax + abw + 4f, ay, 72f, 20f), "Export", _sBtnSmall))
+                {
+                    string json = lib.Export(
+                        new System.Collections.Generic.List<string> { tmpl.templateId });
+                    GUIUtility.systemCopyBuffer = json;
+                    Debug.Log("[TemplateLibrary] Exported to clipboard: " + tmpl.templateName);
+                }
+                GUI.color = btnPrev;
+
+                // Confirm-delete banner
+                if (_templateLibConfirmDelete && _templateLibSelected == tmpl.templateId)
+                {
+                    GUI.color = new Color(0.86f, 0.26f, 0.26f, 0.90f);
+                    GUI.Label(new Rect(0f, ey, lw, EntryH - 2f), "  Click ✕ Delete again to confirm.", _sSub);
+                    GUI.color = btnPrev;
+                }
+
+                // Click anywhere on entry to select
+                if (GUI.Button(new Rect(0, ey, ThumbW + 10f + lw * 0.40f, EntryH - 2f),
+                               "", GUIStyle.none))
+                {
+                    _templateLibSelected      = tmpl.templateId;
+                    _templateLibConfirmDelete = false;
+                }
+
+                ey += EntryH + 4f;
+            }
+
+            if (entries.Count == 0)
+                GUI.Label(new Rect(Pad, 8f, lw - Pad * 2f, 18f),
+                          "No templates found. Use 'New Asset' to create one.", _sSub);
+
+            GUI.EndScrollView();
+        }
+
+
         {
             bool   hasDefn     = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
             string fname       = hasDefn ? fDefn.displayName : f.buildableId;
@@ -1743,7 +1920,7 @@ namespace Waystation.UI
 
             // ── Scrollable body ───────────────────────────────────────────────
             float CardH   = LineH * 4f + 10f;   // compact card height
-            float DeptHdH = LineH * 2f;          // department header height
+            float DeptHdH = LineH * 2f + 28f;   // department header height (extended for colour swatches)
 
             // Group crew by dept (null dept → "Unassigned")
             var depts      = s.departments;
@@ -1886,9 +2063,94 @@ namespace Waystation.UI
                 }
                 else
                 {
-                    // Normal mode: name + count only
-                    GUI.Label(new Rect(6f, y + 5f, cw - 8f, 18f),
+                    // Normal mode: name + count + colour swatches
+                    GUI.Label(new Rect(6f, y + 5f, cw - 80f, 18f),
                               $"{dept.name}  ({deptCrew.Count})", _sLabel);
+
+                    // ── Primary colour swatch ─────────────────────────────────
+                    Color? primC = dept.GetColour();
+                    Color swatchPrim = primC ?? new Color(0.25f, 0.30f, 0.42f, 1f);
+                    var scPrev = GUI.color;
+                    GUI.color = swatchPrim;
+                    bool primClick = GUI.Button(new Rect(cw - 72f, y + 4f, 18f, 18f), "■", _sBtnSmall);
+                    GUI.color = scPrev;
+                    GUI.Label(new Rect(cw - 72f + 20f, y + 5f, 24f, 14f), "Dept", _sSub);
+
+                    // ── Accent colour swatch ──────────────────────────────────
+                    Color? secC = dept.GetSecondaryColour();
+                    Color swatchSec = secC ?? new Color(0.25f, 0.30f, 0.42f, 1f);
+                    GUI.color = swatchSec;
+                    bool secClick = GUI.Button(new Rect(cw - 72f, y + 24f, 18f, 18f), "■", _sBtnSmall);
+                    GUI.color = scPrev;
+                    GUI.Label(new Rect(cw - 72f + 20f, y + 25f, 32f, 14f), "Accent", _sSub);
+
+                    if (primClick) OpenDeptPicker(dept.uid, "primary");
+                    if (secClick)  OpenDeptPicker(dept.uid, "secondary");
+
+                    // ── Inline colour picker for this department ──────────────
+                    if (_deptPickerUid == dept.uid)
+                    {
+                        float py2   = y + DeptHdH;
+                        float pickH = 110f;
+                        DrawSolid(new Rect(0f, py2, cw, pickH), new Color(0.08f, 0.10f, 0.18f, 1f));
+                        DrawSolid(new Rect(0f, py2, cw, 1f), ColDivider);
+
+                        string chanLabel = _deptPickerChannel == "primary" ? "Primary" : "Accent";
+                        GUI.Label(new Rect(4f, py2 + 4f, cw - 8f, 14f),
+                                  $"{chanLabel} Colour", _sLabel);
+
+                        float sx = 4f, slW = cw - 56f;
+                        GUI.Label(new Rect(sx, py2 + 20f, 14f, 12f), "H", _sSub);
+                        _deptPickerH = GUI.HorizontalSlider(new Rect(sx + 16f, py2 + 23f, slW, 10f), _deptPickerH, 0f, 1f);
+                        GUI.Label(new Rect(sx, py2 + 34f, 14f, 12f), "S", _sSub);
+                        _deptPickerS = GUI.HorizontalSlider(new Rect(sx + 16f, py2 + 37f, slW, 10f), _deptPickerS, 0f, 1f);
+                        GUI.Label(new Rect(sx, py2 + 48f, 14f, 12f), "V", _sSub);
+                        _deptPickerV = GUI.HorizontalSlider(new Rect(sx + 16f, py2 + 51f, slW, 10f), _deptPickerV, 0f, 1f);
+
+                        // Hex input
+                        Color previewCol = Color.HSVToRGB(_deptPickerH, _deptPickerS, _deptPickerV);
+                        GUI.Label(new Rect(sx, py2 + 64f, 24f, 14f), "Hex", _sSub);
+                        string newHex = GUI.TextField(new Rect(sx + 28f, py2 + 62f, 70f, 18f),
+                                                      _deptPickerHexInput, 9, _sTextField);
+                        if (newHex != _deptPickerHexInput)
+                        {
+                            _deptPickerHexInput = newHex;
+                            if (ColorUtility.TryParseHtmlString(newHex, out Color hc))
+                                Color.RGBToHSV(hc, out _deptPickerH, out _deptPickerS, out _deptPickerV);
+                        }
+                        else
+                        {
+                            _deptPickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(previewCol);
+                        }
+
+                        // Preview swatch
+                        var pcp = GUI.color; GUI.color = previewCol;
+                        DrawSolid(new Rect(sx + 102f, py2 + 62f, 20f, 18f), previewCol);
+                        GUI.color = pcp;
+
+                        // Confirm / Clear / Cancel buttons
+                        float btnY = py2 + 84f;
+                        float bbw = (cw - 12f) / 3f;
+                        GUI.color = new Color(0.22f, 0.76f, 0.35f);
+                        if (GUI.Button(new Rect(sx, btnY, bbw, 20f), "Confirm", _sBtnSmall))
+                        {
+                            ApplyDeptPickerColour(dept, previewCol);
+                            _deptPickerUid = "";
+                        }
+                        GUI.color = new Color(0.55f, 0.60f, 0.70f);
+                        if (GUI.Button(new Rect(sx + bbw + 4f, btnY, bbw, 20f), "Clear", _sBtnSmall))
+                        {
+                            ClearDeptPickerColour(dept);
+                            _deptPickerUid = "";
+                        }
+                        GUI.color = new Color(0.55f, 0.60f, 0.70f);
+                        if (GUI.Button(new Rect(sx + (bbw + 4f) * 2f, btnY, bbw, 20f), "Cancel", _sBtnSmall))
+                            _deptPickerUid = "";
+                        GUI.color = scPrev;
+
+                        // Reserve the inline picker height in the layout
+                        y += pickH;
+                    }
                 }
                 y += DeptHdH;
 
@@ -3119,11 +3381,11 @@ namespace Waystation.UI
 
             GUI.color = new Color(0.50f, 0.62f, 0.90f, 0.9f);
             GUI.Label(new Rect(area.x, y, w - 8f, 32f),
-                "Use  Build \u2192 Rooms  to manage room assignments and room type bonuses.", _sSub);
+                "Use  Designer \u2192 Rooms  to manage room assignments and room type bonuses.", _sSub);
             GUI.color = Color.white;
             y += 38f;
 
-            if (GUI.Button(new Rect(area.x + 4f, y, w - 16f, 24f), "Open Build > Rooms", _sBtnSmall))
+            if (GUI.Button(new Rect(area.x + 4f, y, w - 16f, 24f), "Open Designer > Rooms", _sBtnSmall))
             {
                 _active   = Tab.Build;
                 _buildSub = BuildSubPanel.Rooms;
@@ -3180,6 +3442,18 @@ namespace Waystation.UI
             DrawSolid(new Rect(Pad, 50f, cw, 1f), ColDivider);
 
             float y = 62f;
+
+            // Asset Editor button (debug-only entry point — no access restrictions)
+            GUI.color = new Color(0.82f, 0.55f, 1.00f, 1f);
+            if (GUI.Button(new Rect(Pad, y, cw, 28f), "✦ Asset Editor", _sBtnWide))
+            {
+                Waystation.UI.AssetEditorController.Open();
+                _devDrawerOpen = false;
+            }
+            GUI.color = Color.white;
+            y += 34f;
+
+            DrawSolid(new Rect(Pad, y, cw, 1f), ColDivider); y += 14f;
 
             // Free Build toggle
             bool devMode = Waystation.Systems.BuildingSystem.DevMode;
@@ -4304,6 +4578,47 @@ namespace Waystation.UI
             }
 
             GUI.EndScrollView();
+        }
+
+        // ── Department colour picker helpers ──────────────────────────────────
+
+        private void OpenDeptPicker(string deptUid, string channel)
+        {
+            if (_deptPickerUid == deptUid && _deptPickerChannel == channel)
+            {
+                // Toggle off
+                _deptPickerUid = "";
+                return;
+            }
+
+            _deptPickerUid     = deptUid;
+            _deptPickerChannel = channel;
+
+            // Seed the picker with the existing colour if any
+            var dept = _gm?.Station?.departments?.Find(d => d.uid == deptUid);
+            Color? existing = channel == "secondary" ? dept?.GetSecondaryColour() : dept?.GetColour();
+            Color seed = existing ?? Color.white;
+            Color.RGBToHSV(seed, out _deptPickerH, out _deptPickerS, out _deptPickerV);
+            _deptPickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(seed);
+        }
+
+        private void ApplyDeptPickerColour(Department dept, Color colour)
+        {
+            if (dept == null) return;
+            string hex = "#" + ColorUtility.ToHtmlStringRGB(colour);
+            if (_deptPickerChannel == "secondary")
+                dept.secondaryColourHex = hex;
+            else
+                dept.colourHex = hex;
+        }
+
+        private void ClearDeptPickerColour(Department dept)
+        {
+            if (dept == null) return;
+            if (_deptPickerChannel == "secondary")
+                dept.secondaryColourHex = null;
+            else
+                dept.colourHex = null;
         }
     }
 }
