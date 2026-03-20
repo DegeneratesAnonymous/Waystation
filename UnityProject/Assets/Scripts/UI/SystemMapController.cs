@@ -1007,7 +1007,9 @@ namespace Waystation.UI
 
             // Restore selection highlight if this sector was previously selected.
             var boxImg = boxGo.GetComponent<Image>();
-            if (SelectedSector != null && sector.uid == SelectedSector.uid)
+            bool isPrimarySelected = SelectedSector != null && sector.uid == SelectedSector.uid;
+            bool isMultiSelected   = _multiSelectedUids != null && _multiSelectedUids.Contains(sector.uid);
+            if (isPrimarySelected || isMultiSelected)
             {
                 boxImg.color = Color.white;  // bright white = selected
             }
