@@ -1,8 +1,14 @@
 {
   "atlas": "npc_shoes.png",
   "mask_atlas": "npc_shoes_mask.png",
-  "tile_size": { "w": 32, "h": 48 },
-  "slot_size": { "w": 34, "h": 50 },
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
   "padding": 1,
   "pivot": "center",
   "perspective": "top-down-north-fixed",
@@ -10,27 +16,61 @@
   "tiles": [
     {
       "id": "npc_shoes_boots",
-      "col": 0, "row": 0,
-      "tags": ["npc", "shoes", "type:boots", "state:normal"],
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shoes",
+        "type:boots",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "sole",
+          "mask_colour": "#00ff00"
+        }
       ]
     },
     {
       "id": "npc_shoes_sneakers",
-      "col": 1, "row": 0,
-      "tags": ["npc", "shoes", "type:sneakers", "state:normal"],
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shoes",
+        "type:sneakers",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "sole",      "mask_colour": "#00ff00" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "stripe",
+          "mask_colour": "#00ff00"
+        }
       ]
     },
     {
       "id": "npc_shoes_formal",
-      "col": 2, "row": 0,
-      "tags": ["npc", "shoes", "type:formal", "state:normal"],
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shoes",
+        "type:formal",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     }
   ]

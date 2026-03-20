@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NPC Shoes Atlas Generator</title>
+<title>NPC Shoes Atlas Generator — Neutral Master</title>
 <style>
 *{box-sizing:border-box}
 body{background:#0a0b0e;color:#c8d0e0;font-family:'Courier New',Courier,monospace;padding:20px;margin:0}
@@ -16,13 +16,15 @@ button:hover{background:#1e2e48}
 </style>
 </head>
 <body>
-<h2>NPC Shoes Atlas Generator</h2>
-<p>15 variants · 3 types × 5 colours · 510×50px</p>
+<h2>NPC Shoes Atlas Generator — Neutral Master</h2>
+<p>3 types × 1 neutral master · 102×50px · + companion mask atlas</p>
 <canvas id="atl"></canvas>
+<canvas id="msk"></canvas>
 <div class="prv-wrap"><canvas id="prv"></canvas></div>
 <div>
-  <button id="dlP">&#x2193; download PNG</button>
-  <button id="dlJ">&#x2193; download JSON</button>
+  <button id="dlP">&#x2193; download npc_shoes.png</button>
+  <button id="dlM">&#x2193; download npc_shoes_mask.png</button>
+  <button id="dlJ">&#x2193; download npc_shoes.json</button>
 </div>
 <script>
 
@@ -35,99 +37,71 @@ const C={
   rHi:'#565e7a',rLo:'#2c3048',
   acc:'#4880aa',accG:'#111e30',accD:'#1a3a60',
 };
+const NMID='#909090',NLIT='#b0b0b0',NDRK='#707070',SOLE='#606060',OUTLINE='#080a0c';
+
 function h2r(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
 function sp(d,x,y,col,a=255){if(x<0||y<0||x>=TW||y>=TH)return;const[r,g,b]=h2r(col),i=(y*TW+x)*4;d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=a;}
 function hl(d,x1,x2,y,col,a=255){for(let x=Math.max(0,x1);x<=Math.min(TW-1,x2);x++)sp(d,x,y,col,a);}
-function vl(d,x,y1,y2,col,a=255){for(let y=Math.max(0,y1);y<=Math.min(TH-1,y2);y++)sp(d,x,y,col,a);}
 function fr(d,x1,y1,x2,y2,col,a=255){for(let y=Math.max(0,y1);y<=Math.min(TH-1,y2);y++)hl(d,x1,x2,y,col,a);}
-function dk(h,f){const[r,g,b]=h2r(h);return'#'+[r,g,b].map(c=>Math.max(0,Math.round(c*f)).toString(16).padStart(2,'0')).join('');}
-function lt(h,f){const[r,g,b]=h2r(h);return'#'+[r,g,b].map(c=>Math.min(255,Math.round(c*f)).toString(16).padStart(2,'0')).join('');}
 function outline(d){
-  const t=new Uint8ClampedArray(d.length);
-  for(let i=0;i<d.length;i++)t[i]=d[i];
+  const t=new Uint8ClampedArray(d.length);for(let i=0;i<d.length;i++)t[i]=d[i];
   for(let y=0;y<TH;y++)for(let x=0;x<TW;x++){
     if(t[(y*TW+x)*4+3]>0)continue;
     const nb=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-    for(const[nx,ny]of nb)if(nx>=0&&nx<TW&&ny>=0&&ny<TH&&t[(ny*TW+nx)*4+3]>0){sp(d,x,y,'#080a0c');break;}
+    for(const[nx,ny]of nb)if(nx>=0&&nx<TW&&ny>=0&&ny<TH&&t[(ny*TW+nx)*4+3]>0){sp(d,x,y,OUTLINE);break;}
   }
 }
 
-
-const SHOE_NAMES=['boots','sneakers','formal'];
-const COLOR_NAMES=['grey','blue','green','red','brown'];
-const COLOR_HEX  =['#808890','#305888','#307040','#883030','#705028'];
-function drawShoes(d,type,col){
-  const hi=lt(col,1.25), sh=dk(col,0.60), dk2=dk(col,0.45);
-  if(type===0){// boots – ankle high
-    // shaft
-    for(let y=40;y<=43;y++){hl(d,10,15,y,col);hl(d,16,21,y,col);}
-    // foot
-    for(let y=44;y<=47;y++){hl(d,9,16,y,col);hl(d,15,22,y,col);}
-    // toe cap
-    hl(d,9,11,46,sh); hl(d,19,21,46,sh);
-    hl(d,9,11,47,dk2); hl(d,19,21,47,dk2);
-    // shaft top
-    hl(d,10,15,40,hi); hl(d,16,21,40,hi);
-    // heel block
-    hl(d,9,10,46,sh); hl(d,21,22,46,sh);
-  } else if(type===1){// sneakers – low profile
-    for(let y=44;y<=47;y++){hl(d,9,16,y,col);hl(d,15,22,y,col);}
-    // sole stripe
-    hl(d,9,16,47,'#d0d0d0'); hl(d,15,22,47,'#d0d0d0');
-    // laces
-    sp(d,11,45,'#e8e8e8');sp(d,13,44,'#e8e8e8');
-    sp(d,18,45,'#e8e8e8');sp(d,20,44,'#e8e8e8');
-    // toe highlight
-    hl(d,9,11,44,hi); hl(d,15,17,44,hi);
-  } else {// formal – pointed toe
-    for(let y=44;y<=47;y++){hl(d,10,16,y,col);hl(d,15,21,y,col);}
-    // pointed toes extend
-    sp(d,9,46,sh); sp(d,9,47,col);
-    sp(d,22,46,sh); sp(d,22,47,col);
-    // heel
-    hl(d,14,16,46,sh); hl(d,14,16,47,dk2);
-    hl(d,15,16,44,hi);
-    // toe highlight
-    hl(d,10,12,44,hi); hl(d,15,17,44,hi);
-  }
+function drawShoes(d,stype){
+  if(stype===0){fr(d,9,38,14,44,NMID);fr(d,17,38,22,44,NMID);hl(d,9,22,44,NDRK);fr(d,9,45,14,47,SOLE);fr(d,17,45,22,47,SOLE);}
+  else if(stype===1){fr(d,9,41,14,44,NMID);fr(d,17,41,22,44,NMID);hl(d,10,13,41,NLIT);hl(d,18,21,41,NLIT);fr(d,9,45,14,47,SOLE);fr(d,17,45,22,47,SOLE);}
+  else{fr(d,8,41,15,44,NMID);fr(d,16,41,23,44,NMID);hl(d,8,15,41,NLIT);hl(d,16,23,41,NLIT);fr(d,8,45,15,47,SOLE);fr(d,16,45,23,47,SOLE);}
   outline(d);
 }
-const COLS=15, AW=COLS*SW, AH=SH;
-const atl=document.getElementById('atl');
-atl.width=AW; atl.height=AH;
-const ctx=atl.getContext('2d');
-const tiles=[];
-for(let t=0;t<3;t++)for(let c=0;c<5;c++){
-  const col=t*5+c;
-  const id=ctx.createImageData(TW,TH);
-  drawShoes(id.data,t,COLOR_HEX[c]);
-  ctx.putImageData(id,col*SW+PAD,PAD);
-  tiles.push({id:`npc_shoes_${SHOE_NAMES[t]}_${COLOR_NAMES[c]}`,col,row:0,
-    tags:['npc','shoes',`type:${SHOE_NAMES[t]}`,`color:${COLOR_NAMES[c]}`,'state:normal']});
-}
-const META={atlas:'npc_shoes.png',tile_size:{w:TW,h:TH},slot_size:{w:SW,h:SH},
-  padding:PAD,pivot:'center',perspective:'top-down-north-fixed',category:'npc',tiles};
 
-// ── preview 4× ──
-const prv=document.getElementById('prv');
-prv.width=AW*4;prv.height=AH*4;
-const pc=prv.getContext('2d');
-for(let py=0;py<AH*4;py+=8)for(let px=0;px<AW*4;px+=8){
-  pc.fillStyle=((Math.floor(px/8)+Math.floor(py/8))%2===0)?'#14162a':'#0c0e1c';
-  pc.fillRect(px,py,8,8);
+const SLOTS=[
+  [{name:'primary',mask_colour:'#ff0000'},{name:'sole',mask_colour:'#00ff00'}],
+  [{name:'primary',mask_colour:'#ff0000'},{name:'stripe',mask_colour:'#00ff00'}],
+  [{name:'primary',mask_colour:'#ff0000'}],
+];
+const TYPE_NAMES=['boots','sneakers','formal'];
+
+const COLS=3,AW=COLS*SW,AH=SH;
+const atl=document.getElementById('atl');atl.width=AW;atl.height=AH;
+const msk=document.getElementById('msk');msk.width=AW;msk.height=AH;
+const ctx=atl.getContext('2d');const mctx=msk.getContext('2d');
+const tiles=[];
+
+for(let t=0;t<3;t++){
+  const id=ctx.createImageData(TW,TH);drawShoes(id.data,t);
+  ctx.putImageData(id,t*SW+PAD,PAD);
+  const m=new ImageData(TW,TH);
+  const[or,og,ob]=h2r(OUTLINE);const[sr,sg,sb]=h2r(SOLE);const[lr,lg,lb]=h2r(NLIT);
+  for(let i=0;i<id.data.length;i+=4){
+    if(id.data[i+3]===0)continue;
+    const r=id.data[i],g=id.data[i+1],b=id.data[i+2];
+    if(r===or&&g===og&&b===ob){m.data[i]=0;m.data[i+1]=0;m.data[i+2]=0;m.data[i+3]=255;}
+    else if(SLOTS[t].length>1&&r===sr&&g===sg&&b===sb){m.data[i]=0;m.data[i+1]=255;m.data[i+2]=0;m.data[i+3]=255;}
+    else if(SLOTS[t].length>1&&TYPE_NAMES[t]==="sneakers"&&r===lr&&g===lg&&b===lb){m.data[i]=0;m.data[i+1]=255;m.data[i+2]=0;m.data[i+3]=255;}
+    else{m.data[i]=255;m.data[i+1]=0;m.data[i+2]=0;m.data[i+3]=255;}
+  }
+  mctx.putImageData(m,t*SW+PAD,PAD);
+  tiles.push({id:`npc_shoes_${TYPE_NAMES[t]}`,col:t,row:0,
+    tags:['npc','shoes',`type:${TYPE_NAMES[t]}`,'state:normal'],colour_slots:SLOTS[t]});
 }
-pc.imageSmoothingEnabled=false;
-pc.drawImage(atl,0,0,AW*4,AH*4);
-// ── downloads ──
-document.getElementById('dlP').onclick=()=>atl.toBlob(b=>{
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);
-  a.download='npc_shoes.png';a.click();
-});
-document.getElementById('dlJ').onclick=()=>{
-  const b=new Blob([JSON.stringify(META,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);
-  a.download='npc_shoes.json';a.click();
-};
+
+const META={atlas:'npc_shoes.png',mask_atlas:'npc_shoes_mask.png',
+  tile_size:{w:TW,h:TH},slot_size:{w:SW,h:SH},padding:PAD,pivot:'center',
+  perspective:'top-down-north-fixed',category:'npc',tiles};
+
+const prv=document.getElementById('prv');prv.width=AW*4;prv.height=AH*4;
+const pc=prv.getContext('2d');
+for(let py=0;py<AH*4;py+=8)for(let px=0;px<AW*4;px+=8){pc.fillStyle=((Math.floor(px/8)+Math.floor(py/8))%2===0)?'#14162a':'#0c0e1c';pc.fillRect(px,py,8,8);}
+pc.imageSmoothingEnabled=false;pc.drawImage(atl,0,0,AW*4,AH*4);
+
+document.getElementById('dlP').onclick=()=>atl.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='npc_shoes.png';a.click();});
+document.getElementById('dlM').onclick=()=>msk.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='npc_shoes_mask.png';a.click();});
+document.getElementById('dlJ').onclick=()=>{const b=new Blob([JSON.stringify(META,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='npc_shoes.json';a.click();};
 </script>
 </body>
 </html>

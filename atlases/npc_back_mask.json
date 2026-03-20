@@ -1,0 +1,78 @@
+{
+  "atlas": "npc_back_mask.png",
+  "base_atlas": "npc_back.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc_mask",
+  "tiles": [
+    {
+      "id": "npc_back_none_mask",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:none",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_back_backpack_mask",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:backpack",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_back_quiver_mask",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:quiver",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_back_jetpack_mask",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:jetpack",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_back_shield_mask",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:shield",
+        "state:normal",
+        "mask"
+      ]
+    }
+  ]
+}

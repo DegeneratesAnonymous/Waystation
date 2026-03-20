@@ -1,46 +1,109 @@
 {
   "atlas": "npc_back.png",
   "mask_atlas": "npc_back_mask.png",
-  "tile_size": { "w": 32, "h": 48 },
-  "slot_size": { "w": 34, "h": 50 },
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
   "padding": 1,
   "pivot": "center",
   "perspective": "top-down-north-fixed",
   "category": "npc",
   "tiles": [
     {
+      "id": "npc_back_none",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:none",
+        "state:normal"
+      ],
+      "colour_slots": []
+    },
+    {
       "id": "npc_back_backpack",
-      "col": 0, "row": 0,
-      "tags": ["npc", "back", "type:backpack", "state:normal"],
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:backpack",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "pocket",    "mask_colour": "#00ff00" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "pocket",
+          "mask_colour": "#00ff00"
+        }
       ]
     },
     {
       "id": "npc_back_quiver",
-      "col": 1, "row": 0,
-      "tags": ["npc", "back", "type:quiver", "state:normal"],
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:quiver",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
       "id": "npc_back_jetpack",
-      "col": 2, "row": 0,
-      "tags": ["npc", "back", "type:jetpack", "state:normal"],
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:jetpack",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "exhaust",   "mask_colour": "#00ff00" }
+        {
+          "name": "body",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "nozzle",
+          "mask_colour": "#00ff00"
+        }
       ]
     },
     {
       "id": "npc_back_shield",
-      "col": 3, "row": 0,
-      "tags": ["npc", "back", "type:shield", "state:normal"],
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "back",
+        "type:shield",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "emblem",    "mask_colour": "#00ff00" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "emblem",
+          "mask_colour": "#00ff00"
+        }
       ]
     }
   ]

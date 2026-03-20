@@ -1,8 +1,14 @@
 {
   "atlas": "npc_hat.png",
   "mask_atlas": "npc_hat_mask.png",
-  "tile_size": { "w": 32, "h": 48 },
-  "slot_size": { "w": 34, "h": 50 },
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
   "padding": 1,
   "pivot": "center",
   "perspective": "top-down-north-fixed",
@@ -10,38 +16,95 @@
   "tiles": [
     {
       "id": "npc_hat_cap",
-      "col": 0, "row": 0,
-      "tags": ["npc", "hat", "type:cap", "state:normal"],
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:cap",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "brim",      "mask_colour": "#00ff00" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "brim",
+          "mask_colour": "#00ff00"
+        }
       ]
     },
     {
       "id": "npc_hat_helmet",
-      "col": 1, "row": 0,
-      "tags": ["npc", "hat", "type:helmet", "state:normal"],
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:helmet",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "visor",     "mask_colour": "#00ff00" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "visor",
+          "mask_colour": "#00ff00"
+        }
       ]
     },
     {
       "id": "npc_hat_beret",
-      "col": 2, "row": 0,
-      "tags": ["npc", "hat", "type:beret", "state:normal"],
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:beret",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
       ]
     },
     {
       "id": "npc_hat_visor",
-      "col": 3, "row": 0,
-      "tags": ["npc", "hat", "type:visor", "state:normal"],
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:visor",
+        "state:normal"
+      ],
       "colour_slots": [
-        { "name": "primary",   "mask_colour": "#ff0000" },
-        { "name": "lens",      "mask_colour": "#00ff00" }
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "lens",
+          "mask_colour": "#00ff00"
+        }
       ]
+    },
+    {
+      "id": "npc_hat_none",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:none",
+        "state:normal"
+      ],
+      "colour_slots": []
     }
   ]
 }

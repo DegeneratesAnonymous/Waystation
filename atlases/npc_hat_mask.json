@@ -1,0 +1,78 @@
+{
+  "atlas": "npc_hat_mask.png",
+  "base_atlas": "npc_hat.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc_mask",
+  "tiles": [
+    {
+      "id": "npc_hat_cap_mask",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:cap",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hat_helmet_mask",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:helmet",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hat_beret_mask",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:beret",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hat_visor_mask",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:visor",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_hat_none_mask",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "hat",
+        "type:none",
+        "state:normal",
+        "mask"
+      ]
+    }
+  ]
+}

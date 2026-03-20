@@ -70,12 +70,9 @@ namespace Waystation.Models
         // Optional department colour used by the shader-driven NPC tinting system.
         // Null means no colour is configured; DeptColour sources on NPC clothing
         // will fall back to MaterialDefault (no tint) when this is null.
-        // Stored as a nullable RGB hex string (e.g. "#4880aa") for JSON round-trip
+        // Stored as a nullable RGBA hex string (e.g. "#4880aa") for JSON round-trip
         // compatibility; resolved to a Unity Color at render time via DepartmentRegistry.
         public string colourHex = null;
-
-        // Optional accent (secondary) colour — nullable, same rules as colourHex.
-        public string secondaryColourHex = null;
 
         public static Department Create(string uid, string name, List<string> allowedJobs = null)
         {
@@ -83,30 +80,19 @@ namespace Waystation.Models
             {
                 uid         = uid,
                 name        = name,
-                allowedJobs = allowedJobs ?? new List<string>()
+                allowedJobs = allowedJobs ?? new List<string>(),
+                colour      = colour
             };
         }
 
         /// <summary>
-        /// Returns the department primary colour as a nullable UnityEngine.Color.
+        /// Returns the department colour as a nullable UnityEngine.Color.
         /// Returns null when <see cref="colourHex"/> is unset or invalid.
         /// </summary>
         public UnityEngine.Color? GetColour()
         {
             if (string.IsNullOrEmpty(colourHex)) return null;
             if (UnityEngine.ColorUtility.TryParseHtmlString(colourHex, out UnityEngine.Color c))
-                return c;
-            return null;
-        }
-
-        /// <summary>
-        /// Returns the department secondary (accent) colour as a nullable UnityEngine.Color.
-        /// Returns null when <see cref="secondaryColourHex"/> is unset or invalid.
-        /// </summary>
-        public UnityEngine.Color? GetSecondaryColour()
-        {
-            if (string.IsNullOrEmpty(secondaryColourHex)) return null;
-            if (UnityEngine.ColorUtility.TryParseHtmlString(secondaryColourHex, out UnityEngine.Color c))
                 return c;
             return null;
         }
