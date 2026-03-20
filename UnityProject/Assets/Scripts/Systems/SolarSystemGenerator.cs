@@ -11,11 +11,6 @@ namespace Waystation.Systems
 {
     public static class SolarSystemGenerator
     {
-        // ── Name tables ───────────────────────────────────────────────────────
-
-        private static readonly string[] Numerals =
-            { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
-
         // ── Phoneme pools for planet names ────────────────────────────────────
 
         private static readonly string[] PlanetV1 =
@@ -74,6 +69,14 @@ namespace Waystation.Systems
 
         private static readonly string[] MoonColors  =
             { "#998877", "#AAAAAA", "#887766", "#BBBBAA" };
+
+        // Exotic planet classes that can appear anywhere in the system (~6% chance).
+        private static readonly PlanetClass[] ExoticPlanetClasses =
+        {
+            PlanetClass.E1_Chthonian, PlanetClass.E2_CarbonPlanet,
+            PlanetClass.E3_IronPlanet, PlanetClass.E4_HeliumPlanet,
+            PlanetClass.E5_RogueBody,
+        };
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -162,10 +165,7 @@ namespace Waystation.Systems
             PlanetClass pClass;
             if (rng.NextDouble() < 0.06)
             {
-                var exotics = new[] { PlanetClass.E1_Chthonian, PlanetClass.E2_CarbonPlanet,
-                                      PlanetClass.E3_IronPlanet, PlanetClass.E4_HeliumPlanet,
-                                      PlanetClass.E5_RogueBody };
-                pClass = exotics[rng.Next(exotics.Length)];
+                pClass = ExoticPlanetClasses[rng.Next(ExoticPlanetClasses.Length)];
             }
             else if (zone < 0.20f)
                 pClass = rng.NextDouble() < 0.5 ? PlanetClass.T2_Volcanic    : PlanetClass.T1_BarrenRock;

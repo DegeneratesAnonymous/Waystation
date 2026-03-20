@@ -100,16 +100,6 @@ namespace Waystation.UI
         private const float GalUnitPerCell  = 3.0f;
         // Minimum separation between system dots (normalised 0–1 within the interior).
         private const float SysDotMinDist   = 0.09f;
-        // Colour palette for procedurally generated system dots.
-        private static readonly string[] StarColorHexPalette =
-        {
-            "#FFD98B",  // yellow dwarf
-            "#FF8C69",  // orange sub-giant
-            "#FFB3A1",  // red dwarf
-            "#B3CDFF",  // blue giant
-            "#FFFFFF",  // white dwarf
-            "#FFF5CC",  // warm main sequence
-        };
         private const float GalaxyZoomMin  = 0.15f;
         private const float GalaxyZoomMax  = 8f;
 
@@ -122,8 +112,6 @@ namespace Waystation.UI
 
         // Sector designation dot/label tracking
         private readonly List<GameObject> _sectorObjects = new List<GameObject>();
-        // Cached zoom-threshold state — used to skip needless sector-dot rebuilds in Sector layer.
-        private bool _prevZoomedOut;
         // Currently selected sector (for detail panel)
         private SectorData _selectedSector;
         // Double-click detection for system dots (sector map layer)
@@ -153,9 +141,6 @@ namespace Waystation.UI
         public static bool IsOpen        { get; private set; }
         // Lazily generated unit-circle sprite (white disc, anti-aliased)
         private static Sprite _circleSprite;
-        // Currently selected sector box border Image (for selection highlight)
-        private Image  _selectedBoxImage;
-        private Color  _selectedBoxDefaultColor;
 
         // ── Multi-select (Sector / Galaxy layers) ─────────────────────────────
         private readonly Dictionary<string, (Image img, Color defaultCol, SectorData sector, RectTransform rt)>
@@ -206,11 +191,11 @@ namespace Waystation.UI
         {
             if (!IsOpen) return;
 
-            // ESC: drill up one layer at a time, close only from System layer.
+            // ESC: drill up one layer at a time: System → Sector → Galaxy → Close.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                if      (_layer == MapLayer.Galaxy) SwitchLayer(MapLayer.Sector);
-                else if (_layer == MapLayer.Sector) SwitchLayer(MapLayer.System);
+                if      (_layer == MapLayer.System) SwitchLayer(MapLayer.Sector);
+                else if (_layer == MapLayer.Sector) SwitchLayer(MapLayer.Galaxy);
                 else                                Close();
                 return;
             }
@@ -450,11 +435,9 @@ namespace Waystation.UI
             if (isSelected)
             {
                 _multiSelectedUids.Add(uid);
-                entry.img.color      = Color.white;
-                _selectedBoxImage        = entry.img;
-                _selectedBoxDefaultColor = entry.defaultCol;
-                _selectedSector          = entry.sector;
-                SelectedSector           = entry.sector;
+                entry.img.color = Color.white;
+                _selectedSector = entry.sector;
+                SelectedSector  = entry.sector;
             }
             else
             {
@@ -482,7 +465,6 @@ namespace Waystation.UI
                 if (_sectorBoxRegistry.TryGetValue(uid, out var entry))
                     entry.img.color = entry.defaultCol;
             _multiSelectedUids.Clear();
-            _selectedBoxImage = null;
             _selectedSector   = null;
             SelectedSector    = null;
         }
@@ -568,7 +550,6 @@ namespace Waystation.UI
             IsOpen = false;
             // Clear selection when map is closed.
             SelectedSector       = null;
-            _selectedBoxImage    = null;
             _selectedSector      = null;
             _multiSelectedUids.Clear();
             _sectorBoxRegistry.Clear();
@@ -1028,9 +1009,7 @@ namespace Waystation.UI
             var boxImg = boxGo.GetComponent<Image>();
             if (SelectedSector != null && sector.uid == SelectedSector.uid)
             {
-                _selectedBoxImage        = boxImg;
-                _selectedBoxDefaultColor = borderCol;
-                boxImg.color             = Color.white;  // bright white = selected
+                boxImg.color = Color.white;  // bright white = selected
             }
 
             // ── Inner fill (2 px inset) ───────────────────────────────────────
@@ -1122,64 +1101,55 @@ namespace Waystation.UI
             trigger.triggers.Add(exitEntry);
         }
 
-        /// <summary>
-        /// Places procedurally generated star system dots inside one sector box.
-        /// Positions are deterministic (seeded from sector uid) and respect a
-        /// minimum separation so dots never overlap.
-        /// </summary>
-        /// <summary>
-        /// Adds four right-angle triangle accents at the corners of <paramref name="parent"/>.
-        /// Each triangle has its right-angle at the corresponding corner and its hypotenuse
-        /// cutting diagonally inward, giving a tapered corner-flag effect.
-        /// They sit in the hierarchy before system dots so dots always render on top.
-        /// </summary>
         // ── Modifier badge ────────────────────────────────────────────────────
         // A small coloured pip + 2-char label placed in the top-right of the fill rect.
         // Physical = cold blue-grey, Resource = amber, Political = red.
 
-        private static readonly (string label, string hex)[] ModifierBadgeTable =
-        {
-            // Physical
-            ("NB", "#7AAED6"), // Nebula
-            ("AB", "#7AAED6"), // AsteroidBelt
-            ("DC", "#7AAED6"), // DustCloud
-            ("RD", "#7AAED6"), // PlanetaryRingDebris
-            ("CT", "#7AAED6"), // CometaryTail
-            ("AD", "#7AAED6"), // AccretionDisk
-            ("PW", "#A0D6E8"), // PulsarWash
-            ("MF", "#A0D6E8"), // MagnetarField
-            ("GL", "#A0D6E8"), // GravitationalLens
-            ("GW", "#A0D6E8"), // GravityWell
-            ("TS", "#A0D6E8"), // TidalShearZone
-            ("CR", "#A0D6E8"), // CosmicRaySurge
-            ("RB", "#A0D6E8"), // RadiationBelt
-            ("DM", "#A0D6E8"), // DarkMatterFilament
-            ("FA", "#A0D6E8"), // FrameDraggingAnomaly
-            ("GT", "#A0D6E8"), // GravitationalTimeDilation
-            ("ER", "#A0D6E8"), // EinsteinRosenRemnant
-            ("QF", "#A0D6E8"), // QuantumFoamPocket
-            ("HR", "#A0D6E8"), // HawkingRadiationZone
-            // Resource
-            ("OR", "#E8C060"), // RichOreDeposit
-            ("IF", "#E8C060"), // IceField
-            ("GP", "#E8C060"), // GasPocket
-            ("SG", "#E8C060"), // SalvageGraveyard
-            ("DS", "#E8C060"), // DerelictStation
-            ("AR", "#E8C060"), // AncientRuins
-            ("BB", "#E8C060"), // BiologicalBloom
-            // Political
-            ("CS", "#D06060"), // ContestedSpace
-            ("EZ", "#D06060"), // ExclusionZone
-            ("QS", "#D06060"), // QuarantineSeal
-            ("PR", "#D06060"), // PatrolRoute
-        };
+        // Explicit mapping from SectorModifier to badge (label, colour hex).
+        // Using a Dictionary keyed by enum value prevents silent mis-mapping if the
+        // SectorModifier enum is ever reordered or extended.
+        private static readonly Dictionary<SectorModifier, (string label, string hex)> ModifierBadgeMap =
+            new Dictionary<SectorModifier, (string label, string hex)>
+            {
+                // Physical
+                { SectorModifier.Nebula,                    ("NB", "#7AAED6") },
+                { SectorModifier.AsteroidBelt,              ("AB", "#7AAED6") },
+                { SectorModifier.DustCloud,                 ("DC", "#7AAED6") },
+                { SectorModifier.PlanetaryRingDebris,       ("RD", "#7AAED6") },
+                { SectorModifier.CometaryTail,              ("CT", "#7AAED6") },
+                { SectorModifier.AccretionDisk,             ("AD", "#7AAED6") },
+                { SectorModifier.PulsarWash,                ("PW", "#A0D6E8") },
+                { SectorModifier.MagnetarField,             ("MF", "#A0D6E8") },
+                { SectorModifier.GravitationalLens,         ("GL", "#A0D6E8") },
+                { SectorModifier.GravityWell,               ("GW", "#A0D6E8") },
+                { SectorModifier.TidalShearZone,            ("TS", "#A0D6E8") },
+                { SectorModifier.CosmicRaySurge,            ("CR", "#A0D6E8") },
+                { SectorModifier.RadiationBelt,             ("RB", "#A0D6E8") },
+                { SectorModifier.DarkMatterFilament,        ("DM", "#A0D6E8") },
+                { SectorModifier.FrameDraggingAnomaly,      ("FA", "#A0D6E8") },
+                { SectorModifier.GravitationalTimeDilation, ("GT", "#A0D6E8") },
+                { SectorModifier.EinsteinRosenRemnant,      ("ER", "#A0D6E8") },
+                { SectorModifier.QuantumFoamPocket,         ("QF", "#A0D6E8") },
+                { SectorModifier.HawkingRadiationZone,      ("HR", "#A0D6E8") },
+                // Resource
+                { SectorModifier.RichOreDeposit,            ("OR", "#E8C060") },
+                { SectorModifier.IceField,                  ("IF", "#E8C060") },
+                { SectorModifier.GasPocket,                 ("GP", "#E8C060") },
+                { SectorModifier.SalvageGraveyard,          ("SG", "#E8C060") },
+                { SectorModifier.DerelictStation,           ("DS", "#E8C060") },
+                { SectorModifier.AncientRuins,              ("AR", "#E8C060") },
+                { SectorModifier.BiologicalBloom,           ("BB", "#E8C060") },
+                // Political
+                { SectorModifier.ContestedSpace,            ("CS", "#D06060") },
+                { SectorModifier.ExclusionZone,             ("EZ", "#D06060") },
+                { SectorModifier.QuarantineSeal,            ("QS", "#D06060") },
+                { SectorModifier.PatrolRoute,               ("PR", "#D06060") },
+            };
 
-        // Maps SectorModifier enum index (minus None=0) to ModifierBadgeTable.
         private static (string label, string hex) GetModifierBadge(SectorModifier m)
         {
-            int idx = (int)m - 1; // None=0, first real value=1
-            if (idx < 0 || idx >= ModifierBadgeTable.Length) return ("??", "#888888");
-            return ModifierBadgeTable[idx];
+            if (ModifierBadgeMap.TryGetValue(m, out var badge)) return badge;
+            return ("??", "#888888");
         }
 
         private static void DrawModifierBadge(RectTransform fillRt, SectorModifier modifier)
@@ -1235,6 +1205,12 @@ namespace Waystation.UI
             };
         }
 
+        /// <summary>
+        /// Adds four right-angle triangle accents at the corners of <paramref name="parent"/>.
+        /// Each triangle has its right-angle at the corresponding corner and its hypotenuse
+        /// cutting diagonally inward, giving a tapered corner-flag effect.
+        /// They sit in the hierarchy before system dots so dots always render on top.
+        /// </summary>
         private static void AddCornerAccents(RectTransform parent, Color col, float size = 12f, float pad = 2f)
         {
             // Each triangle's RectTransform is anchored to its corner and inset
@@ -1263,6 +1239,11 @@ namespace Waystation.UI
             }
         }
 
+        /// <summary>
+        /// Places procedurally generated star system dots inside one sector box.
+        /// Positions are deterministic (seeded from sector uid) and respect a
+        /// minimum separation so dots never overlap.
+        /// </summary>
         private void PlaceSectorSystemDots(
             RectTransform fillRt, SectorData sector, bool isHome,
             float areaX, float areaY, float areaW, float areaH,
