@@ -19,7 +19,9 @@
 // (order in hierarchy does not matter — sortingOrder drives draw order)
 //
 // Mask renderers must use a material assigned in the Inspector that references NpcApparel.shader.
-// TODO: apply shader tints via NpcApparelTinter
+// Shader tints are applied by setting _TintColor0..7 properties on the mask renderer materials
+// at runtime. A future NpcApparelTinter MonoBehaviour (tracked separately) will automate
+// this from ClothingLayerAppearance.slotColours and DepartmentRegistry lookups.
 using UnityEngine;
 
 namespace Waystation.NPC
