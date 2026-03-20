@@ -67,10 +67,14 @@ namespace Waystation.Models
         public string       name;
         public List<string> allowedJobs = new List<string>();
 
-        /// <summary>Optional department colour token. Null = no colour configured.</summary>
-        public Color? colour = null;
+        // Optional department colour used by the shader-driven NPC tinting system.
+        // Null means no colour is configured; DeptColour sources on NPC clothing
+        // will fall back to MaterialDefault (no tint) when this is null.
+        // Stored as a nullable RGBA hex string (e.g. "#4880aa") for JSON round-trip
+        // compatibility; resolved to a Unity Color at render time via DepartmentRegistry.
+        public string colourHex = null;
 
-        public static Department Create(string uid, string name, List<string> allowedJobs = null, Color? colour = null)
+        public static Department Create(string uid, string name, List<string> allowedJobs = null)
         {
             return new Department
             {
@@ -79,6 +83,18 @@ namespace Waystation.Models
                 allowedJobs = allowedJobs ?? new List<string>(),
                 colour      = colour
             };
+        }
+
+        /// <summary>
+        /// Returns the department colour as a nullable UnityEngine.Color.
+        /// Returns null when <see cref="colourHex"/> is unset or invalid.
+        /// </summary>
+        public UnityEngine.Color? GetColour()
+        {
+            if (string.IsNullOrEmpty(colourHex)) return null;
+            if (UnityEngine.ColorUtility.TryParseHtmlString(colourHex, out UnityEngine.Color c))
+                return c;
+            return null;
         }
     }
 

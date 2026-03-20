@@ -1,49 +1,83 @@
-// ColourSource — discriminated union describing where a clothing layer's tint colour comes from.
+// ColourSource — discriminated union representing the three ways a clothing
+// colour slot can be specified.
+//
+// ExplicitColour  — a player-chosen, free colour value.
+// DeptColour      — a token; the actual colour is resolved at render time from
+//                   the owning NPC's department via DepartmentRegistry.
+// MaterialDefault — no tint; the base texture renders unmodified for this slot.
 using System;
 using UnityEngine;
 
 namespace Waystation.NPC
 {
-    /// <summary>Base class for colour source tokens used by the shader-driven tinting system.</summary>
     [Serializable]
     public abstract class ColourSource
     {
-        /// <summary>
-        /// Resolves to the actual tint colour, or null if no tint should be applied.
-        /// </summary>
-        public abstract Color? Resolve(DepartmentRegistry registry, string departmentId);
-    }
+        // ── Concrete cases ────────────────────────────────────────────────────
 
-    /// <summary>A player-chosen explicit colour. Always resolves to the stored value.</summary>
-    [Serializable]
-    public sealed class ExplicitColour : ColourSource
-    {
-        public Color value;
-
-        public ExplicitColour() { }
-        public ExplicitColour(Color value) { this.value = value; }
-
-        public override Color? Resolve(DepartmentRegistry registry, string departmentId) => value;
-    }
-
-    /// <summary>
-    /// Department colour token. Resolves to the department's configured colour,
-    /// or null if registry/departmentId is missing.
-    /// </summary>
-    [Serializable]
-    public sealed class DeptColour : ColourSource
-    {
-        public override Color? Resolve(DepartmentRegistry registry, string departmentId)
+        /// <summary>A player-chosen explicit colour value.</summary>
+        [Serializable]
+        public sealed class ExplicitColour : ColourSource
         {
-            if (registry == null || string.IsNullOrEmpty(departmentId)) return null;
-            return registry.GetDepartmentColour(departmentId);
+            public Color value;
+            public ExplicitColour() { value = Color.white; }
+            public ExplicitColour(Color value) { this.value = value; }
         }
-    }
 
-    /// <summary>No tint — material default. Always resolves to null.</summary>
-    [Serializable]
-    public sealed class MaterialDefault : ColourSource
-    {
-        public override Color? Resolve(DepartmentRegistry registry, string departmentId) => null;
+        /// <summary>
+        /// Token that resolves at render time from the owning NPC's department
+        /// colour via <see cref="DepartmentRegistry"/>.
+        /// When no department colour is assigned, falls back to MaterialDefault.
+        /// </summary>
+        [Serializable]
+        public sealed class DeptColour : ColourSource { }
+
+        /// <summary>
+        /// No tint applied — the base texture renders without colour modification.
+        /// </summary>
+        [Serializable]
+        public sealed class MaterialDefault : ColourSource { }
+
+        // ── Convenience factories ─────────────────────────────────────────────
+
+        /// <summary>Returns an ExplicitColour source for the given colour value.</summary>
+        public static ColourSource Explicit(Color c) => new ExplicitColour(c);
+
+        /// <summary>Returns a DeptColour token source.</summary>
+        public static ColourSource Dept() => new DeptColour();
+
+        /// <summary>Returns a MaterialDefault (no-tint) source.</summary>
+        public static ColourSource Default() => new MaterialDefault();
+
+        // ── Resolution helper ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Resolves this source to a concrete Unity Color.
+        /// Returns <see langword="null"/> when the result is MaterialDefault
+        /// (i.e. no tint should be applied to the slot).
+        /// </summary>
+        /// <param name="departmentId">The owning NPC's department UID (may be null).</param>
+        /// <param name="registry">
+        /// The DepartmentRegistry used to look up department colours.
+        /// May be null; treated as department-with-no-colour.
+        /// </param>
+        public Color? Resolve(string departmentId, DepartmentRegistry registry)
+        {
+            switch (this)
+            {
+                case ExplicitColour ec:
+                    return ec.value;
+
+                case DeptColour _:
+                    Color? deptCol = registry?.GetColour(departmentId);
+                    return deptCol; // null when department has no colour → no tint
+
+                case MaterialDefault _:
+                    return null;
+
+                default:
+                    return null;
+            }
+        }
     }
 }

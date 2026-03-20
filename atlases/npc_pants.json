@@ -1,16 +1,94 @@
 {
   "atlas": "npc_pants.png",
   "mask_atlas": "npc_pants_mask.png",
-  "tile_size": {"w":32,"h":48},
-  "slot_size": {"w":34,"h":50},
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
   "padding": 1,
   "pivot": "center",
   "perspective": "top-down-north-fixed",
   "category": "npc",
   "tiles": [
-    {"id":"npc_pants_casual",  "col":0,"row":0,"tags":["npc","pants","type:casual"], "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_pants_cargo",   "col":1,"row":0,"tags":["npc","pants","type:cargo"],  "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_pants_uniform", "col":2,"row":0,"tags":["npc","pants","type:uniform"],"colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_pants_shorts",  "col":3,"row":0,"tags":["npc","pants","type:shorts"], "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]}
+    {
+      "id": "npc_pants_casual",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
+      ]
+    },
+    {
+      "id": "npc_pants_cargo",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "pockets",
+          "mask_colour": "#00ff00"
+        }
+      ]
+    },
+    {
+      "id": "npc_pants_uniform",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "stripe",
+          "mask_colour": "#00ff00"
+        }
+      ]
+    },
+    {
+      "id": "npc_pants_shorts",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
+      ]
+    }
   ]
 }

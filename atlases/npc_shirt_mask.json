@@ -1,0 +1,78 @@
+{
+  "atlas": "npc_shirt_mask.png",
+  "base_atlas": "npc_shirt.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc_mask",
+  "tiles": [
+    {
+      "id": "npc_shirt_tshirt_mask",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_shirt_collar_mask",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform_mask",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_shirt_vest_mask",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_shirt_tank_mask",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "state:normal",
+        "mask"
+      ]
+    }
+  ]
+}

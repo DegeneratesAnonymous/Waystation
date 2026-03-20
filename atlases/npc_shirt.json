@@ -1,17 +1,115 @@
 {
   "atlas": "npc_shirt.png",
   "mask_atlas": "npc_shirt_mask.png",
-  "tile_size": {"w":32,"h":48},
-  "slot_size": {"w":34,"h":50},
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
   "padding": 1,
   "pivot": "center",
   "perspective": "top-down-north-fixed",
   "category": "npc",
   "tiles": [
-    {"id":"npc_shirt_tshirt",  "col":0,"row":0,"tags":["npc","shirt","type:tshirt"], "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_shirt_collar",  "col":1,"row":0,"tags":["npc","shirt","type:collar"], "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_shirt_uniform", "col":2,"row":0,"tags":["npc","shirt","type:uniform"],"colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_shirt_vest",    "col":3,"row":0,"tags":["npc","shirt","type:vest"],   "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]},
-    {"id":"npc_shirt_tank",    "col":4,"row":0,"tags":["npc","shirt","type:tank"],   "colour_slots":[{"name":"primary","mask_colour":"#ff0000"},{"name":"secondary","mask_colour":"#00ff00"}]}
+    {
+      "id": "npc_shirt_tshirt",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tshirt",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
+      ]
+    },
+    {
+      "id": "npc_shirt_collar",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:collar",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "collar",
+          "mask_colour": "#00ff00"
+        }
+      ]
+    },
+    {
+      "id": "npc_shirt_uniform",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:uniform",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "trim",
+          "mask_colour": "#00ff00"
+        }
+      ]
+    },
+    {
+      "id": "npc_shirt_vest",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:vest",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        },
+        {
+          "name": "inner",
+          "mask_colour": "#00ff00"
+        }
+      ]
+    },
+    {
+      "id": "npc_shirt_tank",
+      "col": 4,
+      "row": 0,
+      "tags": [
+        "npc",
+        "shirt",
+        "type:tank",
+        "state:normal"
+      ],
+      "colour_slots": [
+        {
+          "name": "primary",
+          "mask_colour": "#ff0000"
+        }
+      ]
+    }
   ]
 }

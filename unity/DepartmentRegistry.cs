@@ -1,35 +1,50 @@
-// DepartmentRegistry — maps department UIDs to their configured colours.
+// DepartmentRegistry — lightweight runtime helper that resolves department
+// colours from StationState.departments.
+//
+// Used by ColourSource.DeptColour.Resolve() during render-time tint evaluation.
+// Should be instantiated once (e.g. in NpcSpriteController or a GameManager
+// facade) and passed to colour resolution calls.
 using System.Collections.Generic;
 using UnityEngine;
-using Waystation.Models;
 
 namespace Waystation.NPC
 {
-    /// <summary>
-    /// Wraps a list of Department instances and exposes colour lookups for the tinting system.
-    /// </summary>
     public class DepartmentRegistry
     {
-        private readonly Dictionary<string, Department> _byUid = new Dictionary<string, Department>();
+        // ── Internal state ────────────────────────────────────────────────────
 
-        public DepartmentRegistry(List<Department> departments)
+        // departmentId → resolved Color (nullable)
+        private readonly Dictionary<string, Color?> _colours
+            = new Dictionary<string, Color?>();
+
+        // ── Construction ──────────────────────────────────────────────────────
+
+        public DepartmentRegistry() { }
+
+        // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Registers (or updates) the colour for a department.
+        /// Pass <see langword="null"/> to indicate the department has no configured colour.
+        /// </summary>
+        public void SetColour(string departmentId, Color? colour)
         {
-            if (departments == null) return;
-            foreach (var dept in departments)
-            {
-                if (dept != null && !string.IsNullOrEmpty(dept.uid))
-                    _byUid[dept.uid] = dept;
-            }
+            if (departmentId == null) return;
+            _colours[departmentId] = colour;
         }
 
         /// <summary>
-        /// Returns the department's colour token if it has one configured, otherwise null.
+        /// Returns the configured colour for <paramref name="departmentId"/>,
+        /// or <see langword="null"/> if the department has no colour set or is
+        /// unknown.
         /// </summary>
-        public Color? GetDepartmentColour(string deptUid)
+        public Color? GetColour(string departmentId)
         {
-            if (string.IsNullOrEmpty(deptUid)) return null;
-            if (!_byUid.TryGetValue(deptUid, out var dept)) return null;
-            return dept.colour;
+            if (departmentId == null) return null;
+            return _colours.TryGetValue(departmentId, out Color? c) ? c : null;
         }
+
+        /// <summary>Removes all registered department colours.</summary>
+        public void Clear() => _colours.Clear();
     }
 }

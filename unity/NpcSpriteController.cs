@@ -18,10 +18,8 @@
 //   BackMask / ShoesMask / PantsMask / ShirtMask / HairMask / HatMask / WeaponMask
 // (order in hierarchy does not matter — sortingOrder drives draw order)
 //
-// Mask renderers must use a material assigned in the Inspector that references NpcApparel.shader.
-// Shader tints are applied by setting _TintColor0..7 properties on the mask renderer materials
-// at runtime. A future NpcApparelTinter MonoBehaviour (tracked separately) will automate
-// this from ClothingLayerAppearance.slotColours and DepartmentRegistry lookups.
+// Clothing and hair layers use NpcApparel.shader for mask-keyed runtime tinting.
+// Body and face layers continue to use the default sprite material (baked).
 using UnityEngine;
 
 namespace Waystation.NPC
@@ -29,9 +27,35 @@ namespace Waystation.NPC
     [DisallowMultipleComponent]
     public class NpcSpriteController : MonoBehaviour
     {
+        // ── Max tint slots supported by NpcApparel.shader ─────────────────────
+        private const int MaxTintSlots = 8;
+
+        // Shader property IDs (cached for performance)
+        private static readonly int PropMaskTex   = Shader.PropertyToID("_MaskTex");
+        private static readonly int PropTintColors = Shader.PropertyToID("_TintColors");
+
         [Header("Atlas Registry")]
         [Tooltip("Assign the NpcAtlasRegistry ScriptableObject here.")]
         public NpcAtlasRegistry registry;
+
+        // DepartmentRegistry is a plain C# class and cannot be serialized by
+        // Unity. Inject it at runtime via SetDepartmentRegistry() (e.g. from a
+        // manager that owns the registry) rather than assigning it in the Inspector.
+        private DepartmentRegistry _departmentRegistry;
+
+        /// <summary>
+        /// Injects the DepartmentRegistry used to resolve DeptColour sources.
+        /// Call this from a manager before calling Apply() on any NPC that has
+        /// DeptColour clothing slots.
+        /// </summary>
+        public void SetDepartmentRegistry(DepartmentRegistry registry)
+        {
+            _departmentRegistry = registry;
+        }
+
+        /// <summary>Department UID of the NPC owning this controller (set before Apply).</summary>
+        [HideInInspector]
+        public string npcDepartmentId;
 
         [Header("Layer Renderers")]
         [Tooltip("SpriteRenderer for the back item layer (sortingOrder 10).")]
@@ -61,27 +85,14 @@ namespace Waystation.NPC
         [Tooltip("SpriteRenderer for the weapon layer (sortingOrder 18).")]
         public SpriteRenderer weaponRenderer;
 
-        [Header("Mask Renderers (assign NpcApparel.shader material in Inspector)")]
-        [Tooltip("Mask renderer for the back item layer (sortingOrder 10).")]
-        public SpriteRenderer backMaskRenderer;
-
-        [Tooltip("Mask renderer for the shoes layer (sortingOrder 12).")]
-        public SpriteRenderer shoesMaskRenderer;
-
-        [Tooltip("Mask renderer for the pants layer (sortingOrder 13).")]
-        public SpriteRenderer pantsMaskRenderer;
-
-        [Tooltip("Mask renderer for the shirt layer (sortingOrder 14).")]
-        public SpriteRenderer shirtMaskRenderer;
-
-        [Tooltip("Mask renderer for the hair layer (sortingOrder 16).")]
-        public SpriteRenderer hairMaskRenderer;
-
-        [Tooltip("Mask renderer for the hat layer (sortingOrder 17).")]
-        public SpriteRenderer hatMaskRenderer;
-
-        [Tooltip("Mask renderer for the weapon layer (sortingOrder 18).")]
-        public SpriteRenderer weaponMaskRenderer;
+        // ── Shared MaterialPropertyBlocks (one per layer renderer) ────────────
+        private MaterialPropertyBlock _backBlock;
+        private MaterialPropertyBlock _shoesBlock;
+        private MaterialPropertyBlock _pantsBlock;
+        private MaterialPropertyBlock _shirtBlock;
+        private MaterialPropertyBlock _hairBlock;
+        private MaterialPropertyBlock _hatBlock;
+        private MaterialPropertyBlock _weaponBlock;
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
 
@@ -89,6 +100,7 @@ namespace Waystation.NPC
         {
             AutoResolveRenderers();
             EnforceSortingOrders();
+            InitPropertyBlocks();
         }
 
 #if UNITY_EDITOR
@@ -118,27 +130,117 @@ namespace Waystation.NPC
                 return;
             }
 
-            AssignSprite(backRenderer,   "backRenderer",   registry.GetBack(appearance.back));
+            // Body and face: baked sprites, no tinting
             AssignSprite(bodyRenderer,   "bodyRenderer",   registry.GetBody(appearance.bodyType, appearance.skinTone));
-            AssignSprite(shoesRenderer,  "shoesRenderer",  registry.GetShoes(appearance.shoes));
-            AssignSprite(pantsRenderer,  "pantsRenderer",  registry.GetPants(appearance.pants));
-            AssignSprite(shirtRenderer,  "shirtRenderer",  registry.GetShirt(appearance.shirt));
             AssignSprite(faceRenderer,   "faceRenderer",   registry.GetFace(appearance.faceType));
-            AssignSprite(hairRenderer,   "hairRenderer",   registry.GetHair(appearance.hair));
-            AssignSprite(hatRenderer,    "hatRenderer",    registry.GetHat(appearance.hat));
-            AssignSprite(weaponRenderer, "weaponRenderer", registry.GetWeapon(appearance.weapon));
 
-            // Assign mask sprites (material with NpcApparel.shader must be set in Inspector)
-            AssignSprite(backMaskRenderer,   "backMaskRenderer",   registry.GetBackMask(appearance.back));
-            AssignSprite(shoesMaskRenderer,  "shoesMaskRenderer",  registry.GetShoesMask(appearance.shoes));
-            AssignSprite(pantsMaskRenderer,  "pantsMaskRenderer",  registry.GetPantsMask(appearance.pants));
-            AssignSprite(shirtMaskRenderer,  "shirtMaskRenderer",  registry.GetShirtMask(appearance.shirt));
-            AssignSprite(hairMaskRenderer,   "hairMaskRenderer",   registry.GetHairMask(appearance.hair));
-            AssignSprite(hatMaskRenderer,    "hatMaskRenderer",    registry.GetHatMask(appearance.hat));
-            AssignSprite(weaponMaskRenderer, "weaponMaskRenderer", registry.GetWeaponMask(appearance.weapon));
+            // Clothing and hair: neutral masters + mask-keyed tinting
+            ApplyTintedLayer(
+                backRenderer,    "backRenderer",
+                registry.GetBack(appearance.BackItemTypeEnum),
+                registry.GetBackMask(appearance.BackItemTypeEnum),
+                appearance.backItem,
+                ref _backBlock);
+
+            ApplyTintedLayer(
+                shoesRenderer,   "shoesRenderer",
+                registry.GetShoes(appearance.ShoeTypeEnum),
+                registry.GetShoesMask(appearance.ShoeTypeEnum),
+                appearance.shoes,
+                ref _shoesBlock);
+
+            ApplyTintedLayer(
+                pantsRenderer,   "pantsRenderer",
+                registry.GetPants(appearance.PantsTypeEnum),
+                registry.GetPantsMask(appearance.PantsTypeEnum),
+                appearance.pants,
+                ref _pantsBlock);
+
+            ApplyTintedLayer(
+                shirtRenderer,   "shirtRenderer",
+                registry.GetShirt(appearance.ShirtTypeEnum),
+                registry.GetShirtMask(appearance.ShirtTypeEnum),
+                appearance.shirt,
+                ref _shirtBlock);
+
+            ApplyTintedLayer(
+                hairRenderer,    "hairRenderer",
+                registry.GetHair(appearance.HairStyleEnum),
+                registry.GetHairMask(appearance.HairStyleEnum),
+                appearance.hair,
+                ref _hairBlock);
+
+            ApplyTintedLayer(
+                hatRenderer,     "hatRenderer",
+                registry.GetHat(appearance.HatTypeEnum),
+                registry.GetHatMask(appearance.HatTypeEnum),
+                appearance.hat,
+                ref _hatBlock);
+
+            ApplyTintedLayer(
+                weaponRenderer,  "weaponRenderer",
+                registry.GetWeapon(appearance.WeaponTypeEnum),
+                registry.GetWeaponMask(appearance.WeaponTypeEnum),
+                appearance.weapon,
+                ref _weaponBlock);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Applies a neutral-master sprite and sets the companion mask + resolved
+        /// tint colours on the renderer via a MaterialPropertyBlock.
+        /// </summary>
+        private void ApplyTintedLayer(
+            SpriteRenderer sr,
+            string fieldName,
+            Sprite baseSprite,
+            Sprite maskSprite,
+            ClothingLayerAppearance layer,
+            ref MaterialPropertyBlock block)
+        {
+            if (sr == null)
+            {
+                Debug.LogError($"[NpcSpriteController] '{fieldName}' is not assigned.", this);
+                return;
+            }
+
+            sr.sprite = baseSprite;
+
+            if (block == null) block = new MaterialPropertyBlock();
+
+            // Mask texture — always write to avoid stale textures from previous Apply calls.
+            // When maskSprite is null (layer has no mask atlas), clear to a black 1×1 texture
+            // so the shader sees no mask and passes all pixels through unmodified.
+            if (maskSprite != null)
+                block.SetTexture(PropMaskTex, maskSprite.texture);
+            else
+                block.SetTexture(PropMaskTex, Texture2D.blackTexture);
+
+            // Resolve tint colours
+            var tints = new Color[MaxTintSlots];
+            for (int i = 0; i < MaxTintSlots; i++)
+                tints[i] = Color.white; // default: white = multiplicative identity (no tint change)
+
+            if (layer != null)
+            {
+                for (int i = 0; i < layer.slotColours.Count && i < MaxTintSlots; i++)
+                {
+                    // A null entry in slotColours is explicitly treated as MaterialDefault
+                    // (no tint); white is the multiplicative identity so tints[i] stays white.
+                    ColourSource src = layer.slotColours[i];
+                    if (src == null || src is ColourSource.MaterialDefault)
+                        continue;
+
+                    Color? resolved = src.Resolve(npcDepartmentId, _departmentRegistry);
+                    if (resolved.HasValue)
+                        tints[i] = resolved.Value;
+                }
+            }
+
+            block.SetColorArray(PropTintColors, tints);
+            sr.SetPropertyBlock(block);
+        }
 
         /// <summary>
         /// Programmatically sets the sorting layer and order on every renderer.
@@ -193,6 +295,17 @@ namespace Waystation.NPC
             hairMaskRenderer   = hairMaskRenderer   != null ? hairMaskRenderer   : FindChildRenderer("HairMask");
             hatMaskRenderer    = hatMaskRenderer    != null ? hatMaskRenderer    : FindChildRenderer("HatMask");
             weaponMaskRenderer = weaponMaskRenderer != null ? weaponMaskRenderer : FindChildRenderer("WeaponMask");
+        }
+
+        private void InitPropertyBlocks()
+        {
+            _backBlock   = new MaterialPropertyBlock();
+            _shoesBlock  = new MaterialPropertyBlock();
+            _pantsBlock  = new MaterialPropertyBlock();
+            _shirtBlock  = new MaterialPropertyBlock();
+            _hairBlock   = new MaterialPropertyBlock();
+            _hatBlock    = new MaterialPropertyBlock();
+            _weaponBlock = new MaterialPropertyBlock();
         }
 
         private SpriteRenderer FindChildRenderer(string childName)

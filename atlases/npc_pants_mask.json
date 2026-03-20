@@ -1,0 +1,66 @@
+{
+  "atlas": "npc_pants_mask.png",
+  "base_atlas": "npc_pants.png",
+  "tile_size": {
+    "w": 32,
+    "h": 48
+  },
+  "slot_size": {
+    "w": 34,
+    "h": 50
+  },
+  "padding": 1,
+  "pivot": "center",
+  "perspective": "top-down-north-fixed",
+  "category": "npc_mask",
+  "tiles": [
+    {
+      "id": "npc_pants_casual_mask",
+      "col": 0,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:casual",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_pants_cargo_mask",
+      "col": 1,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:cargo",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_pants_uniform_mask",
+      "col": 2,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:uniform",
+        "state:normal",
+        "mask"
+      ]
+    },
+    {
+      "id": "npc_pants_shorts_mask",
+      "col": 3,
+      "row": 0,
+      "tags": [
+        "npc",
+        "pants",
+        "type:shorts",
+        "state:normal",
+        "mask"
+      ]
+    }
+  ]
+}
