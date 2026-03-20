@@ -31,13 +31,25 @@ namespace Waystation.NPC.Editor
         {
             { "npc_body.png",   18 },
             { "npc_face.png",    4 },
-            { "npc_hair.png",   30 },
-            { "npc_hat.png",    25 },
-            { "npc_shirt.png",  25 },
-            { "npc_pants.png",  20 },
-            { "npc_shoes.png",  15 },
-            { "npc_back.png",   10 },
+            { "npc_hair.png",    5 },  // was 30
+            { "npc_hat.png",     5 },  // was 25
+            { "npc_shirt.png",   5 },  // was 25
+            { "npc_pants.png",   4 },  // was 20
+            { "npc_shoes.png",   3 },  // was 15
+            { "npc_back.png",    5 },  // was 10
             { "npc_weapon.png", 20 },
+        };
+
+        // Maps mask atlas filename → expected sprite count
+        private static readonly Dictionary<string, int> MaskAtlasCounts = new Dictionary<string, int>
+        {
+            { "npc_hair_mask.png",    5 },
+            { "npc_hat_mask.png",     5 },
+            { "npc_shirt_mask.png",   5 },
+            { "npc_pants_mask.png",   4 },
+            { "npc_shoes_mask.png",   3 },
+            { "npc_back_mask.png",    5 },
+            { "npc_weapon_mask.png", 20 },
         };
 
         [MenuItem("Waystation/NPC/Import NPC Atlases")]
@@ -71,6 +83,15 @@ namespace Waystation.NPC.Editor
             var backSprites   = SliceAtlas("npc_back.png",   AtlasCounts["npc_back.png"],   ref anyError);
             var weaponSprites = SliceAtlas("npc_weapon.png", AtlasCounts["npc_weapon.png"], ref anyError);
 
+            // Mask atlases
+            var hairMaskSprites   = SliceAtlas("npc_hair_mask.png",   MaskAtlasCounts["npc_hair_mask.png"],   ref anyError);
+            var hatMaskSprites    = SliceAtlas("npc_hat_mask.png",    MaskAtlasCounts["npc_hat_mask.png"],    ref anyError);
+            var shirtMaskSprites  = SliceAtlas("npc_shirt_mask.png",  MaskAtlasCounts["npc_shirt_mask.png"],  ref anyError);
+            var pantsMaskSprites  = SliceAtlas("npc_pants_mask.png",  MaskAtlasCounts["npc_pants_mask.png"],  ref anyError);
+            var shoeMaskSprites   = SliceAtlas("npc_shoes_mask.png",  MaskAtlasCounts["npc_shoes_mask.png"],  ref anyError);
+            var backMaskSprites   = SliceAtlas("npc_back_mask.png",   MaskAtlasCounts["npc_back_mask.png"],   ref anyError);
+            var weaponMaskSprites = SliceAtlas("npc_weapon_mask.png", MaskAtlasCounts["npc_weapon_mask.png"], ref anyError);
+
             if (anyError)
             {
                 // Don't overwrite existing registry arrays when an atlas is missing/invalid;
@@ -90,6 +111,15 @@ namespace Waystation.NPC.Editor
             registry.shoeSprites   = shoeSprites;
             registry.backSprites   = backSprites;
             registry.weaponSprites = weaponSprites;
+
+            // Mask sprite arrays
+            registry.hairMaskSprites   = hairMaskSprites;
+            registry.hatMaskSprites    = hatMaskSprites;
+            registry.shirtMaskSprites  = shirtMaskSprites;
+            registry.pantsMaskSprites  = pantsMaskSprites;
+            registry.shoeMaskSprites   = shoeMaskSprites;
+            registry.backMaskSprites   = backMaskSprites;
+            registry.weaponMaskSprites = weaponMaskSprites;
 
             EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
