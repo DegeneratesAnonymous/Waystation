@@ -209,7 +209,6 @@ namespace Waystation.Systems
 
             float baseHue = existingHues[0];
             float sat = 0.60f, val = 0.70f;
-            if (Color.RGBToHSV(Color.HSVToRGB(baseHue, sat, val), out float _, out float _, out float _)) { }
 
             int slotIndex = 0;
             foreach (var slot in atlasSlots)

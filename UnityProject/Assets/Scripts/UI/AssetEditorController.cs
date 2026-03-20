@@ -646,7 +646,8 @@ namespace Waystation.UI
             {
                 s = FloatField("Radius",    ref b.lightEmitter.lightRadius,    cw, s);
                 s = FloatField("Intensity", ref b.lightEmitter.lightIntensity, cw, s);
-                s = ColourField("Colour",   ref b.lightEmitter.lightColour,    cw, s);
+                s = ColourField("Colour",   b.lightEmitter.lightColour,
+                                c => b.lightEmitter.lightColour = c, cw, s);
                 return s;
             });
 
@@ -1146,19 +1147,20 @@ namespace Waystation.UI
             return sy + 22f;
         }
 
-        private float ColourField(string label, ref Color val, float cw, float sy)
+        // ColourField uses an Action<Color> setter so the deferred picker callback
+        // writes directly to the source field rather than to a local copy that would
+        // be discarded when the method returns.
+        private float ColourField(string label, Color currentVal, Action<Color> setter, float cw, float sy)
         {
             GUI.Label(new Rect(0f, sy, cw * 0.52f, 18f), label, _sSub);
-            Color prev = GUI.color; GUI.color = val;
-            Color captured = val;
+            Color prev = GUI.color; GUI.color = currentVal;
             if (GUI.Button(new Rect(cw * 0.54f, sy, cw * 0.44f, 20f), "  ", _sBtn))
             {
-                OpenPicker(ColourSource.Explicit(captured), src =>
+                OpenPicker(ColourSource.Explicit(currentVal), src =>
                 {
-                    if (src.TryGetExplicit(out Color c)) captured = c;
+                    if (src.TryGetExplicit(out Color c)) setter(c);
                 });
             }
-            val = captured;
             GUI.color = prev;
             return sy + 24f;
         }
