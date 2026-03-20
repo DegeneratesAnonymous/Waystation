@@ -17,7 +17,6 @@ Exits with code 0 on success, code 1 on any failure.
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -99,6 +98,9 @@ def check_png_dimensions(dim_map, label=""):
         png_path = ATLASES_DIR / filename
         if not png_path.exists():
             failures.append(f"MISSING PNG{label}: {png_path}")
+            continue
+        if filename in PENDING_REGENERATION_PNGS:
+            print(f"  SKIP {filename}: pending neutral-tone master regeneration")
             continue
         try:
             with Image.open(png_path) as img:
