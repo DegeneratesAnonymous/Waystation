@@ -60,7 +60,7 @@ namespace Waystation.NPC
         public Sprite[] pantsMaskSprites;
 
         [Tooltip("3 sprites — shoes mask atlas, one per type")]
-        public Sprite[] shoeMaskSprites;
+        public Sprite[] shoesMaskSprites;
 
         [Tooltip("5 sprites — back mask atlas, one per type")]
         public Sprite[] backMaskSprites;
@@ -98,7 +98,7 @@ namespace Waystation.NPC
         public Sprite GetPantsMask(ClothingLayerAppearance app)  => SafeGet(pantsMaskSprites,  app.atlasVariantIndex, "pantsMask");
 
         public Sprite GetShoes(ClothingLayerAppearance app)      => SafeGet(shoeSprites,       app.atlasVariantIndex, "shoes");
-        public Sprite GetShoesMask(ClothingLayerAppearance app)  => SafeGet(shoeMaskSprites,   app.atlasVariantIndex, "shoesMask");
+        public Sprite GetShoesMask(ClothingLayerAppearance app)  => SafeGet(shoesMaskSprites,  app.atlasVariantIndex, "shoesMask");
 
         public Sprite GetBack(ClothingLayerAppearance app)      => SafeGet(backSprites,       app.atlasVariantIndex, "back");
         public Sprite GetBackMask(ClothingLayerAppearance app)  => SafeGet(backMaskSprites,   app.atlasVariantIndex, "backMask");

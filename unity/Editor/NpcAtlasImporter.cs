@@ -88,7 +88,7 @@ namespace Waystation.NPC.Editor
             var hatMaskSprites    = SliceAtlas("npc_hat_mask.png",    MaskAtlasCounts["npc_hat_mask.png"],    ref anyError);
             var shirtMaskSprites  = SliceAtlas("npc_shirt_mask.png",  MaskAtlasCounts["npc_shirt_mask.png"],  ref anyError);
             var pantsMaskSprites  = SliceAtlas("npc_pants_mask.png",  MaskAtlasCounts["npc_pants_mask.png"],  ref anyError);
-            var shoeMaskSprites   = SliceAtlas("npc_shoes_mask.png",  MaskAtlasCounts["npc_shoes_mask.png"],  ref anyError);
+            var shoesMaskSprites  = SliceAtlas("npc_shoes_mask.png",  MaskAtlasCounts["npc_shoes_mask.png"],  ref anyError);
             var backMaskSprites   = SliceAtlas("npc_back_mask.png",   MaskAtlasCounts["npc_back_mask.png"],   ref anyError);
             var weaponMaskSprites = SliceAtlas("npc_weapon_mask.png", MaskAtlasCounts["npc_weapon_mask.png"], ref anyError);
 
@@ -117,7 +117,7 @@ namespace Waystation.NPC.Editor
             registry.hatMaskSprites    = hatMaskSprites;
             registry.shirtMaskSprites  = shirtMaskSprites;
             registry.pantsMaskSprites  = pantsMaskSprites;
-            registry.shoeMaskSprites   = shoeMaskSprites;
+            registry.shoesMaskSprites  = shoesMaskSprites;
             registry.backMaskSprites   = backMaskSprites;
             registry.weaponMaskSprites = weaponMaskSprites;
 
