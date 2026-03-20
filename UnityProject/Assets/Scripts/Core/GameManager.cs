@@ -221,7 +221,7 @@ namespace Waystation.Core
             Factions.Initialize(Station);
 
             // Generate the galaxy sector map. Uses the same seed as solar system generation.
-            int galaxySeed = seed.HasValue ? seed.Value : SolarSystemGenerator.StableHashPublic(stationName);
+            int galaxySeed = seed.HasValue ? seed.Value : SolarSystemGenerator.StableHash(stationName);
             GalaxyGenerator.Generate(galaxySeed, Station);
 
             // Initialise skill instances for all starting crew.

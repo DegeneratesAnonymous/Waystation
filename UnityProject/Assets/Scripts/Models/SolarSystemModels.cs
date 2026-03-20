@@ -12,11 +12,47 @@ namespace Waystation.Models
     public enum BodyType  { RockyPlanet, GasGiant, IcePlanet, AsteroidBelt }
     public enum MapLayer  { System, Sector, Galaxy }
 
+    /// <summary>
+    /// Detailed classification of a planetary body.
+    /// Terrestrial T-I..T-VII, Gas Giants G-I..G-V, Ice Bodies I-I..I-III,
+    /// Exotic E-I..E-V. AsteroidBelt has no PlanetClass (None).
+    /// </summary>
+    public enum PlanetClass
+    {
+        None = 0,
+        // Terrestrial
+        T1_BarrenRock,
+        T2_Volcanic,
+        T3_Desert,
+        T4_Tectonic,
+        T5_Oceanic,
+        T6_Terran,
+        T7_Frozen,
+        // Gas Giants (Sudarsky)
+        G1_AmmoniaCloud,
+        G2_WaterCloud,
+        G3_Cloudless,
+        G4_AlkaliMetal,
+        G5_SilicateCloud,
+        // Ice Bodies
+        I1_IceDwarf,
+        I2_CryogenicMoon,
+        I3_CometaryBody,
+        // Exotic
+        E1_Chthonian,
+        E2_CarbonPlanet,
+        E3_IronPlanet,
+        E4_HeliumPlanet,
+        E5_RogueBody,
+    }
+
     [Serializable]
     public class SolarBody
     {
         public string       name;
         public BodyType     bodyType;
+        /// <summary>Detailed classification — populated by SolarSystemGenerator.</summary>
+        public PlanetClass  planetClass;
 
         // Orbital parameters
         public float        orbitalRadius;   // AU equivalents; used as display-space scale factor

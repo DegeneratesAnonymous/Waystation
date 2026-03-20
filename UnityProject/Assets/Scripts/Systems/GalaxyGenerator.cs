@@ -15,9 +15,9 @@
 //   GalaxyGenerator.Enabled                — skip galaxy generation when false
 //   GalaxyGenerator.PhenomenonInfluenceEnabled — disable DK/ResourceBias side-effects
 //   GalaxyGenerator.ProperNameGenerationEnabled — emit code+coord only when false
-using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Random = System.Random;
 using Waystation.Models;
 
 namespace Waystation.Systems
@@ -65,22 +65,58 @@ namespace Waystation.Systems
         // ANC prefix probability (approximately 8 % of sectors).
         private const float AncProbability = 0.08f;
 
-        // ── Proper name word pools ─────────────────────────────────────────────
+        // ── Proper name word pools (Modifier + Noun, Proper + Noun, Modifier + Proper) ──
 
-        private static readonly string[] PoolA =
+        private static readonly string[] PoolModifiers =
         {
-            "Hollow", "Sunken", "Verdant", "Ashen", "Still", "Broken", "Rising",
-            "Pale", "Ancient", "Burning", "Drifting", "Lost", "Outer", "Deep",
-            "Far", "Silent", "Fractured", "Wandering", "Forsaken", "Amber",
-            "Iron", "Sunward", "Rimward", "Coreward",
+            "Ashen", "Hollow", "Drifting", "Pale", "Sunken", "Fractured", "Silent",
+            "Burning", "Frozen", "Forsaken", "Wandering", "Shattered", "Dim", "Veiled",
+            "Ruined", "Ancient", "Bleeding", "Collapsed", "Eternal", "Fading",
+            "Haunted", "Jagged", "Molten", "Nameless", "Obsidian", "Phantom",
+            "Radiant", "Scarred", "Tideless", "Umbral", "Vacant", "Waning",
+            "Abyssal", "Blighted", "Corroded", "Desolate", "Errant", "Feral",
+            "Glacial", "Inert", "Kinetic", "Liminal", "Murky", "Necrotic",
+            "Ruptured", "Spectral", "Tidal", "Volatile", "Withered", "Boreal",
+            "Celestial", "Dusk", "Elysian", "Hadean", "Infernal", "Jovian",
+            "Lunar", "Promethean", "Relic", "Stygian", "Titanic", "Voidborn",
+            "Amber", "Basalt", "Crimson", "Dust", "Ember", "Flint",
+            "Hoarfrost", "Iron", "Lacuna", "Mire", "Sundered", "Bleached",
+            "Scorched", "Vast", "Bitter", "Sunless", "Deep", "Far", "Cold",
         };
 
-        private static readonly string[] PoolB =
+        private static readonly string[] PoolNouns =
         {
-            "March", "Reach", "Band", "Deep", "Expanse", "Field", "Arm", "Run",
-            "Pass", "Drift", "Vale", "Shelf", "Crossing", "Threshold", "Veil",
-            "Corridor", "Cradle", "Breach", "Frontier", "Basin", "Scatter",
-            "Fold", "Current", "Wake", "Silence",
+            "Reach", "Expanse", "Belt", "Silence", "Ruin", "Threshold", "Passage",
+            "Front", "Claim", "Dominion", "March", "Nebula", "Drift", "Corridor",
+            "Void", "Hollow", "Terminus", "Wake", "Remnant", "Scar", "Cradle",
+            "Gate", "Wound", "Shelf", "Veil", "Frontier", "Breach", "Shroud",
+            "Rift", "Basin", "Verge", "Field", "Accord", "Trench", "Horizon",
+            "Lament", "Column", "Pact", "Crucible", "Chain", "Forge", "Archive",
+            "Vigil", "Swell", "Ledger", "Aegis", "Grave", "Covenant", "Atoll",
+            "Wreckage", "Sovereign", "Dirge", "Mantle", "Conquest", "Sanctum",
+            "Pyre", "Mandate", "Collapse", "Enclave", "Tide", "Fracture",
+            "Legacy", "Exile", "Approach", "Boundary", "Current", "Edge",
+            "Gap", "Haunt", "Inlet", "Junction", "Keep", "Margin", "Node",
+            "Orbit", "Perimeter", "Quarter", "Range", "Span", "Transit", "Undertow",
+        };
+
+        // Phoneme pools for proper-name syllables
+        private static readonly string[] PhonemeC1 =
+        {
+            "Cor", "Vel", "Sael", "Aer", "Vor", "Ely", "Cal", "Thal", "Sor", "Vaen",
+            "Mer", "Ael", "Dor", "Iven", "Sol", "Cer", "Nael", "Ryn", "Oth", "Evan",
+        };
+        private static readonly string[] PhonemeV =
+            { "a", "ae", "o", "oe", "ei", "au", "ue", "ia", "io", "ea" };
+        private static readonly string[] PhonemeC2 =
+        {
+            "thr", "vyn", "lys", "ryn", "ven", "nor", "eth", "sar", "lon", "mir",
+            "del", "than", "ral", "wen", "sor",
+        };
+        private static readonly string[] PhonemeE =
+        {
+            "is", "yn", "ael", "on", "ara", "iel", "orn", "ari", "oel", "yne",
+            "ath", "ori", "eyn", "aen",
         };
 
         // Roman numerals for collision suffix.
@@ -174,6 +210,8 @@ namespace Waystation.Systems
                     prefix:      prefix,
                     codes:       codes,
                     properName:  name);
+                sectorData.systemDensity = AssignSystemDensity(rng);
+                sectorData.modifier      = AssignModifier(rng);
 
                 positions.Add(candidate);
                 station.sectors[sectorData.uid] = sectorData;
@@ -205,6 +243,8 @@ namespace Waystation.Systems
                             prefix:      prefix,
                             codes:       codes,
                             properName:  name);
+                        sectorData.systemDensity = AssignSystemDensity(rng);
+                        sectorData.modifier      = AssignModifier(rng);
                         positions.Add(candidate);
                         station.sectors[sectorData.uid] = sectorData;
                         index++;
@@ -220,6 +260,45 @@ namespace Waystation.Systems
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Assigns a <see cref="SystemDensity"/> tier using weighted random selection.
+        /// Weights: Sparse 15 %, Low 30 %, Standard 40 %, High 15 %.
+        /// </summary>
+        private static SystemDensity AssignSystemDensity(Random rng)
+        {
+            double roll = rng.NextDouble();
+            if (roll < 0.15) return SystemDensity.Sparse;
+            if (roll < 0.45) return SystemDensity.Low;
+            if (roll < 0.85) return SystemDensity.Standard;
+            return SystemDensity.High;
+        }
+
+        // All modifier values except None, used for random selection.
+        private static readonly SectorModifier[] ModifierPool =
+        {
+            SectorModifier.Nebula, SectorModifier.AsteroidBelt, SectorModifier.DustCloud,
+            SectorModifier.PlanetaryRingDebris, SectorModifier.CometaryTail, SectorModifier.AccretionDisk,
+            SectorModifier.PulsarWash, SectorModifier.MagnetarField, SectorModifier.GravitationalLens,
+            SectorModifier.GravityWell, SectorModifier.TidalShearZone, SectorModifier.CosmicRaySurge,
+            SectorModifier.RadiationBelt, SectorModifier.DarkMatterFilament, SectorModifier.FrameDraggingAnomaly,
+            SectorModifier.GravitationalTimeDilation, SectorModifier.EinsteinRosenRemnant,
+            SectorModifier.QuantumFoamPocket, SectorModifier.HawkingRadiationZone,
+            SectorModifier.RichOreDeposit, SectorModifier.IceField, SectorModifier.GasPocket,
+            SectorModifier.SalvageGraveyard, SectorModifier.DerelictStation, SectorModifier.AncientRuins,
+            SectorModifier.BiologicalBloom,
+            SectorModifier.ContestedSpace, SectorModifier.ExclusionZone,
+            SectorModifier.QuarantineSeal, SectorModifier.PatrolRoute,
+        };
+
+        /// <summary>
+        /// 40 % chance of a random modifier; otherwise None.
+        /// </summary>
+        private static SectorModifier AssignModifier(Random rng)
+        {
+            if (rng.NextDouble() >= 0.40) return SectorModifier.None;
+            return ModifierPool[rng.Next(ModifierPool.Length)];
+        }
 
         private static bool IsFarEnoughFromAll(Vector2 candidate, List<Vector2> existing)
         {
@@ -295,26 +374,73 @@ namespace Waystation.Systems
         {
             double roll = rng.NextDouble();
 
-            if (roll < 0.70)
+            if (roll < 0.40)
             {
-                // "The [A] [B]"
-                string a = PoolA[rng.Next(PoolA.Length)];
-                string b = PoolB[rng.Next(PoolB.Length)];
-                return $"The {a} {b}";
+                // "The [Modifier] [Noun]"
+                string m = PoolModifiers[rng.Next(PoolModifiers.Length)];
+                string n = PoolNouns[rng.Next(PoolNouns.Length)];
+                return $"The {m} {n}";
             }
-            else if (roll < 0.90)
+            else if (roll < 0.60)
             {
-                // "[A] [B]"
-                string a = PoolA[rng.Next(PoolA.Length)];
-                string b = PoolB[rng.Next(PoolB.Length)];
-                return $"{a} {b}";
+                // "[Modifier] [Noun]"
+                string m = PoolModifiers[rng.Next(PoolModifiers.Length)];
+                string n = PoolNouns[rng.Next(PoolNouns.Length)];
+                return $"{m} {n}";
+            }
+            else if (roll < 0.75)
+            {
+                // "The [Noun]"
+                string n = PoolNouns[rng.Next(PoolNouns.Length)];
+                return $"The {n}";
+            }
+            else if (roll < 0.88)
+            {
+                // "[ProperName] [Noun]" — Variant 3: C1+V+C2+E
+                string proper = BuildProperName(rng);
+                string n = PoolNouns[rng.Next(PoolNouns.Length)];
+                return $"{proper} {n}";
             }
             else
             {
-                // "The [B]"
-                string b = PoolB[rng.Next(PoolB.Length)];
-                return $"The {b}";
+                // "[Modifier] [ProperName]" — exotic
+                string m = PoolModifiers[rng.Next(PoolModifiers.Length)];
+                string proper = BuildProperName(rng);
+                return $"{m} {proper}";
             }
+        }
+
+        /// <summary>Generates a single proper-name word from the phoneme pools.</summary>
+        private static string BuildProperName(Random rng)
+        {
+            int variant = rng.Next(4);
+            string result;
+            switch (variant)
+            {
+                case 0: // C1 + E
+                    result = PhonemeC1[rng.Next(PhonemeC1.Length)] +
+                             PhonemeE[rng.Next(PhonemeE.Length)];
+                    break;
+                case 1: // C1 + V + E
+                    result = PhonemeC1[rng.Next(PhonemeC1.Length)] +
+                             PhonemeV[rng.Next(PhonemeV.Length)] +
+                             PhonemeE[rng.Next(PhonemeE.Length)];
+                    break;
+                case 2: // C1 + V + C2 + E
+                    result = PhonemeC1[rng.Next(PhonemeC1.Length)] +
+                             PhonemeV[rng.Next(PhonemeV.Length)] +
+                             PhonemeC2[rng.Next(PhonemeC2.Length)] +
+                             PhonemeE[rng.Next(PhonemeE.Length)];
+                    break;
+                default: // C1 + C2 + V + E
+                    result = PhonemeC1[rng.Next(PhonemeC1.Length)] +
+                             PhonemeC2[rng.Next(PhonemeC2.Length)] +
+                             PhonemeV[rng.Next(PhonemeV.Length)] +
+                             PhonemeE[rng.Next(PhonemeE.Length)];
+                    break;
+            }
+            // Capitalise first letter
+            return char.ToUpper(result[0]) + result[1..];
         }
 
         /// <summary>
