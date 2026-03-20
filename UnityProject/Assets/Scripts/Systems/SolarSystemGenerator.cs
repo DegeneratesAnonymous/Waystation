@@ -11,23 +11,39 @@ namespace Waystation.Systems
 {
     public static class SolarSystemGenerator
     {
-        // ── Name tables ───────────────────────────────────────────────────────
+        // ── Phoneme pools for planet names ────────────────────────────────────
 
-        private static readonly string[] Prefixes =
+        private static readonly string[] PlanetV1 =
         {
-            "Ara", "Cor", "Dal", "Eth", "Fyr", "Gal", "Hel", "Ixo",
-            "Jur", "Kel", "Lyr", "Myr", "Nox", "Orv", "Pel", "Quo",
-            "Ret", "Sol", "Tar", "Ura", "Vex", "Wyr", "Xan", "Yel"
+            "Ar", "Vel", "Sol", "Cor", "Aer", "Vor", "Kel", "Nal",
+            "Tyr", "Ish", "Orn", "El", "Mer", "Tar", "Syl", "Dal",
+        };
+        private static readonly string[] PlanetL  =
+        {
+            "a", "e", "i", "o", "u", "ae", "io", "ei", "ou", "au",
+        };
+        private static readonly string[] PlanetV2 =
+        {
+            "dar", "lon", "ris", "ven", "nar", "than", "sol", "mir",
+            "thal", "von", "sar", "del", "ran", "wyn", "aen",
+        };
+        private static readonly string[] PlanetE  =
+        {
+            "is", "yn", "ael", "on", "ara", "iel", "orn", "ari",
+            "ath", "ori", "eyn", "aen",
         };
 
-        private static readonly string[] Suffixes =
+        /// <summary>
+        /// Generates a soft-phoneme planet name using V1 + L + V2 + E.
+        /// </summary>
+        private static string PickPlanetName(Random rng)
         {
-            "ius", "ara", "on", "ix", "us", "en", "or", "yx",
-            "ith", "an", "el", "os", "ax", "ur", "ek", "yn"
-        };
-
-        private static readonly string[] Numerals =
-            { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
+            string raw = PlanetV1[rng.Next(PlanetV1.Length)]
+                       + PlanetL [rng.Next(PlanetL.Length)]
+                       + PlanetV2[rng.Next(PlanetV2.Length)]
+                       + PlanetE [rng.Next(PlanetE.Length)];
+            return char.ToUpper(raw[0]) + raw[1..];
+        }
 
         // ── Star definitions: (type, colorHex, relativeSize, minPlanets, maxPlanets) ──
 
@@ -54,6 +70,14 @@ namespace Waystation.Systems
         private static readonly string[] MoonColors  =
             { "#998877", "#AAAAAA", "#887766", "#BBBBAA" };
 
+        // Exotic planet classes that can appear anywhere in the system (~6% chance).
+        private static readonly PlanetClass[] ExoticPlanetClasses =
+        {
+            PlanetClass.E1_Chthonian, PlanetClass.E2_CarbonPlanet,
+            PlanetClass.E3_IronPlanet, PlanetClass.E4_HeliumPlanet,
+            PlanetClass.E5_RogueBody,
+        };
+
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
@@ -73,7 +97,7 @@ namespace Waystation.Systems
             state.starType    = starDef.type;
             state.starColorHex = starDef.color;
             state.starSize    = starDef.size;
-            state.systemName  = $"{PickName(rng)} System";
+            state.systemName  = $"{PickPlanetName(rng)} System";
 
             // ── Body count & layout ───────────────────────────────────────────
             int planetCount = rng.Next(starDef.minP, starDef.maxP + 1);
@@ -107,15 +131,15 @@ namespace Waystation.Systems
                 SolarBody planet;
 
                 if (zone < 0.35f)
-                    planet = MakeRockyPlanet(i, state.systemName, radius, phase, rng);
+                    planet = MakeRockyPlanet(i, state.systemName, radius, phase, zone, rng);
                 else if (zone < 0.65f)
                     planet = rng.NextDouble() < 0.5
-                        ? MakeRockyPlanet(i, state.systemName, radius, phase, rng)
-                        : MakeGasGiant  (i, state.systemName, radius, phase, rng);
+                        ? MakeRockyPlanet(i, state.systemName, radius, phase, zone, rng)
+                        : MakeGasGiant  (i, state.systemName, radius, phase, zone, rng);
                 else
                     planet = rng.NextDouble() < 0.4
-                        ? MakeGasGiant (i, state.systemName, radius, phase, rng)
-                        : MakeIcePlanet(i, state.systemName, radius, phase, rng);
+                        ? MakeGasGiant (i, state.systemName, radius, phase, zone, rng)
+                        : MakeIcePlanet(i, state.systemName, radius, phase, zone, rng);
 
                 planet.stationIsHere = isStation;
 
@@ -134,12 +158,29 @@ namespace Waystation.Systems
         // ── Body factories ────────────────────────────────────────────────────
 
         private static SolarBody MakeRockyPlanet(int index, string sysName,
-                                                  float radius, float phase, Random rng)
+                                                  float radius, float phase, float zone, Random rng)
         {
+            // Assign planet class: inner hot zone → T2/T3, mid → T4/T5, outer → T6/T7;
+            // small chance of exotic (E-class) anywhere.
+            PlanetClass pClass;
+            if (rng.NextDouble() < 0.06)
+            {
+                pClass = ExoticPlanetClasses[rng.Next(ExoticPlanetClasses.Length)];
+            }
+            else if (zone < 0.20f)
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.T2_Volcanic    : PlanetClass.T1_BarrenRock;
+            else if (zone < 0.40f)
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.T3_Desert      : PlanetClass.T4_Tectonic;
+            else if (zone < 0.60f)
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.T5_Oceanic     : PlanetClass.T6_Terran;
+            else
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.T7_Frozen      : PlanetClass.T4_Tectonic;
+
             var p = new SolarBody
             {
-                name          = $"{BaseName(sysName)} {Numerals[index % Numerals.Length]}",
+                name          = PickPlanetName(rng),
                 bodyType      = BodyType.RockyPlanet,
+                planetClass   = pClass,
                 orbitalRadius = radius,
                 orbitalPeriod = OrbitalPeriod(radius),
                 initialPhase  = phase,
@@ -154,12 +195,25 @@ namespace Waystation.Systems
         }
 
         private static SolarBody MakeGasGiant(int index, string sysName,
-                                               float radius, float phase, Random rng)
+                                               float radius, float phase, float zone, Random rng)
         {
+            // Zone-based gas giant class:
+            // inner hot → G4/G5 (alkali metal / silicate cloud)
+            // mid       → G2/G3 (water cloud / cloudless)
+            // outer     → G1    (ammonia cloud)
+            PlanetClass pClass;
+            if (zone < 0.35f)
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.G4_AlkaliMetal   : PlanetClass.G5_SilicateCloud;
+            else if (zone < 0.65f)
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.G2_WaterCloud    : PlanetClass.G3_Cloudless;
+            else
+                pClass = rng.NextDouble() < 0.7 ? PlanetClass.G1_AmmoniaCloud  : PlanetClass.G2_WaterCloud;
+
             var p = new SolarBody
             {
-                name          = $"{BaseName(sysName)} {Numerals[index % Numerals.Length]}",
+                name          = PickPlanetName(rng),
                 bodyType      = BodyType.GasGiant,
+                planetClass   = pClass,
                 orbitalRadius = radius,
                 orbitalPeriod = OrbitalPeriod(radius),
                 initialPhase  = phase,
@@ -173,12 +227,22 @@ namespace Waystation.Systems
         }
 
         private static SolarBody MakeIcePlanet(int index, string sysName,
-                                                float radius, float phase, Random rng)
+                                                float radius, float phase, float zone, Random rng)
         {
+            // Outer zone → I3 (cometary); mid-outer → I1/I2
+            PlanetClass pClass;
+            if (zone > 0.85f)
+                pClass = PlanetClass.I3_CometaryBody;
+            else if (zone > 0.65f)
+                pClass = rng.NextDouble() < 0.5 ? PlanetClass.I1_IceDwarf : PlanetClass.I2_CryogenicMoon;
+            else
+                pClass = PlanetClass.I1_IceDwarf;
+
             var p = new SolarBody
             {
-                name          = $"{BaseName(sysName)} {Numerals[index % Numerals.Length]}",
+                name          = PickPlanetName(rng),
                 bodyType      = BodyType.IcePlanet,
+                planetClass   = pClass,
                 orbitalRadius = radius,
                 orbitalPeriod = OrbitalPeriod(radius),
                 initialPhase  = phase,
@@ -227,16 +291,14 @@ namespace Waystation.Systems
         // ── Helpers ───────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Simplified Keplerian period: T ∝ r^1.5, scaled so r=1 gives 200 ticks.
+        /// Keplerian period scaled so that r = 1 AU (Earth-like orbit) completes
+        /// one revolution in exactly 365 in-game days (365 × TimeSystem.TicksPerDay ticks).
         /// </summary>
         private static float OrbitalPeriod(float r)
-            => 200f * (float)Math.Pow(Math.Max(r, 0.01), 1.5);
+            => 365f * TimeSystem.TicksPerDay * (float)Math.Pow(Math.Max(r, 0.01), 1.5);
 
         private static string BaseName(string systemName)
             => systemName.Replace(" System", "");
-
-        private static string PickName(Random rng)
-            => Prefixes[rng.Next(Prefixes.Length)] + Suffixes[rng.Next(Suffixes.Length)];
 
         /// <summary>
         /// FNV-1a hash — stable across .NET runtime versions, matching MapSystem.
@@ -300,7 +362,7 @@ namespace Waystation.Systems
                         // which candidates pass the distance filter.
                         var starDef    = StarDefs[rng.Next(StarDefs.Length)];
                         int sysSeed    = (int)((uint)chunkSeed ^ (uint)(i * 2654435769u));
-                        string sysName = $"{PickName(rng)} System";
+                        string sysName = $"{PickPlanetName(rng)} System";
 
                         if (isHomeChunk && dx * dx + dy * dy < 4f) continue;
                         if (dx * dx + dy * dy > r2) continue;

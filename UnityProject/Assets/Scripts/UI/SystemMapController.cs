@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 using Waystation.Core;
 using Waystation.Models;
@@ -86,9 +87,19 @@ namespace Waystation.UI
         private bool            _isPanning;
         private Vector2         _panStartMouse;
         private Vector2         _panStartOffset;
-        // pixels per light-year at zoom=1 for each layer
-        private const float SectorPxPerLY  = 2.8f;   // 100LY ≈ 280px → fits 340px radius
-        private const float GalaxyPxPerLY  = 1.0f;   // starting scale
+        // pixels per light-year at zoom=1 for the Galaxy layer
+        private const float GalaxyPxPerLY  = 1.0f;
+
+        // ── Sector grid constants ─────────────────────────────────────────────
+        // Each discovered sector is rendered as a fixed square box.
+        // The grid step converts galaxy-coordinate units to pixel positions;
+        // adjacent sectors (PoissonMinDist≈2.5, NeighborThreshold≈5.0) round to ±1.
+        private const float SectorBoxSize   = 160f;
+        private const float SectorBoxGap    = 2f;
+        private const float SectorBoxStride = SectorBoxSize + SectorBoxGap;  // 162 px
+        private const float GalUnitPerCell  = 3.0f;
+        // Minimum separation between system dots (normalised 0–1 within the interior).
+        private const float SysDotMinDist   = 0.09f;
         private const float GalaxyZoomMin  = 0.15f;
         private const float GalaxyZoomMax  = 8f;
 
@@ -101,10 +112,11 @@ namespace Waystation.UI
 
         // Sector designation dot/label tracking
         private readonly List<GameObject> _sectorObjects = new List<GameObject>();
-        // Cached zoom-threshold state — used to skip needless sector-dot rebuilds in Sector layer.
-        private bool _prevZoomedOut;
         // Currently selected sector (for detail panel)
         private SectorData _selectedSector;
+        // Double-click detection for system dots (sector map layer)
+        private string _dotLastClickKey  = "";
+        private float  _dotLastClickTime = -10f;
         // Sector detail UI refs (assigned in EnsureCanvas)
         private TMP_Text _sectorRenamedLabel;
         private Button   _sectorRenameBtn;
@@ -129,6 +141,28 @@ namespace Waystation.UI
         public static bool IsOpen        { get; private set; }
         // Lazily generated unit-circle sprite (white disc, anti-aliased)
         private static Sprite _circleSprite;
+
+        // ── Multi-select (Sector / Galaxy layers) ─────────────────────────────
+        private readonly Dictionary<string, (Image img, Color defaultCol, SectorData sector, RectTransform rt)>
+            _sectorBoxRegistry = new Dictionary<string, (Image img, Color defaultCol, SectorData sector, RectTransform rt)>();
+        private readonly HashSet<string> _multiSelectedUids = new HashSet<string>();
+        private const float  BoxSelectThreshold = 6f;
+        private bool         _isBoxSelecting;
+        private Vector2      _boxSelectStartScreen;
+        private GameObject   _boxSelectOverlay;
+
+        // ── System map pan / zoom ──────────────────────────────────────────────
+        private RectTransform _sysWorld;
+        private float         _sysZoom   = 1f;
+        private bool          _sysPanning;
+        private Vector2       _sysPanStart;
+        private Vector2       _sysPanOffset;
+        private const float   SysZoomMin = 0.3f;
+        private const float   SysZoomMax = 5f;
+
+        // ── Public API ────────────────────────────────────────────────────────
+        /// <summary>The sector the player has most recently clicked. Read by GameHUD.</summary>
+        public static SectorData SelectedSector { get; private set; }
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
         private void Awake()
@@ -156,11 +190,29 @@ namespace Waystation.UI
         private void Update()
         {
             if (!IsOpen) return;
+
+            // ESC: drill up one layer at a time: System → Sector → Galaxy → Close.
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if      (_layer == MapLayer.System) SwitchLayer(MapLayer.Sector);
+                else if (_layer == MapLayer.Sector) SwitchLayer(MapLayer.Galaxy);
+                else                                Close();
+                return;
+            }
+
+            if (_layer == MapLayer.System)
+            {
+                HandleSystemZoom();
+                HandleSystemPan();
+                return;
+            }
+
             if (_layer != MapLayer.Sector && _layer != MapLayer.Galaxy) return;
             if (_exploreWorld == null) return;
 
             HandleExploreZoom();
             HandleExplorePan();
+            HandleExploreDragSelect();
         }
 
         private void HandleExploreZoom()
@@ -169,7 +221,7 @@ namespace Waystation.UI
             if (Mathf.Abs(scroll) < 0.001f) return;
 
             float minZ = _layer == MapLayer.Galaxy ? GalaxyZoomMin : 0.5f;
-            float maxZ = _layer == MapLayer.Galaxy ? GalaxyZoomMax : 3f;
+            float maxZ = _layer == MapLayer.Galaxy ? GalaxyZoomMax : 8f;
 
             float newZoom = Mathf.Clamp(_exploreZoom * (1f + scroll * 0.12f), minZ, maxZ);
             if (Mathf.Approximately(newZoom, _exploreZoom)) return;
@@ -188,32 +240,20 @@ namespace Waystation.UI
 
             if (_layer == MapLayer.Galaxy)
                 RefreshGalaxyChunks();
-            else if (_layer == MapLayer.Sector)
-            {
-                // Only rebuild sector dots when the label-detail threshold (0.8x) actually changes.
-                bool zoomedOut = _exploreZoom < 0.8f;
-                if (zoomedOut != _prevZoomedOut)
-                {
-                    _prevZoomedOut = zoomedOut;
-                    foreach (var go in _sectorObjects) if (go != null) Destroy(go);
-                    _sectorObjects.Clear();
-                    RenderSectorDots(SectorPxPerLY, zoomedOut);
-                }
-            }
         }
 
         private void HandleExplorePan()
         {
             Vector2 mouse = Input.mousePosition;
 
-            if (Input.GetMouseButtonDown(0))
+            if (Input.GetMouseButtonDown(1))
             {
-                _isPanning       = true;
+                _isPanning      = true;
                 _panStartMouse  = mouse;
                 _panStartOffset = _exploreWorld.anchoredPosition;
             }
 
-            if (Input.GetMouseButtonUp(0))
+            if (Input.GetMouseButtonUp(1))
                 _isPanning = false;
 
             if (!_isPanning) return;
@@ -222,6 +262,251 @@ namespace Waystation.UI
 
             if (_layer == MapLayer.Galaxy)
                 RefreshGalaxyChunks();
+        }
+
+        // ── System map pan / zoom ─────────────────────────────────────────────
+
+        private void HandleSystemZoom()
+        {
+            float scroll = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(scroll) < 0.001f || _sysWorld == null) return;
+
+            float newZoom = Mathf.Clamp(_sysZoom * (1f + scroll * 0.12f), SysZoomMin, SysZoomMax);
+            if (Mathf.Approximately(newZoom, _sysZoom)) return;
+
+            // Zoom toward screen cursor position.
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                mapContainer, Input.mousePosition, null, out Vector2 localMouse);
+            float ratio = newZoom / _sysZoom;
+            _sysWorld.anchoredPosition =
+                localMouse + ((_sysWorld.anchoredPosition - localMouse) * ratio);
+            _sysZoom = newZoom;
+            _sysWorld.localScale = new Vector3(newZoom, newZoom, 1f);
+        }
+
+        private void HandleSystemPan()
+        {
+            if (_sysWorld == null) return;
+            Vector2 mouse = Input.mousePosition;
+
+            if (Input.GetMouseButtonDown(1))
+            {
+                _sysPanning   = true;
+                _sysPanStart  = mouse;
+                _sysPanOffset = _sysWorld.anchoredPosition;
+            }
+
+            if (Input.GetMouseButtonUp(1))
+                _sysPanning = false;
+
+            if (!_sysPanning) return;
+            _sysWorld.anchoredPosition = _sysPanOffset + (mouse - _sysPanStart);
+        }
+
+        // ── Left-drag box select (Sector / Galaxy layers) ─────────────────────
+
+        private void HandleExploreDragSelect()
+        {
+            if (Input.GetMouseButtonDown(0))
+            {
+                _isBoxSelecting       = false;
+                _boxSelectStartScreen = Input.mousePosition;
+            }
+
+            if (Input.GetMouseButton(0))
+            {
+                Vector2 delta = (Vector2)Input.mousePosition - _boxSelectStartScreen;
+                if (!_isBoxSelecting && delta.magnitude > BoxSelectThreshold)
+                {
+                    _isBoxSelecting = true;
+                    EnsureBoxSelectOverlay();
+                }
+                if (_isBoxSelecting)
+                    UpdateBoxSelectOverlay(_boxSelectStartScreen, Input.mousePosition);
+            }
+
+            if (Input.GetMouseButtonUp(0) && _isBoxSelecting)
+            {
+                FinishBoxSelect(_boxSelectStartScreen, Input.mousePosition);
+                DestroyBoxSelectOverlay();
+                _isBoxSelecting = false;
+            }
+        }
+
+        private void EnsureBoxSelectOverlay()
+        {
+            if (_boxSelectOverlay != null) return;
+            _boxSelectOverlay = new GameObject("BoxSelectOverlay",
+                typeof(RectTransform), typeof(Image));
+            _boxSelectOverlay.transform.SetParent(_mapAreaRt, false);
+            _boxSelectOverlay.transform.SetAsLastSibling();
+            var rt  = _boxSelectOverlay.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot     = new Vector2(0.5f, 0.5f);
+            var img = _boxSelectOverlay.GetComponent<Image>();
+            img.color         = new Color(0.40f, 0.70f, 1.00f, 0.10f);
+            img.raycastTarget = false;
+            // Visible border frame
+            var borderGo = new GameObject("Border", typeof(RectTransform), typeof(Image));
+            borderGo.transform.SetParent(_boxSelectOverlay.transform, false);
+            var borderRt  = borderGo.GetComponent<RectTransform>();
+            borderRt.anchorMin = Vector2.zero;
+            borderRt.anchorMax = Vector2.one;
+            borderRt.offsetMin = Vector2.zero;
+            borderRt.offsetMax = Vector2.zero;
+            var borderImg = borderGo.GetComponent<Image>();
+            borderImg.color         = new Color(0.45f, 0.78f, 1.00f, 0.60f);
+            borderImg.raycastTarget = false;
+            // Inner solid fill (thinner, covers border) to give hollow border look
+            var innerGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            innerGo.transform.SetParent(_boxSelectOverlay.transform, false);
+            var innerRt  = innerGo.GetComponent<RectTransform>();
+            innerRt.anchorMin = Vector2.zero;
+            innerRt.anchorMax = Vector2.one;
+            innerRt.offsetMin = new Vector2( 1f,  1f);
+            innerRt.offsetMax = new Vector2(-1f, -1f);
+            var innerImg = innerGo.GetComponent<Image>();
+            innerImg.color         = new Color(0.35f, 0.65f, 1.00f, 0.06f);
+            innerImg.raycastTarget = false;
+        }
+
+        private void UpdateBoxSelectOverlay(Vector2 screenA, Vector2 screenB)
+        {
+            if (_boxSelectOverlay == null) return;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _mapAreaRt, screenA, null, out Vector2 la);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _mapAreaRt, screenB, null, out Vector2 lb);
+            var rt = _boxSelectOverlay.GetComponent<RectTransform>();
+            rt.anchoredPosition = (la + lb) * 0.5f;
+            rt.sizeDelta        = new Vector2(Mathf.Abs(lb.x - la.x), Mathf.Abs(lb.y - la.y));
+        }
+
+        private void DestroyBoxSelectOverlay()
+        {
+            if (_boxSelectOverlay == null) return;
+            Destroy(_boxSelectOverlay);
+            _boxSelectOverlay = null;
+        }
+
+        private void FinishBoxSelect(Vector2 screenA, Vector2 screenB)
+        {
+            Vector2 smin = Vector2.Min(screenA, screenB);
+            Vector2 smax = Vector2.Max(screenA, screenB);
+            var screenRect = new Rect(smin, smax - smin);
+            if (screenRect.width < 2f && screenRect.height < 2f) return;
+
+            bool additive = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (!additive) ClearMultiSelect();
+
+            // For ScreenSpaceOverlay canvas, GetWorldCorners returns positions in screen pixels.
+            var corners = new Vector3[4];
+            bool anyHit = false;
+            foreach (var kv in _sectorBoxRegistry)
+            {
+                kv.Value.rt.GetWorldCorners(corners);
+                float xMin = corners[0].x, xMax = corners[0].x;
+                float yMin = corners[0].y, yMax = corners[0].y;
+                for (int ci = 1; ci < 4; ci++)
+                {
+                    if (corners[ci].x < xMin) xMin = corners[ci].x;
+                    if (corners[ci].x > xMax) xMax = corners[ci].x;
+                    if (corners[ci].y < yMin) yMin = corners[ci].y;
+                    if (corners[ci].y > yMax) yMax = corners[ci].y;
+                }
+                if (screenRect.Overlaps(new Rect(xMin, yMin, xMax - xMin, yMax - yMin)))
+                {
+                    anyHit = true;
+                    SetSectorSelected(kv.Key, true);
+                }
+            }
+
+            if (!anyHit) return;
+            var selected = GetSelectedSectors();
+            if      (selected.Count == 1) ShowSectorDetail(selected[0]);
+            else if (selected.Count  > 1) ShowMultiSectorDetail(selected);
+        }
+
+        // ── Multi-select helpers ──────────────────────────────────────────────
+
+        private void SetSectorSelected(string uid, bool isSelected)
+        {
+            if (!_sectorBoxRegistry.TryGetValue(uid, out var entry)) return;
+            if (isSelected)
+            {
+                _multiSelectedUids.Add(uid);
+                entry.img.color = Color.white;
+                _selectedSector = entry.sector;
+                SelectedSector  = entry.sector;
+            }
+            else
+            {
+                _multiSelectedUids.Remove(uid);
+                entry.img.color = entry.defaultCol;
+                if (_selectedSector == entry.sector)
+                {
+                    _selectedSector = null;
+                    SelectedSector  = null;
+                }
+            }
+        }
+
+        private void ToggleSectorSelected(string uid)
+        {
+            if (_multiSelectedUids.Contains(uid)) SetSectorSelected(uid, false);
+            else                                   SetSectorSelected(uid, true);
+        }
+
+        private void ClearMultiSelect()
+        {
+            // Snapshot keys to avoid modifying collection while iterating.
+            var keys = new List<string>(_multiSelectedUids);
+            foreach (var uid in keys)
+                if (_sectorBoxRegistry.TryGetValue(uid, out var entry))
+                    entry.img.color = entry.defaultCol;
+            _multiSelectedUids.Clear();
+            _selectedSector   = null;
+            SelectedSector    = null;
+        }
+
+        private List<SectorData> GetSelectedSectors()
+        {
+            var result = new List<SectorData>();
+            foreach (var uid in _multiSelectedUids)
+                if (_sectorBoxRegistry.TryGetValue(uid, out var entry))
+                    result.Add(entry.sector);
+            return result;
+        }
+
+        private void ShowMultiSectorDetail(List<SectorData> sectors)
+        {
+            if (detailPanel == null || sectors.Count == 0) return;
+            detailPanel.SetActive(true);
+
+            if (detailNameLabel != null)
+                detailNameLabel.text = $"{sectors.Count} Sectors Selected";
+
+            if (detailTypeLabel != null)
+            {
+                var sb  = new System.Text.StringBuilder();
+                int max = Mathf.Min(sectors.Count, 8);
+                for (int i = 0; i < max; i++)
+                {
+                    var s = sectors[i];
+                    sb.AppendLine(string.IsNullOrEmpty(s.properName)
+                        ? s.ShortDesignation()
+                        : s.properName);
+                }
+                if (sectors.Count > max) sb.AppendLine($"... +{sectors.Count - max} more");
+                detailTypeLabel.text = sb.ToString().TrimEnd();
+            }
+
+            if (detailTagsLabel    != null) detailTagsLabel.text    = "";
+            if (detailMoonsLabel   != null) detailMoonsLabel.text   = "";
+            if (detailStationLabel != null) detailStationLabel.text = "";
+            if (_detailViewBtn     != null) _detailViewBtn.gameObject.SetActive(false);
+            if (_sectorRenameBtn   != null) _sectorRenameBtn.gameObject.SetActive(false);
+            if (_sectorRenamedLabel != null) _sectorRenamedLabel.gameObject.SetActive(false);
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -263,6 +548,12 @@ namespace Waystation.UI
             if (mapPanel != null) mapPanel.SetActive(false);
             if (detailPanel != null) detailPanel.SetActive(false);
             IsOpen = false;
+            // Clear selection when map is closed.
+            SelectedSector       = null;
+            _selectedSector      = null;
+            _multiSelectedUids.Clear();
+            _sectorBoxRegistry.Clear();
+            DestroyBoxSelectOverlay();
         }
 
         // ── Tick handler ──────────────────────────────────────────────────────
@@ -279,6 +570,17 @@ namespace Waystation.UI
         {
             ClearMap();
 
+            // Lazily create the panning/zooming world root inside mapContainer.
+            if (_sysWorld == null)
+            {
+                var sysWorldGo = new GameObject("SysWorld", typeof(RectTransform));
+                sysWorldGo.transform.SetParent(mapContainer, false);
+                _sysWorld = sysWorldGo.GetComponent<RectTransform>();
+                _sysWorld.anchorMin        = _sysWorld.anchorMax = new Vector2(0.5f, 0.5f);
+                _sysWorld.sizeDelta        = new Vector2(4000f, 4000f);
+                _sysWorld.anchoredPosition = Vector2.zero;
+            }
+
             // Leave a small margin so outer orbits don't clip the container edge.
             _mapRadius = Mathf.Min(mapContainer.rect.width,
                                    mapContainer.rect.height) * 0.5f - 24f;
@@ -291,7 +593,7 @@ namespace Waystation.UI
 
             // ── Star ───────────────────────────────────────────────────
             float starPx = Mathf.Clamp(_viewedSystem.starSize * 30f, 16f, 48f);
-            _starMarker = CreateCircleDot(mapContainer, Vector2.zero,
+            _starMarker = CreateCircleDot(_sysWorld, Vector2.zero,
                                           starPx, ParseColor(_viewedSystem.starColorHex), "Star");
             _starMarker.SetAsFirstSibling();   // render behind everything else
 
@@ -305,7 +607,7 @@ namespace Waystation.UI
                 // Orbit ring
                 float ringThickness = isBelt ? 0.07f : 0.018f;
                 Color ringColor     = isBelt ? BeltColor : OrbitColor;
-                var   ring          = CreateOrbitRing(mapContainer, ringPx, ringColor, ringThickness);
+                var   ring          = CreateOrbitRing(_sysWorld, ringPx, ringColor, ringThickness);
                 _orbitRings.Add(ring);
 
                 if (isBelt)
@@ -315,23 +617,23 @@ namespace Waystation.UI
                     _planetLabels.Add(null);
 
                     if (body.stationIsHere)
-                        _stationMarker = CreateStationMarker(mapContainer, ringPx);
+                        _stationMarker = CreateStationMarker(_sysWorld, ringPx);
                     continue;
                 }
 
                 // Planet dot
                 float dotPx = Mathf.Clamp(body.size * 20f, 6f, 28f);
-                var   dot   = CreateCircleDot(mapContainer, Vector2.zero,
+                var   dot   = CreateCircleDot(_sysWorld, Vector2.zero,
                                               dotPx, ParseColor(body.colorHex), body.name);
                 AddClickHandler(dot, body);
                 _planetMarkers.Add(dot);
 
                 // Small name label beneath the dot (hidden at small dot sizes)
-                var label = CreateLabel(mapContainer, body.name, dotPx * 0.5f + 8f);
+                var label = CreateLabel(_sysWorld, body.name, dotPx * 0.5f + 8f);
                 _planetLabels.Add(label);
 
                 if (body.stationIsHere)
-                    _stationMarker = CreateStationMarker(mapContainer, ringPx);
+                    _stationMarker = CreateStationMarker(_sysWorld, ringPx);
             }
 
             // Initial placement
@@ -413,6 +715,14 @@ namespace Waystation.UI
             _planetMarkers.Clear();
             _planetLabels.Clear();
             _orbitRings.Clear();
+            // Reset system-map pan/zoom.
+            if (_sysWorld != null)
+            {
+                _sysWorld.anchoredPosition = Vector2.zero;
+                _sysWorld.localScale       = Vector3.one;
+            }
+            _sysZoom    = 1f;
+            _sysPanning = false;
         }
 
         // ── Layer switching ───────────────────────────────────────────────────
@@ -475,14 +785,14 @@ namespace Waystation.UI
             {
                 case MapLayer.System:
                     _contextLabel.text = _viewedSystem != null
-                        ? $"{_viewedSystem.systemName}  ·  {StarTypeLabel(_viewedSystem.starType)}"
+                        ? $"{_viewedSystem.systemName}  \u00b7  {StarTypeLabel(_viewedSystem.starType)}  \u00b7  scroll to zoom  \u00b7  right-drag to pan"
                         : "";
                     break;
                 case MapLayer.Sector:
-                    _contextLabel.text = "Sector Map  ·  100 LY radius";
+                    _contextLabel.text = "Sector Map  ·  scroll to zoom  ·  right-drag to pan  ·  left-drag or ctrl+click to multi-select";
                     break;
                 case MapLayer.Galaxy:
-                    _contextLabel.text = "Galaxy Map  ·  scroll to zoom · drag to pan";
+                    _contextLabel.text = "Galaxy Map  ·  scroll to zoom  ·  right-drag to pan  ·  left-drag or ctrl+click to multi-select";
                     break;
             }
         }
@@ -504,6 +814,9 @@ namespace Waystation.UI
         }
 
         // ── Sector map ────────────────────────────────────────────────────────
+        // Shows each discovered sector as a square box arranged in a grid.
+        // Within each box, procedurally generated star systems are rendered as
+        // colour-coded circles spaced realistically across the interior.
 
         private void RebuildSector()
         {
@@ -512,21 +825,581 @@ namespace Waystation.UI
             _exploreWorld.localScale = Vector3.one;
 
             if (_sys == null) return;
-            var neighbors = SolarSystemGenerator.GenerateNeighbors(_sys.seed, 100f);
+            var station = _gm?.Station;
+            if (station == null || station.sectors.Count == 0) return;
 
-            // Home system dot at centre (bright white/yellow)
-            CreateExploreDot(_exploreWorld, Vector2.zero, 12f,
-                new Color(1f, 0.95f, 0.50f), _sys, isHome: true);
+            // Track occupied grid cells to detect rare Poisson collisions.
+            var usedCells = new HashSet<(int, int)>();
 
-            foreach (var n in neighbors)
+            foreach (var sector in station.sectors.Values)
             {
-                var pos = n.positionLY * SectorPxPerLY;
-                CreateExploreDot(_exploreWorld, pos, Mathf.Clamp(n.starSize * 9f, 5f, 14f),
-                    ParseColor(n.starColorHex), neighbor: n);
+                bool isHome = Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                              Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+
+                // Only home + detected/visited sectors are visible.
+                if (!isHome && sector.discoveryState == SectorDiscoveryState.Uncharted)
+                    continue;
+
+                // Map galaxy coordinates to a grid cell.
+                int col = Mathf.RoundToInt(
+                    (sector.coordinates.x - GalaxyGenerator.HomeX) / GalUnitPerCell);
+                int row = Mathf.RoundToInt(
+                    (sector.coordinates.y - GalaxyGenerator.HomeY) / GalUnitPerCell);
+
+                // Nudge on collision (extremely rare with PoissonMinDist=2.5).
+                while (usedCells.Contains((col, row)))
+                    col++;
+                usedCells.Add((col, row));
+
+                var screenPos = new Vector2(col * SectorBoxStride, row * SectorBoxStride);
+                CreateSectorBox(_exploreWorld, screenPos, sector, isHome);
             }
 
-            // Overlay sector designation labels on the sector map.
-            RenderSectorDots(SectorPxPerLY, zoomedOut: false);
+            // In Telescope Mode show "+" buttons at every empty grid cell adjacent
+            // to a visible sector box, so the player can expand the grid manually.
+            if (TelescopeMode && station != null)
+            {
+                var plusCells = new HashSet<(int, int)>();
+                int[] dx = { -1, 1,  0, 0 };
+                int[] dy = {  0, 0, -1, 1 };
+                foreach (var (c, r) in usedCells)
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int nc = c + dx[d], nr = r + dy[d];
+                        if (!usedCells.Contains((nc, nr)))
+                            plusCells.Add((nc, nr));
+                    }
+                foreach (var (nc, nr) in plusCells)
+                {
+                    var btnPos = new Vector2(nc * SectorBoxStride, nr * SectorBoxStride);
+                    CreateAddSectorButton(_exploreWorld, btnPos, nc, nr);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates a "+" button at a grid position (Telescope Dev Mode only).
+        /// Clicking it generates a new Visited sector at that grid cell.
+        /// </summary>
+        private void CreateAddSectorButton(RectTransform parent, Vector2 pos, int col, int row)
+        {
+            // Ghost sector box — same footprint as a real sector, clearly clickable.
+            var go = new GameObject($"AddSector_{col}_{row}",
+                typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin        = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta        = new Vector2(SectorBoxSize, SectorBoxSize);
+            rt.anchoredPosition = pos;
+            // Dim green border (same size as real box border image).
+            go.GetComponent<Image>().color = new Color(0.30f, 0.75f, 0.40f, 0.45f);
+            _sectorObjects.Add(go);
+
+            // Dark semi-transparent fill inset 2 px (mirrors CreateSectorBox fill).
+            var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fillGo.transform.SetParent(rt, false);
+            var fillRt2 = fillGo.GetComponent<RectTransform>();
+            fillRt2.anchorMin = Vector2.zero;
+            fillRt2.anchorMax = Vector2.one;
+            fillRt2.offsetMin = new Vector2( 2f,  2f);
+            fillRt2.offsetMax = new Vector2(-2f, -2f);
+            fillGo.GetComponent<Image>().color = new Color(0.04f, 0.14f, 0.07f, 0.08f);
+
+            // "+" centred in the ghost box.
+            var lblGo = new GameObject("Lbl", typeof(RectTransform), typeof(TextMeshProUGUI));
+            lblGo.transform.SetParent(rt, false);
+            var lblRt = lblGo.GetComponent<RectTransform>();
+            lblRt.anchorMin = Vector2.zero;
+            lblRt.anchorMax = Vector2.one;
+            lblRt.offsetMin = lblRt.offsetMax = Vector2.zero;
+            var txt = lblGo.GetComponent<TMP_Text>();
+            txt.text          = "+";
+            txt.fontSize      = 48f;
+            txt.fontStyle     = FontStyles.Bold;
+            txt.alignment     = TextAlignmentOptions.Center;
+            txt.color         = new Color(0.45f, 1.0f, 0.55f, 0.90f);
+            txt.raycastTarget = false;
+
+            var btn = go.AddComponent<Button>();
+            var colors = btn.colors;
+            colors.normalColor      = new Color(1f, 1f, 1f, 1f);
+            colors.highlightedColor = new Color(0.5f, 1.0f, 0.60f, 1.00f);
+            colors.pressedColor     = new Color(0.6f, 1.0f, 0.70f, 1.00f);
+            btn.colors = colors;
+            int capturedCol = col, capturedRow = row;
+            btn.onClick.AddListener(() => DevAddSector(capturedCol, capturedRow));
+        }
+
+        /// <summary>
+        /// Dev-only: creates a new Visited sector at the given grid cell and rebuilds
+        /// the sector map. Only available in Telescope Mode.
+        /// </summary>
+        private void DevAddSector(int col, int row)
+        {
+            if (!TelescopeMode) return;
+            var station = _gm?.Station;
+            if (station == null) return;
+
+            string uid = $"sector_dev_{col}_{row}";
+            if (station.sectors.ContainsKey(uid)) return;
+
+            float gx = GalaxyGenerator.HomeX + col * GalUnitPerCell;
+            float gy = GalaxyGenerator.HomeY + row * GalUnitPerCell;
+
+            var newSector = SectorData.Create(
+                uid:         uid,
+                coordinates: new Vector2(gx, gy),
+                prefix:      SurveyPrefix.IND,
+                codes:       new System.Collections.Generic.List<PhenomenonCode> { PhenomenonCode.MS },
+                properName:  $"Dev {col:+#;-#;0},{row:+#;-#;0}");
+            newSector.discoveryState = SectorDiscoveryState.Visited;
+            station.sectors[uid] = newSector;
+
+            ClearExplore();
+            RebuildSector();
+        }
+
+        private void CreateSectorBox(RectTransform parent, Vector2 pos,
+                                     SectorData sector, bool isHome)
+        {
+            bool uncharted = sector.discoveryState == SectorDiscoveryState.Uncharted;
+            bool visited   = sector.discoveryState == SectorDiscoveryState.Visited;
+
+            // Determine if this sector is player-owned (home sector = player-owned).
+            bool isPlayerOwned = isHome;
+
+            // Faction primary/secondary colours (player-owned sectors only).
+            Color factionPrimary   = new Color(1.00f, 0.85f, 0.00f, 0.90f);
+            Color factionSecondary = new Color(0.05f, 0.15f, 0.25f, 1.00f);   // alpha ignored — overridden by fillCol
+            if (isPlayerOwned && _gm?.Station != null)
+            {
+                if (!ColorUtility.TryParseHtmlString(_gm.Station.playerFactionColor, out factionPrimary))
+                    factionPrimary = new Color(1.00f, 0.85f, 0.00f, 0.90f);
+                factionPrimary.a = 0.90f;
+                if (!ColorUtility.TryParseHtmlString(_gm.Station.playerFactionColorSecondary, out factionSecondary))
+                    factionSecondary = new Color(0.05f, 0.15f, 0.25f, 1.00f);
+                // alpha is intentionally NOT forced here — fillCol pins it to 0.08f
+            }
+
+            // Border: faction primary for owned, otherwise discovery-state colour.
+            Color borderCol = isPlayerOwned
+                ? factionPrimary
+                : uncharted
+                    ? new Color(0.25f, 0.30f, 0.40f, 0.30f)
+                    : visited ? ColVisited : ColDetected;
+
+            // Standard dark-grey fill for every sector — keeps dots visible.
+            Color fillCol = new Color(0.13f, 0.13f, 0.15f, 0.92f);
+
+            // Faction ring colour for the home star dot.
+            Color factionRingCol = factionPrimary;
+
+            // ── Outer border rectangle ────────────────────────────────────────
+            var boxGo = new GameObject($"Sector_{sector.uid}",
+                typeof(RectTransform), typeof(Image));
+            boxGo.transform.SetParent(parent, false);
+            var boxRt = boxGo.GetComponent<RectTransform>();
+            boxRt.anchorMin = boxRt.anchorMax = new Vector2(0.5f, 0.5f);
+            boxRt.sizeDelta        = new Vector2(SectorBoxSize, SectorBoxSize);
+            boxRt.anchoredPosition = pos;
+            boxGo.GetComponent<Image>().color = borderCol;
+            _sectorObjects.Add(boxGo);
+
+            // Restore selection highlight if this sector was previously selected.
+            var boxImg = boxGo.GetComponent<Image>();
+            bool isPrimarySelected = SelectedSector != null && sector.uid == SelectedSector.uid;
+            bool isMultiSelected   = _multiSelectedUids != null && _multiSelectedUids.Contains(sector.uid);
+            if (isPrimarySelected || isMultiSelected)
+            {
+                boxImg.color = Color.white;  // bright white = selected
+            }
+
+            // ── Inner fill (2 px inset) ───────────────────────────────────────
+            var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fillGo.transform.SetParent(boxRt, false);
+            var fillRt = fillGo.GetComponent<RectTransform>();
+            fillRt.anchorMin = Vector2.zero;
+            fillRt.anchorMax = Vector2.one;
+            fillRt.offsetMin = new Vector2( 2f,  2f);
+            fillRt.offsetMax = new Vector2(-2f, -2f);
+            fillGo.GetComponent<Image>().color = fillCol;
+
+            // ── Faction corner accents (owned sectors only) ───────────────────
+            // Triangles use the faction PRIMARY colour so they always match the border.
+            if (isPlayerOwned)
+            {
+                Color accentCol = new Color(
+                    factionPrimary.r, factionPrimary.g, factionPrimary.b, 0.45f);
+                AddCornerAccents(fillRt, accentCol);
+            }
+
+            // ── Sector modifier badge (top-right pip) ─────────────────────────
+            if (sector.modifier != SectorModifier.None)
+                DrawModifierBadge(fillRt, sector.modifier);
+
+            // ── System dots inside the box ────────────────────────────────────
+            // Interior area (in fill-local coords, origin = fill bottom-left):
+            //   x: [pad .. fillInnerW - pad]
+            //   y: [pad .. fillInnerH - pad]
+            float fillInner = SectorBoxSize - 4f;  // fill inner edge
+            float interiorPadX = 8f;
+            float botReserve   = 32f;  // keep dots above the footer label
+            float areaW = fillInner - interiorPadX * 2f;
+            float areaH = fillInner - botReserve;
+            PlaceSectorSystemDots(fillRt, sector, isHome,
+                interiorPadX, botReserve, areaW, areaH, factionRingCol);
+
+            // ── Click handler ─────────────────────────────────────────────────
+            // Designation / name footer (dim at rest, revealed on hover)
+            string footerLine = string.IsNullOrEmpty(sector.properName)
+                ? sector.ShortDesignation()
+                : $"{sector.properName}  \u00b7  {sector.ShortDesignation()}";
+            var footGo = new GameObject("SectorFooter",
+                typeof(RectTransform), typeof(TextMeshProUGUI));
+            footGo.transform.SetParent(fillRt, false);
+            var footRt = footGo.GetComponent<RectTransform>();
+            footRt.anchorMin        = new Vector2(0f, 0f);
+            footRt.anchorMax        = new Vector2(1f, 0f);
+            footRt.pivot            = new Vector2(0.5f, 0f);
+            footRt.sizeDelta        = new Vector2(0f, 28f);
+            footRt.anchoredPosition = new Vector2(0f, 2f);
+            var footTxt = footGo.GetComponent<TMP_Text>();
+            footTxt.text          = footerLine;
+            footTxt.fontSize      = 7.5f;
+            footTxt.alignment     = TextAlignmentOptions.Center;
+            footTxt.color         = new Color(0.70f, 0.82f, 1.00f, 0.28f);
+            footTxt.raycastTarget = false;
+
+            var btn      = boxGo.AddComponent<Button>();
+            var capturedSector     = sector;
+            var capturedImg        = boxGo.GetComponent<Image>();
+            var capturedDefaultCol = borderCol;
+            // Register for box-select intersection tests and selection management.
+            _sectorBoxRegistry[sector.uid] = (capturedImg, capturedDefaultCol, capturedSector, boxRt);
+            btn.onClick.AddListener(() =>
+            {
+                // Skip if the mouse moved far enough to be a drag gesture.
+                if (Vector2.Distance(_boxSelectStartScreen, Input.mousePosition) > BoxSelectThreshold)
+                    return;
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                if (ctrl)
+                    ToggleSectorSelected(capturedSector.uid);
+                else
+                {
+                    ClearMultiSelect();
+                    SetSectorSelected(capturedSector.uid, true);
+                }
+                var sel = GetSelectedSectors();
+                if      (sel.Count == 1) ShowSectorDetail(sel[0]);
+                else if (sel.Count  > 1) ShowMultiSectorDetail(sel);
+            });
+
+            var trigger    = boxGo.AddComponent<EventTrigger>();
+            var enterEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            var exitEntry  = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            enterEntry.callback.AddListener(_ => footTxt.color = new Color(0.85f, 0.93f, 1.00f, 0.95f));
+            exitEntry.callback.AddListener(_ =>  footTxt.color = new Color(0.70f, 0.82f, 1.00f, 0.28f));
+            trigger.triggers.Add(enterEntry);
+            trigger.triggers.Add(exitEntry);
+        }
+
+        // ── Modifier badge ────────────────────────────────────────────────────
+        // A small coloured pip + 2-char label placed in the top-right of the fill rect.
+        // Physical = cold blue-grey, Resource = amber, Political = red.
+
+        // Explicit mapping from SectorModifier to badge (label, colour hex).
+        // Using a Dictionary keyed by enum value prevents silent mis-mapping if the
+        // SectorModifier enum is ever reordered or extended.
+        private static readonly Dictionary<SectorModifier, (string label, string hex)> ModifierBadgeMap =
+            new Dictionary<SectorModifier, (string label, string hex)>
+            {
+                // Physical
+                { SectorModifier.Nebula,                    ("NB", "#7AAED6") },
+                { SectorModifier.AsteroidBelt,              ("AB", "#7AAED6") },
+                { SectorModifier.DustCloud,                 ("DC", "#7AAED6") },
+                { SectorModifier.PlanetaryRingDebris,       ("RD", "#7AAED6") },
+                { SectorModifier.CometaryTail,              ("CT", "#7AAED6") },
+                { SectorModifier.AccretionDisk,             ("AD", "#7AAED6") },
+                { SectorModifier.PulsarWash,                ("PW", "#A0D6E8") },
+                { SectorModifier.MagnetarField,             ("MF", "#A0D6E8") },
+                { SectorModifier.GravitationalLens,         ("GL", "#A0D6E8") },
+                { SectorModifier.GravityWell,               ("GW", "#A0D6E8") },
+                { SectorModifier.TidalShearZone,            ("TS", "#A0D6E8") },
+                { SectorModifier.CosmicRaySurge,            ("CR", "#A0D6E8") },
+                { SectorModifier.RadiationBelt,             ("RB", "#A0D6E8") },
+                { SectorModifier.DarkMatterFilament,        ("DM", "#A0D6E8") },
+                { SectorModifier.FrameDraggingAnomaly,      ("FA", "#A0D6E8") },
+                { SectorModifier.GravitationalTimeDilation, ("GT", "#A0D6E8") },
+                { SectorModifier.EinsteinRosenRemnant,      ("ER", "#A0D6E8") },
+                { SectorModifier.QuantumFoamPocket,         ("QF", "#A0D6E8") },
+                { SectorModifier.HawkingRadiationZone,      ("HR", "#A0D6E8") },
+                // Resource
+                { SectorModifier.RichOreDeposit,            ("OR", "#E8C060") },
+                { SectorModifier.IceField,                  ("IF", "#E8C060") },
+                { SectorModifier.GasPocket,                 ("GP", "#E8C060") },
+                { SectorModifier.SalvageGraveyard,          ("SG", "#E8C060") },
+                { SectorModifier.DerelictStation,           ("DS", "#E8C060") },
+                { SectorModifier.AncientRuins,              ("AR", "#E8C060") },
+                { SectorModifier.BiologicalBloom,           ("BB", "#E8C060") },
+                // Political
+                { SectorModifier.ContestedSpace,            ("CS", "#D06060") },
+                { SectorModifier.ExclusionZone,             ("EZ", "#D06060") },
+                { SectorModifier.QuarantineSeal,            ("QS", "#D06060") },
+                { SectorModifier.PatrolRoute,               ("PR", "#D06060") },
+            };
+
+        private static (string label, string hex) GetModifierBadge(SectorModifier m)
+        {
+            if (ModifierBadgeMap.TryGetValue(m, out var badge)) return badge;
+            return ("??", "#888888");
+        }
+
+        private static void DrawModifierBadge(RectTransform fillRt, SectorModifier modifier)
+        {
+            var (label, hex) = GetModifierBadge(modifier);
+            Color col = ParseColor(hex);
+
+            const float pipSize = 13f;
+            const float pad     = 4f;
+
+            // Pip (tiny square) anchored to top-right, inset by pad.
+            var pipGo = new GameObject("ModBadgePip", typeof(RectTransform), typeof(Image));
+            pipGo.transform.SetParent(fillRt, false);
+            var pipRt = pipGo.GetComponent<RectTransform>();
+            pipRt.anchorMin        = Vector2.one;
+            pipRt.anchorMax        = Vector2.one;
+            pipRt.pivot            = Vector2.one;
+            pipRt.sizeDelta        = new Vector2(pipSize, pipSize);
+            pipRt.anchoredPosition = new Vector2(-pad, -pad);
+            var pipImg = pipGo.GetComponent<Image>();
+            pipImg.color         = new Color(col.r, col.g, col.b, 0.80f);
+            pipImg.raycastTarget = false;
+
+            // 2-char label centred on the pip.
+            var lblGo = new GameObject("ModBadgeLbl",
+                typeof(RectTransform), typeof(TextMeshProUGUI));
+            lblGo.transform.SetParent(pipGo.GetComponent<RectTransform>(), false);
+            var lblRt = lblGo.GetComponent<RectTransform>();
+            lblRt.anchorMin = Vector2.zero;
+            lblRt.anchorMax = Vector2.one;
+            lblRt.offsetMin = Vector2.zero;
+            lblRt.offsetMax = Vector2.zero;
+            var lbl = lblGo.GetComponent<TMP_Text>();
+            lbl.text          = label;
+            lbl.fontSize      = 6f;
+            lbl.alignment     = TextAlignmentOptions.Center;
+            lbl.color         = new Color(0f, 0f, 0f, 0.90f);
+            lbl.raycastTarget = false;
+        }
+
+        // ── Planet-class dot colour ───────────────────────────────────────────
+        // Returns a hex string for a non-home dot based on body type when available.
+
+        private static string PlanetClassDotColor(BodyType bodyType)
+        {
+            return bodyType switch
+            {
+                BodyType.RockyPlanet  => "#CC9977",   // warm tan
+                BodyType.GasGiant     => "#AABB88",   // olive-green
+                BodyType.IcePlanet    => "#99BBDD",   // icy blue
+                BodyType.AsteroidBelt => "#887766",   // dull brown
+                _                     => "#D0C8A8",   // default cream
+            };
+        }
+
+        /// <summary>
+        /// Adds four right-angle triangle accents at the corners of <paramref name="parent"/>.
+        /// Each triangle has its right-angle at the corresponding corner and its hypotenuse
+        /// cutting diagonally inward, giving a tapered corner-flag effect.
+        /// They sit in the hierarchy before system dots so dots always render on top.
+        /// </summary>
+        private static void AddCornerAccents(RectTransform parent, Color col, float size = 12f, float pad = 2f)
+        {
+            // Each triangle's RectTransform is anchored to its corner and inset
+            // `pad` pixels from each border wall, with legs of length `size`.
+            var defs = new (Vector2 amin, Vector2 amax, Vector2 omin, Vector2 omax, CornerTriangle.Corner c)[]
+            {
+                (Vector2.zero,  Vector2.zero,  new Vector2(       pad,        pad), new Vector2( size+pad,  size+pad), CornerTriangle.Corner.BottomLeft),
+                (Vector2.right, Vector2.right, new Vector2(-size-pad,        pad), new Vector2(      -pad,  size+pad), CornerTriangle.Corner.BottomRight),
+                (Vector2.up,    Vector2.up,    new Vector2(       pad, -size-pad), new Vector2( size+pad,       -pad), CornerTriangle.Corner.TopLeft),
+                (Vector2.one,   Vector2.one,   new Vector2(-size-pad, -size-pad), new Vector2(      -pad,       -pad), CornerTriangle.Corner.TopRight),
+            };
+            string[] names = { "CornerBL", "CornerBR", "CornerTL", "CornerTR" };
+            for (int i = 0; i < 4; i++)
+            {
+                var go  = new GameObject(names[i], typeof(RectTransform), typeof(CornerTriangle));
+                go.transform.SetParent(parent, false);
+                var rt  = go.GetComponent<RectTransform>();
+                rt.anchorMin = defs[i].amin;
+                rt.anchorMax = defs[i].amax;
+                rt.offsetMin = defs[i].omin;
+                rt.offsetMax = defs[i].omax;
+                var tri = go.GetComponent<CornerTriangle>();
+                tri.corner        = defs[i].c;
+                tri.color         = col;
+                tri.raycastTarget = false;
+            }
+        }
+
+        /// <summary>
+        /// Places procedurally generated star system dots inside one sector box.
+        /// Positions are deterministic (seeded from sector uid) and respect a
+        /// minimum separation so dots never overlap.
+        /// </summary>
+        private void PlaceSectorSystemDots(
+            RectTransform fillRt, SectorData sector, bool isHome,
+            float areaX, float areaY, float areaW, float areaH,
+            Color factionRingCol)
+        {
+            int seed = SolarSystemGenerator.StableHash(sector.uid);
+            var rng  = new System.Random(seed);
+
+            var positions  = new List<Vector2>();
+            var sizes      = new List<float>();
+            var colorHexes = new List<string>();
+
+            // Home star placed first — near centre with slight randomised jitter.
+            if (isHome && _sys != null)
+            {
+                positions.Add(new Vector2(
+                    0.42f + (float)rng.NextDouble() * 0.16f,
+                    0.42f + (float)rng.NextDouble() * 0.16f));
+                sizes.Add(Mathf.Clamp(_sys.starSize * 10f, 8f, 16f));
+                colorHexes.Add(_sys.starColorHex);
+            }
+
+            // Target dot count driven by sector density tier.
+            int targetCount = sector.systemDensity switch
+            {
+                SystemDensity.Sparse   => rng.Next(3,  7),
+                SystemDensity.Low      => rng.Next(7, 11),
+                SystemDensity.Standard => rng.Next(11, 16),
+                SystemDensity.High     => rng.Next(16, 21),
+                _                      => rng.Next(11, 16),
+            };
+
+            // Remaining systems: random positions with minimum separation.
+            int attempts    = 0;
+            while (positions.Count < targetCount && attempts < 600)
+            {
+                attempts++;
+                float nx = 0.06f + (float)rng.NextDouble() * 0.88f;
+                float ny = 0.06f + (float)rng.NextDouble() * 0.88f;
+                bool  tooClose = false;
+                foreach (var p in positions)
+                {
+                    float ddx = p.x - nx, ddy = p.y - ny;
+                    if (ddx * ddx + ddy * ddy < SysDotMinDist * SysDotMinDist)
+                    { tooClose = true; break; }
+                }
+                if (tooClose) continue;
+                positions.Add(new Vector2(nx, ny));
+                sizes.Add(2.5f + (float)rng.NextDouble() * 4.0f);
+
+                // Use nx as a loose zone proxy (inner = rocky/hot, mid = gas, outer = ice)
+                // to give sector-map dots planet-class flavour without storing full body data.
+                BodyType dotType;
+                double btRoll = rng.NextDouble();
+                if (nx < 0.35f)
+                    dotType = BodyType.RockyPlanet;
+                else if (nx < 0.65f)
+                    dotType = btRoll < 0.55 ? BodyType.RockyPlanet : BodyType.GasGiant;
+                else
+                    dotType = btRoll < 0.45 ? BodyType.GasGiant : BodyType.IcePlanet;
+
+                colorHexes.Add(PlanetClassDotColor(dotType));
+            }
+
+            // Place each dot.
+            for (int i = 0; i < positions.Count; i++)
+            {
+                float px  = areaX + positions[i].x * areaW;
+                float py  = areaY + positions[i].y * areaH;
+                float sz  = sizes[i];
+                Color col = ParseColor(colorHexes[i]);
+                col.a = (i == 0 && isHome) ? 1.00f : 0.85f;
+
+                var dotGo = new GameObject($"Sys_{i}",
+                    typeof(RectTransform), typeof(Image));
+                dotGo.transform.SetParent(fillRt, false);
+                var dotRt = dotGo.GetComponent<RectTransform>();
+                // anchor at fill's bottom-left; anchoredPosition = px,py from that corner
+                dotRt.anchorMin = dotRt.anchorMax = Vector2.zero;
+                dotRt.pivot           = new Vector2(0.5f, 0.5f);
+                dotRt.sizeDelta       = new Vector2(sz, sz);
+                dotRt.anchoredPosition = new Vector2(px, py);
+                var img = dotGo.GetComponent<Image>();
+                img.sprite = GetCircleSprite();
+                img.color  = col;
+
+                // Double-click on any dot in a visible (non-uncharted) sector or in
+                // Telescope Mode switches to the System layer.
+                bool allowDblClick = TelescopeMode ||
+                                     sector.discoveryState != SectorDiscoveryState.Uncharted;
+                img.raycastTarget = allowDblClick;
+                if (allowDblClick)
+                {
+                    // Use Transition.None so the Button never modifies the dot's color.
+                    var dotBtn          = dotGo.AddComponent<Button>();
+                    dotBtn.transition   = Selectable.Transition.None;
+                    string dotKey = $"{sector.uid}_{i}";
+                    dotBtn.onClick.AddListener(() =>
+                    {
+                        float now = Time.unscaledTime;
+                        if (_dotLastClickKey == dotKey &&
+                            now - _dotLastClickTime < 0.35f)
+                        {
+                            SwitchLayer(MapLayer.System);
+                        }
+                        _dotLastClickKey  = dotKey;
+                        _dotLastClickTime = now;
+                    });
+
+                    // White hover-ring — visible on mouse-over via EventTrigger.
+                    var hoverRingGo = new GameObject("HoverRing",
+                        typeof(RectTransform), typeof(UIRing));
+                    hoverRingGo.transform.SetParent(dotGo.transform, false);
+                    var hrRt = hoverRingGo.GetComponent<RectTransform>();
+                    hrRt.anchorMin = hrRt.anchorMax = new Vector2(0.5f, 0.5f);
+                    hrRt.pivot            = new Vector2(0.5f, 0.5f);
+                    hrRt.sizeDelta        = new Vector2(sz + 6f, sz + 6f);
+                    hrRt.anchoredPosition = Vector2.zero;
+                    var hr = hoverRingGo.GetComponent<UIRing>();
+                    hr.color         = new Color(1f, 1f, 1f, 0.90f);
+                    hr.thickness     = 0.22f;
+                    hr.segments      = 32;
+                    hr.raycastTarget = false;
+                    hoverRingGo.SetActive(false);
+
+                    var trig      = dotGo.AddComponent<EventTrigger>();
+                    var captHvr   = hoverRingGo;
+                    var enterEvt  = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    var exitEvt   = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    enterEvt.callback.AddListener(_ => captHvr.SetActive(true));
+                    exitEvt.callback.AddListener(_ =>  captHvr.SetActive(false));
+                    trig.triggers.Add(enterEvt);
+                    trig.triggers.Add(exitEvt);
+                }
+
+                // Home star gets a faction-coloured glow ring.
+                if (i == 0 && isHome)
+                {
+                    var ringGo = new GameObject("HomeRing",
+                        typeof(RectTransform), typeof(UIRing));
+                    ringGo.transform.SetParent(fillRt, false);
+                    var rrt = ringGo.GetComponent<RectTransform>();
+                    rrt.anchorMin = rrt.anchorMax = Vector2.zero;
+                    rrt.pivot           = new Vector2(0.5f, 0.5f);
+                    rrt.sizeDelta       = new Vector2(sz + 10f, sz + 10f);
+                    rrt.anchoredPosition = new Vector2(px, py);
+                    var ur = ringGo.GetComponent<UIRing>();
+                    ur.color        = new Color(factionRingCol.r, factionRingCol.g,
+                                               factionRingCol.b, 0.85f);
+                    ur.thickness    = 0.22f;
+                    ur.segments     = 32;
+                    ur.raycastTarget = false;
+                }
+            }
         }
 
         // ── Galaxy map ────────────────────────────────────────────────────────
@@ -688,6 +1561,7 @@ namespace Waystation.UI
         private void ShowSectorDetail(SectorData sector)
         {
             _selectedSector = sector;
+            SelectedSector  = sector;
             if (detailPanel == null) return;
             detailPanel.SetActive(true);
 
@@ -897,6 +1771,9 @@ namespace Waystation.UI
                     Destroy(child.gameObject);
             _exploreDots.Clear();
             _sectorObjects.Clear();
+            _sectorBoxRegistry.Clear();
+            _multiSelectedUids.Clear();
+            DestroyBoxSelectOverlay();
             _selectedSector = null;
         }
 
@@ -1165,9 +2042,9 @@ namespace Waystation.UI
                 btn = b;
                 lbl = l;
             }
-            SetupTab(ref _tabSystemBtn, ref _tabSystemLbl, headerRt, "⊙  System", 0f,     0.167f, MapLayer.System);
-            SetupTab(ref _tabSectorBtn, ref _tabSectorLbl, headerRt, "◎  Sector", 0.167f, 0.334f, MapLayer.Sector);
-            SetupTab(ref _tabGalaxyBtn, ref _tabGalaxyLbl, headerRt, "✦  Galaxy", 0.334f, 0.50f,  MapLayer.Galaxy);
+            SetupTab(ref _tabSystemBtn, ref _tabSystemLbl, headerRt, "⊙  System", 0f,    0.25f, MapLayer.System);
+            SetupTab(ref _tabSectorBtn, ref _tabSectorLbl, headerRt, "◈  Sector", 0.25f, 0.50f, MapLayer.Sector);
+            // Galaxy tab removed — sector layer now serves as the surrounding-sectors view.
 
             //   Context label (centre 40 %)
             {

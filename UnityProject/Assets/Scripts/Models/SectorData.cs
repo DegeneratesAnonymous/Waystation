@@ -54,6 +54,61 @@ namespace Waystation.Models
         Visited,    // player has been here
     }
 
+    /// <summary>
+    /// How many star systems are packed into a sector.
+    /// Determines the dot count rendered in the sector box and future
+    /// gameplay effects (trade route density, spawn rates, etc.).
+    /// </summary>
+    public enum SystemDensity
+    {
+        Sparse,    // 3 –  6  systems
+        Low,       // 7 – 10  systems
+        Standard,  // 11 – 15  systems
+        High,      // 16 – 20  systems
+    }
+
+    /// <summary>
+    /// Environmental or political modifier present in a sector.
+    /// None = standard space. 40 % of sectors receive one modifier.
+    /// </summary>
+    public enum SectorModifier
+    {
+        None = 0,
+        // Physical
+        Nebula,
+        AsteroidBelt,
+        DustCloud,
+        PlanetaryRingDebris,
+        CometaryTail,
+        AccretionDisk,
+        PulsarWash,
+        MagnetarField,
+        GravitationalLens,
+        GravityWell,
+        TidalShearZone,
+        CosmicRaySurge,
+        RadiationBelt,
+        DarkMatterFilament,
+        FrameDraggingAnomaly,
+        GravitationalTimeDilation,
+        EinsteinRosenRemnant,
+        QuantumFoamPocket,
+        HawkingRadiationZone,
+        // Resource
+        RichOreDeposit,
+        IceField,
+        GasPocket,
+        SalvageGraveyard,
+        DerelictStation,
+        AncientRuins,
+        BiologicalBloom,
+        // Political
+        ContestedSpace,
+        ExclusionZone,
+        QuarantineSeal,
+        PatrolRoute,
+    }
+
     // ── SectorData ────────────────────────────────────────────────────────────
 
     [Serializable]
@@ -87,6 +142,12 @@ namespace Waystation.Models
         public bool isRenamed;
 
         public SectorDiscoveryState discoveryState = SectorDiscoveryState.Uncharted;
+
+        /// <summary>How densely packed with star systems this sector is.</summary>
+        public SystemDensity systemDensity = SystemDensity.Standard;
+
+        /// <summary>Environmental / political modifier for this sector. None = standard space.</summary>
+        public SectorModifier modifier = SectorModifier.None;
 
         // ── Derived display helpers ────────────────────────────────────────────
 
@@ -152,6 +213,7 @@ namespace Waystation.Models
                 properName       = properName,
                 isRenamed        = false,
                 discoveryState   = SectorDiscoveryState.Uncharted,
+                systemDensity    = SystemDensity.Standard,  // overwritten by GalaxyGenerator
             };
         }
 
