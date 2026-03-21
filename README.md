@@ -223,6 +223,31 @@ This project uses a multi-agent AI development workflow. See [`docs/DEV_WORKFLOW
 
 ---
 
+## Stubbed Systems
+
+The following systems are defined in the codebase but are not yet fully implemented. They are registered and wired up so that dependent systems compile and run against a stable interface; a dedicated work order is expected for each before the feature is playable.
+
+| System | File(s) | Status | Notes |
+|---|---|---|---|
+| **Horizon Simulation** | `RegionSimulationStub.cs`, `IRegionSimulation.cs` | No-op stub | `RegionSimulationStub` implements `IRegionSimulation` with empty methods (all log TODO markers). Registered in `GameManager.InitSystems()` as the active implementation. Intended to be replaced by a full Horizon Simulation work order that adds procedural region ticking, horizon expansion, and region discovery. |
+| **Faction History** | `RegionSimulationStub.cs` (`FactionHistoryStub` class), `IFactionHistoryProvider.cs` | No-op stub | `FactionHistoryStub` (co-located in `RegionSimulationStub.cs`) implements `IFactionHistoryProvider`; `GetFactionHistory` always returns an empty list and `RecordFactionEvent` does not persist. Registered alongside `RegionSimulationStub` and intended for replacement in the same Horizon Simulation work order. |
+| **Visitor NPC Shop & Wander Behaviour** | `NPCTaskQueue.cs` | Immediate-succeed stub | `ShopVisitTask` and `IdleInHangarTask` both exist as named task types but complete immediately without executing any behaviour. Visitor NPCs are spawned and walk to the landing pad (via `CommunicationsTask`), then stand in place. A future Visitor Behaviour work order is expected to wire these tasks to shop modules and wander waypoints. |
+| **Faction Government — Pirate Region Mechanics** | `FactionGovernmentSystem.cs` | Partial stub | Pirate faction government aggregation returns `null` instead of a resolved leader; only individual NPC resolution is implemented. Full pirate-region mechanics are deferred to a follow-on work order. |
+| **Faction Government — Leader Succession** | `FactionGovernmentSystem.cs` | Partial stub | `SuccessionEvaluator` selects a candidate pool but the auto-selection and promotion logic is not executed; the method exits early with a TODO comment. Deferred to a succession-condition work order. |
+| **NPC Tension — Crew Departure** | `TensionSystem.cs` | Partial stub | `TensionSystem` calculates per-NPC departure risk and pushes a mood penalty, but the actual departure attempt is not triggered; the TODO comment notes it requires a crew/roster system to be implemented first. |
+| **Trait System — Medical/Therapy Event Removal** | `TraitSystem.cs` | Partial stub | `TriggerEventRemoval()` is defined on the trait system but has no wired triggers; the TODO comment notes that medical/therapy system hooks are required before trait-removal events can fire. |
+| **Farming — Fertiliser & Pruning Mechanics** | `FarmingSystem.cs` | Partial stub | The NPC `TendTask` completes without any gameplay effect. A TODO comment marks it as a stub pending fertiliser and pruning mechanics. |
+| **Temperature — Duct Integration** | `TemperatureSystem.cs` | Partial stub | Vent processing equalises temperature between adjacent rooms, but integration with the ducting utility network (i.e. duct-driven airflow affecting temperature) is marked as a TODO stub. |
+| **Horizon — Resource Flow Recording** | `RegionSystem.cs` | Partial stub | `RegionSystem` has a hook to record resource flows per region, but the actual recording is a TODO pending Horizon Simulation providing real flow data. |
+| **Save / Load Game** | `GameHUD.cs`, `MainMenuManager.cs` | UI stub | The **Load Game** button exists in both the main menu and the in-game settings panel but is disabled and labelled *"coming soon"*. Save serialises station resources; load is not yet implemented. |
+| **Graphics Settings** | `GameHUD.cs` | UI stub | The Graphics settings panel displays *"Graphics settings coming soon."* with no controls. |
+| **Sound Settings** | `GameHUD.cs` | UI stub | The Sound settings panel displays *"Sound settings coming soon."* with no controls. |
+| **Template Library — File Picker** | `GameHUD.cs` | UI stub | The **Import** button in the Template Library logs a TODO message instead of opening a file dialog. |
+| **Multi-Station Founding** | `AntennaSystem.cs`, `SystemMapController.cs` | Future work | `AntennaSystem` explicitly limits antenna-range bonuses to the home sector because multi-station founding is out of scope; `SystemMapController` contains a matching note. Full multi-station support is deferred to a future work order. |
+| **Galaxy Outer-Fringe Survey Density** | `GalaxyGenerator.cs` | Partial stub | Sectors beyond the outer fringe (x > 85) return a `SurveyPrefix.UNK` (Unknown) designation because the density-threshold algorithm that would classify them is not yet implemented. |
+
+---
+
 ## Contributing
 
 Pull requests are welcome. For larger changes, please open a **Work Order** issue first (use the issue template) to discuss scope and approach.
