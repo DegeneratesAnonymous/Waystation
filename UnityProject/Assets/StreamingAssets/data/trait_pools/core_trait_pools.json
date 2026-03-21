@@ -1,0 +1,77 @@
+[
+  {
+    "id": "pool.resource_scarcity",
+    "condition_category": "ResourceScarcity",
+    "entries": [
+      { "trait_id": "trait.resourceful",  "weight": 3.0 },
+      { "trait_id": "trait.anxious",      "weight": 2.5 },
+      { "trait_id": "trait.distrustful",  "weight": 1.5 },
+      { "trait_id": "trait.brittle",      "weight": 1.0 }
+    ]
+  },
+  {
+    "id": "pool.resource_abundance",
+    "condition_category": "ResourceAbundance",
+    "entries": [
+      { "trait_id": "trait.prosperous",  "weight": 3.0 },
+      { "trait_id": "trait.sociable",    "weight": 2.0 },
+      { "trait_id": "trait.wasteful",    "weight": 1.5 }
+    ]
+  },
+  {
+    "id": "pool.isolation",
+    "condition_category": "Isolation",
+    "entries": [
+      { "trait_id": "trait.distrustful", "weight": 3.0 },
+      { "trait_id": "trait.resilient",   "weight": 2.0 },
+      { "trait_id": "trait.anxious",     "weight": 1.5 }
+    ]
+  },
+  {
+    "id": "pool.overcrowding",
+    "condition_category": "Overcrowding",
+    "entries": [
+      { "trait_id": "trait.brittle",     "weight": 2.5 },
+      { "trait_id": "trait.anxious",     "weight": 2.0 },
+      { "trait_id": "trait.sociable",    "weight": 1.0 }
+    ]
+  },
+  {
+    "id": "pool.danger",
+    "condition_category": "Danger",
+    "entries": [
+      { "trait_id": "trait.vigilant",    "weight": 3.0 },
+      { "trait_id": "trait.traumatised", "weight": 2.0 },
+      { "trait_id": "trait.resilient",   "weight": 1.5 },
+      { "trait_id": "trait.anxious",     "weight": 2.5 }
+    ]
+  },
+  {
+    "id": "pool.stability",
+    "condition_category": "Stability",
+    "entries": [
+      { "trait_id": "trait.composed",    "weight": 3.0 },
+      { "trait_id": "trait.idealistic",  "weight": 2.0 },
+      { "trait_id": "trait.sociable",    "weight": 2.0 }
+    ]
+  },
+  {
+    "id": "pool.low_mood",
+    "condition_category": "LowMood",
+    "entries": [
+      { "trait_id": "trait.brittle",     "weight": 3.0 },
+      { "trait_id": "trait.anxious",     "weight": 2.5 },
+      { "trait_id": "trait.cynical",     "weight": 2.0 },
+      { "trait_id": "trait.traumatised", "weight": 1.0 }
+    ]
+  },
+  {
+    "id": "pool.high_mood",
+    "condition_category": "HighMood",
+    "entries": [
+      { "trait_id": "trait.resilient",   "weight": 3.0 },
+      { "trait_id": "trait.composed",    "weight": 2.5 },
+      { "trait_id": "trait.sociable",    "weight": 2.0 }
+    ]
+  }
+]

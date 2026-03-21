@@ -78,6 +78,18 @@ namespace Waystation.Core
 
         // ── Skill & Expertise system ────────────────────────────────────────────────────────────
         public SkillSystem              Skills        { get; private set; }
+
+        // ── Trait, Tension, Faction Government, Region systems ───────────────────────────────────
+        public TraitSystem              Traits        { get; private set; }
+        public TensionSystem            Tension       { get; private set; }
+        public FactionGovernmentSystem  FactionGov    { get; private set; }
+        public RegionSystem             Regions       { get; private set; }
+
+        /// <summary>Active region simulation — defaults to RegionSimulationStub.</summary>
+        public IRegionSimulation        RegionSim     { get; private set; }
+
+        /// <summary>Active faction history provider — defaults to FactionHistoryStub.</summary>
+        public IFactionHistoryProvider  FactionHistory { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -181,6 +193,27 @@ namespace Waystation.Core
             Research.SetSecondsPerTick(secondsPerTick);
             Farming.SetSkillSystem(Skills);
             Conversations.SetSkillSystem(Skills);
+
+            // Trait, Tension, Faction Government, Region systems
+            Traits = new TraitSystem();
+            foreach (var kv in Registry.Traits)     Traits.RegisterTrait(kv.Value);
+            foreach (var kv in Registry.TraitPools) Traits.RegisterPool(kv.Value);
+
+            Tension    = new TensionSystem(Traits);
+            Tension.SetMoodSystem(Mood);
+            FactionGov = new FactionGovernmentSystem(Traits);
+            Regions    = new RegionSystem();
+
+            // Stub implementations — replaced by Horizon Simulation work order
+            RegionSim     = new RegionSimulationStub();
+            FactionHistory = new FactionHistoryStub();
+
+            // Wire tension stage change events to station log
+            Tension.OnTensionStageChanged += (npc, stage) =>
+            {
+                if (stage != TensionStage.Normal)
+                    Station?.LogEvent($"{npc.name}: tension stage → {TensionSystem.GetTensionStageLabel(stage)}");
+            };
 
             // Wire sleep/wake events from NPCSystem → MoodSystem
             Npcs.OnNPCSleeps += npc => Mood.OnNPCSleeps(npc);
@@ -333,6 +366,29 @@ namespace Waystation.Core
 
             // Skill system
             Skills.Tick(Station);
+
+            // Trait, Tension, Faction Government, Region systems (after mood so moodScore is current)
+            if (FeatureFlags.NpcTraits)
+            {
+                // Register mood-based condition pressure for all crew NPCs
+                if (Station.tick % TimeSystem.TicksPerDay == 0)
+                {
+                    foreach (var npc in Station.npcs.Values)
+                    {
+                        if (!npc.IsCrew()) continue;
+                        if (npc.moodScore < MoodSystem.CrisisThreshold)
+                            Traits.RegisterConditionPressure(npc, TraitConditionCategory.LowMood, 2f);
+                        else if (npc.moodScore >= MoodSystem.ThrivingThreshold)
+                            Traits.RegisterConditionPressure(npc, TraitConditionCategory.HighMood, 1f);
+                    }
+                }
+                Traits.Tick(Station);
+                Tension.Tick(Station);
+            }
+            if (FeatureFlags.FactionGovernment)
+                FactionGov.Tick(Station, Registry.Factions);
+            if (FeatureFlags.RegionSimulation)
+                Regions.Tick(Station);
 
             // Process events
             var newEvents = Events.Tick(Station);

@@ -229,6 +229,191 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // NPC Trait Runtime State
+    // -------------------------------------------------------------------------
+
+    /// <summary>Stage of player-NPC tension — progresses as player actions conflict with NPC traits.</summary>
+    public enum TensionStage { Normal, Disgruntled, WorkSlowdown, DepartureRisk }
+
+    /// <summary>Player action types used for tension calculation — append-only.</summary>
+    public enum PlayerActionType
+    {
+        Micromanage,
+        ResourceRestriction,
+        ForcedOvertime,
+        SocialInteraction,
+        ResourceProvisioning,
+        // Extend as needed — append-only
+    }
+
+    /// <summary>A single active trait on an NPC, with its current strength.</summary>
+    [Serializable]
+    public class ActiveTrait
+    {
+        /// <summary>References NpcTraitDefinition.traitId.</summary>
+        public string traitId;
+
+        /// <summary>Current strength: 0–1. Trait is removed when this reaches 0.</summary>
+        public float  strength = 1f;
+
+        /// <summary>Game tick when this trait was acquired.</summary>
+        public int    acquisitionTick;
+    }
+
+    /// <summary>Per-NPC trait state: active traits plus sustained condition pressure.</summary>
+    [Serializable]
+    public class NpcTraitProfile
+    {
+        /// <summary>Active traits on this NPC.</summary>
+        public List<ActiveTrait> traits = new List<ActiveTrait>();
+
+        /// <summary>
+        /// Accumulated condition pressure per category (dimensionless units per day).
+        /// Pressure is reset after a trait fires from that category.
+        /// </summary>
+        public Dictionary<string, float> conditionPressure = new Dictionary<string, float>();
+
+        /// <summary>Current tension score — accumulates from conflicting player actions.</summary>
+        public float tensionScore = 0f;
+
+        /// <summary>Current tension stage derived from tensionScore.</summary>
+        public TensionStage tensionStage = TensionStage.Normal;
+    }
+
+    // -------------------------------------------------------------------------
+    // Faction Government Runtime State
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Cached result of a faction trait aggregation calculation.
+    /// Produced by FactionGovernmentSystem.FactionAggregator.
+    /// </summary>
+    [Serializable]
+    public class FactionTraitAggregate
+    {
+        /// <summary>Averaged trait magnitudes per TraitCategory name.</summary>
+        public Dictionary<string, float> categoryScores  = new Dictionary<string, float>();
+
+        /// <summary>Summed effect magnitudes across the relevant NPC pool, keyed by TraitEffectTarget name.</summary>
+        public Dictionary<string, float> aggregateEffects = new Dictionary<string, float>();
+
+        /// <summary>Government type used during this calculation (for cache invalidation).</summary>
+        public GovernmentType sourceGovernmentType;
+
+        /// <summary>Game tick when this aggregate was last calculated.</summary>
+        public int calculatedAtTick = -1;
+    }
+
+    // -------------------------------------------------------------------------
+    // Region & Resource History Runtime State
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Rolling 30-day resource history for a region.
+    /// Used to bias NPC trait generation at spawn time.
+    /// </summary>
+    [Serializable]
+    public class RegionResourceHistory
+    {
+        private const int WindowDays = 30;
+
+        /// <summary>
+        /// Daily resource amounts per ResourceType name.
+        /// Oldest entries are dropped when the window exceeds 30 days.
+        /// </summary>
+        public Dictionary<string, List<float>> dailyAmounts =
+            new Dictionary<string, List<float>>();
+
+        /// <summary>Baseline amount used to compute scarcity scores (per resource type).</summary>
+        public Dictionary<string, float> baselines =
+            new Dictionary<string, float>();
+
+        /// <summary>Records a new daily amount for the given resource type, pruning old entries.</summary>
+        public void RecordDailyAmount(ResourceType resource, float amount)
+        {
+            string key = resource.ToString();
+            if (!dailyAmounts.ContainsKey(key))
+                dailyAmounts[key] = new List<float>();
+            dailyAmounts[key].Add(amount);
+            while (dailyAmounts[key].Count > WindowDays)
+                dailyAmounts[key].RemoveAt(0);
+        }
+
+        /// <summary>Returns the rolling average for the resource, or 0 if no data.</summary>
+        public float GetAverageAmount(ResourceType resource)
+        {
+            string key = resource.ToString();
+            if (!dailyAmounts.TryGetValue(key, out var list) || list.Count == 0) return 0f;
+            float sum = 0f;
+            foreach (var v in list) sum += v;
+            return sum / list.Count;
+        }
+
+        /// <summary>
+        /// Normalised scarcity score 0–1: 0 = abundant, 1 = critically scarce.
+        /// Computed relative to the configured baseline for that resource.
+        /// </summary>
+        public float GetScarcityScore(ResourceType resource)
+        {
+            string key = resource.ToString();
+            float baseline = baselines.TryGetValue(key, out var b) ? b : 100f;
+            if (baseline <= 0f) return 0f;
+            float avg = GetAverageAmount(resource);
+            return Mathf.Clamp01(1f - avg / baseline);
+        }
+
+        /// <summary>Composite pressure across all tracked resources.</summary>
+        public float GetOverallResourcePressure()
+        {
+            float total = 0f;
+            int   count = 0;
+            foreach (ResourceType rt in System.Enum.GetValues(typeof(ResourceType)))
+            {
+                string key = rt.ToString();
+                if (!dailyAmounts.ContainsKey(key) || dailyAmounts[key].Count == 0) continue;
+                total += GetScarcityScore(rt);
+                count++;
+            }
+            return count > 0 ? total / count : 0f;
+        }
+    }
+
+    /// <summary>
+    /// Represents a single region stub for the Horizon Simulation interface.
+    /// All simulation fields beyond resource history are stubbed with TODO markers
+    /// for the Horizon Simulation work order.
+    /// </summary>
+    [Serializable]
+    public class RegionData
+    {
+        public string                regionId;
+        public string                displayName;
+        public RegionResourceHistory resourceHistory     = new RegionResourceHistory();
+        public List<string>          factionIds          = new List<string>();
+        public RegionSimulationState simulationState     = RegionSimulationState.Undiscovered;
+
+        // TODO: Add Horizon Simulation fields (population density, conflict level, etc.)
+        //       when the Horizon Simulation work order is implemented.
+    }
+
+    // -------------------------------------------------------------------------
+    // Horizon Simulation — HistoricalEvent stub
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Stub data class for recording faction-level historical events.
+    /// Used by IFactionHistoryProvider.
+    /// </summary>
+    [Serializable]
+    public class HistoricalEvent
+    {
+        public string   eventId;
+        public string   description;
+        public int      gameTick;
+        public string[] involvedFactionIds;
+    }
+
+    // -------------------------------------------------------------------------
     // NPC Instance
     // -------------------------------------------------------------------------
 
@@ -323,6 +508,28 @@ namespace Waystation.Models
         public List<MoodModifierRecord> moodModifiers = new List<MoodModifierRecord>();
         // Game tick of the last conversation this NPC completed (60-tick cooldown)
         public int   lastConversationTick  = -99;
+
+        // ── Trait Profile (NPC Traits system) ────────────────────────────────
+        // Nullable — existing NPCs without a profile are treated as having no traits.
+        // Initialised lazily by TraitSystem on first interaction.
+        public NpcTraitProfile traitProfile = null;
+
+        // Multiplicative work speed modifier applied by active traits (default 1.0).
+        // Stacks multiplicatively with workModifier (MoodSystem) and expertiseModifier (SkillSystem).
+        // Evaluated by TraitSystem.ApplyTraitEffects() after any trait change.
+        public float traitWorkModifier = 1.0f;
+
+        // Multiplicative work speed modifier applied by tension stage (default 1.0).
+        // Set to WorkSlowdownModifier at WorkSlowdown/DepartureRisk; reset to 1.0 at Normal/Disgruntled.
+        // Stacks multiplicatively with traitWorkModifier and workModifier.
+        public float tensionWorkModifier = 1.0f;
+
+        /// <summary>Returns the trait profile, initialising it lazily if needed.</summary>
+        public NpcTraitProfile GetOrCreateTraitProfile()
+        {
+            if (traitProfile == null) traitProfile = new NpcTraitProfile();
+            return traitProfile;
+        }
 
         public static NPCInstance Create(string templateId, string name,
                                          string classId, string subclassId = null)
@@ -1255,6 +1462,15 @@ namespace Waystation.Models
         public Dictionary<string, ShuttleLandingPadState> landingPads  = new Dictionary<string, ShuttleLandingPadState>();
         // Hail cooldowns per ship uid (player must wait before re-hailing)
         public List<HailCooldownRecord>   hailCooldowns  = new List<HailCooldownRecord>();
+
+        // ── Region Simulation state ──────────────────────────────────────────
+        // Region data keyed by regionId. Stub — populated by Horizon Simulation work order.
+        public Dictionary<string, RegionData> regions = new Dictionary<string, RegionData>();
+
+        // ── Faction Government state ─────────────────────────────────────────
+        // Cached aggregates per factionId; rebuilt by FactionGovernmentSystem when stale.
+        public Dictionary<string, FactionTraitAggregate> factionAggregates =
+            new Dictionary<string, FactionTraitAggregate>();
 
         public StationState(string name)
         {

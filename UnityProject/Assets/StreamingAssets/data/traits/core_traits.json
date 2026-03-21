@@ -1,0 +1,179 @@
+[
+  {
+    "id": "trait.resilient",
+    "display_name": "Resilient",
+    "description": "Bounces back quickly from hardship. Reduced mood penalty from adverse events.",
+    "category": "Psychological",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.brittle"],
+    "effects": [
+      { "target": "MoodModifier", "magnitude": 5.0 }
+    ]
+  },
+  {
+    "id": "trait.brittle",
+    "display_name": "Brittle",
+    "description": "Easily destabilised by stress. Increased mood penalty from adverse events.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.05,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.resilient"],
+    "effects": [
+      { "target": "MoodModifier", "magnitude": -5.0 }
+    ]
+  },
+  {
+    "id": "trait.anxious",
+    "display_name": "Anxious",
+    "description": "Persistent low-level anxiety reduces productivity and social engagement.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.03,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.composed"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.05 },
+      { "target": "SocialModifier", "magnitude": -0.1 }
+    ]
+  },
+  {
+    "id": "trait.composed",
+    "display_name": "Composed",
+    "description": "Maintains calm under pressure. Mild work speed bonus.",
+    "category": "Psychological",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.anxious"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": 0.05 }
+    ]
+  },
+  {
+    "id": "trait.resourceful",
+    "display_name": "Resourceful",
+    "description": "Experienced with scarcity. Increased work efficiency.",
+    "category": "Economic",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.wasteful"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": 0.08 }
+    ]
+  },
+  {
+    "id": "trait.wasteful",
+    "display_name": "Wasteful",
+    "description": "Poor resource discipline. Reduced work efficiency.",
+    "category": "Economic",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.02,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.resourceful"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.08 }
+    ]
+  },
+  {
+    "id": "trait.distrustful",
+    "display_name": "Distrustful",
+    "description": "Isolation has made this NPC wary of others. Reduced social engagement.",
+    "category": "Social",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.04,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.sociable"],
+    "effects": [
+      { "target": "SocialModifier", "magnitude": -0.2 },
+      { "target": "HostilityModifier", "magnitude": 0.1 }
+    ]
+  },
+  {
+    "id": "trait.sociable",
+    "display_name": "Sociable",
+    "description": "Thrives in social environments. Improved morale and cooperation.",
+    "category": "Social",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.distrustful"],
+    "effects": [
+      { "target": "SocialModifier", "magnitude": 0.2 },
+      { "target": "LoyaltyModifier", "magnitude": 0.1 }
+    ]
+  },
+  {
+    "id": "trait.vigilant",
+    "display_name": "Vigilant",
+    "description": "Sustained exposure to danger has sharpened awareness.",
+    "category": "Physical",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": [],
+    "effects": [
+      { "target": "HostilityModifier", "magnitude": 0.1 },
+      { "target": "WorkSpeedModifier", "magnitude": 0.03 }
+    ]
+  },
+  {
+    "id": "trait.traumatised",
+    "display_name": "Traumatised",
+    "description": "Unresolved trauma impairs work and social function. Requires therapeutic event to remove.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": true,
+    "conflicting_trait_ids": [],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.15 },
+      { "target": "MoodModifier", "magnitude": -10.0 },
+      { "target": "SocialModifier", "magnitude": -0.3 }
+    ]
+  },
+  {
+    "id": "trait.prosperous",
+    "display_name": "Prosperous",
+    "description": "Raised in abundance. Optimistic outlook boosts morale.",
+    "category": "Economic",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.01,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": [],
+    "effects": [
+      { "target": "MoodModifier", "magnitude": 8.0 }
+    ]
+  },
+  {
+    "id": "trait.idealistic",
+    "display_name": "Idealistic",
+    "description": "Strong belief in a cause. High loyalty but brittle when ideals are compromised.",
+    "category": "Ideological",
+    "valence": "Neutral",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.cynical"],
+    "effects": [
+      { "target": "LoyaltyModifier", "magnitude": 0.2 },
+      { "target": "HostilityModifier", "magnitude": 0.1 }
+    ]
+  },
+  {
+    "id": "trait.cynical",
+    "display_name": "Cynical",
+    "description": "Disillusionment with institutions. Lower loyalty but resistant to manipulation.",
+    "category": "Ideological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.02,
+    "requires_event_to_remove": false,
+    "conflicting_trait_ids": ["trait.idealistic"],
+    "effects": [
+      { "target": "LoyaltyModifier", "magnitude": -0.2 },
+      { "target": "SocialModifier", "magnitude": -0.1 }
+    ]
+  }
+]
