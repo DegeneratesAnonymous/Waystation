@@ -71,6 +71,8 @@ A sci-fi space station management game in early development. You command a front
 | **RelationshipRegistry** | Pairwise NPC affinity scores (None → Acquaintance → Friend → Lover → Spouse); slow decay after 7-day inactivity; affinity thresholds trigger relationship-type changes |
 | **ConversationSystem** | Idle co-module NPCs autonomously converse; outcome probability weighted by current relationship type; updates affinity and pushes mood modifiers on both participants |
 | **ProximitySystem** | Friends sharing a module receive a passive mood boost each tick; enemies share a mood penalty; modifier expires naturally after NPCs separate |
+| **TraitSystem** | NPC trait acquisition, conflict resolution, and decay; positive and negative traits apply passive modifiers to skill XP, work speed, and mood; wired to trait pools for condition-based assignment |
+| **FactionGovernmentSystem** | Faction leader resolution per NPC; succession candidate pooling; pirate-region government aggregation (partial — full succession and pirate mechanics deferred) |
 
 ---
 
@@ -78,12 +80,10 @@ A sci-fi space station management game in early development. You command a front
 
 | Faction | Profile |
 |---|---|
-| **Imperial Remnant** | Sends inspectors; demands compliance; hostile to refugees |
-| **Merchant League** | Primary trade partner; sends freighters and traders |
-| **Raider Clans** | Sends hostiles at low standing; can be appeased or opposed |
-| **Archive Order** | Sends scientists; values knowledge and rare items |
-| **Refugee Fleets** | Sends colony ships seeking asylum; costs food but grants rep |
-| **Frontier Collective** | Independent frontier allies; balanced relationship |
+| **Stellar Authority** | The dominant interstellar governing body. Bureaucratic and militaristic — sends inspectors, demands compliance, patrols borders |
+| **Free Traders Guild** | Loose coalition of independent merchants. Primary trade partner; always willing to deal regardless of politics |
+| **Scavenger Clans** | Nomadic salvagers and opportunists. Raid weak stations at low standing; useful allies when kept friendly |
+| **Refugee Network** | Displaced civilians seeking safety. Grateful for shelter, but desperate and dangerous when ignored |
 
 ---
 
@@ -97,14 +97,19 @@ data/
 ├── classes/       # NPC class attribute and skill ranges
 ├── crops/         # Crop definitions (growth stages, light/temperature requirements, yield)
 ├── events/        # Event definitions (faction, arrival, incident, crisis)
+├── expertise/     # NPC expertise and specialisation pools (skill-gated passive bonuses and capability unlocks)
 ├── factions/      # Faction definitions, diplomacy profiles, behavior tags
 ├── items/         # Tradeable items (weapons, food, medicine, contraband, …)
 ├── jobs/          # Job definitions with resource and need effects
+├── missions/      # Away-mission templates (mining runs, trade routes, patrol circuits)
 ├── modules/       # Station module types with resource effects and capacity
 ├── npcs/          # NPC class templates (skills, traits, starting equipment)
 ├── research/      # Research node definitions (branch, prerequisites, cost, unlock tags)
 ├── rooms/         # Room type definitions (workbench bonuses, greenhouse climate rules)
-└── ships/         # Ship templates (role, cargo, threat level)
+├── ships/         # Ship templates (role, cargo, threat level)
+├── skills/        # NPC skill definitions (id, display name, governing attribute)
+├── trait_pools/   # Trait pool definitions controlling condition-based trait acquisition
+└── traits/        # NPC trait definitions (positive/negative status effects and modifiers)
 ```
 
 The **ContentRegistry** loads all JSON files at startup and indexes every definition by ID. **Templates** (static, read-only) are cleanly separated from **Instances** (runtime, mutable, JSON-serializable), enabling a full save/load system.
