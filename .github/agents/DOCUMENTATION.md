@@ -18,6 +18,7 @@ Your sole responsibility is to ensure that all human-facing documentation is acc
    - Project structure overview
    - Contributing guidelines
    - License
+   - The Current Stubbs needing completed
 
 2. **`docs/` directory** — Update any planning, architecture, or workflow documents that are affected by the change. This includes:
    - `docs/DEV_WORKFLOW.md` (if the agent workflow changes)
