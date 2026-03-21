@@ -189,7 +189,12 @@ namespace Waystation.Systems
                     conflictFound = true;
                 }
             }
-            if (conflictFound) return;
+            if (conflictFound)
+            {
+                // Traits were removed due to conflict; recompute effects to avoid stale modifiers.
+                ApplyTraitEffects(npc);
+                return;
+            }
 
             // No conflict — add the trait
             profile.traits.Add(new ActiveTrait
@@ -215,10 +220,18 @@ namespace Waystation.Systems
                 if (def.requiresEventToRemove) continue;      // exempt from passive decay
                 if (def.decayRatePerDay <= 0f) continue;      // no passive decay configured
 
+                float oldStrength = active.strength;
                 active.strength -= def.decayRatePerDay;
+                if (active.strength < 0f) active.strength = 0f;
+
                 if (active.strength <= 0f)
                 {
                     profile.traits.RemoveAt(i);
+                    effectsDirty = true;
+                }
+                else if (!Mathf.Approximately(oldStrength, active.strength))
+                {
+                    // Strength changed but trait still active — effects must be recomputed.
                     effectsDirty = true;
                 }
             }
@@ -274,8 +287,17 @@ namespace Waystation.Systems
                         case TraitEffectTarget.WorkSpeedModifier:
                             workSpeedDelta += effect.magnitude * scale;
                             break;
-                        // MoodModifier effects are applied via MoodSystem.PushModifier when traits change.
-                        // Other targets reserved for future systems.
+                        case TraitEffectTarget.MoodModifier:
+                            // Intentionally not applied here: MoodSystem observes trait changes
+                            // and applies mood modifiers via MoodSystem.PushModifier.
+                            break;
+                        default:
+                            // Surface unsupported effect targets so data in core_traits.json
+                            // does not silently do nothing.
+                            Debug.LogWarning(
+                                $"[TraitSystem] Unsupported TraitEffectTarget '{effect.target}' " +
+                                $"on trait '{def.traitId}' for NPC '{npc.name}'. Effect ignored.");
+                            break;
                     }
                 }
             }

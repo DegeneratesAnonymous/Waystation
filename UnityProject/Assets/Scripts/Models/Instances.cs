@@ -519,6 +519,11 @@ namespace Waystation.Models
         // Evaluated by TraitSystem.ApplyTraitEffects() after any trait change.
         public float traitWorkModifier = 1.0f;
 
+        // Multiplicative work speed modifier applied by tension stage (default 1.0).
+        // Set to WorkSlowdownModifier at WorkSlowdown/DepartureRisk; reset to 1.0 at Normal/Disgruntled.
+        // Stacks multiplicatively with traitWorkModifier and workModifier.
+        public float tensionWorkModifier = 1.0f;
+
         /// <summary>Returns the trait profile, initialising it lazily if needed.</summary>
         public NpcTraitProfile GetOrCreateTraitProfile()
         {

@@ -93,12 +93,19 @@ namespace Waystation.Systems
             var weights = ComputeCategoryWeights(region.resourceHistory);
             if (weights.Count == 0) return null;
 
-            float maxPressure = 0f;
+            // Find the maximum category weight (>= 1.0 multiplier)
+            float maxWeight = 0f;
             foreach (var w in weights.Values)
-                if (w > maxPressure) maxPressure = w;
+                if (w > maxWeight) maxWeight = w;
 
-            // Not all NPCs acquire biased traits — probability scales with pressure
-            float acquisitionProbability = BaseAcquisitionProbability * maxPressure;
+            // Derive a normalized 0–1 pressure value from the weight range [1, MaxBiasMultiplier].
+            float normalizedPressure = 0f;
+            if (MaxBiasMultiplier > 1.0f && maxWeight > 1.0f)
+                normalizedPressure = (maxWeight - 1.0f) / (MaxBiasMultiplier - 1.0f);
+            normalizedPressure = Mathf.Clamp01(normalizedPressure);
+
+            // Not all NPCs acquire biased traits — probability scales with normalized pressure
+            float acquisitionProbability = Mathf.Clamp01(BaseAcquisitionProbability * normalizedPressure);
             if (UnityEngine.Random.value > acquisitionProbability) return null;
 
             // Select the highest-weighted category and perform an initial trait roll

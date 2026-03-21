@@ -353,6 +353,8 @@ namespace Waystation.Systems
                         faction, station.npcs, _traits, allFactions, station.tick);
                     if (aggregate != null)
                         station.factionAggregates[kv.Key] = aggregate;
+                    else
+                        station.factionAggregates.Remove(kv.Key);
                 }
             }
         }

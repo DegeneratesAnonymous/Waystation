@@ -123,12 +123,22 @@ namespace Waystation.Systems
         private static bool TraitConflictsWithAction(NpcTraitDefinition trait,
                                                       PlayerActionType actionType)
         {
-            // Negative traits amplify tension from harmful actions;
-            // Positive traits amplify tension reduction from positive actions.
-            return trait.valence == TraitValence.Negative &&
-                   (actionType == PlayerActionType.ForcedOvertime  ||
-                    actionType == PlayerActionType.Micromanage      ||
-                    actionType == PlayerActionType.ResourceRestriction);
+            bool isHarmfulAction = actionType == PlayerActionType.ForcedOvertime  ||
+                                   actionType == PlayerActionType.Micromanage      ||
+                                   actionType == PlayerActionType.ResourceRestriction;
+
+            bool isPositiveAction = actionType == PlayerActionType.SocialInteraction ||
+                                    actionType == PlayerActionType.ResourceProvisioning;
+
+            // Negative traits amplify tension from harmful actions.
+            if (isHarmfulAction && trait.valence == TraitValence.Negative)
+                return true;
+
+            // Positive/neutral traits amplify tension reduction from positive actions.
+            if (isPositiveAction && trait.valence != TraitValence.Negative)
+                return true;
+
+            return false;
         }
 
         // ── Passive decay ─────────────────────────────────────────────────────
@@ -178,16 +188,20 @@ namespace Waystation.Systems
                     // Mood penalty applied daily
                     _mood?.PushModifier(npc, "tension_disgruntled", -5f,
                                         TimeSystem.TicksPerDay, station.tick, "tension");
+                    npc.tensionWorkModifier = 1.0f;   // no work penalty yet
                     break;
 
                 case TensionStage.WorkSlowdown:
                     _mood?.PushModifier(npc, "tension_slowdown", -10f,
                                         TimeSystem.TicksPerDay, station.tick, "tension");
+                    // Apply configured work speed penalty
+                    npc.tensionWorkModifier = WorkSlowdownModifier;
                     break;
 
                 case TensionStage.DepartureRisk:
                     _mood?.PushModifier(npc, "tension_departure_risk", -15f,
                                         TimeSystem.TicksPerDay, station.tick, "tension");
+                    npc.tensionWorkModifier = WorkSlowdownModifier;   // same penalty as WorkSlowdown
                     // Evaluate departure attempt
                     if (UnityEngine.Random.value < DepartureAttemptChancePerDay)
                     {
@@ -199,6 +213,7 @@ namespace Waystation.Systems
 
                 case TensionStage.Normal:
                 default:
+                    npc.tensionWorkModifier = 1.0f;
                     break;
             }
         }
