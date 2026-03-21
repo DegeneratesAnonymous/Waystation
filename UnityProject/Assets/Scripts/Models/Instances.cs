@@ -1463,6 +1463,11 @@ namespace Waystation.Models
         // Hail cooldowns per ship uid (player must wait before re-hailing)
         public List<HailCooldownRecord>   hailCooldowns  = new List<HailCooldownRecord>();
 
+        // ── Player faction branding ──────────────────────────────────────────
+        // Hex colour strings used for faction-owned sector borders on the galaxy map.
+        public string playerFactionColor          = "#FFD700";
+        public string playerFactionColorSecondary = "#0D2540";
+
         // ── Region Simulation state ──────────────────────────────────────────
         // Region data keyed by regionId. Stub — populated by Horizon Simulation work order.
         public Dictionary<string, RegionData> regions = new Dictionary<string, RegionData>();

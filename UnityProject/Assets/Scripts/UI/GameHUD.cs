@@ -1449,7 +1449,7 @@ namespace Waystation.UI
             GUI.EndScrollView();
         }
 
-
+        private void DrawFoundationRow(FoundationInstance f, float cw, ref float y, StationState s)
         {
             bool   hasDefn     = _gm.Registry.Buildables.TryGetValue(f.buildableId, out var fDefn);
             string fname       = hasDefn ? fDefn.displayName : f.buildableId;
@@ -2129,8 +2129,8 @@ namespace Waystation.UI
                         if (newHex != _deptPickerHexInput)
                         {
                             _deptPickerHexInput = newHex;
-                            if (ColorUtility.TryParseHtmlString(newHex, out Color hc))
-                                Color.RGBToHSV(hc, out _deptPickerH, out _deptPickerS, out _deptPickerV);
+                            if (ColorUtility.TryParseHtmlString(newHex, out Color parsedHc))
+                                Color.RGBToHSV(parsedHc, out _deptPickerH, out _deptPickerS, out _deptPickerV);
                         }
                         else
                         {
