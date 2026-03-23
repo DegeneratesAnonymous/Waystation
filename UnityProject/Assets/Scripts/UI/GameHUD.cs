@@ -76,7 +76,8 @@ namespace Waystation.UI
 
         // ── Sub-drawer panel enum ─────────────────────────────────────────────
         // Which content to show in the secondary slide-out detail panel.
-        private enum SubPanel { None, CrewDetail, HoldSettings, ResearchDetail, ModuleDetail, StationSettings }
+        private enum SubPanel { None, CrewDetail, HoldSettings, ResearchDetail, ModuleDetail, StationSettings,
+                                  StationBuild, StationRooms, StationCrew, StationComms }
 
         private static readonly (Tab tab, string label)[] Tabs =
         {
@@ -165,6 +166,10 @@ namespace Waystation.UI
 
         // ── Relationships sub-panel state ─────────────────────────────────────
         private Vector2 _relScroll;
+
+        // ── Placement auto-collapse / restore state ────────────────────────
+        private Tab      _prePlacementTab = Tab.None;
+        private SubPanel _prePlacementSub = SubPanel.None;
 
         // ── Station panel sub-tab / header state ──────────────────────────────
         private bool   _stationNameEditing  = false;
@@ -344,6 +349,27 @@ namespace Waystation.UI
                 _isDragging = false;
                 _dragLine.Clear();
                 _dragBlocked.Clear();
+                // Restore drawers that were open before placement started
+                if (_prePlacementTab != Tab.None)
+                {
+                    _active          = _prePlacementTab;
+                    _prePlacementTab = Tab.None;
+                }
+                if (_prePlacementSub != SubPanel.None)
+                {
+                    SubPanel restoreSub  = _prePlacementSub;
+                    _prePlacementSub     = SubPanel.None;
+                    OpenSub(restoreSub, "");
+                    // Restore the sub-tab visual selection
+                    _stationSub = restoreSub switch
+                    {
+                        SubPanel.StationBuild => StationSubTab.Build,
+                        SubPanel.StationRooms => StationSubTab.Rooms,
+                        SubPanel.StationCrew  => StationSubTab.Crew,
+                        SubPanel.StationComms => StationSubTab.Comms,
+                        _                     => StationSubTab.Overview,
+                    };
+                }
                 return;
             }
 
@@ -747,6 +773,10 @@ namespace Waystation.UI
                 SubPanel.ResearchDetail  => "Research Node",
                 SubPanel.ModuleDetail    => "Module Detail",
                 SubPanel.StationSettings => "Station Settings",
+                SubPanel.StationBuild    => "Build",
+                SubPanel.StationRooms    => "Rooms",
+                SubPanel.StationCrew     => "Crew",
+                SubPanel.StationComms    => _gm?.Station != null && HasUnreadComms(_gm.Station) ? "Comms \u25cf" : "Comms",
                 _                        => "",
             };
 
@@ -798,6 +828,22 @@ namespace Waystation.UI
 
                 case SubPanel.StationSettings:
                     GUI.Label(area, "Station settings placeholder.", _sSub);
+                    break;
+
+                case SubPanel.StationBuild:
+                    DrawStationBuild(area, cw, contentH);
+                    break;
+
+                case SubPanel.StationRooms:
+                    DrawStationRooms(area, cw, contentH);
+                    break;
+
+                case SubPanel.StationCrew:
+                    DrawCrew(area, cw, contentH);
+                    break;
+
+                case SubPanel.StationComms:
+                    DrawComms(area, cw, contentH);
                     break;
             }
         }
@@ -1848,9 +1894,13 @@ namespace Waystation.UI
 
             if (GUI.Button(tile, "", GUIStyle.none) && canPlace)
             {
-                _ghostBuildableId = defn.id;
-                _ghostRotation    = 0;
-                _active           = Tab.None;
+                _ghostBuildableId    = defn.id;
+                _ghostRotation       = 0;
+                // Save and collapse drawers so the station grid is unobstructed
+                _prePlacementTab     = _active;
+                _prePlacementSub     = _subActive;
+                _active              = Tab.None;
+                CloseSub();
             }
         }
 
@@ -3749,7 +3799,47 @@ namespace Waystation.UI
                 }
                 if (GUI.Button(new Rect(tx2, tabBarY, stTabW, TabH2 - 1f),
                                stTabs[ti].lbl, on ? _sTabOn : _sTabOff))
-                    _stationSub = stTabs[ti].tab;
+                {
+                    SubPanel sp = stTabs[ti].tab switch
+                    {
+                        StationSubTab.Build  => SubPanel.StationBuild,
+                        StationSubTab.Rooms  => SubPanel.StationRooms,
+                        StationSubTab.Crew   => SubPanel.StationCrew,
+                        StationSubTab.Comms  => SubPanel.StationComms,
+                        _                    => SubPanel.None,
+                    };
+                    if (sp == SubPanel.None) // Overview — close any open station sub-drawer
+                    {
+                        _stationSub = StationSubTab.Overview;
+                        if (_subActive == SubPanel.StationBuild || _subActive == SubPanel.StationRooms ||
+                            _subActive == SubPanel.StationCrew  || _subActive == SubPanel.StationComms)
+                            CloseSub();
+                    }
+                    else if (_subActive == sp) // toggle off
+                    {
+                        CloseSub();
+                        _stationSub = StationSubTab.Overview;
+                    }
+                    else
+                    {
+                        _stationSub = stTabs[ti].tab;
+                        OpenSub(sp, "");
+                    }
+                }
+            }
+
+            // Sync: if sub-drawer was closed externally (e.g. × button), revert visual selection
+            {
+                SubPanel expectedSub = _stationSub switch
+                {
+                    StationSubTab.Build  => SubPanel.StationBuild,
+                    StationSubTab.Rooms  => SubPanel.StationRooms,
+                    StationSubTab.Crew   => SubPanel.StationCrew,
+                    StationSubTab.Comms  => SubPanel.StationComms,
+                    _                    => SubPanel.None,
+                };
+                if (_stationSub != StationSubTab.Overview && _subActive != expectedSub)
+                    _stationSub = StationSubTab.Overview;
             }
 
             // ═══ CONTENT AREA ════════════════════════════════════════════════
@@ -3757,14 +3847,8 @@ namespace Waystation.UI
             float bodyH = h - HdrH - TabH2;
             Rect  body  = new Rect(area.x, bodyY, w, bodyH);
 
-            switch (_stationSub)
-            {
-                case StationSubTab.Overview: DrawStationOverview(body, w, bodyH); break;
-                case StationSubTab.Build:    DrawStationBuild(body, w, bodyH);    break;
-                case StationSubTab.Rooms:    DrawStationRooms(body, w, bodyH);    break;
-                case StationSubTab.Crew:     DrawCrew(body, w, bodyH);            break;
-                case StationSubTab.Comms:    DrawComms(body, w, bodyH);           break;
-            }
+            // Overview content is always shown; Build/Rooms/Crew/Comms render in sub-drawers
+            DrawStationOverview(body, w, bodyH);
         }
 
         private bool HasUnreadComms(StationState s)
@@ -4148,7 +4232,7 @@ namespace Waystation.UI
             }
 
             bool showPopup = !string.IsNullOrEmpty(_stationRoomHoverKey)
-                             && (Time.realtimeSinceStartup - _stationRoomHoverTime) >= 0.2f;
+                             && (Time.realtimeSinceStartup - _stationRoomHoverTime) >= 2.0f;
             if (showPopup && s.roomBonusCache.Count > 0)
             {
                 // Collect requirements for this room
