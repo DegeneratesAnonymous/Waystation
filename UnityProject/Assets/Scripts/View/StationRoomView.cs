@@ -1588,6 +1588,8 @@ namespace Waystation.View
         private void OnGUI()
         {
             if (!_ready || Camera.main == null) return;
+            // Suppress all world-space labels while the map overlay is open.
+            if (Waystation.UI.SystemMapController.IsOpen) return;
 
             // Lazy-initialise once so we don't allocate a new GUIStyle each frame.
             if (_labelStyle == null)

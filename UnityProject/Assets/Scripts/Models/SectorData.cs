@@ -179,6 +179,14 @@ namespace Waystation.Models
             return $"{codes} {CoordString()} \"{properName}\"";
         }
 
+        /// <summary>Short codes + coordinate without proper name: NB·OR 22.51</summary>
+        public string ShortCodeAndCoord()
+        {
+            int dash = designationCode.IndexOf('-');
+            string codes = dash >= 0 ? designationCode[(dash + 1)..] : designationCode;
+            return $"{codes} {CoordString()}";
+        }
+
         /// <summary>Minimal format: 22.51 "The Cradle"</summary>
         public string MinimalDesignation()
         {

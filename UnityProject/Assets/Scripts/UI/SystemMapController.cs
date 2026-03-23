@@ -191,12 +191,10 @@ namespace Waystation.UI
         {
             if (!IsOpen) return;
 
-            // ESC: drill up one layer at a time: System → Sector → Galaxy → Close.
+            // ESC: close the map immediately regardless of layer.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                if      (_layer == MapLayer.System) SwitchLayer(MapLayer.Sector);
-                else if (_layer == MapLayer.Sector) SwitchLayer(MapLayer.Galaxy);
-                else                                Close();
+                Close();
                 return;
             }
 
@@ -482,6 +480,7 @@ namespace Waystation.UI
         {
             if (detailPanel == null || sectors.Count == 0) return;
             detailPanel.SetActive(true);
+            if (_sectorSystemsSection != null) _sectorSystemsSection.SetActive(false);
 
             if (detailNameLabel != null)
                 detailNameLabel.text = $"{sectors.Count} Sectors Selected";
@@ -686,11 +685,14 @@ namespace Waystation.UI
         {
             if (detailPanel == null) return;
             detailPanel.SetActive(true);
+            if (_sectorSystemsSection != null) _sectorSystemsSection.SetActive(false);
 
             if (detailNameLabel    != null)
                 detailNameLabel.text    = body.name;
             if (detailTypeLabel    != null)
-                detailTypeLabel.text    = BodyTypeLabel(body.bodyType);
+                detailTypeLabel.text    = body.planetClass != PlanetClass.None
+                    ? $"{BodyTypeLabel(body.bodyType)}\n{PlanetClassLabel(body.planetClass)}"
+                    : BodyTypeLabel(body.bodyType);
             if (detailTagsLabel    != null)
                 detailTagsLabel.text    = body.tags.Count > 0
                     ? string.Join(" · ", body.tags)
@@ -1052,8 +1054,8 @@ namespace Waystation.UI
             // ── Click handler ─────────────────────────────────────────────────
             // Designation / name footer (dim at rest, revealed on hover)
             string footerLine = string.IsNullOrEmpty(sector.properName)
-                ? sector.ShortDesignation()
-                : $"{sector.properName}  \u00b7  {sector.ShortDesignation()}";
+                ? sector.ShortCodeAndCoord()
+                : $"{sector.properName}\n<size=6.5><color=#7799bb>{sector.ShortCodeAndCoord()}</color></size>";
             var footGo = new GameObject("SectorFooter",
                 typeof(RectTransform), typeof(TextMeshProUGUI));
             footGo.transform.SetParent(fillRt, false);
@@ -1061,7 +1063,7 @@ namespace Waystation.UI
             footRt.anchorMin        = new Vector2(0f, 0f);
             footRt.anchorMax        = new Vector2(1f, 0f);
             footRt.pivot            = new Vector2(0.5f, 0f);
-            footRt.sizeDelta        = new Vector2(0f, 28f);
+            footRt.sizeDelta        = new Vector2(0f, 36f);
             footRt.anchoredPosition = new Vector2(0f, 2f);
             var footTxt = footGo.GetComponent<TMP_Text>();
             footTxt.text          = footerLine;
@@ -1337,6 +1339,13 @@ namespace Waystation.UI
                 bool allowDblClick = TelescopeMode ||
                                      sector.discoveryState != SectorDiscoveryState.Uncharted;
                 img.raycastTarget = allowDblClick;
+
+                // Deterministic star name for this dot — used in the hover tooltip.
+                string dotStarName = (isHome && i == 0)
+                    ? (_sys?.starName ?? "")
+                    : SolarSystemGenerator.GetStarNameForSeed(
+                        SolarSystemGenerator.StableHash(sector.uid + $"_sys_{i}"));
+
                 if (allowDblClick)
                 {
                     // Use Transition.None so the Button never modifies the dot's color.
@@ -1373,10 +1382,24 @@ namespace Waystation.UI
 
                     var trig      = dotGo.AddComponent<EventTrigger>();
                     var captHvr   = hoverRingGo;
+                    var captName  = dotStarName;
                     var enterEvt  = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
                     var exitEvt   = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
-                    enterEvt.callback.AddListener(_ => captHvr.SetActive(true));
-                    exitEvt.callback.AddListener(_ =>  captHvr.SetActive(false));
+                    enterEvt.callback.AddListener(_ =>
+                    {
+                        captHvr.SetActive(true);
+                        if (_mapHoverLabel != null)
+                        {
+                            _mapHoverLabel.text = captName;
+                            _mapHoverLabel.gameObject.SetActive(true);
+                        }
+                    });
+                    exitEvt.callback.AddListener(_ =>
+                    {
+                        captHvr.SetActive(false);
+                        if (_mapHoverLabel != null)
+                            _mapHoverLabel.gameObject.SetActive(false);
+                    });
                     trig.triggers.Add(enterEvt);
                     trig.triggers.Add(exitEvt);
                 }
@@ -1591,7 +1614,7 @@ namespace Waystation.UI
                         detailTypeLabel.text = "Uncharted — extend Antenna range to detect.";
                         break;
                     default:
-                        detailTypeLabel.text = sector.FullDesignation();
+                        detailTypeLabel.text = sector.CodeOnlyDesignation();
                         break;
                 }
             }
@@ -1607,7 +1630,16 @@ namespace Waystation.UI
                     var phenomParts = new System.Collections.Generic.List<string>();
                     foreach (var code in sector.phenomenonCodes)
                         phenomParts.Add(PhenomenonCodeLabel(code));
-                    detailTagsLabel.text = string.Join(" · ", phenomParts);
+                    string densityStr = sector.systemDensity switch
+                    {
+                        SystemDensity.Sparse   => "3–6 systems (Sparse)",
+                        SystemDensity.Low      => "7–10 systems (Low)",
+                        SystemDensity.Standard => "11–15 systems (Standard)",
+                        SystemDensity.High     => "16–20 systems (High)",
+                        _                      => "",
+                    };
+                    detailTagsLabel.text = string.Join(" · ", phenomParts)
+                        + (densityStr.Length > 0 ? $"\n{densityStr}" : "");
                 }
             }
 
@@ -1639,6 +1671,13 @@ namespace Waystation.UI
             // Show "(renamed)" indicator via the _sectorRenamedLabel if available.
             if (_sectorRenamedLabel != null)
                 _sectorRenamedLabel.gameObject.SetActive(sector.isRenamed);
+
+            // Populate systems scroll list for known sectors.
+            bool canShowSystems = sector.discoveryState != SectorDiscoveryState.Uncharted;
+            if (_sectorSystemsSection != null)
+                _sectorSystemsSection.SetActive(canShowSystems);
+            if (canShowSystems)
+                PopulateSectorSystemsList(sector);
         }
 
         private static string PhenomenonCodeLabel(PhenomenonCode code) => code switch
@@ -1671,7 +1710,119 @@ namespace Waystation.UI
             else if (_layer == MapLayer.Galaxy) RefreshGalaxyChunks();
         }
 
-        // ── Explore dot factory ───────────────────────────────────────────────
+        // ── Sector systems list ───────────────────────────────────────────────
+
+        private void PopulateSectorSystemsList(SectorData sector)
+        {
+            if (_sectorSystemsList == null) return;
+
+            // Remove old entries.
+            foreach (Transform child in _sectorSystemsList)
+                Destroy(child.gameObject);
+
+            bool isHomeSector =
+                Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+
+            var systems = SolarSystemGenerator.GenerateSectorSystems(sector, isHomeSector, _sys);
+
+            for (int idx = 0; idx < systems.Count; idx++)
+            {
+                var sys         = systems[idx];
+                bool isThisHome = isHomeSector && idx == 0;
+
+                // Row background
+                var rowGo = new GameObject($"SysRow_{idx}", typeof(RectTransform), typeof(Image));
+                rowGo.transform.SetParent(_sectorSystemsList, false);
+                rowGo.GetComponent<Image>().color = new Color(0.10f, 0.13f, 0.20f, 0.80f);
+                var le = rowGo.AddComponent<LayoutElement>();
+                le.preferredHeight = 26f;
+                le.minHeight       = 26f;
+
+                // Star colour dot
+                var dotGo = new GameObject("StarDot", typeof(RectTransform), typeof(Image));
+                dotGo.transform.SetParent(rowGo.transform, false);
+                var dotRt = dotGo.GetComponent<RectTransform>();
+                dotRt.anchorMin        = new Vector2(0f, 0.5f);
+                dotRt.anchorMax        = new Vector2(0f, 0.5f);
+                dotRt.pivot            = new Vector2(0.5f, 0.5f);
+                dotRt.sizeDelta        = new Vector2(8f, 8f);
+                dotRt.anchoredPosition = new Vector2(14f, 0f);
+                var dotImg = dotGo.GetComponent<Image>();
+                dotImg.color  = ParseColor(sys.starColorHex);
+                dotImg.sprite = GetCircleSprite();
+
+                // System name + star type
+                var lblGo = new GameObject("SysLbl", typeof(RectTransform), typeof(TextMeshProUGUI));
+                lblGo.transform.SetParent(rowGo.transform, false);
+                var lblRt = lblGo.GetComponent<RectTransform>();
+                lblRt.anchorMin = new Vector2(0f, 0f);
+                lblRt.anchorMax = new Vector2(1f, 1f);
+                lblRt.offsetMin = new Vector2(26f, 0f);
+                lblRt.offsetMax = new Vector2(-62f, 0f);
+                var lbl = lblGo.GetComponent<TMP_Text>();
+                lbl.text         = sys.systemName + (isThisHome ? "  \u2605" : "");
+                lbl.fontSize     = 11f;
+                lbl.alignment    = TextAlignmentOptions.Left;
+                lbl.color        = new Color(0.82f, 0.90f, 1.00f);
+                lbl.overflowMode = TextOverflowModes.Ellipsis;
+                lbl.raycastTarget = false;
+
+                // View button
+                var btnGo = new GameObject("ViewBtn", typeof(RectTransform), typeof(Image));
+                btnGo.transform.SetParent(rowGo.transform, false);
+                var btnRt = btnGo.GetComponent<RectTransform>();
+                btnRt.anchorMin        = new Vector2(1f, 0.5f);
+                btnRt.anchorMax        = new Vector2(1f, 0.5f);
+                btnRt.pivot            = new Vector2(1f, 0.5f);
+                btnRt.sizeDelta        = new Vector2(54f, 20f);
+                btnRt.anchoredPosition = new Vector2(-4f, 0f);
+                btnGo.GetComponent<Image>().color = new Color(0.14f, 0.36f, 0.65f, 0.90f);
+
+                var btnLblGo = new GameObject("Lbl", typeof(RectTransform), typeof(TextMeshProUGUI));
+                btnLblGo.transform.SetParent(btnGo.transform, false);
+                var btnLblRt = btnLblGo.GetComponent<RectTransform>();
+                btnLblRt.anchorMin = Vector2.zero;
+                btnLblRt.anchorMax = Vector2.one;
+                btnLblRt.offsetMin = Vector2.zero;
+                btnLblRt.offsetMax = Vector2.zero;
+                var btnLbl = btnLblGo.GetComponent<TMP_Text>();
+                btnLbl.text      = "View \u2192";
+                btnLbl.fontSize  = 9f;
+                btnLbl.alignment = TextAlignmentOptions.Center;
+                btnLbl.color     = new Color(0.85f, 0.92f, 1f);
+                btnLbl.raycastTarget = false;
+
+                var btn       = btnGo.AddComponent<Button>();
+                var capSys    = sys;
+                var capIsHome = isThisHome;
+                btn.onClick.AddListener(() => OpenSystemFromSector(capSys, capIsHome));
+            }
+
+            // Reset scroll to top
+            if (_sectorSystemsScrollRect != null)
+                _sectorSystemsScrollRect.verticalNormalizedPosition = 1f;
+        }
+
+        private void OpenSystemFromSector(NeighborSystem sys, bool isHome)
+        {
+            _viewedSystem = isHome && _sys != null
+                ? _sys
+                : SolarSystemGenerator.Generate(sys.systemName, sys.seed);
+            SwitchLayer(MapLayer.System);
+
+            // SwitchLayer hides the detail panel — re-show it with system summary.
+            if (detailPanel == null) return;
+            detailPanel.SetActive(true);
+            if (_sectorSystemsSection != null) _sectorSystemsSection.SetActive(false);
+            if (detailNameLabel    != null) detailNameLabel.text    = sys.systemName;
+            if (detailTypeLabel    != null) detailTypeLabel.text    = StarTypeLabel(sys.starType)
+                + $"\n{_viewedSystem.bodies.Count} bod{(_viewedSystem.bodies.Count != 1 ? "ies" : "y")} \u00b7 click a body for details";
+            if (detailTagsLabel    != null) detailTagsLabel.text    = isHome ? "Your station orbits here" : "";
+            if (detailMoonsLabel   != null) detailMoonsLabel.text   = "";
+            if (detailStationLabel != null) detailStationLabel.text = "";
+            if (_detailViewBtn     != null) _detailViewBtn.gameObject.SetActive(false);
+        }
 
         private void CreateExploreDot(RectTransform parent, Vector2 pos, float diameter,
             Color col, SolarSystemState sysState = null,
@@ -1722,6 +1873,7 @@ namespace Waystation.UI
         {
             if (detailPanel == null) return;
             detailPanel.SetActive(true);
+            if (_sectorSystemsSection != null) _sectorSystemsSection.SetActive(false);
             if (detailNameLabel    != null) detailNameLabel.text    = n.systemName;
             if (detailTypeLabel    != null) detailTypeLabel.text    = StarTypeLabel(n.starType);
             if (detailTagsLabel    != null) detailTagsLabel.text    = $"{n.positionLY.magnitude:F0} LY from home";
@@ -1740,6 +1892,7 @@ namespace Waystation.UI
         {
             if (detailPanel == null) return;
             detailPanel.SetActive(true);
+            if (_sectorSystemsSection != null) _sectorSystemsSection.SetActive(false);
             if (detailNameLabel    != null) detailNameLabel.text    = s.systemName + "  (Home)";
             if (detailTypeLabel    != null) detailTypeLabel.text    = StarTypeLabel(s.starType);
             if (detailTagsLabel    != null) detailTagsLabel.text    = "Your station is here";
@@ -1753,7 +1906,12 @@ namespace Waystation.UI
         }
 
         // The detail panel has a button slot at the bottom — wire it once via a stored ref
-        private Button _detailViewBtn;
+        private Button        _detailViewBtn;
+        // Sector systems scroll section (right panel, shown when a sector is selected)
+        private RectTransform _sectorSystemsList;
+        private GameObject    _sectorSystemsSection;
+        private ScrollRect    _sectorSystemsScrollRect;
+        private TMP_Text      _mapHoverLabel;           // shown at map bottom on dot hover
         private void SetDetailViewButton(UnityEngine.Events.UnityAction action)
         {
             if (_detailViewBtn == null) return;
@@ -1896,6 +2054,31 @@ namespace Waystation.UI
             BodyType.IcePlanet    => "Ice Planet",
             BodyType.AsteroidBelt => "Asteroid Belt",
             _                     => t.ToString(),
+        };
+
+        private static string PlanetClassLabel(PlanetClass cls) => cls switch
+        {
+            PlanetClass.T1_BarrenRock    => "Barren Rock",
+            PlanetClass.T2_Volcanic      => "Volcanic",
+            PlanetClass.T3_Desert        => "Desert World",
+            PlanetClass.T4_Tectonic      => "Tectonic World",
+            PlanetClass.T5_Oceanic       => "Oceanic World",
+            PlanetClass.T6_Terran        => "Terran World",
+            PlanetClass.T7_Frozen        => "Frozen World",
+            PlanetClass.G1_AmmoniaCloud  => "Ammonia Cloud (Class I)",
+            PlanetClass.G2_WaterCloud    => "Water Cloud (Class II)",
+            PlanetClass.G3_Cloudless     => "Cloudless (Class III)",
+            PlanetClass.G4_AlkaliMetal   => "Alkali Metal (Class IV)",
+            PlanetClass.G5_SilicateCloud => "Silicate Cloud (Class V)",
+            PlanetClass.I1_IceDwarf      => "Ice Dwarf",
+            PlanetClass.I2_CryogenicMoon => "Cryogenic Body",
+            PlanetClass.I3_CometaryBody  => "Cometary Body",
+            PlanetClass.E1_Chthonian     => "Chthonian (Exotic)",
+            PlanetClass.E2_CarbonPlanet  => "Carbon Planet (Exotic)",
+            PlanetClass.E3_IronPlanet    => "Iron Planet (Exotic)",
+            PlanetClass.E4_HeliumPlanet  => "Helium Planet (Exotic)",
+            PlanetClass.E5_RogueBody     => "Rogue Body (Exotic)",
+            _                            => cls.ToString(),
         };
 
         private static string StarTypeLabel(StarType t) => t switch
@@ -2046,11 +2229,12 @@ namespace Waystation.UI
             SetupTab(ref _tabSectorBtn, ref _tabSectorLbl, headerRt, "◈  Sector", 0.25f, 0.50f, MapLayer.Sector);
             // Galaxy tab removed — sector layer now serves as the surrounding-sectors view.
 
-            //   Context label (centre 40 %)
+            //   Context label (spans from 50 % to 90 % of header width)
             {
-                var rt = MakeLabel(headerRt, "ContextLabel", 12f,
+                var rt = MakeLabel(headerRt, "ContextLabel", 10f,
                     TextAlignmentOptions.Center, new Color(0.72f, 0.82f, 1.00f));
-                Stretch(rt.rectTransform, 0.50f, 0f, 0.84f, 1f, 8f, 0f, -8f, 0f);
+                Stretch(rt.rectTransform, 0.50f, 0f, 0.90f, 1f, 8f, 0f, -8f, 0f);
+                rt.overflowMode = TextOverflowModes.Ellipsis;
                 _contextLabel = rt;
             }
 
@@ -2094,6 +2278,20 @@ namespace Waystation.UI
                 // Re-wire: keep reference to clip root via _exploreWorld.parent
             }
 
+            // ── Hover label (bottom of map area, shown when hovering a system dot) ───────
+            {
+                var hl = MakeLabel(_mapAreaRt, "MapHoverLabel", 11f,
+                    TextAlignmentOptions.Center, new Color(0.90f, 0.95f, 1.00f, 0.90f));
+                hl.rectTransform.anchorMin        = new Vector2(0f, 0f);
+                hl.rectTransform.anchorMax        = new Vector2(1f, 0f);
+                hl.rectTransform.pivot            = new Vector2(0.5f, 0f);
+                hl.rectTransform.sizeDelta        = new Vector2(0f, 30f);
+                hl.rectTransform.anchoredPosition = new Vector2(0f, 8f);
+                hl.raycastTarget  = false;
+                hl.gameObject.SetActive(false);
+                _mapHoverLabel = hl;
+            }
+
             // ── Detail sidebar (right 32 %, below header) ─────────────────────
             var detailBgRt = MakeImage(mapPanel.transform, "DetailPanel",
                 new Color(0.06f, 0.09f, 0.18f, 0.95f));
@@ -2102,14 +2300,42 @@ namespace Waystation.UI
             detailPanel.SetActive(false);
 
             float dy = -16f;
-            TMP_Text AddDetailLabel(string name, float size, bool bold, Color col)
+            // ── Info Panel title + divider ────────────────────────────────────
+            {
+                var titleRt = MakeRect(detailBgRt, "InfoPanelTitle");
+                titleRt.gameObject.AddComponent<TextMeshProUGUI>();
+                titleRt.anchorMin = new Vector2(0f, 1f);
+                titleRt.anchorMax = new Vector2(1f, 1f);
+                titleRt.pivot     = new Vector2(0.5f, 1f);
+                titleRt.sizeDelta        = new Vector2(0f, 20f);
+                titleRt.anchoredPosition = new Vector2(0f, -8f);
+                var titleTxt = titleRt.GetComponent<TMP_Text>();
+                titleTxt.text      = "INFO PANEL";
+                titleTxt.fontSize  = 10f;
+                titleTxt.alignment = TextAlignmentOptions.Center;
+                titleTxt.color     = new Color(0.45f, 0.55f, 0.72f, 0.80f);
+                titleTxt.fontStyle = FontStyles.Bold;
+                titleTxt.raycastTarget = false;
+
+                var divRt = MakeImage(detailBgRt, "InfoPanelDivider",
+                    new Color(0.22f, 0.32f, 0.50f, 0.40f));
+                divRt.anchorMin = new Vector2(0f, 1f);
+                divRt.anchorMax = new Vector2(1f, 1f);
+                divRt.pivot     = new Vector2(0.5f, 1f);
+                divRt.sizeDelta        = new Vector2(-16f, 1f);
+                divRt.anchoredPosition = new Vector2(0f, -30f);
+            }
+            dy = -38f; // start labels below title + divider
+
+            TMP_Text AddDetailLabel(string name, float size, bool bold, Color col, float heightOverride = 0f)
             {
                 var rt = MakeRect(detailBgRt, name);
                 rt.gameObject.AddComponent<TextMeshProUGUI>();
                 rt.anchorMin = new Vector2(0f, 1f);
                 rt.anchorMax = new Vector2(1f, 1f);
                 rt.pivot     = new Vector2(0.5f, 1f);
-                rt.sizeDelta        = new Vector2(0f, size + 8f);
+                float h      = heightOverride > 0f ? heightOverride : size + 8f;
+                rt.sizeDelta        = new Vector2(0f, h);
                 rt.anchoredPosition = new Vector2(0f, dy);
                 var t = rt.GetComponent<TMP_Text>();
                 t.fontSize  = size;
@@ -2118,14 +2344,20 @@ namespace Waystation.UI
                 t.margin    = new Vector4(14f, 4f, 8f, 0f);
                 t.raycastTarget = false;
                 if (bold) t.fontStyle = FontStyles.Bold;
-                dy -= size + 14f;
+                dy -= h + 6f;
                 return t;
             }
-            detailNameLabel    = AddDetailLabel("BodyName",    18f, true,  new Color(0.92f, 0.96f, 1.00f));
-            detailTypeLabel    = AddDetailLabel("BodyType",    13f, false, new Color(0.62f, 0.72f, 0.90f));
-            detailTagsLabel    = AddDetailLabel("BodyTags",    11f, false, new Color(0.55f, 0.65f, 0.78f));
-            detailMoonsLabel   = AddDetailLabel("BodyMoons",   11f, false, new Color(0.55f, 0.65f, 0.78f));
-            detailStationLabel = AddDetailLabel("BodyStation", 11f, false, new Color(0.30f, 1.00f, 0.55f));
+            detailNameLabel    = AddDetailLabel("BodyName",    18f, true,  new Color(0.92f, 0.96f, 1.00f), 34f);
+            detailTypeLabel    = AddDetailLabel("BodyType",    13f, false, new Color(0.62f, 0.72f, 0.90f), 44f);
+            detailTagsLabel    = AddDetailLabel("BodyTags",    11f, false, new Color(0.55f, 0.65f, 0.78f), 50f);
+            detailMoonsLabel   = AddDetailLabel("BodyMoons",   11f, false, new Color(0.55f, 0.65f, 0.78f), 24f);
+            detailStationLabel = AddDetailLabel("BodyStation", 11f, false, new Color(0.30f, 1.00f, 0.55f), 24f);
+            // Allow long names / multi-tags to display without clipping
+            detailNameLabel.overflowMode    = TextOverflowModes.Ellipsis;
+            detailTypeLabel.overflowMode    = TextOverflowModes.Ellipsis;
+            detailTagsLabel.enableWordWrapping = true;
+            detailMoonsLabel.overflowMode   = TextOverflowModes.Ellipsis;
+            detailStationLabel.overflowMode = TextOverflowModes.Ellipsis;
 
             // "View System Map" button in the detail panel
             {
@@ -2178,6 +2410,82 @@ namespace Waystation.UI
                 _sectorRenamedLabel.fontStyle  = FontStyles.Italic;
                 _sectorRenamedLabel.raycastTarget = false;
                 _sectorRenamedLabel.gameObject.SetActive(false);
+            }
+
+            // ── Sector systems scroll section ─────────────────────────────────
+            {
+                float sectTop = dy - 16f - 10f;  // below RenamedIndicator (16 px) + gap
+
+                // Container — stretches from sectTop down to near the bottom of the panel
+                var secRt = MakeRect(detailBgRt, "SystemsSection");
+                _sectorSystemsSection = secRt.gameObject;
+                secRt.anchorMin = new Vector2(0f, 0f);
+                secRt.anchorMax = new Vector2(1f, 1f);
+                secRt.offsetMin = new Vector2(6f, 8f);
+                secRt.offsetMax = new Vector2(-6f, sectTop);
+                _sectorSystemsSection.SetActive(false);
+
+                // "SYSTEMS" sub-header
+                var hdrRt = MakeRect(secRt, "SysListHeader");
+                hdrRt.gameObject.AddComponent<TextMeshProUGUI>();
+                hdrRt.anchorMin = new Vector2(0f, 1f);
+                hdrRt.anchorMax = new Vector2(1f, 1f);
+                hdrRt.pivot            = new Vector2(0.5f, 1f);
+                hdrRt.sizeDelta        = new Vector2(0f, 18f);
+                hdrRt.anchoredPosition = Vector2.zero;
+                var hdrTxt = hdrRt.GetComponent<TMP_Text>();
+                hdrTxt.text      = "SYSTEMS";
+                hdrTxt.fontSize  = 9f;
+                hdrTxt.alignment = TextAlignmentOptions.Center;
+                hdrTxt.color     = new Color(0.45f, 0.55f, 0.72f, 0.80f);
+                hdrTxt.fontStyle = FontStyles.Bold;
+                hdrTxt.raycastTarget = false;
+
+                // Divider under header
+                var divRt = MakeImage(secRt, "SysDiv", new Color(0.22f, 0.32f, 0.50f, 0.40f));
+                divRt.anchorMin        = new Vector2(0f, 1f);
+                divRt.anchorMax        = new Vector2(1f, 1f);
+                divRt.pivot            = new Vector2(0.5f, 1f);
+                divRt.sizeDelta        = new Vector2(0f, 1f);
+                divRt.anchoredPosition = new Vector2(0f, -19f);
+
+                // Scroll view (fills below header + divider)
+                var scrollGo = new GameObject("SysScrollView",
+                    typeof(RectTransform), typeof(ScrollRect), typeof(RectMask2D));
+                scrollGo.transform.SetParent(secRt, false);
+                var scrollRt = scrollGo.GetComponent<RectTransform>();
+                scrollRt.anchorMin = new Vector2(0f, 0f);
+                scrollRt.anchorMax = new Vector2(1f, 1f);
+                scrollRt.offsetMin = new Vector2(0f, 0f);
+                scrollRt.offsetMax = new Vector2(0f, -22f);  // 18 header + 1 div + 3 gap
+                _sectorSystemsScrollRect = scrollGo.GetComponent<ScrollRect>();
+                _sectorSystemsScrollRect.horizontal       = false;
+                _sectorSystemsScrollRect.vertical         = true;
+                _sectorSystemsScrollRect.scrollSensitivity = 20f;
+                _sectorSystemsScrollRect.movementType     = ScrollRect.MovementType.Clamped;
+
+                // Content – VerticalLayoutGroup drives height
+                var contentGo = new GameObject("Content", typeof(RectTransform));
+                contentGo.transform.SetParent(scrollGo.transform, false);
+                _sectorSystemsList = contentGo.GetComponent<RectTransform>();
+                _sectorSystemsList.anchorMin        = new Vector2(0f, 1f);
+                _sectorSystemsList.anchorMax        = new Vector2(1f, 1f);
+                _sectorSystemsList.pivot            = new Vector2(0.5f, 1f);
+                _sectorSystemsList.sizeDelta        = Vector2.zero;
+                _sectorSystemsList.anchoredPosition = Vector2.zero;
+
+                var vlg = contentGo.AddComponent<VerticalLayoutGroup>();
+                vlg.childControlHeight    = true;
+                vlg.childControlWidth     = true;
+                vlg.childForceExpandWidth = true;
+                vlg.childForceExpandHeight = false;
+                vlg.spacing               = 2f;
+                vlg.padding               = new RectOffset(4, 4, 2, 4);
+
+                var csf = contentGo.AddComponent<ContentSizeFitter>();
+                csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                _sectorSystemsScrollRect.content = _sectorSystemsList;
             }
 
             // ── Locked overlay ────────────────────────────────────────────────
