@@ -5,6 +5,7 @@
 // Press Space to pause/unpause.
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
@@ -43,6 +44,7 @@ namespace Waystation.Demo
             }
             _gm.OnLogMessage += OnLogLine;
             _gm.OnGameLoaded += OnGameLoaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
             if (_gm.IsLoaded && _gm.Station == null && !_started)
                 LaunchNewGame();
         }
@@ -52,7 +54,24 @@ namespace Waystation.Demo
             if (_gm == null) return;
             _gm.OnLogMessage -= OnLogLine;
             _gm.OnGameLoaded -= OnGameLoaded;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
         }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            // When GameScene reloads after the player picks New/Load from the main menu,
+            // reset the started flag so LaunchNewGame() can fire again.
+            if (scene.name == "GameScene" && HasLaunchIntent())
+            {
+                _started = false;
+                if (_gm != null && _gm.IsLoaded)
+                    LaunchNewGame();
+                // If content isn't loaded yet, OnGameLoaded will call LaunchNewGame().
+            }
+        }
+
+        private static bool HasLaunchIntent() =>
+            PlayerPrefs.HasKey("pending_station_name") || PlayerPrefs.GetInt("load_save", 0) == 1;
 
         private void OnGameLoaded()
         {
@@ -63,7 +82,34 @@ namespace Waystation.Demo
         private void LaunchNewGame()
         {
             _started = true;
-            _gm.NewGame(StationName, Seed);
+
+            // In the main menu scene, don't auto-start — WaystationMainMenuHUD handles that.
+            if (SceneManager.GetActiveScene().name == "MainMenuScene") return;
+
+            // If no explicit game-launch intent was set by the main menu, go there now.
+            if (!HasLaunchIntent())
+            {
+                SceneManager.LoadScene("MainMenuScene");
+                return;
+            }
+
+            // Check for a load-save request from the main menu.
+            if (PlayerPrefs.GetInt("load_save", 0) == 1 && _gm.HasSaveFile())
+            {
+                PlayerPrefs.DeleteKey("load_save");
+                _gm.LoadGame();
+                return;
+            }
+
+            // Use station name / seed from the main menu if provided.
+            string stationName = PlayerPrefs.GetString("pending_station_name", StationName);
+            int?   seed        = PlayerPrefs.HasKey("pending_seed")
+                                 ? (int?)PlayerPrefs.GetInt("pending_seed")
+                                 : Seed;
+            PlayerPrefs.DeleteKey("pending_station_name");
+            PlayerPrefs.DeleteKey("pending_seed");
+
+            _gm.NewGame(stationName, seed);
         }
 
         private void OnLogLine(string msg)
@@ -82,6 +128,9 @@ namespace Waystation.Demo
         private void OnGUI()
         {
             if (HideOverlay) return;
+
+            // In the main menu scene, WaystationMainMenuHUD owns the UI.
+            if (SceneManager.GetActiveScene().name == "MainMenuScene") return;
 
             if (_gm == null)
             {

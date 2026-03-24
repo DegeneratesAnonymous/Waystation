@@ -1532,7 +1532,12 @@ namespace Waystation.View
                     float d2 = dx * dx + dy * dy;
                     if (d2 < best) { best = d2; pick = i; }
                 }
-                if (pick >= 0) _selectedDots.Add(pick);
+                if (pick >= 0)
+                {
+                    _selectedDots.Add(pick);
+                    if (pick < _crew.Count)
+                        GameHUD.SelectCrewMember(_crew[pick].uid);
+                }
                 return;
             }
 
@@ -1546,6 +1551,15 @@ namespace Waystation.View
                 float gy = Screen.height - sp.y;
                 if (_dragSelRect.Contains(new Vector2(sp.x, gy)))
                     _selectedDots.Add(i);
+            }
+
+            // If drag enclosed exactly one NPC, open their detail panel
+            if (_selectedDots.Count == 1)
+            {
+                int pick = -1;
+                foreach (int idx in _selectedDots) pick = idx;
+                if (pick >= 0 && pick < _crew.Count)
+                    GameHUD.SelectCrewMember(_crew[pick].uid);
             }
         }
 
@@ -1751,11 +1765,12 @@ namespace Waystation.View
                 };
             }
 
-            bool hasNpcSel   = _selectedDots.Count > 0 && _crew.Count > 0;
             bool hasFoundCtx = _ctxFoundation != null && _gm?.Station != null &&
                                _gm.Station.foundations.ContainsKey(_ctxFoundation.uid);
 
-            if (!hasNpcSel && !hasFoundCtx) { _doorAccessEditing = false; return; }
+            // NPC selection is shown in the GameHUD bottom-left overlay; only show this
+            // panel for foundation/tile context.
+            if (!hasFoundCtx) { _doorAccessEditing = false; return; }
 
             bool isDoor = hasFoundCtx && _ctxFoundation.buildableId.Contains("door") &&
                           _ctxFoundation.status == "complete";
@@ -1914,32 +1929,6 @@ namespace Waystation.View
 
                     if (_doorAccessEditing)
                         DrawDoorAccessEditor(f, PW, ref y);
-                }
-            }
-            else if (hasNpcSel)
-            {
-                // Show first selected NPC
-                int di = -1;
-                foreach (int x2 in _selectedDots) { di = x2; break; }
-                if (di >= 0 && di < _crew.Count)
-                {
-                    var npc = _crew[di];
-                    string deptLabel = npc.departmentId != null ? npc.departmentId : "Crewman";
-                    if (npc.departmentId != null && _gm?.Station != null)
-                    {
-                        foreach (var d in _gm.Station.departments)
-                            if (d.uid == npc.departmentId) { deptLabel = d.name; break; }
-                    }
-                    GUI.Label(new Rect(8, y, PW - 16, 18), $"\u25c9  {npc.name}  \u2014  {deptLabel}", _ctxHeaderStyle);
-                    y += 20;
-                    string rankStr = npc.rank switch { 1 => "\u2605 Officer", 2 => "\u2605\u2605 Senior", 3 => "\u2605\u2605\u2605 Command", _ => "Crew" };
-                    npc.needs.TryGetValue("sleep", out float sv);
-                    float sleepVal  = npc.isSleeping ? 1f : (sv > 0f ? sv : 1f);
-                    string sleepTxt = npc.isSleeping ? "sleeping" : sleepVal.ToString("P0");
-                    string missionTxt = npc.missionUid != null ? "on mission" : "available";
-                    GUI.Label(new Rect(8, y, PW - 16, 16), $"Rank: {rankStr}  |  Mood: {npc.MoodLabel()}  |  {missionTxt}", _ctxValueStyle);
-                    y += 18;
-                    GUI.Label(new Rect(8, y, PW - 16, 16), $"Sleep: {sleepTxt}  |  Injuries: {npc.injuries}", _ctxValueStyle);
                 }
             }
 

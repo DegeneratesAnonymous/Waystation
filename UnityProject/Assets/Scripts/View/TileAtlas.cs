@@ -265,15 +265,15 @@ namespace Waystation.View
                 _wallAtlasCache = new Dictionary<string, Sprite>();
 
                 // Try the primary path under the Art/Tiles/Resources folder.
-                Sprite[] slices = Resources.LoadAll<Sprite>("Walls/wall_metal_atlas");
+                Sprite[] slices = Resources.LoadAll<Sprite>("Walls/wall_atlas");
 
                 // Some Unity versions return an empty array for the bare texture name;
                 // try loading the texture explicitly then pulling its sub-assets.
                 if (slices == null || slices.Length == 0)
                 {
-                    var tex = Resources.Load<Texture2D>("Walls/wall_metal_atlas");
+                    var tex = Resources.Load<Texture2D>("Walls/wall_atlas");
                     if (tex != null)
-                        slices = Resources.LoadAll<Sprite>("Walls/wall_metal_atlas");
+                        slices = Resources.LoadAll<Sprite>("Walls/wall_atlas");
                 }
 
                 if (slices != null)
@@ -281,7 +281,7 @@ namespace Waystation.View
                         _wallAtlasCache[s.name] = s;
 
                 if (_wallAtlasCache.Count == 0)
-                    Debug.LogWarning("[TileAtlas] Wall atlas not found at Resources/Walls/wall_metal_atlas" +
+                    Debug.LogWarning("[TileAtlas] Wall atlas not found at Resources/Walls/wall_atlas" +
                         " — reimport the PNG in Unity or check the Resources folder path." +
                         " Walls will use the procedural flat-block fallback.");
                 else

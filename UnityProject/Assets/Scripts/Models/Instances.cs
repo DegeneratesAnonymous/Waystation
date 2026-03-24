@@ -278,6 +278,17 @@ namespace Waystation.Models
 
         /// <summary>Current tension stage derived from tensionScore.</summary>
         public TensionStage tensionStage = TensionStage.Normal;
+
+        // ── Lineage tracking ─────────────────────────────────────────────────
+        /// <summary>
+        /// Current position on each trait lineage axis.
+        /// Key = lineageId; Value = axis position: -2=negative tier 2, -1=negative tier 1,
+        /// 0=neutral, +1=positive tier 1, +2=positive tier 2.
+        /// </summary>
+        public Dictionary<string, int> lineagePositions = new Dictionary<string, int>();
+
+        /// <summary>Per-lineage cooldown: key = lineageId, value = in-game tick when cooldown expires.</summary>
+        public Dictionary<string, int> lineageCooldownEndTick = new Dictionary<string, int>();
     }
 
     // -------------------------------------------------------------------------
@@ -414,6 +425,121 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Ability Scores
+    // -------------------------------------------------------------------------
+
+    /// <summary>The six core ability scores governing NPC capability and skill checks.</summary>
+    [Serializable]
+    public class AbilityScores
+    {
+        public int STR = 8;   // Strength:  Melee, Hauling, Construction
+        public int DEX = 8;   // Dexterity: Aiming, Shooting, Surgery, Piloting
+        public int INT = 8;   // Intellect: Research, Crafting, Electronics
+        public int WIS = 8;   // Wisdom:    Medical, Plants, Awareness; governs trait resistance
+        public int CHA = 8;   // Charisma:  Bartering, Leading, Negotiating
+        public int END = 8;   // Endurance: Fortitude, Discipline; vitals decay rate
+
+        /// <summary>Modifier for a given score: 1-4→-2, 5-7→-1, 8-11→0, 12-14→+1, 15-17→+2, 18-20→+3.</summary>
+        public static int GetModifier(int score)
+        {
+            if (score <= 4)  return -2;
+            if (score <= 7)  return -1;
+            if (score <= 11) return  0;
+            if (score <= 14) return  1;
+            if (score <= 17) return  2;
+            return 3;
+        }
+
+        public int STRMod => GetModifier(STR);
+        public int DEXMod => GetModifier(DEX);
+        public int INTMod => GetModifier(INT);
+        public int WISMod => GetModifier(WIS);
+        public int CHAMod => GetModifier(CHA);
+        public int ENDMod => GetModifier(END);
+    }
+
+    // -------------------------------------------------------------------------
+    // Life Stage
+    // -------------------------------------------------------------------------
+
+    public enum LifeStage { Baby, Child, Adult }
+
+    // -------------------------------------------------------------------------
+    // Need Profiles
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class SleepNeedProfile
+    {
+        public float value          = 100f;  // 0-100
+        public bool  isSeeking      = false;
+        public string assignedBedId = null;
+        // Ticks of consecutive rest above 90% used to determine well-rested bonus eligibility
+        public int   wellRestedTicks = 0;
+    }
+
+    [Serializable]
+    public class HungerNeedProfile
+    {
+        public float value                  = 100f;  // 0-100
+        public bool  isSeeking              = false;
+        // Cumulative ticks spent below 10% — triggers malnourishment
+        public int   nourishmentDebtTicks   = 0;
+        // Ticks spent above 60% while malnourished — clears malnourishment after 3 in-game days
+        public int   nourishmentRecoveryTicks = 0;
+        public bool  isMalnourished         = false;
+        // Days spent at 0% hunger — starvation timeline
+        public int   starvationDayCount     = 0;
+    }
+
+    [Serializable]
+    public class ThirstNeedProfile
+    {
+        public float value              = 100f;  // 0-100
+        public bool  isSeeking          = false;
+        // Days spent at 0% thirst — dehydration timeline
+        public int   dehydrationDayCount = 0;
+    }
+
+    [Serializable]
+    public class RecreationNeedProfile
+    {
+        public float value      = 100f;  // 0-100
+        public bool  isBurntOut = false;
+    }
+
+    [Serializable]
+    public class SocialNeedProfile
+    {
+        public float value              = 50f;   // 0-100 (starts mid-range)
+        public bool  isReclusive        = false; // if true need is Solitude (inverted)
+        public int   lastInteractionTick = -1;
+    }
+
+    // -------------------------------------------------------------------------
+    // Sanity Profile
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class SanityProfile
+    {
+        /// <summary>Signed sanity score. Floor -10, ceiling = WIS modifier.</summary>
+        public int   score                  = 0;
+        /// <summary>Derived from WIS modifier at profile creation. Recalculated if WIS changes.</summary>
+        public int   ceiling                = 0;
+        /// <summary>Running sum of moodScore values in the current 24-tick day cycle.</summary>
+        public float dailyMoodAccumulator   = 0f;
+        /// <summary>Number of mood samples accumulated this day cycle.</summary>
+        public int   dailyMoodSampleCount   = 0;
+        /// <summary>Set to true if any need reached 0% this day cycle.</summary>
+        public bool  needDepletedThisCycle  = false;
+        /// <summary>Count of needs above 50% for the entire day cycle (max 3).</summary>
+        public int   needsAbove50Count      = 0;
+        public bool  isInBreakdown          = false;
+        public bool  requiresIntervention   = false;
+    }
+
+    // -------------------------------------------------------------------------
     // NPC Instance
     // -------------------------------------------------------------------------
 
@@ -509,6 +635,42 @@ namespace Waystation.Models
         // Game tick of the last conversation this NPC completed (60-tick cooldown)
         public int   lastConversationTick  = -99;
 
+        // ── Ability Scores ────────────────────────────────────────────────────
+        public AbilityScores abilityScores     = new AbilityScores();
+        /// <summary>Unspent ability score points from level milestones (every 4 levels = +2 points).</summary>
+        public int           abilityScorePoints = 0;
+
+        // ── Life Stage ────────────────────────────────────────────────────────
+        public LifeStage lifeStage  = LifeStage.Adult;
+        public int       ageDays    = 0;
+        public string    motherId   = null;
+        public string    fatherId   = null;
+        public List<string> siblingIds = new List<string>();
+
+        // ── Trait Slots ───────────────────────────────────────────────────────
+        /// <summary>Maximum number of general traits this NPC can hold (grows with life stage + level).</summary>
+        public int traitSlots = 3;
+
+        // ── Needs (new structured profiles) ──────────────────────────────────
+        public SleepNeedProfile      sleepNeed      = new SleepNeedProfile();
+        public HungerNeedProfile     hungerNeed     = new HungerNeedProfile();
+        public ThirstNeedProfile     thirstNeed     = new ThirstNeedProfile();
+        public RecreationNeedProfile recreationNeed = new RecreationNeedProfile();
+        public SocialNeedProfile     socialNeed     = new SocialNeedProfile();
+
+        // ── Sanity ────────────────────────────────────────────────────────────
+        public SanityProfile sanity = null;
+
+        public SanityProfile GetOrCreateSanity()
+        {
+            if (sanity == null)
+            {
+                int wisMod = AbilityScores.GetModifier(abilityScores.WIS);
+                sanity = new SanityProfile { score = wisMod, ceiling = wisMod };
+            }
+            return sanity;
+        }
+
         // ── Trait Profile (NPC Traits system) ────────────────────────────────
         // Nullable — existing NPCs without a profile are treated as having no traits.
         // Initialised lazily by TraitSystem on first interaction.
@@ -523,6 +685,14 @@ namespace Waystation.Models
         // Set to WorkSlowdownModifier at WorkSlowdown/DepartureRisk; reset to 1.0 at Normal/Disgruntled.
         // Stacks multiplicatively with traitWorkModifier and workModifier.
         public float tensionWorkModifier = 1.0f;
+
+        // ── Personal Inventory ────────────────────────────────────────────────
+        /// <summary>Items worn / held in named equipment slots (slot name → itemId).
+        /// Example slots: "weapon", "armour", "tool", "accessory".</summary>
+        public Dictionary<string, string> equippedSlots = new Dictionary<string, string>();
+
+        /// <summary>Items carried in pockets / bags (itemId → quantity).</summary>
+        public Dictionary<string, int> pocketItems = new Dictionary<string, int>();
 
         /// <summary>Returns the trait profile, initialising it lazily if needed.</summary>
         public NpcTraitProfile GetOrCreateTraitProfile()
@@ -561,24 +731,10 @@ namespace Waystation.Models
             }
         }
 
+        /// <summary>Syncs the legacy -1..1 mood float from the 0-100 moodScore.</summary>
         public void RecalculateMood()
         {
-            var weights = new Dictionary<string, float>
-            {
-                { "hunger", 1f }, { "rest", 1f }, { "social", 0.5f }, { "safety", 2f }, { "sleep", 1f }
-            };
-            float totalWeight  = 5.5f;
-            float weightedSum  = 0f;
-            foreach (var kv in weights)
-                weightedSum += (needs.ContainsKey(kv.Key) ? needs[kv.Key] : 0.5f) * kv.Value;
-
-            float traitBonus = 0f;
-            foreach (var t in traits)
-            {
-                if (t == "resilient" || t == "optimistic") traitBonus += 0.1f;
-                else if (t == "anxious"   || t == "bitter") traitBonus -= 0.1f;
-            }
-            mood = Mathf.Clamp((weightedSum / totalWeight) * 2f - 1f + traitBonus, -1f, 1f);
+            mood = Mathf.Clamp((moodScore / 100f) * 2f - 1f, -1f, 1f);
         }
 
         public string MoodLabel()

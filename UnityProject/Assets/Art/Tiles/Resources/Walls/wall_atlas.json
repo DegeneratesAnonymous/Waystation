@@ -1,0 +1,300 @@
+{
+  "atlas": "wall_atlas.png",
+  "atlas_size": {
+    "w": 1056,
+    "h": 76
+  },
+  "slot_size": {
+    "w": 66,
+    "h": 76
+  },
+  "padding": 1,
+  "pivot": "bottom-left",
+  "perspective": "top-down-north-fixed",
+  "category": "wall",
+  "layers": {
+    "base": {
+      "description": "Opaque 64×64 top-down square. No perspective face strip. Render first.",
+      "tile_size": {
+        "w": 64,
+        "h": 64
+      },
+      "col": 0,
+      "row": 0
+    },
+    "interior_overlays": {
+      "description": "Transparent 64×74 overlays. Composite on top of base. Perspective face strip (y=64..73) present only when south edge is interior.",
+      "tile_size": {
+        "w": 64,
+        "h": 74
+      },
+      "cols": "1..15",
+      "row": 0,
+      "face_strip_y_offset": 64,
+      "face_strip_height": 10
+    }
+  },
+  "notes": [
+    "Base tile (col 0): fully opaque 64×64 flat square, all four edges treated identically.",
+    "Overlay tiles (cols 1-15): 64×74 transparent canvas. Top 64px covers the tile footprint with interior edge treatments. Bottom 10px is the perspective face strip, only painted when s=true.",
+    "The face strip extends BELOW the tile footprint. Position the overlay at the same (x,y) as the base tile — the strip will naturally hang below into the next row of tiles.",
+    "In Unity: render base sprite, then select overlay by interior adjacency bitmask (n<<3|s<<2|e<<1|w<<0), offset 1..15.",
+    "Interior bitmask encoding: n=8, s=4, e=2, w=1. Value 0 = no interior (no overlay needed)."
+  ],
+  "tiles": [
+    {
+      "id": "wall_solid_normal",
+      "col": 0,
+      "row": 0,
+      "layer": "base",
+      "interior_faces": [],
+      "tags": [
+        "wall",
+        "solid",
+        "state:normal"
+      ]
+    },
+    {
+      "id": "wall_solid_int_s",
+      "col": 1,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "s"
+      ],
+      "bitmask": 4,
+      "tags": [
+        "wall",
+        "solid",
+        "int:s"
+      ]
+    },
+    {
+      "id": "wall_solid_int_n",
+      "col": 2,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n"
+      ],
+      "bitmask": 8,
+      "tags": [
+        "wall",
+        "solid",
+        "int:n"
+      ]
+    },
+    {
+      "id": "wall_solid_int_e",
+      "col": 3,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "e"
+      ],
+      "bitmask": 2,
+      "tags": [
+        "wall",
+        "solid",
+        "int:e"
+      ]
+    },
+    {
+      "id": "wall_solid_int_w",
+      "col": 4,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "w"
+      ],
+      "bitmask": 1,
+      "tags": [
+        "wall",
+        "solid",
+        "int:w"
+      ]
+    },
+    {
+      "id": "wall_solid_int_se",
+      "col": 5,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "s",
+        "e"
+      ],
+      "bitmask": 6,
+      "tags": [
+        "wall",
+        "solid",
+        "int:se"
+      ]
+    },
+    {
+      "id": "wall_solid_int_sw",
+      "col": 6,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "s",
+        "w"
+      ],
+      "bitmask": 5,
+      "tags": [
+        "wall",
+        "solid",
+        "int:sw"
+      ]
+    },
+    {
+      "id": "wall_solid_int_ne",
+      "col": 7,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "e"
+      ],
+      "bitmask": 10,
+      "tags": [
+        "wall",
+        "solid",
+        "int:ne"
+      ]
+    },
+    {
+      "id": "wall_solid_int_nw",
+      "col": 8,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "w"
+      ],
+      "bitmask": 9,
+      "tags": [
+        "wall",
+        "solid",
+        "int:nw"
+      ]
+    },
+    {
+      "id": "wall_solid_int_ns",
+      "col": 9,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "s"
+      ],
+      "bitmask": 12,
+      "tags": [
+        "wall",
+        "solid",
+        "int:ns"
+      ]
+    },
+    {
+      "id": "wall_solid_int_ew",
+      "col": 10,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "e",
+        "w"
+      ],
+      "bitmask": 3,
+      "tags": [
+        "wall",
+        "solid",
+        "int:ew"
+      ]
+    },
+    {
+      "id": "wall_solid_int_nse",
+      "col": 11,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "s",
+        "e"
+      ],
+      "bitmask": 14,
+      "tags": [
+        "wall",
+        "solid",
+        "int:nse"
+      ]
+    },
+    {
+      "id": "wall_solid_int_nsw",
+      "col": 12,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "s",
+        "w"
+      ],
+      "bitmask": 13,
+      "tags": [
+        "wall",
+        "solid",
+        "int:nsw"
+      ]
+    },
+    {
+      "id": "wall_solid_int_new",
+      "col": 13,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "e",
+        "w"
+      ],
+      "bitmask": 11,
+      "tags": [
+        "wall",
+        "solid",
+        "int:new"
+      ]
+    },
+    {
+      "id": "wall_solid_int_sew",
+      "col": 14,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "s",
+        "e",
+        "w"
+      ],
+      "bitmask": 7,
+      "tags": [
+        "wall",
+        "solid",
+        "int:sew"
+      ]
+    },
+    {
+      "id": "wall_solid_int_nsew",
+      "col": 15,
+      "row": 0,
+      "layer": "interior_overlay",
+      "interior_faces": [
+        "n",
+        "s",
+        "e",
+        "w"
+      ],
+      "bitmask": 15,
+      "tags": [
+        "wall",
+        "solid",
+        "int:nsew"
+      ]
+    }
+  ]
+}

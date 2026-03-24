@@ -718,6 +718,12 @@ namespace Waystation.Models
         public string       skillId;
         public string       displayName;
         public string       description       = "";
+        /// <summary>
+        /// Which ability score governs this skill's check modifier.
+        /// Valid values: STR / DEX / INT / WIS / CHA / END.
+        /// Empty = no modifier.
+        /// </summary>
+        public string       governingAbility  = "";
         /// <summary>Task type strings (from FarmingTaskInstance.taskType / job id) that award XP.</summary>
         public List<string> associatedTaskTypes = new List<string>();
         /// <summary>XP awarded per task completion.</summary>
@@ -732,6 +738,7 @@ namespace Waystation.Models
                 skillId             = raw.GetString("id"),
                 displayName         = raw.GetString("display_name", raw.GetString("id")),
                 description         = raw.GetString("description", ""),
+                governingAbility    = raw.GetString("governing_ability", ""),
                 xpPerTaskCompletion = raw.GetFloat("xp_per_task_completion", 10f),
                 xpPerActiveSecond   = raw.GetFloat("xp_per_active_second",   0f),
             };
@@ -1138,6 +1145,81 @@ namespace Waystation.Models
                 requiresWater      = raw.GetBool("requires_water", true),
                 damagePerSecond    = raw.GetFloat("damage_per_second", 5f),
             };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Lineage System
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Defines one position on a lineage axis.
+    /// position: -2/-1 = negative tier 2/1; +1/+2 = positive tier 1/2; 0 = neutral (no trait).
+    /// </summary>
+    [Serializable]
+    public class LineageAxisEntry
+    {
+        public int    position;   // -2, -1, 0, +1, +2
+        public string traitId;    // null for position 0
+        public string tierName;   // "Iron Stomach", "Hardy", etc.
+    }
+
+    /// <summary>
+    /// Static definition of a trait lineage loaded from data/npcs/core_trait_lineages.json.
+    /// Each lineage defines an axis of related positive/negative traits.
+    /// </summary>
+    [Serializable]
+    public class TraitLineageDefinition
+    {
+        public string                lineageId;
+        public string                displayName;
+        /// <summary>Axis entries keyed by position (-2 to +2).</summary>
+        public List<LineageAxisEntry> axisEntries   = new List<LineageAxisEntry>();
+        /// <summary>Event IDs (stubbed) that push the axis in the positive direction.</summary>
+        public List<string>           positiveTriggerEvents = new List<string>();
+        /// <summary>Event IDs (stubbed) that push the axis in the negative direction.</summary>
+        public List<string>           negativeTriggerEvents = new List<string>();
+        /// <summary>Base probability that a qualifying trigger fires a lineage change (0-1).</summary>
+        public float                  baseTriggerChance = 0.30f;
+        /// <summary>Each point of WIS modifier reduces negative trigger chance by this amount.</summary>
+        public float                  wisModifierReductionPerPoint = 0.05f;
+
+        /// <summary>Returns the traitId for a given axis position, or null for neutral.</summary>
+        public string GetTraitIdAtPosition(int position)
+        {
+            if (position == 0) return null;
+            foreach (var e in axisEntries)
+                if (e.position == position) return e.traitId;
+            return null;
+        }
+
+        public static TraitLineageDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var def = new TraitLineageDefinition
+            {
+                lineageId                  = raw.GetString("id"),
+                displayName                = raw.GetString("display_name", raw.GetString("id")),
+                baseTriggerChance          = raw.GetFloat("base_trigger_chance", 0.30f),
+                wisModifierReductionPerPoint = raw.GetFloat("wis_reduction_per_point", 0.05f),
+            };
+            if (raw.ContainsKey("axis") && raw["axis"] is List<object> axis)
+            {
+                foreach (var aObj in axis)
+                {
+                    if (aObj is Dictionary<string, object> a)
+                    {
+                        def.axisEntries.Add(new LineageAxisEntry
+                        {
+                            position = a.GetInt("position"),
+                            traitId  = a.GetString("trait_id", null),
+                            tierName = a.GetString("tier_name", ""),
+                        });
+                    }
+                }
+            }
+            foreach (var s in raw.GetStringList("positive_trigger_events")) def.positiveTriggerEvents.Add(s);
+            foreach (var s in raw.GetStringList("negative_trigger_events")) def.negativeTriggerEvents.Add(s);
+            return def;
         }
     }
 }

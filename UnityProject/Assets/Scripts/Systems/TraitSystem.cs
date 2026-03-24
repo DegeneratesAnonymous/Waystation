@@ -36,6 +36,8 @@ namespace Waystation.Systems
             new Dictionary<string, NpcTraitDefinition>();
         private readonly Dictionary<TraitConditionCategory, TraitPoolDefinition> _pools =
             new Dictionary<TraitConditionCategory, TraitPoolDefinition>();
+        private readonly Dictionary<string, TraitLineageDefinition> _lineages =
+            new Dictionary<string, TraitLineageDefinition>();
 
         // ── Registration ─────────────────────────────────────────────────────
 
@@ -49,6 +51,12 @@ namespace Waystation.Systems
         {
             if (pool == null) return;
             _pools[pool.conditionCategory] = pool;
+        }
+
+        public void RegisterTraitLineage(TraitLineageDefinition def)
+        {
+            if (def == null || string.IsNullOrEmpty(def.lineageId)) return;
+            _lineages[def.lineageId] = def;
         }
 
         // ── Queries ───────────────────────────────────────────────────────────
@@ -87,6 +95,7 @@ namespace Waystation.Systems
                 ProcessDecay(npc, station.tick);
                 EvaluateAcquisition(npc, station.tick);
             }
+            TickLineages(station);
         }
 
         // ── Condition Pressure API ────────────────────────────────────────────
@@ -322,6 +331,104 @@ namespace Waystation.Systems
             foreach (var t in npc.traitProfile.traits)
                 if (t.traitId == traitId) return t;
             return null;
+        }
+
+        // ── Lineage API ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Apply a lineage pressure event to an NPC.
+        /// direction = +1 (positive push) or -1 (negative push).
+        /// Respects a 24h cooldown per lineage axis and reduces negative trigger chance
+        /// by WIS modifier × wisModifierReductionPerPoint.
+        /// </summary>
+        public void ApplyLineageEvent(NPCInstance npc, string lineageId, int direction,
+                                      StationState station)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+            if (!_lineages.TryGetValue(lineageId, out var def)) return;
+
+            var profile = npc.GetOrCreateTraitProfile();
+
+            // Cooldown: one trigger per lineage per 24 in-game hours (96 ticks)
+            if (profile.lineageCooldownEndTick.TryGetValue(lineageId, out int cooldownEnd) &&
+                station.tick < cooldownEnd) return;
+
+            // Probability check (base 30 %; WIS modifier reduces negative trigger chance only)
+            float chance = def.baseTriggerChance;
+            int wisMod = AbilityScores.GetModifier(npc.abilityScores.WIS);
+            if (direction < 0)
+                chance = Mathf.Max(0.05f, chance - wisMod * def.wisModifierReductionPerPoint);
+            if (UnityEngine.Random.value > chance) return;
+
+            // Move position ±1 clamped to -2..+2
+            if (!profile.lineagePositions.TryGetValue(lineageId, out int current))
+                current = 0;
+            int newPos = Mathf.Clamp(current + direction, -2, 2);
+            if (newPos == current) return; // already at limit
+
+            profile.lineagePositions[lineageId]        = newPos;
+            profile.lineageCooldownEndTick[lineageId]  = station.tick + 96;
+
+            SyncLineageTraitToPosition(npc, def, current, newPos, station.tick);
+            string sign = direction > 0 ? "+" : "-";
+            station.LogEvent($"{npc.name}: {def.displayName} shifted to position {newPos} ({sign}1).");
+        }
+
+        /// <summary>
+        /// Daily pass: ensures every NPC's lineage positions map to the correct
+        /// active traits. Called once per day from Tick().
+        /// </summary>
+        public void TickLineages(StationState station)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+
+            foreach (var npc in station.npcs.Values)
+            {
+                if (npc.traitProfile == null) continue;
+                foreach (var kv in npc.traitProfile.lineagePositions)
+                {
+                    if (!_lineages.TryGetValue(kv.Key, out var def)) continue;
+                    string targetTrait = def.GetTraitIdAtPosition(kv.Value);
+
+                    // Remove any stale lineage traits for this axis
+                    for (int pos = -2; pos <= 2; pos++)
+                    {
+                        string candidateId = def.GetTraitIdAtPosition(pos);
+                        if (candidateId == null || candidateId == targetTrait) continue;
+                        for (int i = npc.traitProfile.traits.Count - 1; i >= 0; i--)
+                            if (npc.traitProfile.traits[i].traitId == candidateId)
+                            { npc.traitProfile.traits.RemoveAt(i); break; }
+                    }
+
+                    // Ensure the target trait is present (position 0 = neutral, no trait)
+                    if (targetTrait != null && !NpcHasTrait(npc, targetTrait))
+                        TryAddTrait(npc, targetTrait, station.tick);
+                }
+            }
+        }
+
+        private void SyncLineageTraitToPosition(NPCInstance npc, TraitLineageDefinition def,
+                                                int oldPos, int newPos, int currentTick)
+        {
+            // Remove old trait (if any)
+            string oldTrait = def.GetTraitIdAtPosition(oldPos);
+            if (oldTrait != null)
+            {
+                for (int i = npc.traitProfile.traits.Count - 1; i >= 0; i--)
+                {
+                    if (npc.traitProfile.traits[i].traitId == oldTrait)
+                    {
+                        npc.traitProfile.traits.RemoveAt(i);
+                        ApplyTraitEffects(npc);
+                        break;
+                    }
+                }
+            }
+
+            // Add new trait (position 0 = neutral, no trait)
+            string newTrait = def.GetTraitIdAtPosition(newPos);
+            if (newTrait != null)
+                TryAddTrait(npc, newTrait, currentTick);
         }
     }
 }

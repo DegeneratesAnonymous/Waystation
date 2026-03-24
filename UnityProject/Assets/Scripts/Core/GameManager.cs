@@ -76,6 +76,10 @@ namespace Waystation.Core
         public ConversationSystem       Conversations { get; private set; }
         public ProximitySystem          Proximity     { get; private set; }
 
+        // ── Need & Sanity systems ─────────────────────────────────────────────────────────────
+        public NeedSystem               Needs         { get; private set; }
+        public SanitySystem             Sanity        { get; private set; }
+
         // ── Skill & Expertise system ────────────────────────────────────────────────────────────
         public SkillSystem              Skills        { get; private set; }
 
@@ -196,8 +200,16 @@ namespace Waystation.Core
 
             // Trait, Tension, Faction Government, Region systems
             Traits = new TraitSystem();
-            foreach (var kv in Registry.Traits)     Traits.RegisterTrait(kv.Value);
-            foreach (var kv in Registry.TraitPools) Traits.RegisterPool(kv.Value);
+            foreach (var kv in Registry.Traits)      Traits.RegisterTrait(kv.Value);
+            foreach (var kv in Registry.TraitPools)  Traits.RegisterPool(kv.Value);
+            foreach (var kv in Registry.TraitLineages) Traits.RegisterTraitLineage(kv.Value);
+
+            // Need & Sanity systems
+            Needs  = new NeedSystem();
+            Sanity = new SanitySystem();
+            Needs.SetMoodSystem(Mood);
+            Needs.SetSanitySystem(Sanity);
+            Needs.SetTraitSystem(Traits);
 
             Tension    = new TensionSystem(Traits);
             Tension.SetMoodSystem(Mood);
@@ -216,6 +228,8 @@ namespace Waystation.Core
             };
 
             // Wire sleep/wake events from NPCSystem → MoodSystem
+            // Note: sleep transitions are now driven by NeedSystem; these hooks are kept
+            // for any future systems that still subscribe to OnNPCSleeps/OnNPCWakes.
             Npcs.OnNPCSleeps += npc => Mood.OnNPCSleeps(npc);
             Npcs.OnNPCWakes  += npc => Mood.OnNPCWakes(npc);
 
@@ -273,37 +287,80 @@ namespace Waystation.Core
 
         private void SetupStartingModules()
         {
-            var s = Station;
-            // Add the core starting modules
-            string[] startingModules =
+            // Three connected 5x5 rooms arranged horizontally:
+            //   Room A  cols  0- 4, rows 0-4
+            //   Room B  cols  6-10, rows 0-4
+            //   Room C  cols 12-16, rows 0-4
+            // Doorway openings at (4,2), (6,2), (10,2), (12,2);
+            // corridor floor+door tiles at cols 5 and 11, row 2.
+            var roomOrigins = new[] { (0, 0), (6, 0), (12, 0) };
+
+            foreach (var (ox, oy) in roomOrigins)
             {
-                "module.command_center",
-                "module.docking_bay_a",
-                "module.docking_bay_b",
-                "module.crew_quarters",
-                "module.storage_hold",
-                "module.power_core"
-            };
-            foreach (var defId in startingModules)
-            {
-                if (Registry.Modules.TryGetValue(defId, out var defn))
+                // Floor: fill the entire 5x5 area
+                for (int dx = 0; dx < 5; dx++)
+                for (int dy = 0; dy < 5; dy++)
+                    PlaceBuilt("buildable.floor", ox + dx, oy + dy);
+
+                // Walls: top and bottom rows
+                for (int dx = 0; dx < 5; dx++)
                 {
-                    var mod = ModuleInstance.Create(defn.id, defn.displayName, defn.category);
-                    if (defn.cargoCapacity > 0)
-                        mod.cargoSettings = new CargoHoldSettings();
-                    s.AddModule(mod);
+                    if (!IsDoorwayOpening(ox + dx, oy))     PlaceBuilt("buildable.wall", ox + dx, oy);
+                    if (!IsDoorwayOpening(ox + dx, oy + 4)) PlaceBuilt("buildable.wall", ox + dx, oy + 4);
+                }
+                // Walls: left and right columns (excluding corners already handled)
+                for (int dy = 1; dy <= 3; dy++)
+                {
+                    if (!IsDoorwayOpening(ox,     oy + dy)) PlaceBuilt("buildable.wall", ox,     oy + dy);
+                    if (!IsDoorwayOpening(ox + 4, oy + dy)) PlaceBuilt("buildable.wall", ox + 4, oy + dy);
                 }
             }
+
+            // Corridor connections: one floor + door tile between each pair of rooms
+            PlaceBuilt("buildable.floor", 5,  2);
+            PlaceBuilt("buildable.door",  5,  2);
+            PlaceBuilt("buildable.floor", 11, 2);
+            PlaceBuilt("buildable.door",  11, 2);
+        }
+
+        private static bool IsDoorwayOpening(int col, int row) =>
+            (col == 4  && row == 2) || (col == 6  && row == 2) ||
+            (col == 10 && row == 2) || (col == 12 && row == 2);
+
+        private void PlaceBuilt(string buildableId, int col, int row, int rotation = 0)
+        {
+            if (!Registry.Buildables.TryGetValue(buildableId, out var defn)) return;
+            var f = FoundationInstance.Create(buildableId, col, row,
+                                              defn.maxHealth, defn.buildQuality,
+                                              rotation, defn.cargoCapacity);
+            f.status        = "complete";
+            f.buildProgress = 1f;
+            f.tileLayer     = defn.tileLayer;
+            f.tileWidth     = defn.tileWidth;
+            f.tileHeight    = defn.tileHeight;
+            Station.foundations[f.uid] = f;
         }
 
         private void SetupStartingCrew()
         {
-            string[] startingTemplates = { "npc.engineer", "npc.security_officer", "npc.operations" };
-            foreach (var tmpl in startingTemplates)
+            // Pick 3 random crew from the available templates
+            string[] crewPool = { "npc.engineer", "npc.security_officer", "npc.scientist",
+                                  "npc.trader", "npc.engineer", "npc.security_officer" };
+            // Fisher-Yates shuffle using Unity's seeded RNG
+            for (int i = crewPool.Length - 1; i > 0; i--)
             {
+                int j = UnityEngine.Random.Range(0, i + 1);
+                (crewPool[i], crewPool[j]) = (crewPool[j], crewPool[i]);
+            }
+            var seen = new HashSet<string>();
+            int spawned = 0;
+            foreach (var tmpl in crewPool)
+            {
+                if (spawned >= 3) break;
+                if (!seen.Add(tmpl)) continue;
                 if (!Registry.Npcs.ContainsKey(tmpl)) continue;
                 var npc = Npcs.SpawnCrewMember(tmpl);
-                if (npc != null) Station.AddNpc(npc);
+                if (npc != null) { Station.AddNpc(npc); spawned++; }
             }
         }
 
@@ -359,7 +416,9 @@ namespace Waystation.Core
 
             // Mood & social systems (run after job assignment so crisis is set before
             // next job tick, and after NPC needs so sleep state is current)
+            Needs.Tick(Station);
             Mood.Tick(Station);
+            Sanity.Tick(Station);
             Proximity.Tick(Station, Mood, Relationships);
             Conversations.Tick(Station, Mood, Relationships);
             Relationships.Tick(Station, Mood);
@@ -484,6 +543,109 @@ namespace Waystation.Core
         }
 
         // ── Save / Load ───────────────────────────────────────────────────────
+
+        /// <summary>Returns true if a save file exists and is non-empty.</summary>
+        public bool HasSaveFile()
+        {
+            string path = Path.Combine(Application.persistentDataPath, saveFileName);
+            return File.Exists(path) && new FileInfo(path).Length > 10;
+        }
+
+        /// <summary>
+        /// Loads the persisted save file and restores the fields that are
+        /// currently serialised (resources, tags, log, research, galaxy, etc.).
+        /// Full NPC/ship/module round-trip will be added once that data is saved.
+        /// </summary>
+        public void LoadGame()
+        {
+            string path = Path.Combine(Application.persistentDataPath, saveFileName);
+            if (!File.Exists(path)) { Debug.LogWarning("[GameManager] No save file found."); return; }
+
+            string json = File.ReadAllText(path);
+            if (!(MiniJSON.Json.Deserialize(json) is Dictionary<string, object> data))
+            {
+                Debug.LogError("[GameManager] Save file could not be parsed.");
+                return;
+            }
+
+            string stationName = data.TryGetValue("station_name", out var sn) ? sn.ToString() : "Waystation";
+            Station = new StationState(stationName);
+
+            if (data.TryGetValue("tick", out var tick))
+                Station.tick = System.Convert.ToInt32(tick);
+
+            if (data.TryGetValue("resources", out var res) && res is Dictionary<string, object> resDict)
+                foreach (var kv in resDict)
+                    Station.resources[kv.Key] = System.Convert.ToSingle(kv.Value);
+
+            if (data.TryGetValue("active_tags", out var tags) && tags is List<object> tagList)
+                foreach (var t in tagList) Station.activeTags.Add(t.ToString());
+
+            if (data.TryGetValue("policy", out var pol) && pol is Dictionary<string, object> polDict)
+                foreach (var kv in polDict) Station.policy[kv.Key] = kv.Value.ToString();
+
+            if (data.TryGetValue("event_cooldowns", out var cd) && cd is Dictionary<string, object> cdDict)
+                foreach (var kv in cdDict)
+                    Station.eventCooldowns[kv.Key] = System.Convert.ToInt32(kv.Value);
+
+            if (data.TryGetValue("log", out var lg) && lg is List<object> logList)
+                foreach (var l in logList) Station.log.Add(l.ToString());
+
+            if (data.TryGetValue("custom_room_names", out var crn) && crn is Dictionary<string, object> crnDict)
+                foreach (var kv in crnDict) Station.customRoomNames[kv.Key] = kv.Value.ToString();
+
+            // Research
+            if (data.TryGetValue("research", out var rsr) && rsr is Dictionary<string, object> rsrDict
+                && Station.research != null)
+            {
+                if (rsrDict.TryGetValue("pending_datachips", out var pdv))
+                    Station.research.pendingDatachips = System.Convert.ToInt32(pdv);
+                foreach (var kv in rsrDict)
+                {
+                    if (kv.Key == "pending_datachips") continue;
+                    if (!(kv.Value is Dictionary<string, object> branchDict)) continue;
+                    if (!System.Enum.TryParse(kv.Key, out ResearchBranch branch)) continue;
+                    if (!Station.research.branches.TryGetValue(branch, out var bs)) continue;
+                    if (branchDict.TryGetValue("points", out var pts))
+                        bs.points = System.Convert.ToSingle(pts);
+                    if (branchDict.TryGetValue("unlocked", out var ul) && ul is List<object> ulList)
+                        foreach (var u in ulList) bs.unlockedNodeIds.Add(u.ToString());
+                }
+            }
+
+            // Galaxy
+            if (data.TryGetValue("galaxy", out var gal) && gal is Dictionary<string, object> galDict)
+            {
+                if (galDict.TryGetValue("galaxy_seed", out var gsv))
+                    Station.galaxySeed = System.Convert.ToInt32(gsv);
+                if (galDict.TryGetValue("sectors", out var secObj) && secObj is List<object> secList)
+                {
+                    foreach (var secRaw in secList)
+                    {
+                        if (!(secRaw is Dictionary<string, object> sd)) continue;
+                        string uid = sd.TryGetValue("uid", out var uidv) ? uidv.ToString() : null;
+                        if (uid == null || !Station.sectors.TryGetValue(uid, out var sec)) continue;
+                        if (sd.TryGetValue("proper_name",  out var pn))  sec.properName = pn.ToString();
+                        if (sd.TryGetValue("is_renamed",   out var ir))  sec.isRenamed  = System.Convert.ToBoolean(ir);
+                        if (sd.TryGetValue("discovery",    out var dv)
+                            && System.Enum.TryParse(dv.ToString(), out SectorDiscoveryState disc))
+                            sec.discoveryState = disc;
+                    }
+                }
+            }
+
+            SetupStartingModules();
+            SetupStartingCrew();
+            Factions.Initialize(Station);
+            Skills.InitialiseNpcSkills(Station);
+            Rooms.RebuildBonusCache(Station);
+            UtilityNetworks.RebuildAll(Station);
+
+            Log($"Save loaded: '{stationName}' at tick {Station.tick}.");
+            IsPaused = false;
+            OnGameLoaded?.Invoke();
+            Debug.Log($"[GameManager] Save loaded from {path}");
+        }
 
         public void SaveGame()
         {
