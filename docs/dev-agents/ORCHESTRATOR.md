@@ -61,7 +61,7 @@ Work through each role in order. Do not skip a role unless it is genuinely not a
 
 ### 6 — Security
 - Review the full implementation for security issues.
-- Check: authentication, authorisation (RBAC), input validation, output encoding, secrets handling, OWASP Top 10 applicability.
+- Check: authentication, authorization (RBAC), input validation, output encoding, secrets handling, OWASP Top 10 applicability.
 - All findings must be resolved before the QA section.
 
 ### 7 — QA
