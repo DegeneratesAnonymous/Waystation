@@ -94,10 +94,20 @@ namespace Waystation.Demo
             }
 
             // Check for a load-save request from the main menu.
-            if (PlayerPrefs.GetInt("load_save", 0) == 1 && _gm.HasSaveFile())
+            if (PlayerPrefs.GetInt("load_save", 0) == 1)
             {
+                // Always clear the load intent so we don't get stuck repeatedly trying to load.
                 PlayerPrefs.DeleteKey("load_save");
-                _gm.LoadGame();
+
+                if (_gm.HasSaveFile())
+                {
+                    _gm.LoadGame();
+                    return;
+                }
+
+                // No save file exists: return to main menu rather than starting a new game
+                // with a stale load intent.
+                SceneManager.LoadScene("MainMenuScene");
                 return;
             }
 

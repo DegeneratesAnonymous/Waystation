@@ -1200,9 +1200,9 @@ namespace Waystation.Models
                 lineageId                  = raw.GetString("id"),
                 displayName                = raw.GetString("display_name", raw.GetString("id")),
                 baseTriggerChance          = raw.GetFloat("base_trigger_chance", 0.30f),
-                wisModifierReductionPerPoint = raw.GetFloat("wis_reduction_per_point", 0.05f),
+                wisModifierReductionPerPoint = raw.GetFloat("wis_modifier_reduction_per_point", 0.05f),
             };
-            if (raw.ContainsKey("axis") && raw["axis"] is List<object> axis)
+            if (raw.ContainsKey("axis_entries") && raw["axis_entries"] is List<object> axis)
             {
                 foreach (var aObj in axis)
                 {
