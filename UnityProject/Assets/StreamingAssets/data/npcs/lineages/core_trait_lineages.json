@@ -1,0 +1,194 @@
+[
+  {
+    "id": "lineage.hunger",
+    "display_name": "Hunger Relationship",
+    "description": "How an NPC has adapted to—or been shaped by—chronic hunger or plenty.",
+    "base_trigger_chance": 0.30,
+    "wis_modifier_reduction_per_point": 0.05,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.starvation_hardened", "tier_name": "Starvation Hardened" },
+      { "position": -1, "trait_id": "trait.hungry",              "tier_name": "Hungry" },
+      { "position":  0, "trait_id": null,                        "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.well_fed",            "tier_name": "Well Fed" },
+      { "position":  2, "trait_id": "trait.iron_stomach",        "tier_name": "Iron Stomach" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.rest",
+    "display_name": "Rest Relationship",
+    "description": "An NPC's relationship with sleep — from chronic exhaustion to mastery of rest.",
+    "base_trigger_chance": 0.30,
+    "wis_modifier_reduction_per_point": 0.05,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.exhausted_disposition",  "tier_name": "Exhausted" },
+      { "position": -1, "trait_id": "trait.fatigued",               "tier_name": "Fatigued" },
+      { "position":  0, "trait_id": null,                           "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.rested",                 "tier_name": "Rested" },
+      { "position":  2, "trait_id": "trait.well_rested_expert",     "tier_name": "Well Rested Expert" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.focus",
+    "display_name": "Work Focus",
+    "description": "Whether an NPC has developed disciplined work habits or burnout patterns.",
+    "base_trigger_chance": 0.30,
+    "wis_modifier_reduction_per_point": 0.05,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.burnt_out",       "tier_name": "Burnt Out" },
+      { "position": -1, "trait_id": "trait.overworked",      "tier_name": "Overworked" },
+      { "position":  0, "trait_id": null,                    "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.focused",         "tier_name": "Focused" },
+      { "position":  2, "trait_id": "trait.peak_performer",  "tier_name": "Peak Performer" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.social_comfort",
+    "display_name": "Social Comfort",
+    "description": "Whether an NPC thrives in company or withdraws from social interaction.",
+    "base_trigger_chance": 0.30,
+    "wis_modifier_reduction_per_point": 0.05,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.reclusive",            "tier_name": "Reclusive" },
+      { "position": -1, "trait_id": "trait.withdrawn",            "tier_name": "Withdrawn" },
+      { "position":  0, "trait_id": null,                         "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.social_comfortable",   "tier_name": "Social Comfortable" },
+      { "position":  2, "trait_id": "trait.gregarious",           "tier_name": "Gregarious" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.resilience",
+    "display_name": "Mental Resilience",
+    "description": "How an NPC responds to trauma, hardship, and prolonged stress.",
+    "base_trigger_chance": 0.25,
+    "wis_modifier_reduction_per_point": 0.06,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.fragile_psyche",    "tier_name": "Fragile Psyche" },
+      { "position": -1, "trait_id": "trait.anxious",           "tier_name": "Anxious" },
+      { "position":  0, "trait_id": null,                      "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.stoic",             "tier_name": "Stoic" },
+      { "position":  2, "trait_id": "trait.unbreakable",       "tier_name": "Unbreakable" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.ambition",
+    "display_name": "Ambition",
+    "description": "Whether an NPC is driven by achievement or has lost their sense of purpose.",
+    "base_trigger_chance": 0.25,
+    "wis_modifier_reduction_per_point": 0.04,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.apathetic",      "tier_name": "Apathetic" },
+      { "position": -1, "trait_id": "trait.unmotivated",    "tier_name": "Unmotivated" },
+      { "position":  0, "trait_id": null,                   "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.driven",         "tier_name": "Driven" },
+      { "position":  2, "trait_id": "trait.overachiever",   "tier_name": "Overachiever" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.loyalty",
+    "display_name": "Station Loyalty",
+    "description": "How deeply bonded an NPC has become to this station and its crew.",
+    "base_trigger_chance": 0.20,
+    "wis_modifier_reduction_per_point": 0.04,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.disloyal",         "tier_name": "Disloyal" },
+      { "position": -1, "trait_id": "trait.uncommitted",      "tier_name": "Uncommitted" },
+      { "position":  0, "trait_id": null,                     "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.loyal",            "tier_name": "Loyal" },
+      { "position":  2, "trait_id": "trait.deeply_devoted",   "tier_name": "Deeply Devoted" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.risk_tolerance",
+    "display_name": "Risk Tolerance",
+    "description": "How an NPC responds to dangerous assignments and uncertain outcomes.",
+    "base_trigger_chance": 0.25,
+    "wis_modifier_reduction_per_point": 0.05,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.cowardly",       "tier_name": "Cowardly" },
+      { "position": -1, "trait_id": "trait.cautious",       "tier_name": "Cautious" },
+      { "position":  0, "trait_id": null,                   "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.bold",           "tier_name": "Bold" },
+      { "position":  2, "trait_id": "trait.reckless",       "tier_name": "Reckless" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.authority_respect",
+    "display_name": "Respect for Authority",
+    "description": "Whether an NPC defers to command or questions orders and protocol.",
+    "base_trigger_chance": 0.20,
+    "wis_modifier_reduction_per_point": 0.04,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.insubordinate",    "tier_name": "Insubordinate" },
+      { "position": -1, "trait_id": "trait.questioning",      "tier_name": "Questioning" },
+      { "position":  0, "trait_id": null,                     "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.disciplined",      "tier_name": "Disciplined" },
+      { "position":  2, "trait_id": "trait.by_the_book",      "tier_name": "By the Book" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.empathy",
+    "display_name": "Empathy",
+    "description": "How much an NPC connects with and cares about the welfare of others.",
+    "base_trigger_chance": 0.25,
+    "wis_modifier_reduction_per_point": 0.05,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.callous",          "tier_name": "Callous" },
+      { "position": -1, "trait_id": "trait.indifferent",      "tier_name": "Indifferent" },
+      { "position":  0, "trait_id": null,                     "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.compassionate",    "tier_name": "Compassionate" },
+      { "position":  2, "trait_id": "trait.selfless",         "tier_name": "Selfless" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.curiosity",
+    "display_name": "Curiosity",
+    "description": "Whether an NPC seeks to explore knowledge and the unknown, or avoids novelty.",
+    "base_trigger_chance": 0.25,
+    "wis_modifier_reduction_per_point": 0.04,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.incurious",      "tier_name": "Incurious" },
+      { "position": -1, "trait_id": "trait.content",        "tier_name": "Content" },
+      { "position":  0, "trait_id": null,                   "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.curious",        "tier_name": "Curious" },
+      { "position":  2, "trait_id": "trait.obsessive",      "tier_name": "Obsessive" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  },
+  {
+    "id": "lineage.materialism",
+    "display_name": "Materialism",
+    "description": "Whether an NPC is driven by wealth and goods, or indifferent to material concerns.",
+    "base_trigger_chance": 0.20,
+    "wis_modifier_reduction_per_point": 0.04,
+    "axis_entries": [
+      { "position": -2, "trait_id": "trait.ascetic",         "tier_name": "Ascetic" },
+      { "position": -1, "trait_id": "trait.frugal",          "tier_name": "Frugal" },
+      { "position":  0, "trait_id": null,                    "tier_name": "Neutral" },
+      { "position":  1, "trait_id": "trait.acquisitive",     "tier_name": "Acquisitive" },
+      { "position":  2, "trait_id": "trait.greedy",          "tier_name": "Greedy" }
+    ],
+    "positive_trigger_events": [],
+    "negative_trigger_events": []
+  }
+]

@@ -34,15 +34,43 @@ namespace Waystation.Systems
         };
 
         /// <summary>
-        /// Generates a soft-phoneme planet name using V1 + L + V2 + E.
+        /// Generates a soft-phoneme star/planet name using V1 + L + V2 + E.
         /// </summary>
-        private static string PickPlanetName(Random rng)
+        public static string PickPlanetName(Random rng)
         {
             string raw = PlanetV1[rng.Next(PlanetV1.Length)]
                        + PlanetL [rng.Next(PlanetL.Length)]
                        + PlanetV2[rng.Next(PlanetV2.Length)]
                        + PlanetE [rng.Next(PlanetE.Length)];
             return char.ToUpper(raw[0]) + raw[1..];
+        }
+
+        // Roman numeral labels for orbital positions I–XV.
+        private static readonly string[] RomanNumerals =
+            { "I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV" };
+
+        private static string Roman(int n) =>
+            (n >= 1 && n <= RomanNumerals.Length) ? RomanNumerals[n - 1] : n.ToString();
+
+        // Unique catalogued names for Class-M (T6_Terran) worlds.
+        private static readonly string[] TerranNames =
+        {
+            "Eden", "Elysium", "Haven", "Sanctuary", "Verdana", "Gaia", "Nova Terra",
+            "Arcadia", "Covenant", "Refuge", "Meridian", "Genesis", "Horizon",
+            "Solace", "Prospect", "Elara", "Lyra", "Vela", "Palladia", "Eridani",
+            "Numeria", "Caspia", "Tethys", "Ioria", "Veris", "Aurum", "Seraph",
+            "Athena", "Callisto", "Caelum", "Verdant", "Alara", "Novum", "Auris",
+        };
+
+        /// <summary>
+        /// Returns the star name that <see cref="Generate"/> assigns for the given seed,
+        /// without building a full solar system (fast path for map hover tooltips).
+        /// </summary>
+        public static string GetStarNameForSeed(int seed)
+        {
+            var rng = new Random(seed);
+            rng.Next(StarDefs.Length);  // skip star-type selection (matches Generate sequence)
+            return PickPlanetName(rng);
         }
 
         // ── Star definitions: (type, colorHex, relativeSize, minPlanets, maxPlanets) ──
@@ -93,11 +121,12 @@ namespace Waystation.Systems
             var state = new SolarSystemState { seed = seed };
 
             // ── Star ──────────────────────────────────────────────────────────
-            var starDef       = StarDefs[rng.Next(StarDefs.Length)];
-            state.starType    = starDef.type;
+            var starDef        = StarDefs[rng.Next(StarDefs.Length)];
+            state.starType     = starDef.type;
             state.starColorHex = starDef.color;
-            state.starSize    = starDef.size;
-            state.systemName  = $"{PickPlanetName(rng)} System";
+            state.starSize     = starDef.size;
+            state.starName     = PickPlanetName(rng);
+            state.systemName   = $"{state.starName} System";
 
             // ── Body count & layout ───────────────────────────────────────────
             int planetCount = rng.Next(starDef.minP, starDef.maxP + 1);
@@ -112,6 +141,7 @@ namespace Waystation.Systems
             // First orbit starts at 1.5–2.2 AU-equivalents from the star.
             float baseOrbit = 1.5f + (float)rng.NextDouble() * 0.7f;
 
+            int planetNum = 0;  // sequential planet number (excludes asteroid belts)
             for (int i = 0; i < planetCount; i++)
             {
                 // Each successive orbit is 1.2–2.0 AU wider than the last
@@ -122,24 +152,25 @@ namespace Waystation.Systems
 
                 if (i == beltSlot)
                 {
-                    state.bodies.Add(MakeAsteroidBelt(state.systemName, radius, phase, isStation, rng));
+                    state.bodies.Add(MakeAsteroidBelt(state.starName, radius, phase, isStation, rng));
                     continue;
                 }
 
                 // Zone fraction (0 = innermost, 1 = outermost) determines body type.
                 float zone = (float)i / planetCount;
+                planetNum++;
                 SolarBody planet;
 
                 if (zone < 0.35f)
-                    planet = MakeRockyPlanet(i, state.systemName, radius, phase, zone, rng);
+                    planet = MakeRockyPlanet(i, state.starName, planetNum, radius, phase, zone, rng);
                 else if (zone < 0.65f)
                     planet = rng.NextDouble() < 0.5
-                        ? MakeRockyPlanet(i, state.systemName, radius, phase, zone, rng)
-                        : MakeGasGiant  (i, state.systemName, radius, phase, zone, rng);
+                        ? MakeRockyPlanet(i, state.starName, planetNum, radius, phase, zone, rng)
+                        : MakeGasGiant  (i, state.starName, planetNum, radius, phase, zone, rng);
                 else
                     planet = rng.NextDouble() < 0.4
-                        ? MakeGasGiant (i, state.systemName, radius, phase, zone, rng)
-                        : MakeIcePlanet(i, state.systemName, radius, phase, zone, rng);
+                        ? MakeGasGiant (i, state.starName, planetNum, radius, phase, zone, rng)
+                        : MakeIcePlanet(i, state.starName, planetNum, radius, phase, zone, rng);
 
                 planet.stationIsHere = isStation;
 
@@ -157,7 +188,7 @@ namespace Waystation.Systems
 
         // ── Body factories ────────────────────────────────────────────────────
 
-        private static SolarBody MakeRockyPlanet(int index, string sysName,
+        private static SolarBody MakeRockyPlanet(int index, string starName, int planetNum,
                                                   float radius, float phase, float zone, Random rng)
         {
             // Assign planet class: inner hot zone → T2/T3, mid → T4/T5, outer → T6/T7;
@@ -176,9 +207,15 @@ namespace Waystation.Systems
             else
                 pClass = rng.NextDouble() < 0.5 ? PlanetClass.T7_Frozen      : PlanetClass.T4_Tectonic;
 
+            // T6_Terran (Class M) worlds get a unique catalogued proper name.
+            // All other bodies are designated by star name + Roman numeral orbit index.
+            string bodyName = pClass == PlanetClass.T6_Terran
+                ? TerranNames[rng.Next(TerranNames.Length)]
+                : $"{starName} {Roman(planetNum)}";
+
             var p = new SolarBody
             {
-                name          = PickPlanetName(rng),
+                name          = bodyName,
                 bodyType      = BodyType.RockyPlanet,
                 planetClass   = pClass,
                 orbitalRadius = radius,
@@ -194,7 +231,7 @@ namespace Waystation.Systems
             return p;
         }
 
-        private static SolarBody MakeGasGiant(int index, string sysName,
+        private static SolarBody MakeGasGiant(int index, string starName, int planetNum,
                                                float radius, float phase, float zone, Random rng)
         {
             // Zone-based gas giant class:
@@ -211,7 +248,7 @@ namespace Waystation.Systems
 
             var p = new SolarBody
             {
-                name          = PickPlanetName(rng),
+                name          = $"{starName} {Roman(planetNum)}",
                 bodyType      = BodyType.GasGiant,
                 planetClass   = pClass,
                 orbitalRadius = radius,
@@ -226,7 +263,7 @@ namespace Waystation.Systems
             return p;
         }
 
-        private static SolarBody MakeIcePlanet(int index, string sysName,
+        private static SolarBody MakeIcePlanet(int index, string starName, int planetNum,
                                                 float radius, float phase, float zone, Random rng)
         {
             // Outer zone → I3 (cometary); mid-outer → I1/I2
@@ -240,7 +277,7 @@ namespace Waystation.Systems
 
             var p = new SolarBody
             {
-                name          = PickPlanetName(rng),
+                name          = $"{starName} {Roman(planetNum)}",
                 bodyType      = BodyType.IcePlanet,
                 planetClass   = pClass,
                 orbitalRadius = radius,
@@ -255,12 +292,12 @@ namespace Waystation.Systems
             return p;
         }
 
-        private static SolarBody MakeAsteroidBelt(string sysName, float radius,
+        private static SolarBody MakeAsteroidBelt(string starName, float radius,
                                                    float phase, bool isStation, Random rng)
         {
             var belt = new SolarBody
             {
-                name          = $"{BaseName(sysName)} Belt",
+                name          = $"{starName} Belt",
                 bodyType      = BodyType.AsteroidBelt,
                 orbitalRadius = radius,
                 orbitalPeriod = OrbitalPeriod(radius),
@@ -360,9 +397,10 @@ namespace Waystation.Systems
 
                         // Consume RNG unconditionally so results are stable regardless of
                         // which candidates pass the distance filter.
-                        var starDef    = StarDefs[rng.Next(StarDefs.Length)];
-                        int sysSeed    = (int)((uint)chunkSeed ^ (uint)(i * 2654435769u));
-                        string sysName = $"{PickPlanetName(rng)} System";
+                        var starDef     = StarDefs[rng.Next(StarDefs.Length)];
+                        int sysSeed     = (int)((uint)chunkSeed ^ (uint)(i * 2654435769u));
+                        string starName = PickPlanetName(rng);
+                        string sysName  = $"{starName} System";
 
                         if (isHomeChunk && dx * dx + dy * dy < 4f) continue;
                         if (dx * dx + dy * dy > r2) continue;
@@ -370,6 +408,7 @@ namespace Waystation.Systems
                         result.Add(new NeighborSystem
                         {
                             systemName   = sysName,
+                            starName     = starName,
                             seed         = sysSeed,
                             positionLY   = new UnityEngine.Vector2(x, y),
                             starType     = starDef.type,
@@ -379,6 +418,62 @@ namespace Waystation.Systems
                     }
                 }
             }
+            return result;
+        }
+
+        /// <summary>
+        /// Generates a deterministic list of NeighborSystem entries for all star systems
+        /// within <paramref name="sector"/>, matching the dot count produced by
+        /// PlaceSectorSystemDots in SystemMapController.
+        /// </summary>
+        public static List<NeighborSystem> GenerateSectorSystems(
+            SectorData sector, bool isHome, SolarSystemState homeSys)
+        {
+            int baseSeed = StableHash(sector.uid);
+            var rng      = new Random(baseSeed);
+            var result   = new List<NeighborSystem>();
+
+            if (isHome && homeSys != null)
+            {
+                // Consume the 2 home-star position jitter calls made by PlaceSectorSystemDots.
+                rng.NextDouble(); rng.NextDouble();
+                result.Add(new NeighborSystem
+                {
+                    systemName   = homeSys.systemName,
+                    starName     = homeSys.starName,
+                    seed         = homeSys.seed,
+                    positionLY   = UnityEngine.Vector2.zero,
+                    starType     = homeSys.starType,
+                    starColorHex = homeSys.starColorHex,
+                    starSize     = homeSys.starSize,
+                });
+            }
+
+            int targetCount = sector.systemDensity switch
+            {
+                SystemDensity.Sparse   => rng.Next(3,  7),
+                SystemDensity.Low      => rng.Next(7, 11),
+                SystemDensity.Standard => rng.Next(11, 16),
+                SystemDensity.High     => rng.Next(16, 21),
+                _                      => rng.Next(11, 16),
+            };
+
+            for (int i = result.Count; i < targetCount; i++)
+            {
+                int sysSeed  = StableHash(sector.uid + $"_sys_{i}");
+                var sysState = Generate("sys", sysSeed);
+                result.Add(new NeighborSystem
+                {
+                    systemName   = sysState.systemName,
+                    starName     = sysState.starName,
+                    seed         = sysSeed,
+                    positionLY   = UnityEngine.Vector2.zero,
+                    starType     = sysState.starType,
+                    starColorHex = sysState.starColorHex,
+                    starSize     = sysState.starSize,
+                });
+            }
+
             return result;
         }
     }

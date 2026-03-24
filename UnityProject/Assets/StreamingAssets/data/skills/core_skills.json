@@ -3,6 +3,7 @@
     "id": "skill.farming",
     "display_name": "Farming",
     "description": "Proficiency in growing and harvesting crops in hydroponics bays.",
+    "governing_ability": "WIS",
     "associated_task_types": ["sow", "harvest", "tend"],
     "xp_per_task_completion": 15.0,
     "xp_per_active_second": 0.0
@@ -11,6 +12,7 @@
     "id": "skill.engineering",
     "display_name": "Engineering",
     "description": "Skill in construction, block placement, and utility repair.",
+    "governing_ability": "INT",
     "associated_task_types": ["job.build", "job.module_maintenance", "job.power_management"],
     "xp_per_task_completion": 12.0,
     "xp_per_active_second": 0.0
@@ -19,6 +21,7 @@
     "id": "skill.science",
     "display_name": "Science",
     "description": "Research aptitude gained from time at Science Terminals.",
+    "governing_ability": "INT",
     "associated_task_types": ["job.research_science"],
     "xp_per_task_completion": 0.0,
     "xp_per_active_second": 0.5
@@ -27,6 +30,7 @@
     "id": "skill.economics",
     "display_name": "Economics",
     "description": "Business acumen built through Economic Terminal work and trade.",
+    "governing_ability": "INT",
     "associated_task_types": ["job.research_economic"],
     "xp_per_task_completion": 0.0,
     "xp_per_active_second": 0.5
@@ -35,6 +39,7 @@
     "id": "skill.combat",
     "display_name": "Combat",
     "description": "Military readiness developed at Military Terminals.",
+    "governing_ability": "STR",
     "associated_task_types": ["job.research_military"],
     "xp_per_task_completion": 0.0,
     "xp_per_active_second": 0.5
@@ -43,6 +48,7 @@
     "id": "skill.social",
     "display_name": "Social",
     "description": "Interpersonal skill improved through conversations and hail attempts.",
+    "governing_ability": "CHA",
     "associated_task_types": ["conversation_positive", "hail_success"],
     "xp_per_task_completion": 10.0,
     "xp_per_active_second": 0.0
@@ -51,8 +57,190 @@
     "id": "skill.piloting",
     "display_name": "Piloting",
     "description": "Shuttle operation expertise from away missions and departures.",
+    "governing_ability": "DEX",
     "associated_task_types": ["shuttle_depart", "shuttle_return"],
     "xp_per_task_completion": 20.0,
+    "xp_per_active_second": 0.0
+  },
+
+  {
+    "id": "skill.athletics",
+    "display_name": "Athletics",
+    "description": "Physical exertion — climbing, running, and carrying heavy loads.",
+    "governing_ability": "STR",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.melee",
+    "display_name": "Melee",
+    "description": "Unarmed and close-quarters combat proficiency.",
+    "governing_ability": "STR",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.agility",
+    "display_name": "Agility",
+    "description": "Quick movement, tumbling, and evasion in tight spaces.",
+    "governing_ability": "DEX",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.stealth",
+    "display_name": "Stealth",
+    "description": "Moving quietly and avoiding detection.",
+    "governing_ability": "DEX",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.ranged",
+    "display_name": "Ranged",
+    "description": "Accuracy with firearms, energy weapons, and thrown projectiles.",
+    "governing_ability": "DEX",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.crafting",
+    "display_name": "Crafting",
+    "description": "Dexterous fabrication, tool use, and fine assembly work.",
+    "governing_ability": "DEX",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.medicine",
+    "display_name": "Medicine",
+    "description": "Medical treatment, surgery, and triage under pressure.",
+    "governing_ability": "INT",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.electronics",
+    "display_name": "Electronics",
+    "description": "Circuit work, computing, and electronic system configuration.",
+    "governing_ability": "INT",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.navigation",
+    "display_name": "Navigation",
+    "description": "Plotting stellar courses and reading astro-positional data.",
+    "governing_ability": "INT",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.investigation",
+    "display_name": "Investigation",
+    "description": "Evidence gathering, document analysis, and scene reconstruction.",
+    "governing_ability": "INT",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.perception",
+    "display_name": "Perception",
+    "description": "Noticing hidden objects, listening for danger, ambient awareness.",
+    "governing_ability": "WIS",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.survival",
+    "display_name": "Survival",
+    "description": "Rationing supplies, foraging, and adapting to hostile environments.",
+    "governing_ability": "WIS",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.animal_handling",
+    "display_name": "Animal Handling",
+    "description": "Calming, training, and caring for live creatures aboard the station.",
+    "governing_ability": "WIS",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.insight",
+    "display_name": "Insight",
+    "description": "Reading people — detecting lies, sensing intent, social cue interpretation.",
+    "governing_ability": "WIS",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.persuasion",
+    "display_name": "Persuasion",
+    "description": "Diplomacy, negotiation, and earning cooperation through reason or charm.",
+    "governing_ability": "CHA",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.deception",
+    "display_name": "Deception",
+    "description": "Misdirection, bluffing, and maintaining a believable false front.",
+    "governing_ability": "CHA",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.intimidation",
+    "display_name": "Intimidation",
+    "description": "Coercion through displays of force, threats, or fearsome presence.",
+    "governing_ability": "CHA",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.performance",
+    "display_name": "Performance",
+    "description": "Entertainment, storytelling, and raising crew morale through expression.",
+    "governing_ability": "CHA",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.endurance",
+    "display_name": "Endurance",
+    "description": "Sustained physical labor, fatigue resistance, and prolonged exertion.",
+    "governing_ability": "END",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.resilience",
+    "display_name": "Resilience",
+    "description": "Recovery from trauma, illness, and psychological stress.",
+    "governing_ability": "END",
+    "associated_task_types": [],
+    "xp_per_task_completion": 10.0,
     "xp_per_active_second": 0.0
   }
 ]

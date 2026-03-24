@@ -1,6 +1,7 @@
-// FeatureFlags — compile-time feature gates.
-// Set a flag to false to eliminate dead-code paths at build time.
-// All three flags must compile cleanly when set to false.
+// FeatureFlags — runtime feature gates.
+// Set a flag to false to disable a feature. Use static (not const) to avoid
+// CS0162 unreachable-code warnings from guard checks like
+//   if (!FeatureFlags.X) return;
 namespace Waystation.Core
 {
     public static class FeatureFlags
@@ -9,18 +10,18 @@ namespace Waystation.Core
         /// Enables NPC trait acquisition, decay, conflict resolution,
         /// and trait display in the Crew Menu.
         /// </summary>
-        public const bool NpcTraits = true;
+        public static bool NpcTraits = true;
 
         /// <summary>
         /// Enables faction government aggregation and succession logic.
         /// Requires NpcTraits = true to produce meaningful aggregates.
         /// </summary>
-        public const bool FactionGovernment = true;
+        public static bool FactionGovernment = true;
 
         /// <summary>
         /// Enables regional resource history tracking and NPC generation biasing.
         /// Stub implementations are active when this is false.
         /// </summary>
-        public const bool RegionSimulation = true;
+        public static bool RegionSimulation = true;
     }
 }

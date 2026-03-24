@@ -285,6 +285,31 @@ namespace Waystation.Systems
             return null;
         }
 
+        /// <summary>
+        /// Returns the effective skill check result: skill level + governing ability modifier
+        /// + need-state modifier.  Range is roughly -4 to level+5.
+        /// </summary>
+        public int GetSkillCheckResult(NPCInstance npc, string skillId)
+        {
+            int level     = GetSkillLevel(npc, skillId);
+            int abilityMod = 0;
+            if (_registry.Skills.TryGetValue(skillId, out var def) &&
+                !string.IsNullOrEmpty(def.governingAbility))
+            {
+                abilityMod = def.governingAbility switch
+                {
+                    "STR" => AbilityScores.GetModifier(npc.abilityScores.STR),
+                    "DEX" => AbilityScores.GetModifier(npc.abilityScores.DEX),
+                    "INT" => AbilityScores.GetModifier(npc.abilityScores.INT),
+                    "WIS" => AbilityScores.GetModifier(npc.abilityScores.WIS),
+                    "CHA" => AbilityScores.GetModifier(npc.abilityScores.CHA),
+                    "END" => AbilityScores.GetModifier(npc.abilityScores.END),
+                    _     => 0,
+                };
+            }
+            return level + abilityMod + NeedSystem.GetSkillCheckModifier(npc);
+        }
+
         // ── Expertise modifier ────────────────────────────────────────────────
 
         /// <summary>

@@ -97,6 +97,12 @@ namespace Waystation.Systems
 
             // 4. Threshold evaluation → update WorkModifier and crisis flag
             EvaluateThresholds(npc);
+
+            // 5. Sync legacy -1..1 mood float from moodScore
+            npc.RecalculateMood();
+
+            // 6. Feed daily mood accumulator for SanitySystem
+            SanitySystem.AccumulateMood(npc, npc.moodScore);
         }
 
         private static void ApplyDrift(NPCInstance npc)

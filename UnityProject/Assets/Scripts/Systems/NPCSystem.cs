@@ -27,16 +27,8 @@ namespace Waystation.Systems
             "Thane","Nori","Crest","Weld","Pell","Strix","Vael","Oryn"
         };
 
-        // Needs decay rates per tick
-        public static readonly Dictionary<string, float> NeedsDecayRate = new Dictionary<string, float>
-        {
-            { "hunger", -0.04f }, { "rest", -0.03f }, { "social", -0.01f }, { "safety", 0f }, { "sleep", -0.02f }
-        };
-
         private const float SkillXpPerTick           = 0.008f;
         private const float XpPerLevel               = 1.0f;
-        private const float MaxPassiveSocialRecovery  = 0.02f;
-        private const float SocialRecoveryPerPerson   = 0.005f;
         private const float InjuryRecoveryChance      = 0.05f;
 
         // Maps job IDs → the skill they train
@@ -90,6 +82,9 @@ namespace Waystation.Systems
                 if (overrides.ContainsKey("name"))         npc.name      = overrides["name"]?.ToString();
             }
 
+            // Assign standard array ability scores by archetype
+            AssignAbilityScores(npc, templateId);
+
             npc.RecalculateMood();
             return npc;
         }
@@ -115,29 +110,8 @@ namespace Waystation.Systems
             // NPCs on away missions are off-station — skip all local routing.
             if (npc.missionUid != null) return;
 
-            npc.UpdateNeeds(NeedsDecayRate);
-
-            // Food consumption
-            if ((npc.IsCrew() || npc.IsVisitor()) && station.GetResource("food") > 0f)
-            {
-                npc.UpdateNeeds(new Dictionary<string, float> { { "hunger", 0.06f } });
-                station.ModifyResource("food", -0.5f);
-            }
-
-            // Social recovery from population density
-            float socialRecovery = Mathf.Min(MaxPassiveSocialRecovery, (population - 1) * SocialRecoveryPerPerson);
-            if (socialRecovery > 0f)
-                npc.UpdateNeeds(new Dictionary<string, float> { { "social", socialRecovery } });
-
-            // Visitor lounge social boost
-            foreach (var module in station.modules.Values)
-            {
-                if (module.active && module.definitionId.Contains("visitor_lounge"))
-                {
-                    npc.UpdateNeeds(new Dictionary<string, float> { { "social", 0.01f } });
-                    break;
-                }
-            }
+            // Needs, sleep routing, and mood recalculation are now handled by NeedSystem.
+            // MoodSystem.TickMood handles drift and modifier expiry.
 
             // Injury recovery in med bay
             if (npc.injuries > 0)
@@ -154,8 +128,6 @@ namespace Waystation.Systems
                 }
             }
 
-            npc.RecalculateMood();
-
             // Skill progression + rank promotion
             if (npc.IsCrew() && npc.currentJobId != null)
             {
@@ -163,38 +135,14 @@ namespace Waystation.Systems
                 TryPromoteRank(npc, station);
             }
 
-            // Sleep routing for crew
-            if (npc.IsCrew())
+            // Daily aging and life stage update
+            if (station.tick % 96 == 0)
             {
-                float sleepVal = npc.needs.ContainsKey("sleep") ? npc.needs["sleep"] : 1f;
-                if (!npc.isSleeping && sleepVal < 0.25f)
-                {
-                    TryClaimBed(npc, station);
-                    // Fire sleep event only if TryClaimBed successfully put NPC to sleep
-                    if (npc.isSleeping)
-                        OnNPCSleeps?.Invoke(npc);
-                }
-                else if (npc.isSleeping && sleepVal >= 0.9f)
-                {
-                    npc.isSleeping = false;   // wake up; keep bed claimed for next cycle
-                    OnNPCWakes?.Invoke(npc);
-                }
+                npc.ageDays++;
+                UpdateLifeStageAndSlots(npc);
             }
 
-            // Distress logging (rate-limited)
-            if (npc.needs.ContainsKey("hunger") && npc.needs["hunger"] < 0.2f &&
-                UnityEngine.Random.value < 0.1f)
-                station.LogEvent($"{npc.name} is starving.");
-            if (npc.needs.ContainsKey("rest") && npc.needs["rest"] < 0.1f &&
-                UnityEngine.Random.value < 0.1f)
-                station.LogEvent($"{npc.name} is exhausted.");
-            if (npc.needs.ContainsKey("sleep") && npc.needs["sleep"] < 0.1f &&
-                UnityEngine.Random.value < 0.1f)
-                station.LogEvent($"{npc.name} is exhausted and needs sleep.");
-
             // Idle wandering: move to a random oxygenated module periodically.
-            // Only gate on having no active job; re-wander even if already in a
-            // module so idle NPCs keep moving rather than freezing after first step.
             if (npc.IsCrew() && string.IsNullOrEmpty(npc.currentJobId) &&
                 UnityEngine.Random.value < 0.05f)
             {
@@ -384,6 +332,52 @@ namespace Waystation.Systems
         }
 
         // ── Private generation helpers ──────────────────────────────────────────
+
+        /// <summary>
+        /// Assigns ability scores using the standard array [14, 12, 11, 10, 9, 8]
+        /// distributed by archetype (templateId prefix).
+        /// STR DEX INT WIS CHA END order.
+        /// </summary>
+        private static void AssignAbilityScores(NPCInstance npc, string templateId)
+        {
+            // Standard array: STR, DEX, INT, WIS, CHA, END
+            (int str, int dex, int @int, int wis, int cha, int end) scores = templateId switch
+            {
+                var t when t.Contains("engineer")         => (9,  10, 14, 12, 8,  11),
+                var t when t.Contains("security")         => (14, 12, 8,  9,  10, 11),
+                var t when t.Contains("scientist")        => (8,  10, 14, 12, 11, 9 ),
+                var t when t.Contains("medic")            => (8,  10, 12, 14, 11, 9 ),
+                var t when t.Contains("merchant")         => (8,  10, 10, 10, 14, 11),
+                var t when t.Contains("pilot")            => (9,  14, 12, 10, 8,  11),
+                _                                         => (8,  10, 14, 12, 9,  11),
+            };
+            npc.abilityScores.STR = scores.str;
+            npc.abilityScores.DEX = scores.dex;
+            npc.abilityScores.INT = scores.@int;
+            npc.abilityScores.WIS = scores.wis;
+            npc.abilityScores.CHA = scores.cha;
+            npc.abilityScores.END = scores.end;
+        }
+
+        /// <summary>
+        /// Updates life stage and trait slot count based on ageDays.
+        /// Baby → Child at 3 in-game years (1095 days).
+        /// Child → Adult at 18 in-game years (6570 days).
+        /// </summary>
+        private static void UpdateLifeStageAndSlots(NPCInstance npc)
+        {
+            LifeStage newStage = npc.ageDays >= 6570 ? LifeStage.Adult
+                               : npc.ageDays >= 1095 ? LifeStage.Child
+                               :                       LifeStage.Baby;
+            npc.lifeStage = newStage;
+
+            npc.traitSlots = newStage switch
+            {
+                LifeStage.Baby  => 1,
+                LifeStage.Child => 2,
+                _ =>               3, // Adult base; expertise adds slots via SkillSystem
+            };
+        }
 
         private string GenerateName(NPCTemplate template)
         {

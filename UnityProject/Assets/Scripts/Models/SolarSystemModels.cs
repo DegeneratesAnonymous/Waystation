@@ -77,7 +77,8 @@ namespace Waystation.Models
     [Serializable]
     public class SolarSystemState
     {
-        public string    systemName;
+        public string    starName;    // e.g. "Arcturus"
+        public string    systemName;  // e.g. "Arcturus System"
         public int       seed;
 
         // Star
@@ -96,7 +97,8 @@ namespace Waystation.Models
     [Serializable]
     public class NeighborSystem
     {
-        public string   systemName;
+        public string   starName;    // e.g. "Arcturus"
+        public string   systemName;  // e.g. "Arcturus System"
         public int      seed;
         public Vector2  positionLY;   // light-years relative to the home system (0,0)
         public StarType starType;
