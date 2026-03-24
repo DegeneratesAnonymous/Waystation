@@ -435,15 +435,17 @@ namespace Waystation.Core
             // Mood & social systems (run after job assignment so crisis is set before
             // next job tick, and after NPC needs so sleep state is current)
             Needs.Tick(Station);
+
+            // Medical tick runs before Mood so that pain/blood/disease mood modifiers are
+            // included in the current-tick mood score and therefore in Sanity's daily accumulator.
+            if (FeatureFlags.MedicalSystem)
+                Medical?.Tick(Station);
+
             Mood.Tick(Station);
             Sanity.Tick(Station);
             Proximity.Tick(Station, Mood, Relationships);
             Conversations.Tick(Station, Mood, Relationships);
             Relationships.Tick(Station, Mood);
-
-            // Medical system (after needs/mood so blood volume and pain feed into mood correctly)
-            if (FeatureFlags.MedicalSystem)
-                Medical?.Tick(Station);
 
             // Skill system
             Skills.Tick(Station);

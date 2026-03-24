@@ -74,8 +74,8 @@ namespace Waystation.Systems
             PerformSurgery(NPCInstance surgeon, NPCInstance patient,
                           string targetPartId, Wound targetWound,
                           StationState station,
-                          float environmentModifier = 1f,
-                          float facilityModifier    = 1f)
+                          float environmentModifier = 0f,
+                          float facilityModifier    = 0f)
         {
             if (!FeatureFlags.MedicalSystem) return (SurgeryOutcome.Failure, 0, null);
 
@@ -83,13 +83,14 @@ namespace Waystation.Systems
             int medicalLevel = SkillSystem.GetSkillLevel(surgeon, "skill.medical");
             int dexMod       = surgeon.abilityScores.DEXMod;
 
-            int d20 = Random.Range(1, 21);
-            int roll = d20
-                     + surgeryLevel
-                     + dexMod
-                     + Mathf.RoundToInt(environmentModifier)
-                     + Mathf.RoundToInt(facilityModifier)
-                     + Mathf.RoundToInt(medicalLevel * 0.5f);
+            int   d20       = Random.Range(1, 21);
+            float totalRoll = d20
+                            + surgeryLevel
+                            + dexMod
+                            + environmentModifier
+                            + facilityModifier
+                            + (medicalLevel * 0.5f);
+            int   roll      = Mathf.RoundToInt(totalRoll);
 
             var outcome = MapRollToOutcome(roll);
             CriticalFailureResult? cfResult = null;

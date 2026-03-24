@@ -129,6 +129,12 @@ namespace Waystation.Systems
                 san.isInBreakdown = true;
                 station?.LogEvent($"⚠ {npc.name} is having a mental breakdown.");
             }
+            else if (san.isInBreakdown && san.score > 0)
+            {
+                // Mirror the recovery rule from TickDay: breakdown clears when sanity rises above 0
+                san.isInBreakdown        = false;
+                san.requiresIntervention = false;
+            }
         }
     }
 }

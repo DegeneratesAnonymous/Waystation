@@ -71,18 +71,17 @@ namespace Waystation.Systems
             {
                 if (!npc.IsCrew() || npc.missionUid != null) continue;
 
-                // Consciousness check — unconscious NPCs cannot seek needs.
                 // FEATURE_MEDICAL_SYSTEM: when the medical system is active and the NPC is
-                // unconscious, skip all need-seeking behaviour for this tick.
-                if (FeatureFlags.MedicalSystem &&
-                    npc.medicalProfile != null && npc.medicalProfile.isUnconscious)
-                    continue;
+                // unconscious, need decay still happens (hunger/thirst/sleep continue depleting)
+                // but NPCs cannot actively seek or consume resources.
+                bool suppressSeeking = FeatureFlags.MedicalSystem &&
+                                       npc.medicalProfile != null && npc.medicalProfile.isUnconscious;
 
                 EnsureProfiles(npc, station);
 
-                TickSleep     (npc, station);
-                TickHunger    (npc, station);
-                TickThirst    (npc, station);
+                TickSleep     (npc, station, suppressSeeking);
+                TickHunger    (npc, station, suppressSeeking);
+                TickThirst    (npc, station, suppressSeeking);
                 TickRecreation(npc);
                 TickSocial    (npc, population);
                 ApplyMoodModifiers(npc, station);
@@ -96,7 +95,7 @@ namespace Waystation.Systems
 
         // ── Sleep ─────────────────────────────────────────────────────────────
 
-        private void TickSleep(NPCInstance npc, StationState station)
+        private void TickSleep(NPCInstance npc, StationState station, bool suppressSeeking = false)
         {
             var s = npc.sleepNeed;
 
@@ -133,7 +132,7 @@ namespace Waystation.Systems
 
             if (s.value <= 0f)
                 station.LogEvent($"{npc.name} has collapsed from exhaustion.");
-            else if (s.isSeeking)
+            else if (s.isSeeking && !suppressSeeking)
                 TryClaimBedAndSleep(npc, station);
         }
 
@@ -163,7 +162,7 @@ namespace Waystation.Systems
 
         // ── Hunger ────────────────────────────────────────────────────────────
 
-        private void TickHunger(NPCInstance npc, StationState station)
+        private void TickHunger(NPCInstance npc, StationState station, bool suppressSeeking = false)
         {
             var h = npc.hungerNeed;
 
@@ -177,8 +176,8 @@ namespace Waystation.Systems
             h.value     = Mathf.Max(0f, h.value - decay);
             h.isSeeking = h.value <= HungerSeekThreshold;
 
-            // Attempt food consumption when seeking
-            if (h.isSeeking && station.GetResource("food") > 0f)
+            // Attempt food consumption when seeking and able to do so
+            if (h.isSeeking && !suppressSeeking && station.GetResource("food") > 0f)
             {
                 h.value = Mathf.Min(100f, h.value + 45f); // standard meal: 45%
                 station.ModifyResource("food", -1f);
@@ -216,7 +215,7 @@ namespace Waystation.Systems
 
         // ── Thirst ────────────────────────────────────────────────────────────
 
-        private void TickThirst(NPCInstance npc, StationState station)
+        private void TickThirst(NPCInstance npc, StationState station, bool suppressSeeking = false)
         {
             var t = npc.thirstNeed;
 
@@ -225,7 +224,7 @@ namespace Waystation.Systems
             t.value     = Mathf.Max(0f, t.value - ThirstDepletionPerTick);
             t.isSeeking = t.value <= ThirstSeekThreshold;
 
-            if (t.isSeeking && station.GetResource("water") > 0f)
+            if (t.isSeeking && !suppressSeeking && station.GetResource("water") > 0f)
             {
                 t.value = Mathf.Min(100f, t.value + 40f); // basic water: 40%
                 station.ModifyResource("water", -0.5f);

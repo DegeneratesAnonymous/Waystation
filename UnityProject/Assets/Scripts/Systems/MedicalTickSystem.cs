@@ -15,7 +15,7 @@
 //  12. Evaluates scar chance when wounds fully heal
 //  13. Routes mood modifiers (pain, blood loss, disease)
 //  14. Routes sanity/trait lineage events (scars)
-//  15. Suppresses need-seeking when unconscious (via NeedSystem.SetUnconscious)
+//  15. Suppresses need-seeking when unconscious (via MedicalProfile.isUnconscious as checked by NeedSystem)
 //
 // Sub-systems (BleedingSystem, PainSystem, ConsciousnessSystem) are encapsulated
 // as private static helpers to keep this file self-contained but named appropriately
@@ -131,23 +131,46 @@ namespace Waystation.Systems
             // 1. BleedingSystem — advance bleed, apply to blood volume
             BleedingSystem.Tick(profile);
 
+            // Blood volume 0% → immediate death from blood loss
+            if (profile.bloodVolume <= 0f)
+            {
+                KillNPC(npc, station, "blood loss");
+                return;
+            }
+
             // 2–3. Infection accumulation and roll checks
             TickInfection(npc, profile, station);
 
-            // 4. Disease progression
+            // 4. Disease progression (uses antibiotic state)
             TickDiseases(npc, profile, station);
 
             // 5. Wound healing
             TickHealing(npc, profile, station);
 
-            // 6. PainSystem — derive pain from wounds
-            PainSystem.Derive(npc, profile, _woundTypes);
+            // 5a. Analgesic duration countdown
+            if (profile.analgesicDurationTicks > 0)
+            {
+                profile.analgesicDurationTicks--;
+                if (profile.analgesicDurationTicks <= 0)
+                    profile.analgesicStrength = 0f;
+            }
+
+            // 5b. Antibiotic duration countdown
+            if (profile.antibioticsDurationTicks > 0)
+            {
+                profile.antibioticsDurationTicks--;
+                if (profile.antibioticsDurationTicks <= 0)
+                    profile.antibioticsStrength = 0f;
+            }
+
+            // 6. PainSystem — derive pain from wounds (applies analgesic suppression)
+            PainSystem.Derive(npc, profile, _woundTypes, _woundInfectionDef);
 
             // 7. ConsciousnessSystem — derive consciousness
             ConsciousnessSystem.Derive(profile);
 
             // 8. Blood volume natural recovery
-            if (profile.bloodVolume > 0f && profile.bloodVolume < 100f)
+            if (profile.bloodVolume < 100f)
             {
                 // Well-fed bonus (read from NeedsSystem)
                 float recoveryBonus = 1f;
@@ -160,6 +183,10 @@ namespace Waystation.Systems
             // 9–10. Vital part death checks
             CheckVitalParts(npc, profile, station);
             TickPairedOrganTimers(npc, profile, station);
+
+            // Early-return if NPC died during vital checks so we don't apply
+            // mood/penalty/consciousness side-effects to an already-dead NPC.
+            if (npc.statusTags.Contains("dead")) return;
 
             // 11. Functional penalties
             ApplyFunctionalPenalties(npc, profile);
@@ -198,38 +225,37 @@ namespace Waystation.Systems
         private static class PainSystem
         {
             public static void Derive(NPCInstance npc, MedicalProfile profile,
-                                      Dictionary<WoundType, WoundTypeDefinition> woundTypes)
+                                      Dictionary<WoundType, WoundTypeDefinition> woundTypes,
+                                      DiseaseDefinition woundInfectionDef)
             {
                 float rawPain = 0f;
                 foreach (var part in profile.parts.Values)
                     foreach (var w in part.wounds)
                         rawPain += w.painContribution;
 
-                // Include disease pain
+                // Include disease pain (uses pre-cached definition — no allocation per call)
                 foreach (var part in profile.parts.Values)
                     foreach (var d in part.diseases)
-                        rawPain += GetDiseasePain(d);
+                        rawPain += GetDiseasePain(d, woundInfectionDef);
 
                 // END modifier reduces effective pain (Fortitude/Endurance)
                 int endMod = npc.abilityScores.ENDMod; // -2 to +3
                 float endReduction = Mathf.Clamp(endMod * 0.05f, -0.10f, 0.15f);
                 rawPain *= Mathf.Max(0.1f, 1f - endReduction);
 
+                // Analgesic suppression (from AdministerPainkiller)
+                if (profile.analgesicDurationTicks > 0 && profile.analgesicStrength > 0f)
+                    rawPain *= (1f - profile.analgesicStrength);
+
                 // Fortitude trait: TODO — check for "trait.fortitude" and reduce by 0.10
                 profile.pain = Mathf.Clamp(rawPain, 0f, 100f);
             }
 
-            private static float GetDiseasePain(ActiveDisease d)
+            private static float GetDiseasePain(ActiveDisease d, DiseaseDefinition woundInfectionDef)
             {
-                // Placeholder: use fixed values from the disease definition catalog
-                switch (d.diseaseId)
-                {
-                    case "disease.wound_infection":
-                        var stages = DiseaseDefinition.WoundInfection().stages;
-                        if (d.currentStage < stages.Count)
-                            return stages[d.currentStage].painPerTick;
-                        break;
-                }
+                if (d.diseaseId == woundInfectionDef.diseaseId &&
+                    d.currentStage < woundInfectionDef.stages.Count)
+                    return woundInfectionDef.stages[d.currentStage].painPerTick;
                 return 0f;
             }
         }
@@ -327,6 +353,8 @@ namespace Waystation.Systems
 
         private void TickDiseases(NPCInstance npc, MedicalProfile profile, StationState station)
         {
+            bool antibioticsActive = profile.antibioticsDurationTicks > 0 && profile.antibioticsStrength > 0f;
+
             foreach (var part in profile.parts.Values)
             {
                 for (int i = part.diseases.Count - 1; i >= 0; i--)
@@ -336,6 +364,29 @@ namespace Waystation.Systems
 
                     if (disease.diseaseId != def.diseaseId) continue;
                     if (def.stages.Count == 0) continue;
+
+                    // Antibiotics slow progression: strong antibiotics can reverse stage advancement.
+                    // Each tick, roll to determine whether the disease advances or regresses.
+                    if (antibioticsActive)
+                    {
+                        // Probability that antibiotics suppress a stage tick this cycle
+                        float suppressChance = profile.antibioticsStrength;
+                        if (UnityEngine.Random.value < suppressChance)
+                        {
+                            // Antibiotic winning this tick: regress one stage if not already at stage 0.
+                            // Reset ticksInStage so the patient spends a full stage duration at the
+                            // regressed stage before further progression can occur.
+                            if (disease.currentStage > 0)
+                            {
+                                disease.currentStage--;
+                                disease.ticksInStage = 0;
+                                station?.LogEvent(
+                                    $"{npc.name}: {def.displayName} regressing to {def.stages[disease.currentStage].stageName} (antibiotics).");
+                            }
+                            // Skip normal disease progression for this tick
+                            continue;
+                        }
+                    }
 
                     disease.ticksInStage++;
 
@@ -392,6 +443,9 @@ namespace Waystation.Systems
                     var w = part.wounds[i];
 
                     float healRate = w.isTreated ? TreatedHealingPerTick : UntreatedHealingPerTick;
+
+                    // Per-wound healing rate multiplier (e.g., fracture set by SetFracture)
+                    healRate *= w.healingRateMultiplier;
 
                     // Well-fed + well-rested bonus
                     if (npc.hungerNeed != null && npc.hungerNeed.value >= 70f) healRate *= 1.25f;
@@ -594,31 +648,23 @@ namespace Waystation.Systems
             if (_mood == null) return;
             int tick = station.tick;
 
-            // Pain mood tiers (0=none, 1=low, 2=med, 3=high, 4=severe)
+            // Pain mood tiers (0=none, 1=low, 2=med, 3=high, 4=severe).
+            // Push the current tier's modifier every tick so it stays active while sustained.
+            // MoodSystem.PushModifier dedupes by (eventId, source) and refreshes duration,
+            // so re-pushing each tick does not stack the delta — it just resets the timer.
+            // Old tiers expire naturally after their 3-tick duration when no longer refreshed.
             int painTier = GetPainTier(profile.pain);
-            if (painTier != profile.lastPainMoodTier)
+            if (painTier > 0)
             {
-                if (painTier > 0)
-                {
-                    float painDelta = -2f * painTier;  // -2 / -4 / -6 / -8
-                    _mood.PushModifier(npc, $"pain_tier_{painTier}", painDelta, 4, tick, "medical");
-                }
-                profile.lastPainMoodTier = painTier;
+                float painDelta = -2f * painTier;  // -2 / -4 / -6 / -8
+                _mood.PushModifier(npc, $"pain_tier_{painTier}", painDelta, 3, tick, "medical");
             }
 
-            // Blood volume below 60% mood modifier
-            if (profile.bloodVolume < LowBloodMoodThreshold && !profile.lowBloodModifierActive)
-            {
-                _mood.PushModifier(npc, "low_blood_volume", -8f, 4, tick, "medical");
-                profile.lowBloodModifierActive = true;
-            }
-            else if (profile.bloodVolume >= LowBloodMoodThreshold && profile.lowBloodModifierActive)
-            {
-                profile.lowBloodModifierActive = false;
-                // Modifier will expire naturally; no need to remove manually
-            }
+            // Blood volume below 60% mood modifier — push every tick while below threshold.
+            if (profile.bloodVolume < LowBloodMoodThreshold)
+                _mood.PushModifier(npc, "low_blood_volume", -8f, 3, tick, "medical");
 
-            // Active disease mood modifiers — one modifier per active disease stage
+            // Active disease mood modifiers — one modifier per active disease stage, pushed every tick.
             foreach (var part in profile.parts.Values)
             {
                 foreach (var disease in part.diseases)
@@ -631,7 +677,7 @@ namespace Waystation.Systems
                     if (stageMoodMod != 0f)
                     {
                         string eventId = $"disease_{disease.diseaseId}_stage{disease.currentStage}";
-                        _mood.PushModifier(npc, eventId, stageMoodMod, 4, tick, "medical");
+                        _mood.PushModifier(npc, eventId, stageMoodMod, 3, tick, "medical");
                     }
                 }
             }

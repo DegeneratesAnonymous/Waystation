@@ -57,6 +57,12 @@ namespace Waystation.Models
         /// </summary>
         public float treatmentQuality;
 
+        /// <summary>Healing rate multiplier applied on top of the base treated rate.</summary>
+        /// <remarks>
+        /// Default 1f. SetFracture raises this to 1.5f–2.0f based on treatment quality.
+        /// </remarks>
+        public float healingRateMultiplier = 1f;
+
         public static Wound Create(WoundType type, WoundSeverity severity,
                                    float bleedRate, float painContrib, int currentTick)
         {
@@ -165,12 +171,6 @@ namespace Waystation.Models
         /// <summary>Permanent scars on this part.</summary>
         public List<Scar> scars = new List<Scar>();
 
-        /// <summary>
-        /// If > 0, this paired organ and its partner have both reached 0% and a
-        /// death timer is counting down. Value = ticks remaining until NPC dies.
-        /// </summary>
-        public int pairedOrganDeathTicksRemaining;
-
         public static BodyPart Create(string partId)
             => new BodyPart { partId = partId };
     }
@@ -274,11 +274,22 @@ namespace Waystation.Models
 
         // ── Mood Modifier Tracking ────────────────────────────────────────────
 
-        /// <summary>Last pain tier for which a mood modifier was pushed (avoids re-pushing same tier).</summary>
-        public int lastPainMoodTier = -1;
+        // (No per-tick cache needed — mood modifiers are pushed every tick and
+        //  refreshed via MoodSystem.PushModifier dedup by eventId+source.)
 
-        /// <summary>True when a low-blood-volume mood modifier is currently active.</summary>
-        public bool lowBloodModifierActive;
+        // ── Analgesic (painkiller) state ──────────────────────────────────────
+
+        /// <summary>Current analgesic strength 0–1. Applied as a pain reduction multiplier in PainSystem.</summary>
+        public float analgesicStrength = 0f;
+        /// <summary>Ticks remaining for the current analgesic dose. Decremented each tick; clears at 0.</summary>
+        public int   analgesicDurationTicks = 0;
+
+        // ── Antibiotic state ──────────────────────────────────────────────────
+
+        /// <summary>Current antibiotic strength 0–1. Applied in TickDiseases to slow/regress infection stages.</summary>
+        public float antibioticsStrength = 0f;
+        /// <summary>Ticks remaining for the current antibiotic course. Decremented each tick; clears at 0.</summary>
+        public int   antibioticsDurationTicks = 0;
 
         // ── Factory ───────────────────────────────────────────────────────────
 
