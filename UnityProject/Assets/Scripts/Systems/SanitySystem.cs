@@ -111,5 +111,24 @@ namespace Waystation.Systems
             if (san == null) return;
             san.requiresIntervention = false;
         }
+
+        // ── Medical system integration ─────────────────────────────────────────
+
+        /// <summary>
+        /// Directly adjusts an NPC's sanity score by the given delta (positive or negative).
+        /// Clamped to the range [−10, ceiling].
+        /// Called by SurgerySystem on critical failure events and scar accumulation.
+        /// </summary>
+        public void AdjustScore(NPCInstance npc, int delta, StationState station)
+        {
+            var san = npc.GetOrCreateSanity();
+            san.score = UnityEngine.Mathf.Clamp(san.score + delta, -10, san.ceiling);
+
+            if (!san.isInBreakdown && san.score <= -5)
+            {
+                san.isInBreakdown = true;
+                station?.LogEvent($"⚠ {npc.name} is having a mental breakdown.");
+            }
+        }
     }
 }

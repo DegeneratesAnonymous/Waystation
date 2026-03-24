@@ -70,6 +70,14 @@ namespace Waystation.Systems
             foreach (var npc in station.npcs.Values)
             {
                 if (!npc.IsCrew() || npc.missionUid != null) continue;
+
+                // Consciousness check — unconscious NPCs cannot seek needs.
+                // FEATURE_MEDICAL_SYSTEM: when the medical system is active and the NPC is
+                // unconscious, skip all need-seeking behaviour for this tick.
+                if (FeatureFlags.MedicalSystem &&
+                    npc.medicalProfile != null && npc.medicalProfile.isUnconscious)
+                    continue;
+
                 EnsureProfiles(npc, station);
 
                 TickSleep     (npc, station);

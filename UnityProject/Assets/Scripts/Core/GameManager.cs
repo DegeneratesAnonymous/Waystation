@@ -94,6 +94,10 @@ namespace Waystation.Core
 
         /// <summary>Active faction history provider — defaults to FactionHistoryStub.</summary>
         public IFactionHistoryProvider  FactionHistory { get; private set; }
+
+        // ── Medical system ─────────────────────────────────────────────────────────────────────
+        public MedicalTickSystem        Medical       { get; private set; }
+        public SurgerySystem            Surgery       { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -252,6 +256,20 @@ namespace Waystation.Core
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
             Events.RegisterEffectHandler("spawn_npc",        HandleSpawnNpcEffect);
+
+            // Medical system
+            if (FeatureFlags.MedicalSystem)
+            {
+                Medical = new MedicalTickSystem();
+                Medical.Initialise();
+                Medical.SetMoodSystem(Mood);
+                Medical.SetSanitySystem(Sanity);
+                Medical.SetTraitSystem(Traits);
+
+                Surgery = new SurgerySystem();
+                Surgery.SetSanitySystem(Sanity);
+                Surgery.SetTraitSystem(Traits);
+            }
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -422,6 +440,10 @@ namespace Waystation.Core
             Proximity.Tick(Station, Mood, Relationships);
             Conversations.Tick(Station, Mood, Relationships);
             Relationships.Tick(Station, Mood);
+
+            // Medical system (after needs/mood so blood volume and pain feed into mood correctly)
+            if (FeatureFlags.MedicalSystem)
+                Medical?.Tick(Station);
 
             // Skill system
             Skills.Tick(Station);
