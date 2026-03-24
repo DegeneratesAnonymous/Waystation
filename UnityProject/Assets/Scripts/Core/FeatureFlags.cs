@@ -23,5 +23,13 @@ namespace Waystation.Core
         /// Stub implementations are active when this is false.
         /// </summary>
         public static bool RegionSimulation = true;
+
+        /// <summary>
+        /// Enables the body-part-based medical system: wounds, bleeding, pain,
+        /// consciousness, infection, surgery, and scarring on all NPCs.
+        /// Set to false to disable all medical tick processing, treatment actions,
+        /// and surgery without removing code.
+        /// </summary>
+        public static bool MedicalSystem = true;
     }
 }

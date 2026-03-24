@@ -94,6 +94,10 @@ namespace Waystation.Core
 
         /// <summary>Active faction history provider — defaults to FactionHistoryStub.</summary>
         public IFactionHistoryProvider  FactionHistory { get; private set; }
+
+        // ── Medical system ─────────────────────────────────────────────────────────────────────
+        public MedicalTickSystem        Medical       { get; private set; }
+        public SurgerySystem            Surgery       { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -252,6 +256,20 @@ namespace Waystation.Core
             // Register external effect handlers on the event system
             Events.RegisterEffectHandler("resolve_boarding", HandleResolveBoardingEffect);
             Events.RegisterEffectHandler("spawn_npc",        HandleSpawnNpcEffect);
+
+            // Medical system
+            if (FeatureFlags.MedicalSystem)
+            {
+                Medical = new MedicalTickSystem();
+                Medical.Initialise();
+                Medical.SetMoodSystem(Mood);
+                Medical.SetSanitySystem(Sanity);
+                Medical.SetTraitSystem(Traits);
+
+                Surgery = new SurgerySystem();
+                Surgery.SetSanitySystem(Sanity);
+                Surgery.SetTraitSystem(Traits);
+            }
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -417,6 +435,12 @@ namespace Waystation.Core
             // Mood & social systems (run after job assignment so crisis is set before
             // next job tick, and after NPC needs so sleep state is current)
             Needs.Tick(Station);
+
+            // Medical tick runs before Mood so that pain/blood/disease mood modifiers are
+            // included in the current-tick mood score and therefore in Sanity's daily accumulator.
+            if (FeatureFlags.MedicalSystem)
+                Medical?.Tick(Station);
+
             Mood.Tick(Station);
             Sanity.Tick(Station);
             Proximity.Tick(Station, Mood, Relationships);

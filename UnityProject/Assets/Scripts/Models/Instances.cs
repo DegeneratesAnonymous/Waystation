@@ -694,6 +694,15 @@ namespace Waystation.Models
         /// <summary>Items carried in pockets / bags (itemId → quantity).</summary>
         public Dictionary<string, int> pocketItems = new Dictionary<string, int>();
 
+        // ── Medical Profile ───────────────────────────────────────────────────
+        /// <summary>
+        /// Body-part-based medical state for this NPC.
+        /// Null until MedicalTickSystem.EnsureProfile() is called.
+        /// Null-safe: all medical feature code checks FeatureFlags.MedicalSystem
+        /// and/or null-checks this field before touching it.
+        /// </summary>
+        public MedicalProfile medicalProfile = null;
+
         /// <summary>Returns the trait profile, initialising it lazily if needed.</summary>
         public NpcTraitProfile GetOrCreateTraitProfile()
         {
