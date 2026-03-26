@@ -305,49 +305,59 @@ namespace Waystation.Core
 
         private void SetupStartingModules()
         {
-            // Three connected 5x5 rooms arranged horizontally:
-            //   Room A  cols  0- 4, rows 0-4
-            //   Room B  cols  6-10, rows 0-4
-            //   Room C  cols 12-16, rows 0-4
-            // Doorway openings at (4,2), (6,2), (10,2), (12,2);
-            // corridor floor+door tiles at cols 5 and 11, row 2.
+            // Three connected 5×5 rooms arranged horizontally:
+            //   Room A  cols  0– 4, rows 0–4
+            //   Room B  cols  6–10, rows 0–4
+            //   Room C  cols 12–16, rows 0–4
+            //
+            // Doors sit flush in each room's perimeter wall at the connection points
+            // (4,2), (6,2), (10,2), (12,2). A single-tile corridor floor at cols 5
+            // and 11, row 2 is enclosed above and below by wall tiles.
             var roomOrigins = new[] { (0, 0), (6, 0), (12, 0) };
 
             foreach (var (ox, oy) in roomOrigins)
             {
-                // Floor: fill the entire 5x5 area
+                // Floor: fill the entire 5×5 area
                 for (int dx = 0; dx < 5; dx++)
                 for (int dy = 0; dy < 5; dy++)
                     PlaceBuilt("buildable.floor", ox + dx, oy + dy);
 
-                // Walls: top and bottom rows
+                // Walls: top and bottom rows — place door at connection openings, wall elsewhere
                 for (int dx = 0; dx < 5; dx++)
                 {
-                    if (!IsDoorwayOpening(ox + dx, oy))     PlaceBuilt("buildable.wall", ox + dx, oy);
-                    if (!IsDoorwayOpening(ox + dx, oy + 4)) PlaceBuilt("buildable.wall", ox + dx, oy + 4);
+                    PlaceBuilt(IsDoorwayConnection(ox + dx, oy)     ? "buildable.door" : "buildable.wall", ox + dx, oy);
+                    PlaceBuilt(IsDoorwayConnection(ox + dx, oy + 4) ? "buildable.door" : "buildable.wall", ox + dx, oy + 4);
                 }
-                // Walls: left and right columns (excluding corners already handled)
+                // Walls: left and right columns (corners already handled above)
                 for (int dy = 1; dy <= 3; dy++)
                 {
-                    if (!IsDoorwayOpening(ox,     oy + dy)) PlaceBuilt("buildable.wall", ox,     oy + dy);
-                    if (!IsDoorwayOpening(ox + 4, oy + dy)) PlaceBuilt("buildable.wall", ox + 4, oy + dy);
+                    PlaceBuilt(IsDoorwayConnection(ox,     oy + dy) ? "buildable.door" : "buildable.wall", ox,     oy + dy);
+                    PlaceBuilt(IsDoorwayConnection(ox + 4, oy + dy) ? "buildable.door" : "buildable.wall", ox + 4, oy + dy);
                 }
             }
 
-            // Corridor connections: one floor + door tile between each pair of rooms
+            // Corridor tiles: single-tile floors enclosed by walls above and below.
+            // No door in the corridor itself — doors are flush in the room walls at each end.
             PlaceBuilt("buildable.floor", 5,  2);
-            PlaceBuilt("buildable.door",  5,  2);
+            PlaceBuilt("buildable.wall",  5,  1);
+            PlaceBuilt("buildable.wall",  5,  3);
             PlaceBuilt("buildable.floor", 11, 2);
-            PlaceBuilt("buildable.door",  11, 2);
+            PlaceBuilt("buildable.wall",  11, 1);
+            PlaceBuilt("buildable.wall",  11, 3);
         }
 
-        private static bool IsDoorwayOpening(int col, int row) =>
+        /// <summary>Returns true if this position should be a door rather than a wall.</summary>
+        private static bool IsDoorwayConnection(int col, int row) =>
             (col == 4  && row == 2) || (col == 6  && row == 2) ||
             (col == 10 && row == 2) || (col == 12 && row == 2);
 
         private void PlaceBuilt(string buildableId, int col, int row, int rotation = 0)
         {
-            if (!Registry.Buildables.TryGetValue(buildableId, out var defn)) return;
+            if (!Registry.Buildables.TryGetValue(buildableId, out var defn))
+            {
+                Debug.LogError($"[GameManager] PlaceBuilt: unknown buildable '{buildableId}' — check core_buildables.json is loaded.");
+                return;
+            }
             var f = FoundationInstance.Create(buildableId, col, row,
                                               defn.maxHealth, defn.buildQuality,
                                               rotation, defn.cargoCapacity);

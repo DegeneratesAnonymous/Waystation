@@ -17,6 +17,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
@@ -41,10 +42,10 @@ namespace Waystation.View
         {
             new Vector2Int(2, 3),
             new Vector2Int(3, 3),
-            new Vector2Int(4, 3),
+            new Vector2Int(1, 3),
             new Vector2Int(2, 2),
             new Vector2Int(3, 2),
-            new Vector2Int(4, 2),
+            new Vector2Int(1, 2),
         };
 
         private static readonly Color[] ClassColors =
@@ -83,13 +84,18 @@ namespace Waystation.View
         private Vector2 _contextMenuScreen;
         private int     _ctxTileCol, _ctxTileRow;
         private GUIStyle _ctxBoxStyle, _ctxBtnStyle;
+        // ── Door atlas ───────────────────────────────────────────────────────────
+        // Assign in Inspector after running Tools → Door → Setup Door Atlas.
+        [SerializeField] private DoorAtlasData _doorAtlasData;
+
         // ── Door animation ────────────────────────────────────────────────────
         // Each door opens independently when an NPC is one tile away (Manhattan ≤ 1).
-        private const float DoorFrameTime = 0.13f; // 130 ms per step — matches spec
+        private const float DoorFrameTime = 1f / 12f; // 12 fps — matches Door_Open/Close.anim spec
 
         private class DoorEntry
         {
             public SpriteRenderer sr;
+            public DoorRenderer   renderer;
             public Sprite[]       frames;
             public int            col, row;
             public int            frameIdx; // 0 = closed, 4 = fully open
@@ -165,15 +171,37 @@ namespace Waystation.View
         private string _doorAccessInput_Dept    = "";
 
         // ── Auto-install ──────────────────────────────────────────────────────
+        // RuntimeInitializeOnLoadMethod fires only once at startup (the first scene).
+        // We subscribe to sceneLoaded so StationRoomView is (re)created every time
+        // GameScene becomes active — including navigating there from the main menu.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
+            SceneManager.sceneLoaded -= OnAnySceneLoaded;
+            SceneManager.sceneLoaded += OnAnySceneLoaded;
+            // Handle the case where GameScene was already loaded at startup.
+            OnAnySceneLoaded(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+
+        private static void OnAnySceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name != "GameScene") return;
             if (FindAnyObjectByType<StationRoomView>() != null) return;
             new GameObject("StationRoomView").AddComponent<StationRoomView>();
         }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
-        private void Start() => StartCoroutine(InitializeWhenReady());
+        private void Start()
+        {
+#if UNITY_EDITOR
+            // Auto-load DoorAtlasData in the editor so the field doesn't need to be
+            // manually dragged in the Inspector after running Setup Door Atlas.
+            if (_doorAtlasData == null)
+                _doorAtlasData = UnityEditor.AssetDatabase.LoadAssetAtPath<DoorAtlasData>(
+                    "Assets/Art/Tiles/Doors/DoorAtlasData.asset");
+#endif
+            StartCoroutine(InitializeWhenReady());
+        }
 
         private IEnumerator InitializeWhenReady()
         {
@@ -188,7 +216,14 @@ namespace Waystation.View
 
             Instance = this;
             SetupCamera();
-            BuildRoom();
+
+            // Use foundation-based rendering when the game has placed tiles
+            // (e.g. SetupStartingModules). Fall back to the hard-coded 7×7 room
+            // only when there are no foundations at all.
+            if (_gm.Station.foundations != null && _gm.Station.foundations.Count > 0)
+                RebuildFoundationTiles();
+            else
+                BuildRoom();
 
             _gm.OnTick += OnTick;
             if (_gm.UtilityNetworks != null)
@@ -397,7 +432,7 @@ namespace Waystation.View
                 while (e.timer >= DoorFrameTime)
                 {
                     e.timer -= DoorFrameTime;
-                    if (npcNear  && e.frameIdx < 4) e.frameIdx++;
+                    if (npcNear  && e.frameIdx < e.frames.Length - 1) e.frameIdx++;
                     else if (!npcNear && e.frameIdx > 0) e.frameIdx--;
                 }
                 // Refresh frames if foundation health changed damage level
@@ -411,11 +446,21 @@ namespace Waystation.View
                         e.dmgLevel   = newDmg;
                         e.doorStatus = dStatus;
                         e.frames     = TileAtlas.GetDoorFrames(e.isH, dStatus, newDmg);
-                        e.frameIdx = Mathf.Clamp(e.frameIdx, 0, e.frames.Length - 1);
+                        e.frameIdx   = Mathf.Clamp(e.frameIdx, 0, e.frames.Length - 1);
+                        if (e.renderer != null)
+                        {
+                            e.renderer.SetHealthState(newDmg == 0 ? DoorHealthState.Normal
+                                                    : newDmg == 1 ? DoorHealthState.Damaged
+                                                    :               DoorHealthState.Destroyed);
+                        }
                     }
                 }
 
-                e.sr.sprite = e.frames[e.frameIdx];
+                // Delegate sprite selection to DoorRenderer when available.
+                if (e.renderer != null)
+                    e.renderer.SetOpenFraction(e.frameIdx / (float)(e.frames.Length - 1));
+                else
+                    e.sr.sprite = e.frames[e.frameIdx];
                 // Hide door shadows while the door is opening/open
                 bool closed = e.frameIdx == 0;
                 foreach (var sh in e.shadows) if (sh) sh.enabled = closed;
@@ -445,15 +490,45 @@ namespace Waystation.View
             cam.orthographic    = true;
             cam.backgroundColor = BgColor;
 
-            float cx = (RoomCols - 1) * 0.5f;
-            float cy = (RoomRows - 1) * 0.5f;
-            cam.transform.position = new Vector3(cx, cy, -10f);
-            cam.orthographicSize   = RoomCols * 0.5f + 1.5f;
+            // If the station already has foundations, fit the camera to their bounds.
+            if (_gm?.Station?.foundations != null && _gm.Station.foundations.Count > 0)
+            {
+                int minC = int.MaxValue, maxC = int.MinValue;
+                int minR = int.MaxValue, maxR = int.MinValue;
+                foreach (var f in _gm.Station.foundations.Values)
+                {
+                    if (f.tileCol < minC) minC = f.tileCol;
+                    if (f.tileCol > maxC) maxC = f.tileCol;
+                    if (f.tileRow < minR) minR = f.tileRow;
+                    if (f.tileRow > maxR) maxR = f.tileRow;
+                }
+                float cx     = (minC + maxC) * 0.5f;
+                float cy     = (minR + maxR) * 0.5f;
+                float aspect = Screen.width > 0 ? (float)Screen.width / Screen.height : 1.78f;
+                float orthoForCols = (maxC - minC + 1) / (2f * aspect) + 2f;
+                float orthoForRows = (maxR - minR + 1) / 2f + 2f;
+                cam.transform.position = new Vector3(cx, cy, -10f);
+                cam.orthographicSize   = Mathf.Max(orthoForCols, orthoForRows);
+            }
+            else
+            {
+                float cx = (RoomCols - 1) * 0.5f;
+                float cy = (RoomRows - 1) * 0.5f;
+                cam.transform.position = new Vector3(cx, cy, -10f);
+                cam.orthographicSize   = RoomCols * 0.5f + 1.5f;
+            }
         }
 
         // ── Starter room construction ─────────────────────────────────────────
         private void BuildRoom()
         {
+            // Safety: this path should only run when there are genuinely no
+            // foundations (e.g. a very early prototype save or a fresh-build
+            // fallback).  If foundations ARE present the caller already routes
+            // to RebuildFoundationTiles(), but log a warning just in case.
+            if (_gm?.Station?.foundations?.Count > 0)
+                Debug.LogWarning("[StationRoomView] BuildRoom() called but foundations are present — using static room anyway. Check InitializeWhenReady logic.");
+
             _roomRoot  = new GameObject("Room");
             var root   = _roomRoot;
             _foundRoot = new GameObject("Foundations");
@@ -470,13 +545,17 @@ namespace Waystation.View
                     // Floor tile first (transparent gap reveals it)
                     PlaceTile(root.transform, c, r, TileAtlas.GetFloor(PickFloorVariant(c, r)),
                         FloorRotation(c, r), sortOrder: 10);
-                    // Door H — south-wall door connects interior (north) to outside
+                    // Door on south wall (EW wall, isH=true): NS atlas sprite rotated 90° by DoorRenderer.
                     Sprite[] frames = TileAtlas.GetDoorHFrames();
                     var doorGO = PlaceTile(root.transform, c, r, frames[0], 0f, sortOrder: 40);
+                    var sr    = doorGO.GetComponent<SpriteRenderer>();
+                    var dr    = doorGO.AddComponent<DoorRenderer>();
+                    dr.spriteRenderer = sr;
+                    dr.atlasData   = _doorAtlasData;
+                    dr.SetOrientation(DoorOrientation.EW);
                     var dEntry = new DoorEntry
                     {
-                        sr = doorGO.GetComponent<SpriteRenderer>(),
-                        frames = frames, col = c, row = r
+                        sr = sr, renderer = dr, frames = frames, col = c, row = r
                     };
                     AddShadowsForDoor(c, r, root.transform, dEntry);
                     _doorEntries.Add(dEntry);
@@ -513,7 +592,7 @@ namespace Waystation.View
                 if (isWallTile && !isDoorTile)
                 {
                     var sl = new List<GameObject>();
-                    AddShadowsForWall(c, r, root.transform, sl);
+                    AddWallInteriorOverlay(c, r, root.transform, sl);
                     if (sl.Count > 0) _shadowsAt[(c, r)] = sl;
                 }
             }
@@ -530,7 +609,10 @@ namespace Waystation.View
 
         private void RebuildFoundationTiles()
         {
-            if (_gm?.Station == null || _foundRoot == null) return;
+            if (_gm?.Station == null) return;
+            // Create the root GO lazily so RebuildFoundationTiles() works even when
+            // BuildRoom() was skipped (foundation-based new game).
+            if (_foundRoot == null) _foundRoot = new GameObject("Foundations");
             var foundations = _gm.Station.foundations;
 
             // Remove GOs for deleted foundations
@@ -600,7 +682,7 @@ namespace Waystation.View
                     _foundPos[kv.Key]   = (f.tileCol, f.tileRow);
 
                     var shadowList = new List<GameObject>();
-                    AddShadowsForWall(f.tileCol, f.tileRow, _foundRoot.transform, shadowList);
+                    AddWallInteriorOverlay(f.tileCol, f.tileRow, _foundRoot.transform, shadowList);
                     if (shadowList.Count > 0) _shadowsAt[(f.tileCol, f.tileRow)] = shadowList;
                     RefreshAdjacentTiles(f.tileCol, f.tileRow);
                 }
@@ -615,13 +697,19 @@ namespace Waystation.View
                         TileAtlas.GetFloor(PickFloorVariant(f.tileCol, f.tileRow)),
                         FloorRotation(f.tileCol, f.tileRow), sortOrder: 10);
 
-                    // Door sprite on top
+                    // Same NS atlas sprite for both orientations; EW walls get 90° rotation via
+                    // DoorOrientation.EW so the perspective faces land on the correct sides.
                     var doorGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
                         frames[0], 0f, sortOrder: 40);
+                    var fsr = doorGO.GetComponent<SpriteRenderer>();
+                    var fdr = doorGO.AddComponent<DoorRenderer>();
+                    fdr.spriteRenderer = fsr;
+                    fdr.atlasData = _doorAtlasData;
+                    fdr.SetOrientation(isH ? DoorOrientation.EW : DoorOrientation.NS);
                     var fEntry = new DoorEntry
                     {
-                        sr = doorGO.GetComponent<SpriteRenderer>(),
-                        frames = frames, col = f.tileCol, row = f.tileRow,
+                        sr = fsr, renderer = fdr, frames = frames,
+                        col = f.tileCol, row = f.tileRow,
                         foundationUid = kv.Key, isH = isH
                     };
                     AddShadowsForDoor(f.tileCol, f.tileRow, _foundRoot.transform, fEntry);
@@ -978,7 +1066,11 @@ namespace Waystation.View
                 }
             }
 
-            // No foundations here: passable only if inside the starter room interior
+            // No foundations here: passable only if playing the static 7×7 room
+            // (no foundation layout placed at all). Once any foundations exist the
+            // station uses the foundation layout exclusively — non-foundation tiles
+            // outside the rooms are void and not walkable.
+            if (_gm?.Station?.foundations?.Count > 0) return false;
             return col >= IntMinC && col <= IntMaxC &&
                    row >= IntMinR && row <= IntMaxR;
         }
@@ -1068,17 +1160,9 @@ namespace Waystation.View
         //             Boundary room walls (no foundation) always use "normal".
         private Sprite GetWallSprite(int col, int row, FoundationInstance foundation = null)
         {
-            string state = "normal";
-            if (foundation != null && foundation.maxHealth > 0)
-            {
-                float pct = (float)foundation.health / foundation.maxHealth;
-                state = foundation.health <= 0 ? "destroyed"
-                      : pct < 0.5f             ? "damaged"
-                      :                          "normal";
-            }
-            // All wall tiles use the base sprite; floor-adjacent face strips are
-            // composited on top by AddShadowsForWall.
-            return TileAtlas.GetWallBase(state);
+            // Always use the new atlas base tile. Health-state variants (damaged/destroyed) can
+            // be added later by swapping this call; for now all walls share the single base.
+            return TileAtlas.GetWallSolidBase();
         }
 
         // Returns the Z rotation (degrees) for a wall tile so its slab (perspective front
@@ -1149,7 +1233,7 @@ namespace Waystation.View
         // Re-evaluate one tile's wall sprite (if applicable) and its shadow overlays.
         private void RefreshTile(int col, int row)
         {
-            if (!IsInBounds(col, row)) return;
+            // No hard bounds — the station can expand beyond the starter 7×7 room.
 
             bool isWall  = IsWallAtPos(col, row);
             bool isFloor = !isWall && IsFloorTile(col, row);
@@ -1177,11 +1261,20 @@ namespace Waystation.View
                 _shadowsAt.Remove((col, row));
             }
 
-            // Rebuild shadows.  Parent to _foundRoot (dynamic layer) so they clean up properly.
+            // Rebuild shadows/overlays. Parent to _foundRoot (dynamic layer) so they clean up properly.
             if (_foundRoot == null) return;
+
+            // Door tiles are passable (IsFloorTile = true) but must not receive floor shadow
+            // overlays — the door renderer handles its own visuals.
+            bool isDoor = (row == 0 && col == RoomCols / 2);  // starter room door
+            if (!isDoor && _gm?.Station?.foundations != null)
+                foreach (var f in _gm.Station.foundations.Values)
+                    if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("door"))
+                    { isDoor = true; break; }
+
             var newShadows = new List<GameObject>();
-            if      (isWall)  AddShadowsForWall (col, row, _foundRoot.transform, newShadows);
-            else if (isFloor) AddShadowsForFloor(col, row, _foundRoot.transform, newShadows);
+            if      (isWall && !isDoor) AddWallInteriorOverlay(col, row, _foundRoot.transform, newShadows);
+            else if (isFloor && !isDoor) AddShadowsForFloor   (col, row, _foundRoot.transform, newShadows);
             if (newShadows.Count > 0) _shadowsAt[(col, row)] = newShadows;
         }
 
@@ -1233,6 +1326,35 @@ namespace Waystation.View
                 if (!IsTilePressurized(nc, nr)) return true; // non-wall & unpressurized = void
             }
             return false;
+        }
+
+        // ── Wall interior overlay + shadow ────────────────────────────────────
+        // Computes the adjacency bitmask (n=8, s=4, e=2, w=1) for a wall tile and
+        // places the matching 64×64 overlay sprite on top of the base.
+        // Also places the wall_shadow sprite on the floor tile one row south when
+        // the south neighbour is floor, creating the perspective depth shadow.
+        private void AddWallInteriorOverlay(int col, int row, Transform parent,
+            List<GameObject> collector = null)
+        {
+            bool n = IsFloorTile(col,     row + 1);
+            bool s = IsFloorTile(col,     row - 1);
+            bool e = IsFloorTile(col + 1, row    );
+            bool w = IsFloorTile(col - 1, row    );
+
+            // Interior overlay (bitmask 1-15 → one of 15 atlas sprites)
+            int bitmask = (n ? 8 : 0) | (s ? 4 : 0) | (e ? 2 : 0) | (w ? 1 : 0);
+            var spr = TileAtlas.GetWallInteriorOverlay(bitmask);
+            if (spr != null)
+            {
+                var go = new GameObject($"WallOverlay{bitmask}_{col},{row}");
+                go.transform.SetParent(parent);
+                // Overlay is 64×64 — same footprint as base tile, no Y shift needed.
+                go.transform.localPosition = new Vector3(col, row, 0f);
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite       = spr;
+                sr.sortingOrder = 41;  // above wall base (40)
+                collector?.Add(go);
+            }
         }
 
         // Add wall_overlays.png face strips on a WALL tile for every face that borders floor.

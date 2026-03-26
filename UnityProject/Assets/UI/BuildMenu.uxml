@@ -1,0 +1,170 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="build-menu" class="panel">
+
+        <!-- Corner rivets -->
+        <ui:VisualElement name="rivet-tl" class="rivet rivet-tl" />
+        <ui:VisualElement name="rivet-tr" class="rivet rivet-tr" />
+        <ui:VisualElement name="rivet-bl" class="rivet rivet-bl" />
+        <ui:VisualElement name="rivet-br" class="rivet rivet-br" />
+
+        <!-- Header -->
+        <ui:VisualElement name="header" class="header">
+
+            <ui:VisualElement name="header-top" class="header-top">
+                <ui:VisualElement name="title-block" class="title-block">
+                    <ui:Label name="title-icon" class="title-icon" text="⬡" />
+                    <ui:VisualElement name="title-text" class="title-text">
+                        <ui:Label name="title" class="title" text="FABRICATE" />
+                        <ui:Label name="title-sub" class="title-sub" text="CONSTRUCTION TERMINAL" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Button name="close-btn" class="close-btn" text="✕" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="action-row" class="action-row">
+                <ui:Button name="btn-deconstruct" class="action-btn" text="⛏  DECONSTRUCT" />
+                <ui:Button name="btn-queue"       class="action-btn action-btn--active">
+                    <ui:Label text="≡  QUEUE" />
+                    <ui:Label name="queue-badge" class="queue-badge" text="123" />
+                </ui:Button>
+            </ui:VisualElement>
+
+        </ui:VisualElement>
+
+        <!-- Section label -->
+        <ui:VisualElement name="section-categories" class="section-label">
+            <ui:Label text="CATEGORIES" />
+            <ui:VisualElement class="section-line" />
+        </ui:VisualElement>
+
+        <!-- Category list -->
+        <ui:VisualElement name="category-list" class="category-list">
+
+            <ui:Button name="cat-structure"  class="cat-btn" data-category="structure">
+                <ui:VisualElement class="cat-inner">
+                    <ui:VisualElement class="cat-stripe cat-stripe--structure" />
+                    <ui:VisualElement class="cat-icon-wrap">
+                        <ui:VisualElement class="cat-icon-bg cat-icon-bg--structure" />
+                        <ui:Label class="cat-icon cat-icon--structure" text="⬜" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="cat-body">
+                        <ui:Label class="cat-name" text="STRUCTURE" />
+                        <ui:VisualElement class="cat-meta">
+                            <ui:Label class="cat-count" text="18" />
+                            <ui:Label class="cat-arrow" text="›" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:Button>
+
+            <ui:Button name="cat-electrical" class="cat-btn" data-category="electrical">
+                <ui:VisualElement class="cat-inner">
+                    <ui:VisualElement class="cat-stripe cat-stripe--electrical" />
+                    <ui:VisualElement class="cat-icon-wrap">
+                        <ui:VisualElement class="cat-icon-bg cat-icon-bg--electrical" />
+                        <ui:Label class="cat-icon cat-icon--electrical" text="⚡" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="cat-body">
+                        <ui:Label class="cat-name" text="ELECTRICAL" />
+                        <ui:VisualElement class="cat-meta">
+                            <ui:Label class="cat-count" text="24" />
+                            <ui:Label class="cat-arrow" text="›" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:Button>
+
+            <ui:Button name="cat-objects" class="cat-btn" data-category="objects">
+                <ui:VisualElement class="cat-inner">
+                    <ui:VisualElement class="cat-stripe cat-stripe--objects" />
+                    <ui:VisualElement class="cat-icon-wrap">
+                        <ui:VisualElement class="cat-icon-bg cat-icon-bg--objects" />
+                        <ui:Label class="cat-icon cat-icon--objects" text="◈" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="cat-body">
+                        <ui:Label class="cat-name" text="OBJECTS" />
+                        <ui:VisualElement class="cat-meta">
+                            <ui:Label class="cat-count" text="31" />
+                            <ui:Label class="cat-arrow" text="›" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:Button>
+
+            <ui:Button name="cat-production" class="cat-btn" data-category="production">
+                <ui:VisualElement class="cat-inner">
+                    <ui:VisualElement class="cat-stripe cat-stripe--production" />
+                    <ui:VisualElement class="cat-icon-wrap">
+                        <ui:VisualElement class="cat-icon-bg cat-icon-bg--production" />
+                        <ui:Label class="cat-icon cat-icon--production" text="⚙" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="cat-body">
+                        <ui:Label class="cat-name" text="PRODUCTION" />
+                        <ui:VisualElement class="cat-meta">
+                            <ui:Label class="cat-count" text="12" />
+                            <ui:Label class="cat-arrow" text="›" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:Button>
+
+            <ui:Button name="cat-plumbing" class="cat-btn" data-category="plumbing">
+                <ui:VisualElement class="cat-inner">
+                    <ui:VisualElement class="cat-stripe cat-stripe--plumbing" />
+                    <ui:VisualElement class="cat-icon-wrap">
+                        <ui:VisualElement class="cat-icon-bg cat-icon-bg--plumbing" />
+                        <ui:Label class="cat-icon cat-icon--plumbing" text="⌀" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="cat-body">
+                        <ui:Label class="cat-name" text="PLUMBING" />
+                        <ui:VisualElement class="cat-meta">
+                            <ui:Label class="cat-count" text="16" />
+                            <ui:Label class="cat-arrow" text="›" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:Button>
+
+            <ui:Button name="cat-security" class="cat-btn" data-category="security">
+                <ui:VisualElement class="cat-inner">
+                    <ui:VisualElement class="cat-stripe cat-stripe--security" />
+                    <ui:VisualElement class="cat-icon-wrap">
+                        <ui:VisualElement class="cat-icon-bg cat-icon-bg--security" />
+                        <ui:Label class="cat-icon cat-icon--security" text="◎" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="cat-body">
+                        <ui:Label class="cat-name" text="SECURITY" />
+                        <ui:VisualElement class="cat-meta">
+                            <ui:Label class="cat-count" text="9" />
+                            <ui:Label class="cat-arrow" text="›" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:Button>
+
+        </ui:VisualElement>
+
+        <!-- Sub-item list (shown when category selected) -->
+        <ui:VisualElement name="content-area" class="content-area">
+            <ui:VisualElement name="content-inner" class="content-inner">
+                <ui:Label name="content-label" class="content-label" text="ITEMS" />
+                <ui:ScrollView name="sub-item-scroll" class="sub-item-scroll"
+                               horizontal-scroller-visibility="Hidden"
+                               vertical-scroller-visibility="Auto">
+                    <ui:VisualElement name="sub-items" class="sub-items" />
+                </ui:ScrollView>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Status bar -->
+        <ui:VisualElement name="status-bar" class="status-bar">
+            <ui:Label name="status-hint" class="status-hint" text="SELECT CATEGORY" />
+            <ui:VisualElement class="status-lights">
+                <ui:VisualElement class="sled sled--green" />
+                <ui:VisualElement class="sled sled--amber" />
+                <ui:VisualElement class="sled sled--dark"  />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

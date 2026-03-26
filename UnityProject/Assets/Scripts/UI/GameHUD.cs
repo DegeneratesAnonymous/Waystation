@@ -12,6 +12,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Waystation.Core;
 using Waystation.Demo;
 using Waystation.Models;
@@ -33,7 +34,7 @@ namespace Waystation.UI
         // ── Font & layout scale ───────────────────────────────────────────────
         // Change FontSize here to resize the whole UI. Everything derives from it.
         private const int   FontSize    = 12;   // body text (px) — use multiples of 2 for crispest rendering
-        private const int   FontSizeHdr = 18;   // panel / section headers
+        private const int   FontSizeHdr = 15;   // panel / section headers — style guide max
         private static float LineH  => FontSize + 10f;   // one text row: glyph + descenders + gap (22f)
         private static float BtnH   => FontSize + 16f;   // standard button height (28f)
         private static float CharW  => FontSize * 1.0f;  // approx char width for label-width math (12f)
@@ -48,19 +49,31 @@ namespace Waystation.UI
         private static float WrkRowH   => BtnH;              // work grid row height (28f @ FontSize 12)
 
         // ── Palette ───────────────────────────────────────────────────────────
-        private static readonly Color ColBar      = new Color(0.08f, 0.09f, 0.14f, 0.97f);
-        private static readonly Color ColBarEdge  = new Color(0.20f, 0.30f, 0.48f, 1.00f);
-        private static readonly Color ColDrawer    = new Color(0.10f, 0.11f, 0.17f, 0.97f);
-        private static readonly Color ColSubDrawer = new Color(0.07f, 0.08f, 0.13f, 0.97f); // darker tone
-        private static readonly Color ColDivider  = new Color(0.22f, 0.32f, 0.50f, 0.60f);
-        private static readonly Color ColAccent   = new Color(0.35f, 0.62f, 1.00f, 1.00f);
-        private static readonly Color ColTabHl    = new Color(0.18f, 0.27f, 0.46f, 1.00f);
-        private static readonly Color ColBarBg    = new Color(0.13f, 0.15f, 0.22f, 1.00f);
-        private static readonly Color ColBarFill  = new Color(0.24f, 0.56f, 0.86f, 1.00f);
-        private static readonly Color ColBarWarn  = new Color(0.88f, 0.68f, 0.10f, 1.00f);
-        private static readonly Color ColBarCrit  = new Color(0.86f, 0.26f, 0.26f, 1.00f);
-        private static readonly Color ColBarGreen = new Color(0.22f, 0.76f, 0.35f, 1.00f);
-        private static readonly Color ColSummaryBg = new Color(0.07f, 0.09f, 0.15f, 0.85f);
+        // ── Base backgrounds & borders ────────────────────────────────────────
+        private static readonly Color ColBar       = new Color(0.055f, 0.067f, 0.094f, 0.97f); // bg-base    #0e1118
+        private static readonly Color ColBarEdge   = new Color(0.141f, 0.169f, 0.227f, 1.00f); // border-mid #242b3a
+        private static readonly Color ColDrawer    = new Color(0.075f, 0.090f, 0.125f, 0.97f); // bg-panel   #131720
+        private static readonly Color ColSubDrawer = new Color(0.039f, 0.047f, 0.067f, 0.97f); // bg-deep    #0a0c11
+        private static readonly Color ColDivider   = new Color(0.102f, 0.122f, 0.173f, 0.60f); // border-dark #1a1f2c
+        private static readonly Color ColAccent    = new Color(0.282f, 0.502f, 0.667f, 1.00f); // acc        #4880aa
+        private static readonly Color ColTabHl     = new Color(0.118f, 0.145f, 0.208f, 1.00f); // bg-hover   #1e2535
+        private static readonly Color ColBarBg     = new Color(0.094f, 0.114f, 0.157f, 1.00f); // bg-raised  #181d28
+        private static readonly Color ColBarFill   = new Color(0.376f, 0.627f, 0.800f, 1.00f); // acc-bright #60a0cc
+        private static readonly Color ColBarWarn   = new Color(0.784f, 0.627f, 0.188f, 1.00f); // amber      #c8a030
+        private static readonly Color ColBarCrit   = new Color(0.753f, 0.188f, 0.188f, 1.00f); // red        #c03030
+        private static readonly Color ColBarGreen  = new Color(0.188f, 0.627f, 0.314f, 1.00f); // green      #30a050
+        private static readonly Color ColSummaryBg = new Color(0.039f, 0.047f, 0.067f, 0.85f); // bg-deep 85%
+        // ── Bevel & lit-border tokens ─────────────────────────────────────────
+        private static readonly Color ColBevelHi   = new Color(0.165f, 0.200f, 0.282f, 1.00f); // #2a3348
+        private static readonly Color ColBevelLo   = new Color(0.031f, 0.039f, 0.059f, 1.00f); // #080a0f
+        private static readonly Color ColBorderLit = new Color(0.180f, 0.220f, 0.314f, 1.00f); // #2e3850
+        // ── Text hierarchy ────────────────────────────────────────────────────
+        private static readonly Color ColTextDim    = new Color(0.180f, 0.239f, 0.322f, 1.00f); // #2e3d52
+        private static readonly Color ColTextMid    = new Color(0.290f, 0.376f, 0.502f, 1.00f); // #4a6080
+        private static readonly Color ColTextBase   = new Color(0.416f, 0.541f, 0.667f, 1.00f); // #6a8aaa
+        private static readonly Color ColTextBright = new Color(0.541f, 0.667f, 0.784f, 1.00f); // #8aaac8
+        private static readonly Color ColTextHead   = new Color(0.659f, 0.753f, 0.847f, 1.00f); // #a8c0d8
+        private static readonly Color ColAccBright  = new Color(0.376f, 0.627f, 0.800f, 1.00f); // #60a0cc
 
         // ── Resource / credits colour mapping ────────────────────────────────
         private static readonly Color ColResFood   = new Color(0.19f, 0.63f, 0.31f, 1.00f);
@@ -90,11 +103,11 @@ namespace Waystation.UI
 
         private static readonly (Tab tab, string label)[] Tabs =
         {
-            (Tab.Station,  "\u2b21"),   // ⬡ hex icon — hub for all station panels
-            (Tab.Research, "Research"),
-            (Tab.Map,      "Map"),
-            (Tab.Views,    "Views"),
-            (Tab.Settings, "Settings"),
+            (Tab.Station,  "STATION"),
+            (Tab.Research, "RESEARCH"),
+            (Tab.Map,      "MAP"),
+            (Tab.Views,    "VIEWS"),
+            (Tab.Settings, "SETTINGS"),
         };
 
         // ── Map sub-panel ─────────────────────────────────────────────────────
@@ -237,13 +250,26 @@ namespace Waystation.UI
         private GUIStyle  _sHeader, _sLabel, _sSub, _sDescr;
         private GUIStyle  _sBtnSmall, _sBtnWide, _sBtnDanger;
         private GUIStyle  _sTextField;
+        private GUIStyle  _sHint;       // 8px text-dim — panel subtitle + status bar hints
+        private GUIStyle  _sIconAcc;    // 13px acc-blue — panel title icon
         private bool      _stylesReady;
         private Font      _gameFont;
 
         // ── Auto-install ──────────────────────────────────────────────────────
+        // RuntimeInitializeOnLoadMethod fires only once at startup (the first scene).
+        // We subscribe to sceneLoaded so GameHUD is (re)created every time GameScene
+        // becomes active — including navigating there from the main menu.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
+            SceneManager.sceneLoaded -= OnAnySceneLoaded;
+            SceneManager.sceneLoaded += OnAnySceneLoaded;
+            OnAnySceneLoaded(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+
+        private static void OnAnySceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name != "GameScene") return;
             if (FindAnyObjectByType<GameHUD>() != null) return;
             new GameObject("GameHUD").AddComponent<GameHUD>();
         }
@@ -346,6 +372,7 @@ namespace Waystation.UI
                 {
                     foreach (var (col, row) in _dragLine)
                         DeconstructTile(col, row);
+                    StationRoomView.Instance?.ForceRefreshFoundations();
                     _isDragging = false;
                     _dragLine.Clear();
                     _dragBlocked.Clear();
@@ -434,6 +461,7 @@ namespace Waystation.UI
                 if (allNew.Count > 0) _undoStack.Push(allNew);
 
                 _gm.UtilityNetworks.RebuildAll(_gm.Station);
+                StationRoomView.Instance?.ForceRefreshFoundations();
                 _isDragging = false;
                 _dragLine.Clear();
                 _dragBlocked.Clear();
@@ -525,14 +553,14 @@ namespace Waystation.UI
 
             // ── Dev Tools button (top-left) — toggles side drawer ───────────────
             bool devDrawer = _devDrawerOpen;
-            GUI.color = devDrawer ? new Color(1.00f, 0.78f, 0.20f, 1f) : new Color(0.55f, 0.60f, 0.70f, 0.85f);
-            if (GUI.Button(new Rect(6f, 6f, 90f, 22f), devDrawer ? "⚡ Dev ◀" : "⚡ Dev Tools", _sBtnSmall))
+            GUI.color = devDrawer ? new Color(1.00f, 0.78f, 0.20f, 1f) : ColTextBase;
+            if (GUI.Button(new Rect(6f, 6f, 90f, 22f), devDrawer ? "⚡ DEV ◀" : "⚡ DEV TOOLS", _sBtnSmall))
                 _devDrawerOpen = !devDrawer;
             GUI.color = Color.white;
             if (Waystation.Systems.BuildingSystem.DevMode)
             {
                 GUI.color = new Color(1f, 0.92f, 0.35f, 0.85f);
-                GUI.Label(new Rect(100f, 8f, 200f, 18f), "Free Build  ON", _sSub);
+                GUI.Label(new Rect(100f, 8f, 200f, 18f), "FREE BUILD  ON", _sSub);
                 GUI.color = Color.white;
             }
 
@@ -547,21 +575,11 @@ namespace Waystation.UI
                 GUI.EndGroup();
             }
 
-            // ── Drawer (slides in from right) — hidden when Research fullscreen is active
-            bool researchFullscreen = _active == Tab.Research && _ready && _gm?.Station != null;
-            if (_drawerT > 0.004f && !researchFullscreen)
-            {
-                float dx = sw - TabW - DrawerW * _drawerT;
-                DrawSolid(new Rect(dx, 0, DrawerW, sh), ColDrawer);
-                DrawSolid(new Rect(dx, 0, 1f, sh), ColBarEdge);
-
-                GUI.BeginGroup(new Rect(dx, 0, DrawerW, sh));
-                DrawDrawer(DrawerW, sh);
-                GUI.EndGroup();
-            }
-
             // ── Sub-drawer (slides in just left of main drawer) ─────────────────
             // (CrewDetail is excluded — it renders as a bottom-left overlay instead)
+            // Drawn BEFORE the main drawer so the main drawer paints over the overlapping
+            // portion while the sub-drawer is mid-animation, giving a "slide from behind" look.
+            bool researchFullscreen = _active == Tab.Research && _ready && _gm?.Station != null;
             if (_subDrawerT > 0.004f && !researchFullscreen && _subActive != SubPanel.CrewDetail)
             {
                 float mainDx = sw - TabW - DrawerW * _drawerT;
@@ -571,6 +589,18 @@ namespace Waystation.UI
 
                 GUI.BeginGroup(new Rect(sdx, 0, SubDrawerW, sh));
                 DrawSubDrawer(SubDrawerW, sh);
+                GUI.EndGroup();
+            }
+
+            // ── Drawer (slides in from right) — hidden when Research fullscreen is active
+            if (_drawerT > 0.004f && !researchFullscreen)
+            {
+                float dx = sw - TabW - DrawerW * _drawerT;
+                DrawSolid(new Rect(dx, 0, DrawerW, sh), ColDrawer);
+                DrawSolid(new Rect(dx, 0, 1f, sh), ColBarEdge);
+
+                GUI.BeginGroup(new Rect(dx, 0, DrawerW, sh));
+                DrawDrawer(DrawerW, sh);
                 GUI.EndGroup();
             }
 
@@ -598,7 +628,7 @@ namespace Waystation.UI
             if (researchFullscreen)
             {
                 float rpw = sw - TabW;
-                DrawSolid(new Rect(0, 0, rpw, sh), new Color(0.04f, 0.05f, 0.10f, 1f));
+                DrawSolid(new Rect(0, 0, rpw, sh), ColSubDrawer);
                 DrawResearchFullscreen(rpw, sh);
             }
 
@@ -611,13 +641,19 @@ namespace Waystation.UI
             foreach (var (tab, label) in Tabs)
                 DrawTabButton(tab, label, tx, ref ty);
 
-            // Pause / resume at bottom
+            // Pause / resume at bottom — compact, styled like tab buttons
             if (_ready && _gm != null)
             {
-                string pl = _gm.IsPaused ? "► Play" : "⏸ Pause";
-                Rect   pr = new Rect(tx + 5f, sh - 54f, TabW - 10f, 40f);
+                string pl      = _gm.IsPaused ? "► PLAY" : "⏸ PAUSE";
+                bool   paused  = _gm.IsPaused;
+                Rect   pr      = new Rect(tx, sh - 23f, TabW, 23f);
+                DrawSolid(new Rect(tx, sh - 23f, TabW, 1f), ColDivider); // top border
+                DrawSolid(pr, paused ? ColBarGreen : ColBar);             // bg: green when paused
+                if (paused) DrawSolid(new Rect(tx, sh - 23f, 3f, 23f), ColBarGreen); // left stripe
+                GUI.color = paused ? Color.white : ColTextBright;
                 if (GUI.Button(pr, pl, _sTabOff))
                     _gm.IsPaused = !_gm.IsPaused;
+                GUI.color = Color.white;
             }
 
             // ── Foundation tile overlays (placed but incomplete) ─────────────
@@ -733,9 +769,9 @@ namespace Waystation.UI
         // ── Tab button ────────────────────────────────────────────────────────
         private void DrawTabButton(Tab tab, string label, float x, ref float y)
         {
-            const float TabBtnH = 36f;
+            const float TabBtnH = 22f;
             bool on = _active == tab;
-            Rect r  = new Rect(x + 4f, y, TabW - 8f, TabBtnH);
+            Rect r  = new Rect(x, y, TabW, TabBtnH);
 
             // Flash the Comms button when there are unread messages
             string displayLabel = label;
@@ -750,12 +786,12 @@ namespace Waystation.UI
                 }
             }
 
-            if (on)
-            {
-                DrawSolid(new Rect(x,      y, 3f,         TabBtnH), ColAccent);
-                DrawSolid(new Rect(x + 3f, y, TabW - 3f,  TabBtnH), ColTabHl);
-            }
+            // Background for all buttons — selected gets bg-hover, inactive gets bg-base
+            DrawSolid(r, on ? ColTabHl : ColBar);
+            if (on) DrawSolid(new Rect(x, y, 3f, TabBtnH), ColAccent);  // left accent stripe
+            DrawSolid(new Rect(x, y + TabBtnH, TabW, 1f), ColDivider);  // bottom separator
 
+            GUI.color = on ? ColTextHead : ColTextBase;
             if (GUI.Button(r, displayLabel, on ? _sTabOn : _sTabOff))
             {
                 bool wasOff = !on;
@@ -777,7 +813,8 @@ namespace Waystation.UI
                 }
             }
 
-            y += 40f;
+            GUI.color = Color.white;
+            y += TabBtnH + 1f;
         }
 
         private void TryOpenSystemMap()
@@ -807,31 +844,27 @@ namespace Waystation.UI
             {
                 SubPanel.CrewDetail      => (_gm?.Station != null && !string.IsNullOrEmpty(_subItemUid)
                                              && _gm.Station.npcs.TryGetValue(_subItemUid, out var _cdTitleNpc))
-                                             ? _cdTitleNpc.name : "Crew Member",
-                SubPanel.HoldSettings    => "Hold Settings",
-                SubPanel.ResearchDetail  => "Research Node",
-                SubPanel.ModuleDetail    => "Module Detail",
-                SubPanel.StationSettings => "Station Settings",
-                SubPanel.StationBuild    => "Build",
-                SubPanel.StationRooms    => "Rooms",
-                SubPanel.StationCrew     => "Crew",
-                SubPanel.StationComms    => _gm?.Station != null && HasUnreadComms(_gm.Station) ? "Comms \u25cf" : "Comms",
+                                             ? _cdTitleNpc.name.ToUpper() : "CREW MEMBER",
+                SubPanel.HoldSettings    => "HOLD SETTINGS",
+                SubPanel.ResearchDetail  => "RESEARCH NODE",
+                SubPanel.ModuleDetail    => "MODULE DETAIL",
+                SubPanel.StationSettings => "STATION SETTINGS",
+                SubPanel.StationBuild    => "BUILD",
+                SubPanel.StationRooms    => "ROOMS",
+                SubPanel.StationCrew     => "CREW",
+                SubPanel.StationComms    => _gm?.Station != null && HasUnreadComms(_gm.Station) ? "COMMS \u25cf" : "COMMS",
                 _                        => "",
             };
 
-            // × close button
-            var cbPrev = GUI.color;
-            GUI.color = new Color(0.55f, 0.60f, 0.70f, 0.85f);
-            if (GUI.Button(new Rect(w - 30f, 10f, 26f, 26f), "\u00d7", _sBtnSmall))
-                CloseSub();
-            GUI.color = cbPrev;
+            var (icon, subtitle) = SubMeta(_subActive);
+            bool hasUnread = _subActive == SubPanel.StationComms
+                             && _gm?.Station != null && HasUnreadComms(_gm.Station);
 
-            GUI.Label(new Rect(Pad, 12f, w - 44f, 30f), title, _sHeader);
-            DrawSolid(new Rect(Pad, 52f, w - Pad * 2f, 1f), ColDivider);
+            float startY   = DrawPanelChrome(w, h, icon, title, subtitle,
+                                              CloseSub, title, ledGreen: true, ledAmber: hasUnread);
 
             float cw       = w - Pad * 2f;
-            float startY   = 60f;
-            float contentH = h - startY - 8f;
+            float contentH = h - startY - PanelStatH - 8f;
             Rect  area     = new Rect(Pad, startY, cw, contentH);
 
             switch (_subActive)
@@ -892,32 +925,29 @@ namespace Waystation.UI
         {
             string title = _active switch
             {
-                Tab.Build       => "Designer",
-                Tab.Crew        => "Crew",
-                Tab.Station     => _gm?.Station?.stationName is { Length: > 0 } sn ? sn : "Station",
-                Tab.Comms       => "Comms",
-                Tab.AwayMission => "Away Mission",
-                Tab.Rooms       => "Room Designations",
-                Tab.Research    => "Research",
-                Tab.Map         => "Station Map",
-                Tab.Views       => "Views",
-                Tab.Settings    => "Settings",
+                Tab.Build       => "DESIGNER",
+                Tab.Crew        => "CREW",
+                Tab.Station     => (_gm?.Station?.stationName is { Length: > 0 } sn ? sn : "STATION").ToUpper(),
+                Tab.Comms       => "COMMS",
+                Tab.AwayMission => "AWAY MISSION",
+                Tab.Rooms       => "ROOMS",
+                Tab.Research    => "RESEARCH",
+                Tab.Map         => "MAP",
+                Tab.Views       => "VIEWS",
+                Tab.Settings    => "SETTINGS",
                 _               => "",
             };
 
-            // Close button (top-right of drawer header)
-            Color cbPrev = GUI.color;
-            GUI.color = new Color(0.55f, 0.60f, 0.70f, 0.85f);
-            if (GUI.Button(new Rect(w - 30f, 10f, 26f, 26f), "\u00d7", _sBtnSmall))
-                _active = Tab.None;
-            GUI.color = cbPrev;
+            var (icon, subtitle) = TabMeta(_active);
+            string hint = _ready && _gm?.Station != null
+                ? $"{title} \u00b7 {_gm.Station.npcs.Count} CREW"  // · separator
+                : title;
 
-            GUI.Label(new Rect(Pad, 12f, w - 44f, 30f), title, _sHeader);
-            DrawSolid(new Rect(Pad, 52f, w - Pad * 2f, 1f), ColDivider);
+            float startY  = DrawPanelChrome(w, h, icon, title, subtitle,
+                                             () => _active = Tab.None, hint);
 
             float cw      = w - Pad * 2f;
-            float startY  = 60f;
-            float contentH = h - startY - 8f;
+            float contentH = h - startY - PanelStatH - 8f;
             Rect  area    = new Rect(Pad, startY, cw, contentH);
 
             if (!_ready && _active != Tab.Build &&
@@ -1024,7 +1054,7 @@ namespace Waystation.UI
             float navBw = (w - NavPad * 5f) / 4f;
             float navY  = area.y + NavPad;
 
-            DrawSolid(new Rect(area.x, area.y, w, NavH + NavPad), new Color(0.05f, 0.07f, 0.12f, 0.97f));
+            DrawSolid(new Rect(area.x, area.y, w, NavH + NavPad), ColSubDrawer);
 
             Color navPrev = GUI.color;
             var subPanels = new[]
@@ -1038,7 +1068,7 @@ namespace Waystation.UI
             {
                 var (panel, label) = subPanels[i];
                 bool isActive = _buildSub == panel;
-                GUI.color = isActive ? new Color(0.35f, 0.62f, 1.00f, 1f) : new Color(0.55f, 0.60f, 0.70f, 1f);
+                GUI.color = isActive ? ColAccent : ColTextBase;
                 if (GUI.Button(new Rect(area.x + NavPad + i * (navBw + NavPad), navY, navBw, NavH - NavPad * 2f),
                                label, _sBtnSmall))
                 {
@@ -1067,12 +1097,12 @@ namespace Waystation.UI
 
             // ── Toolbar strip ────────────────────────────────────────────────
             const float TBH = 30f;
-            DrawSolid(new Rect(area.x, area.y, w, TBH), new Color(0.05f, 0.07f, 0.12f, 0.9f));
+            DrawSolid(new Rect(area.x, area.y, w, TBH), ColSubDrawer);
             Color tbPrev = GUI.color;
-            GUI.color = _deconstructMode ? new Color(0.9f, 0.3f, 0.3f) : new Color(0.6f, 0.6f, 0.7f);
+            GUI.color = _deconstructMode ? ColBarCrit : ColTextBase;
             if (GUI.Button(new Rect(area.x + 4f, area.y + 4f, 110f, 22f), "\u26CF Deconstruct", _sBtnSmall))
                 _deconstructMode = !_deconstructMode;
-            GUI.color = _showBuildQueue ? new Color(0.4f, 0.7f, 0.9f) : new Color(0.6f, 0.6f, 0.7f);
+            GUI.color = _showBuildQueue ? ColBarFill : ColTextBase;
             if (GUI.Button(new Rect(area.x + 120f, area.y + 4f, 110f, 22f),
                            $"\u2261 Queue ({active.Count})", _sBtnSmall))
                 _showBuildQueue = !_showBuildQueue;
@@ -1082,8 +1112,8 @@ namespace Waystation.UI
 
             if (_deconstructMode)
             {
-                DrawSolid(new Rect(area.x, area.y + TBH, w, 18f), new Color(0.4f, 0.1f, 0.1f, 0.5f));
-                GUI.color = new Color(1f, 0.6f, 0.6f);
+                DrawSolid(new Rect(area.x, area.y + TBH, w, 18f), new Color(ColBarCrit.r, ColBarCrit.g, ColBarCrit.b, 0.25f));
+                GUI.color = new Color(1f, 0.55f, 0.55f);
                 GUI.Label(new Rect(area.x + 6f, area.y + TBH + 2f, w - 12f, LineH),
                           "Click a tile to deconstruct it.  RMB / Esc to cancel.", _sSub);
                 GUI.color = tbPrev;
@@ -1098,7 +1128,7 @@ namespace Waystation.UI
                                     "Production", "Plumbing", "Security" };
             // Two rows of category buttons (4 in first row, 3 in second)
             const float CatBtnH = 22f;
-            DrawSolid(new Rect(area.x, area.y + tbH, w, (CatBtnH + 2f) * 2f + 4f), new Color(0.04f, 0.06f, 0.11f, 0.9f));
+            DrawSolid(new Rect(area.x, area.y + tbH, w, (CatBtnH + 2f) * 2f + 4f), ColSubDrawer);
             int[] rowSplit = { 4, 3 };
             int ci2 = 0;
             for (int row2 = 0; row2 < 2; row2++)
@@ -1109,7 +1139,7 @@ namespace Waystation.UI
                 for (int col2 = 0; col2 < count; col2++, ci2++)
                 {
                     bool isActive = _buildCategoryFilter == catFilters[ci2];
-                    GUI.color = isActive ? new Color(0.35f, 0.60f, 0.90f, 1f) : new Color(0.55f, 0.60f, 0.70f, 1f);
+                    GUI.color = isActive ? ColAccent : ColTextBase;
                     if (GUI.Button(new Rect(bx2, area.y + tbH + 2f + row2 * (CatBtnH + 2f), bw2 - 2f, CatBtnH - 2f),
                                    catLabels[ci2], _sBtnSmall))
                         _buildCategoryFilter = catFilters[ci2];
@@ -1182,7 +1212,7 @@ namespace Waystation.UI
 
             foreach (var catGroup in byCategory)
             {
-                DrawSolid(new Rect(0, y, cw, 22f), new Color(0.04f, 0.06f, 0.12f, 0.8f));
+                DrawSolid(new Rect(0, y, cw, 22f), ColBarBg);
                 GUI.Label(new Rect(4f, y + 3f, cw - 8f, LineH), CategoryDisplayName(catGroup.Key), _sSub);
                 y += 24f;
 
@@ -1297,7 +1327,7 @@ namespace Waystation.UI
 
             if (discovered.Count == 0)
             {
-                GUI.color = new Color(0.55f, 0.58f, 0.65f);
+                GUI.color = ColTextBase;
                 GUI.Label(new Rect(4f, y, cw - 8f, 18f), "No rooms found. Place floors to define rooms.", _sSub);
                 GUI.color = colPrev;
                 y += 22f;
@@ -1318,7 +1348,7 @@ namespace Waystation.UI
                     _roomNameBuffers[roomKey] = s.customRoomNames.TryGetValue(roomKey, out var cn) ? cn : "";
 
                 // ── Room header ───────────────────────────────────────────────
-                DrawSolid(new Rect(0, y, cw, 32f), new Color(0.10f, 0.14f, 0.22f, 0.85f));
+                DrawSolid(new Rect(0, y, cw, 32f), ColBarBg);
                 DrawSolid(new Rect(0, y, 4f, 32f),  new Color(roleColor.r, roleColor.g, roleColor.b, 0.9f));
                 string displayRoomName = (s.customRoomNames.TryGetValue(roomKey, out var crn) && !string.IsNullOrEmpty(crn))
                     ? crn : $"Room {roomKey}";
@@ -1337,12 +1367,12 @@ namespace Waystation.UI
                 // ── Role picker ───────────────────────────────────────────────
                 if (_buildRoomRolePicker == roomKey)
                 {
-                    DrawSolid(new Rect(4f, y, cw - 4f, (RoomRoles.Length + 1) * 22f + 4f), new Color(0.07f, 0.10f, 0.18f, 0.95f));
+                    DrawSolid(new Rect(4f, y, cw - 4f, (RoomRoles.Length + 1) * 22f + 4f), ColDrawer);
                     float ry = y + 2f;
                     foreach (var rr in RoomRoles)
                     {
                         bool cur = roleId == rr.id || (string.IsNullOrEmpty(rr.id) && string.IsNullOrEmpty(roleId));
-                        GUI.color = cur ? new Color(0.35f, 0.65f, 0.95f) : Color.white;
+                        GUI.color = cur ? ColAccent : ColTextBright;
                         if (GUI.Button(new Rect(8f, ry, cw - 12f, 20f), rr.label, _sBtnSmall))
                         {
                             if (string.IsNullOrEmpty(rr.id)) s.roomRoles.Remove(roomKey);
@@ -1377,22 +1407,22 @@ namespace Waystation.UI
                     var bs = bkv.Value;
 
                     float cardH = 28f + bs.requirements.Count * 20f + 16f;
-                    DrawSolid(new Rect(4f, y, cw - 4f, cardH), new Color(0.06f, 0.09f, 0.16f, 0.75f));
+                    DrawSolid(new Rect(4f, y, cw - 4f, cardH), new Color(ColBarBg.r, ColBarBg.g, ColBarBg.b, 0.75f));
 
                     // Header row: type name + status
                     string typeName = bs.displayName ?? bs.workbenchRoomType ?? "Unknown";
                     if (bs.bonusActive)
                     {
-                        GUI.color = new Color(0.90f, 0.78f, 0.20f, 1f);
+                        GUI.color = ColBarWarn;
                         GUI.Label(new Rect(10f, y + 4f, cw - 90f, 16f), $"\u2605 {typeName}", _sLabel);
-                        GUI.color = new Color(0.85f, 0.72f, 0.18f, 0.9f);
+                        GUI.color = new Color(ColBarWarn.r, ColBarWarn.g, ColBarWarn.b, 0.9f);
                         GUI.Label(new Rect(cw - 86f, y + 5f, 80f, LineH), "BONUS ACTIVE", _sSub);
                     }
                     else
                     {
-                        GUI.color = new Color(0.65f, 0.65f, 0.75f, 1f);
+                        GUI.color = ColTextBase;
                         GUI.Label(new Rect(10f, y + 4f, cw - 90f, 16f), $"\u25c7 {typeName}", _sLabel);
-                        GUI.color = new Color(0.50f, 0.50f, 0.60f, 0.9f);
+                        GUI.color = ColTextMid;
                         GUI.Label(new Rect(cw - 68f, y + 5f, 62f, LineH), "inactive", _sSub);
                     }
                     GUI.color = colPrev;
@@ -1412,7 +1442,7 @@ namespace Waystation.UI
                     foreach (var req in bs.requirements)
                     {
                         bool met = req.IsMet;
-                        GUI.color = met ? new Color(0.35f, 0.85f, 0.45f) : new Color(0.85f, 0.45f, 0.25f);
+                        GUI.color = met ? ColBarGreen : ColBarCrit;
                         string checkMark = met ? "\u2713" : "\u2717";
                         string reqTxt = met
                             ? $"{checkMark} {req.displayLabel}:  {req.current}/{req.required}"
@@ -1427,7 +1457,7 @@ namespace Waystation.UI
 
                 if (!anyBonus)
                 {
-                    GUI.color = new Color(0.45f, 0.48f, 0.55f, 0.8f);
+                    GUI.color = ColTextMid;
                     GUI.Label(new Rect(8f, y, cw - 12f, 16f),
                         "No workbench in this room \u2014 place a workbench to define a room type.", _sSub);
                     GUI.color = colPrev;
@@ -1448,10 +1478,10 @@ namespace Waystation.UI
                 foreach (var rtKv in _gm.Registry.RoomTypes)
                 {
                     var rt = rtKv.Value;
-                    DrawSolid(new Rect(0, y, cw, 26f), new Color(0.08f, 0.10f, 0.18f, 0.7f));
-                    GUI.color = new Color(0.55f, 0.62f, 0.75f);
+                    DrawSolid(new Rect(0, y, cw, 26f), ColBarBg);
+                    GUI.color = ColTextBase;
                     GUI.Label(new Rect(4f, y + 4f, cw * 0.55f, 16f), rt.displayName, _sSub);
-                    GUI.color = new Color(0.38f, 0.42f, 0.50f);
+                    GUI.color = ColTextMid;
                     GUI.Label(new Rect(cw * 0.56f, y + 4f, cw * 0.24f, 16f), "(built-in)", _sSub);
                     GUI.color = colPrev;
                     // Show skill bonus
@@ -1467,10 +1497,10 @@ namespace Waystation.UI
             RoomTypeDefinition toDelete = null;
             foreach (var ct in s.customRoomTypes)
             {
-                DrawSolid(new Rect(0, y, cw, 26f), new Color(0.09f, 0.12f, 0.14f, 0.8f));
-                DrawSolid(new Rect(0, y, 3f, 26f), new Color(0.35f, 0.62f, 1.00f, 0.8f));
+                DrawSolid(new Rect(0, y, cw, 26f), ColBarBg);
+                DrawSolid(new Rect(0, y, 3f, 26f), new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.8f));
                 GUI.Label(new Rect(6f, y + 4f, cw * 0.55f, 16f), ct.displayName, _sSub);
-                GUI.color = new Color(0.35f, 0.62f, 1.00f, 0.8f);
+                GUI.color = new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.8f);
                 GUI.Label(new Rect(cw * 0.56f, y + 4f, cw * 0.18f, 16f), "(custom)", _sSub);
                 GUI.color = colPrev;
                 if (GUI.Button(new Rect(cw - 58f, y + 3f, 54f, 20f), "\u2715 Delete", _sBtnDanger))
@@ -1481,7 +1511,7 @@ namespace Waystation.UI
 
             // ── New custom type creator ────────────────────────────────────────
             y += 4f;
-            GUI.color = new Color(0.35f, 0.62f, 1.00f, 0.9f);
+            GUI.color = ColAccent;
             if (!_creatingNewRoomType)
             {
                 if (GUI.Button(new Rect(4f, y, cw - 8f, 24f), "+ Define Custom Room Type", _sBtnSmall))
@@ -1497,8 +1527,8 @@ namespace Waystation.UI
             else
             {
                 GUI.color = colPrev;
-                DrawSolid(new Rect(0, y, cw, 100f), new Color(0.07f, 0.10f, 0.16f, 0.9f));
-                DrawSolid(new Rect(0, y, cw, 1f), new Color(0.35f, 0.62f, 1.00f, 0.6f));
+                DrawSolid(new Rect(0, y, cw, 100f), ColBarBg);
+                DrawSolid(new Rect(0, y, cw, 1f), new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.6f));
 
                 float fy = y + 4f;
                 GUI.Label(new Rect(4f, fy, 72f, 16f), "Name:", _sSub);
@@ -1562,7 +1592,7 @@ namespace Waystation.UI
 
             // ── Search bar + action buttons ───────────────────────────────────
             const float ToolH = 38f;
-            DrawSolid(new Rect(area.x, y, cw, ToolH), new Color(0.06f, 0.08f, 0.14f, 0.97f));
+            DrawSolid(new Rect(area.x, y, cw, ToolH), ColSubDrawer);
 
             float searchW = cw - 180f - Pad * 3f;
             GUI.Label(new Rect(area.x + Pad, y + 10f, 40f, LineH), "Search", _sSub);
@@ -1572,13 +1602,13 @@ namespace Waystation.UI
 
             // "New Asset" button → opens blank Asset Editor
             Color btnPrev = GUI.color;
-            GUI.color = new Color(0.35f, 0.62f, 1.00f);
+            GUI.color = ColAccent;
             if (GUI.Button(new Rect(area.x + Pad + 44f + searchW + Pad, y + 8f, 82f, BtnH),
                            "\u2605 New Asset", _sBtnSmall))
                 Waystation.UI.AssetEditorController.Open();
 
             // "Import" button
-            GUI.color = new Color(0.55f, 0.80f, 0.55f);
+            GUI.color = ColBarGreen;
             if (GUI.Button(new Rect(area.x + cw - Pad - 78f, y + 8f, 74f, BtnH),
                            "Import…", _sBtnSmall))
             {
@@ -1612,13 +1642,12 @@ namespace Waystation.UI
             {
                 bool selected = (_templateLibSelected == tmpl.templateId);
                 DrawSolid(new Rect(0, ey, lw, EntryH - 2f),
-                          selected ? new Color(0.16f, 0.24f, 0.42f, 1f)
-                                   : new Color(0.10f, 0.12f, 0.20f, 0.90f));
+                          selected ? ColTabHl
+                                   : ColBarBg);
 
                 // Thumbnail placeholder (32×32 grey square)
                 const float ThumbW = 40f;
-                DrawSolid(new Rect(4f, ey + 4f, ThumbW, EntryH - 10f),
-                          new Color(0.18f, 0.22f, 0.34f, 1f));
+                DrawSolid(new Rect(4f, ey + 4f, ThumbW, EntryH - 10f), ColBevelHi);
                 GUI.Label(new Rect(4f, ey + 14f, ThumbW, 20f), "👗",
                           new GUIStyle(_sSub) { alignment = TextAnchor.MiddleCenter, fontSize = FontSizeHdr });
 
@@ -1669,7 +1698,7 @@ namespace Waystation.UI
                         _templateLibConfirmDelete = true;
                     }
                 }
-                GUI.color = new Color(0.55f, 0.80f, 0.55f);
+                GUI.color = ColBarGreen;
                 if (GUI.Button(new Rect(ax + abw + 4f, ay, 72f, 20f), "Export", _sBtnSmall))
                 {
                     string json = lib.Export(
@@ -1682,7 +1711,7 @@ namespace Waystation.UI
                 // Confirm-delete banner
                 if (_templateLibConfirmDelete && _templateLibSelected == tmpl.templateId)
                 {
-                    GUI.color = new Color(0.86f, 0.26f, 0.26f, 0.90f);
+                    GUI.color = new Color(ColBarCrit.r, ColBarCrit.g, ColBarCrit.b, 0.90f);
                     GUI.Label(new Rect(0f, ey, lw, EntryH - 2f), "  Click ✕ Delete again to confirm.", _sSub);
                     GUI.color = btnPrev;
                 }
@@ -1713,7 +1742,7 @@ namespace Waystation.UI
             bool   isPlanter   = f.buildableId == "buildable.hydroponics_planter";
             bool   settingsOpen = (isCabinet || isPlanter) && f.status == "complete" && _foundSettingsOpen == f.uid;
 
-            DrawSolid(new Rect(0, y, cw, 76f), new Color(0.07f, 0.09f, 0.15f, 0.6f));
+            DrawSolid(new Rect(0, y, cw, 76f), new Color(ColBarBg.r, ColBarBg.g, ColBarBg.b, 0.6f));
             GUI.Label(new Rect(4f, y + 2f, cw * 0.65f, LineH), fname, _sLabel);
 
             string statusLabel = f.status switch
@@ -1728,7 +1757,7 @@ namespace Waystation.UI
             if (f.status == "constructing" || f.status == "awaiting_haul")
             {
                 float pct = f.status == "constructing" ? f.buildProgress : 0f;
-                DrawSolid(new Rect(4f, y + 46f, cw - 8f, 6f),  new Color(0.15f, 0.15f, 0.2f));
+                DrawSolid(new Rect(4f, y + 46f, cw - 8f, 6f), ColBarBg);
                 DrawSolid(new Rect(4f, y + 36f, (cw - 8f) * pct, 6f), ColBarFill);
             }
 
@@ -1846,7 +1875,7 @@ namespace Waystation.UI
                     {
                         bool selected = f.cropId == kv.Key;
                         Color prev = GUI.color;
-                        if (selected) GUI.color = new Color(0.4f, 0.9f, 0.4f);
+                        if (selected) GUI.color = ColBarGreen;
                         if (GUI.Button(new Rect(8f, y, cw - 16f, 18f), kv.Value.cropName, _sBtnSmall))
                             f.cropId = selected ? null : kv.Key;
                         GUI.color = prev;
@@ -1872,7 +1901,7 @@ namespace Waystation.UI
                 if (inspCrop != null)
                 {
                     var lt = FarmingSystem.EvalLight(f.lightLevel, inspCrop);
-                    GUI.color = lt == FarmingSystem.ConditionTier.Ideal      ? new Color(0.4f, 0.9f, 0.4f)
+                    GUI.color = lt == FarmingSystem.ConditionTier.Ideal      ? ColBarGreen
                               : lt == FarmingSystem.ConditionTier.Acceptable ? new Color(1f, 0.85f, 0.2f)
                               : new Color(1f, 0.4f, 0.3f);
                     lightLabel += lt == FarmingSystem.ConditionTier.Ideal      ? " (Ideal)"
@@ -1888,7 +1917,7 @@ namespace Waystation.UI
                 if (inspCrop != null)
                 {
                     var tt = FarmingSystem.EvalTemperature(f.tileTemperature, inspCrop);
-                    GUI.color = tt == FarmingSystem.ConditionTier.Ideal      ? new Color(0.4f, 0.9f, 0.4f)
+                    GUI.color = tt == FarmingSystem.ConditionTier.Ideal      ? ColBarGreen
                               : tt == FarmingSystem.ConditionTier.Acceptable ? new Color(1f, 0.85f, 0.2f)
                               : new Color(1f, 0.4f, 0.3f);
                     tempLabel += tt == FarmingSystem.ConditionTier.Ideal      ? " (Ideal)"
@@ -1929,15 +1958,15 @@ namespace Waystation.UI
             }
 
             Color bg = hovered
-                ? new Color(0.16f, 0.24f, 0.42f, 1f)
-                : new Color(0.08f, 0.10f, 0.18f, canPlace ? 0.75f : 0.40f);
+                ? ColTabHl
+                : new Color(ColBarBg.r, ColBarBg.g, ColBarBg.b, canPlace ? 0.75f : 0.40f);
             DrawSolid(tile, bg);
             if (hovered)
                 DrawSolid(new Rect(tile.x, tile.y, 2f, tile.height), ColAccent);
 
             GUI.color = canPlace
-                ? (hovered ? Color.white : new Color(0.82f, 0.88f, 1f))
-                : new Color(0.42f, 0.45f, 0.52f);
+                ? (hovered ? ColTextHead : ColTextBright)
+                : ColTextMid;
             GUI.Label(
                 new Rect(tile.x + 4f, tile.y + (tile.height - LineH) * 0.5f, tile.width - 8f, LineH),
                 defn.displayName, _sSub);
@@ -1986,10 +2015,8 @@ namespace Waystation.UI
             ty = Mathf.Clamp(ty, scrollArea.y + 4f, scrollArea.yMax - th - 4f);
 
             // Background: thin accent border + dark fill + left accent bar
-            DrawSolid(new Rect(tx - 2f, ty - 2f, tw + 4f, th + 4f),
-                      new Color(0.22f, 0.30f, 0.52f, 1f));
-            DrawSolid(new Rect(tx, ty, tw, th),
-                      new Color(0.04f, 0.06f, 0.14f, 0.98f));
+            DrawSolid(new Rect(tx - 2f, ty - 2f, tw + 4f, th + 4f), ColBorderLit);
+            DrawSolid(new Rect(tx, ty, tw, th), ColSubDrawer);
             DrawSolid(new Rect(tx, ty, 2f, th), ColAccent);
 
             float iy = ty + 8f;
@@ -2012,7 +2039,7 @@ namespace Waystation.UI
             // Build time + category
             string catShort = defn.category.Length > 0
                 ? char.ToUpper(defn.category[0]) + defn.category.Substring(1) : "Other";
-            GUI.color = new Color(0.55f, 0.62f, 0.78f);
+            GUI.color = ColTextBase;
             GUI.Label(new Rect(tx + 6f, iy, tw - 12f, LineH),
                       $"Build time: {defn.buildTimeTicks}t  \u00b7  {catShort}", _sSub);
             GUI.color = prevCol;
@@ -2023,7 +2050,7 @@ namespace Waystation.UI
             iy += LineH;
             if (defn.requiredMaterials.Count == 0)
             {
-                GUI.color = new Color(0.48f, 0.52f, 0.62f);
+                GUI.color = ColTextMid;
                 GUI.Label(new Rect(tx + 14f, iy, tw - 20f, LineH), "None", _sSub);
                 GUI.color = prevCol;
                 iy += LineH;
@@ -2043,7 +2070,7 @@ namespace Waystation.UI
             iy += LineH;
             if (defn.requiredSkills.Count == 0)
             {
-                GUI.color = new Color(0.48f, 0.52f, 0.62f);
+                GUI.color = ColTextMid;
                 GUI.Label(new Rect(tx + 14f, iy, tw - 20f, LineH), "None", _sSub);
                 GUI.color = prevCol;
                 iy += LineH;
@@ -2056,7 +2083,7 @@ namespace Waystation.UI
                     foreach (var npc in s.GetCrew())
                         if (npc.skills.TryGetValue(sk.Key, out int lvl) && lvl >= sk.Value)
                         { met = true; break; }
-                    Color skCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
+                    Color skCol = met ? ColBarGreen : ColBarCrit;
                     var pc = GUI.color;
                     GUI.color = skCol;
                     GUI.Label(new Rect(tx + 14f, iy, 16f, LineH), met ? "\u2713" : "\u2715", _sSub);
@@ -2075,7 +2102,7 @@ namespace Waystation.UI
                 foreach (var tag in defn.requiredTags)
                 {
                     bool met = s.HasTag(tag);
-                    Color tagCol = met ? new Color(0.4f, 0.9f, 0.4f) : ColBarCrit;
+                    Color tagCol = met ? ColBarGreen : ColBarCrit;
                     var pc = GUI.color;
                     GUI.color = tagCol;
                     GUI.Label(new Rect(tx + 14f, iy, 16f, LineH), met ? "\u2713" : "\u2715", _sSub);
@@ -2130,27 +2157,32 @@ namespace Waystation.UI
         {
             if (_gm?.Station == null) return;
             // ── Sub-panel selector ────────────────────────────────────────────
-            float SubTabH = BtnH + 10f;
+            const float SubTabH = 22f;
             float subY  = area.y;
             float tabW  = Mathf.Floor(w / 3f);
             (string lbl, CrewSubPanel panel)[] crewTabs =
             {
-                ("Crew",  CrewSubPanel.Crew),
-                ("Work",  CrewSubPanel.Work),
-                ("Ranks", CrewSubPanel.Ranks),
+                ("CREW",  CrewSubPanel.Crew),
+                ("WORK",  CrewSubPanel.Work),
+                ("RANKS", CrewSubPanel.Ranks),
             };
+            // Tab row background + bottom border
+            DrawSolid(new Rect(area.x, subY, w, SubTabH), ColBar);
+            DrawSolid(new Rect(area.x, subY + SubTabH - 1f, w, 1f), ColDivider);
             for (int ti = 0; ti < crewTabs.Length; ti++)
             {
                 float tx = area.x + ti * tabW;
                 bool  on = _crewSub == crewTabs[ti].panel;
-                if (on)
-                    DrawSolid(new Rect(tx, subY, tabW - 1f, SubTabH - 3f),
-                              new Color(0.12f, 0.18f, 0.30f, 1f));
-                if (GUI.Button(new Rect(tx, subY, tabW - 1f, SubTabH - 3f),
-                               crewTabs[ti].lbl, on ? _sTabOn : _sTabOff))
-                    _crewSub = crewTabs[ti].panel;
+                DrawSolid(new Rect(tx, subY, tabW - 1f, SubTabH - 1f), on ? ColTabHl : ColBar);
                 if (on)
                     DrawSolid(new Rect(tx, subY + SubTabH - 3f, tabW - 1f, 2f), ColAccent);
+                if (ti > 0)
+                    DrawSolid(new Rect(tx, subY, 1f, SubTabH - 1f), ColDivider);
+                GUI.color = on ? ColTextHead : ColTextBase;
+                if (GUI.Button(new Rect(tx, subY, tabW - 1f, SubTabH - 1f),
+                               crewTabs[ti].lbl, on ? _sTabOn : _sTabOff))
+                    _crewSub = crewTabs[ti].panel;
+                GUI.color = Color.white;
             }
 
             Rect subArea = new Rect(area.x, area.y + SubTabH + 6f, w, h - SubTabH - 6f);
@@ -2192,27 +2224,27 @@ namespace Waystation.UI
                 var chipPrev = GUI.color;
                 float chipW  = (w - 16f - ChipGap * 3f) / 4f;
                 // Crew count chip
-                DrawSolid(new Rect(area.x + 8f, sy, chipW, ChipH), new Color(0.10f, 0.14f, 0.24f, 1f));
-                GUI.color = new Color(0.70f, 0.76f, 0.90f);
+                DrawSolid(new Rect(area.x + 8f, sy, chipW, ChipH), ColBarBg);
+                GUI.color = ColTextBright;
                 GUI.Label(new Rect(area.x + 10f, sy + 4f, chipW - 4f, 16f),
                           $"Crew: {crew.Count}", _sSub);
                 // Mood chip
                 Color moodChipCol = avgMood >= 70f ? ColBarGreen : avgMood >= 40f ? ColBarWarn : ColBarCrit;
                 float cx1 = area.x + 8f + chipW + ChipGap;
-                DrawSolid(new Rect(cx1, sy, chipW, ChipH), new Color(0.10f, 0.14f, 0.24f, 1f));
+                DrawSolid(new Rect(cx1, sy, chipW, ChipH), ColBarBg);
                 GUI.color = moodChipCol;
                 GUI.Label(new Rect(cx1 + 2f, sy + 4f, chipW - 4f, 16f),
                           $"Mood {avgMood:F0}%", _sSub);
                 // Sick chip
                 float cx2 = cx1 + chipW + ChipGap;
-                DrawSolid(new Rect(cx2, sy, chipW, ChipH), new Color(0.10f, 0.14f, 0.24f, 1f));
-                GUI.color = sickC > 0 ? ColBarCrit : new Color(0.50f, 0.55f, 0.65f);
+                DrawSolid(new Rect(cx2, sy, chipW, ChipH), ColBarBg);
+                GUI.color = sickC > 0 ? ColBarCrit : ColTextBase;
                 GUI.Label(new Rect(cx2 + 2f, sy + 4f, chipW - 4f, 16f),
                           $"Sick: {sickC}", _sSub);
                 // Injured chip
                 float cx3 = cx2 + chipW + ChipGap;
-                DrawSolid(new Rect(cx3, sy, chipW, ChipH), new Color(0.10f, 0.14f, 0.24f, 1f));
-                GUI.color = injC > 0 ? ColBarWarn : new Color(0.50f, 0.55f, 0.65f);
+                DrawSolid(new Rect(cx3, sy, chipW, ChipH), ColBarBg);
+                GUI.color = injC > 0 ? ColBarWarn : ColTextBase;
                 GUI.Label(new Rect(cx3 + 2f, sy + 4f, chipW - 4f, 16f),
                           $"Inj: {injC}", _sSub);
                 GUI.color = chipPrev;
@@ -2229,8 +2261,8 @@ namespace Waystation.UI
 
             // Toolbar row — add more buttons here freely; widths auto-distribute
             Color cfgCol = _crewDeptConfigMode
-                ? new Color(0.30f, 0.62f, 1.00f, 1f)
-                : new Color(0.55f, 0.60f, 0.70f, 1f);
+                ? ColAccent
+                : ColTextBase;
             sy = ButtonRow(area.x + 8f, sy, w - 16f, 0f,
                 ("⚙ Config Depts", cfgCol, () => _crewDeptConfigMode = !_crewDeptConfigMode),
                 ("+ New Dept", null, () =>
@@ -2299,13 +2331,13 @@ namespace Waystation.UI
                 bool  crisis = npc.inCrisis;
                 Color cardBg = crisis
                     ? new Color(0.22f, 0.06f, 0.06f, 0.92f)
-                    : new Color(0.09f, 0.11f, 0.19f, 0.90f);
+                    : new Color(ColBarBg.r, ColBarBg.g, ColBarBg.b, 0.90f);
                 DrawSolid(new Rect(2f, y, cw - 2f, CardH - 2f), cardBg);
 
                 // Avatar initials square — tinted with department colour
                 float AW = AvatarSz - 2f;
                 var npcDept = depts.Find(d => d.uid == npc.departmentId);
-                Color avatarBg = npcDept?.GetColour() ?? new Color(0.18f, 0.22f, 0.32f, 1f);
+                Color avatarBg = npcDept?.GetColour() ?? ColBevelHi;
                 DrawSolid(new Rect(4f, y + 6f, AW, AW), avatarBg);
                 string initials = npc.name.Length >= 2
                     ? $"{npc.name[0]}{npc.name[npc.name.LastIndexOf(' ') + 1]}"
@@ -2318,7 +2350,7 @@ namespace Waystation.UI
                 float nw = cw * 0.36f;
                 var   rk = GUI.color;
                 GUI.Label(new Rect(nx, y + 5f, nw, LblH), npc.name, _sSub);
-                GUI.color = npc.rank > 0 ? new Color(1f, 0.85f, 0.25f) : new Color(0.35f, 0.38f, 0.48f);
+                GUI.color = npc.rank > 0 ? ColBarWarn : ColTextDim;
                 GUI.Label(new Rect(nx, y + LineH + 2f, nw, SmH), rankLbl.Length > 0 ? rankLbl : taskLbl, _sSub);
                 GUI.color = rk;
 
@@ -2367,7 +2399,7 @@ namespace Waystation.UI
                 var deptCrew = crew.FindAll(n => n.departmentId == dept.uid);
 
                 // Department header
-                DrawSolid(new Rect(0f, y, cw, DeptHdH - 2f), new Color(0.12f, 0.15f, 0.25f, 1f));
+                DrawSolid(new Rect(0f, y, cw, DeptHdH - 2f), ColBarBg);
 
                 if (_crewDeptConfigMode && _renamingDeptUid == dept.uid)
                 {
@@ -2394,7 +2426,7 @@ namespace Waystation.UI
                     }
                     bool canRemove = deptCrew.Count == 0;
                     var  rmPrev   = GUI.color;
-                    if (!canRemove) GUI.color = new Color(0.4f, 0.4f, 0.4f);
+                    if (!canRemove) GUI.color = ColTextDim;
                     if (GUI.Button(new Rect(cw * 0.52f + 52f, y + 4f, 42f, 20f), "✕ Del", _sBtnSmall)
                         && canRemove)
                     {
@@ -2412,7 +2444,7 @@ namespace Waystation.UI
                     // Chevron expand/collapse
                     bool collapsed = _deptCollapsed.Contains(dept.uid);
                     string chevron = collapsed ? "▶" : "▼";
-                    GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = ColTextBase;
                     if (GUI.Button(new Rect(2f, y + 7f, 18f, 16f), chevron, _sBtnSmall))
                     {
                         if (collapsed)
@@ -2434,7 +2466,7 @@ namespace Waystation.UI
 
                     // (...) settings popover toggle
                     bool settingsOpen = _deptSettingsOpen == dept.uid;
-                    GUI.color = settingsOpen ? ColAccent : new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = settingsOpen ? ColAccent : ColTextBase;
                     if (GUI.Button(new Rect(cw - 28f, y + 6f, 24f, 18f), "···", _sBtnSmall))
                         _deptSettingsOpen = settingsOpen ? "" : dept.uid;
                     GUI.color = scPrev;
@@ -2444,15 +2476,15 @@ namespace Waystation.UI
                     {
                         float py2   = y + DeptHdH;
                         float pickH = 76f;
-                        DrawSolid(new Rect(0f, py2, cw, pickH), new Color(0.08f, 0.10f, 0.18f, 1f));
+                        DrawSolid(new Rect(0f, py2, cw, pickH), ColBarBg);
                         DrawSolid(new Rect(0f, py2, cw, 1f), ColDivider);
 
                         // Colour swatches row
                         Color? primC  = dept.GetColour();
-                        Color  swPrim = primC ?? new Color(0.25f, 0.30f, 0.42f, 1f);
+                        Color  swPrim = primC ?? ColBevelHi;
                         Color? secC   = dept.GetSecondaryColour();
-                        Color  swSec  = secC  ?? new Color(0.25f, 0.30f, 0.42f, 1f);
-                        GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                        Color  swSec  = secC  ?? ColBevelHi;
+                        GUI.color = ColTextBase;
                         GUI.Label(new Rect(4f, py2 + 6f, 44f, 14f), "Colours:", _sSub);
                         GUI.color = swPrim;
                         bool primClick = GUI.Button(new Rect(52f, py2 + 5f, 16f, 16f), "■", _sBtnSmall);
@@ -2466,7 +2498,7 @@ namespace Waystation.UI
                         if (secClick)  OpenDeptPicker(dept.uid, "secondary");
 
                         // Job toggles row
-                        GUI.color = new Color(0.45f, 0.50f, 0.60f);
+                        GUI.color = ColTextMid;
                         GUI.Label(new Rect(4f, py2 + 28f, 28f, 14f), "Jobs:", _sSub);
                         GUI.color = scPrev;
                         float jBtnW = (cw - 36f - (WorkJobCols.Length - 1) * 2f) / WorkJobCols.Length;
@@ -2476,7 +2508,7 @@ namespace Waystation.UI
                             bool   blocked = _deptJobBlockList.TryGetValue(dept.uid, out var blSet)
                                              && blSet.Contains(jid2);
                             float  jx      = 34f + ji * (jBtnW + 2f);
-                            GUI.color = blocked ? new Color(0.28f, 0.30f, 0.36f) : new Color(0.22f, 0.60f, 0.32f);
+                            GUI.color = blocked ? ColTextDim : ColBarGreen;
                             if (GUI.Button(new Rect(jx, py2 + 26f, jBtnW, 18f), WorkJobCols[ji].label, _sBtnSmall))
                             {
                                 if (!_deptJobBlockList.ContainsKey(dept.uid))
@@ -2661,7 +2693,7 @@ namespace Waystation.UI
             }
 
             // ═══ CREW DETAIL SUB-TAB BAR ════════════════════════════════
-            float CdTabH = NpcTabH;
+            const float CdTabH = 22f;
             float cdTabY = area.y + HdrH + 2f;
             DrawSolid(new Rect(area.x, cdTabY, w, CdTabH), new Color(0.09f, 0.11f, 0.18f, 1f));
             DrawSolid(new Rect(area.x, cdTabY + CdTabH - 1f, w, 1f), ColDivider);
@@ -2702,7 +2734,7 @@ namespace Waystation.UI
 
                 void VBar(float cx, string lbl, float val, Color col)
                 {
-                    GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = ColTextBase;
                     GUI.Label(new Rect(cx, y + 2f, CharW * 5f, LblH), lbl, _sSub);
                     GUI.color = prevC;
                     DrawSolid(new Rect(cx + CharW * 5f + 2f, y + 6f, barW2, 6f), ColBarBg);
@@ -2712,13 +2744,13 @@ namespace Waystation.UI
                 void NBar(string lbl, float val, Color col, string badge = null)
                 {
                     float lblW = CharW * 5.5f;
-                    GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = ColTextBase;
                     GUI.Label(new Rect(2f, y + 2f, lblW, LblH), lbl, _sSub);
                     GUI.color = prevC;
                     DrawSolid(new Rect(lblW + 4f, y + 6f, barWF, 6f), ColBarBg);
                     DrawSolid(new Rect(lblW + 4f, y + 6f, barWF * Mathf.Clamp01(val), 6f), col);
                     string rightLbl = badge ?? $"{val * 100f:F0}%";
-                    GUI.color = badge != null ? ColBarWarn : new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = badge != null ? ColBarWarn : ColTextBase;
                     float rw = cw - lblW - 4f - barWF - 4f;
                     GUI.Label(new Rect(lblW + 4f + barWF + 4f, y + 2f, rw, LblH), rightLbl, _sSub);
                     GUI.color = prevC;
@@ -2773,7 +2805,7 @@ namespace Waystation.UI
                     Color  modC   = modVal > 0 ? ColBarGreen
                                   : modVal < 0 ? ColBarCrit
                                   : new Color(0.5f, 0.55f, 0.65f, 1f);
-                    GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = ColTextBase;
                     GUI.Label(new Rect(cx2, y + 2f, 28f, LblH), abbr, _sSub);
                     GUI.color = modC;
                     GUI.Label(new Rect(cx2 + 28f, y + 2f, abilColW - 30f, LblH), $"{score}({modStr})", _sSub);
@@ -2800,12 +2832,12 @@ namespace Waystation.UI
                                  : san.score < 0    ? ColBarWarn
                                  :                   ColBarGreen;
                     float sanLblW = CharW * 5.5f;
-                    GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = ColTextBase;
                     GUI.Label(new Rect(2f, y + 2f, sanLblW, LblH), "Sanity", _sSub);
                     GUI.color = prevC;
                     DrawSolid(new Rect(sanLblW + 4f, y + 6f, barWF, 6f), ColBarBg);
                     DrawSolid(new Rect(sanLblW + 4f, y + 6f, barWF * sanPct, 6f), sanC);
-                    GUI.color = san.isInBreakdown ? ColBarCrit : new Color(0.50f, 0.55f, 0.65f);
+                    GUI.color = san.isInBreakdown ? ColBarCrit : ColTextBase;
                     float sanRW = cw - sanLblW - 4f - barWF - 4f;
                     GUI.Label(new Rect(sanLblW + 4f + barWF + 4f, y + 2f, sanRW, LblH),
                               san.isInBreakdown ? "⚠ Break" : $"{san.score}/{san.ceiling}", _sSub);
@@ -2817,7 +2849,7 @@ namespace Waystation.UI
 
                 // --- Task ---------------------------------------------------
                 string jobLbl = npc.missionUid != null ? "✈ Away" : _gm.Jobs.GetJobLabel(npc);
-                GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                GUI.color = ColTextBase;
                 GUI.Label(new Rect(2f, y + 2f, CharW * 5f, LblH), "Task:", _sSub);
                 GUI.color = prevC;
                 GUI.Label(new Rect(CharW * 5f + 4f, y + 2f, cw - CharW * 5f - 6f, LblH), jobLbl, _sSub);
@@ -3102,7 +3134,7 @@ namespace Waystation.UI
                         string itemName  = _gm.Registry.Items.TryGetValue(itemId, out var def)
                                          ? def.displayName : itemId;
                         float  nameW     = cw - CharW * 8f;
-                        GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                        GUI.color = ColTextBase;
                         GUI.Label(new Rect(4f,      y + 2f, CharW * 7f, LblH), slotName,  _sSub);
                         GUI.color = prevC;
                         GUI.Label(new Rect(CharW * 8f, y + 2f, nameW,      LblH), itemName, _sSub);
@@ -3138,7 +3170,7 @@ namespace Waystation.UI
                         string qtyStr   = qty > 1 ? $"×{qty}" : "";
                         float  nameW    = cw - CharW * 5f;
                         GUI.Label(new Rect(4f,      y + 2f, nameW,      LblH), itemName, _sSub);
-                        GUI.color = new Color(0.50f, 0.55f, 0.65f);
+                        GUI.color = ColTextBase;
                         GUI.Label(new Rect(cw - CharW * 4f, y + 2f, CharW * 4f, LblH), qtyStr, _sSub);
                         GUI.color = prevC;
                         y += LineH;
@@ -3384,7 +3416,7 @@ namespace Waystation.UI
                 DrawSolid(new Rect(area.x, y, w, 36f), new Color(0.10f, 0.12f, 0.20f, 0.85f));
 
                 // Star badge — amber for ranked, muted for unranked
-                Color sc = i == 0 ? new Color(0.48f, 0.52f, 0.62f)
+                Color sc = i == 0 ? ColTextMid
                                   : new Color(0.78f, 0.69f, 0.18f);
                 Color prev = GUI.color; GUI.color = sc;
                 GUI.Label(new Rect(area.x + 4f, y + 9f, 32f, 18f),
@@ -3437,7 +3469,7 @@ namespace Waystation.UI
             var   rprev   = GUI.color;
             for (int i = 0; i < s.rankNames.Count; i++)
             {
-                Color sc2 = i == 0 ? new Color(0.48f, 0.52f, 0.62f) : new Color(0.78f, 0.69f, 0.18f);
+                Color sc2 = i == 0 ? ColTextMid : new Color(0.78f, 0.69f, 0.18f);
                 GUI.color = sc2;
                 GUI.Label(new Rect(area.x + 4f, y + 1f, 28f, LblH),
                           Stars(i), new GUIStyle(_sSub) { fontSize = FontSize });
@@ -3594,7 +3626,7 @@ namespace Waystation.UI
             }
 
             RelSection("Allies",  allies,  ColBarGreen);
-            RelSection("Neutral", neutral, new Color(0.50f, 0.55f, 0.65f));
+            RelSection("Neutral", neutral, ColTextBase);
             RelSection("Rivals",  rivals,  ColBarCrit);
 
             if (allies.Count == 0 && neutral.Count == 0 && rivals.Count == 0)
@@ -3614,20 +3646,33 @@ namespace Waystation.UI
             var s = _gm.Station;
 
             // ── Tab selector (4 tabs) ─────────────────────────────────────────
-            const float TabH = 30f;
-            float tbw = (w - 12f) / 4f;
-            if (GUI.Button(new Rect(area.x,                  area.y, tbw, TabH),
-                           "Unread", _commsTab == CommsTab.Unread ? _sTabOn : _sTabOff))
-            { _commsTab = CommsTab.Unread; _selectedMsgUid = ""; }
-            if (GUI.Button(new Rect(area.x + (tbw + 4f),     area.y, tbw, TabH),
-                           "Read",   _commsTab == CommsTab.Read   ? _sTabOn : _sTabOff))
-            { _commsTab = CommsTab.Read; _selectedMsgUid = ""; }
-            if (GUI.Button(new Rect(area.x + (tbw + 4f)*2f,  area.y, tbw, TabH),
-                           "All",    _commsTab == CommsTab.All    ? _sTabOn : _sTabOff))
-            { _commsTab = CommsTab.All; _selectedMsgUid = ""; }
-            if (GUI.Button(new Rect(area.x + (tbw + 4f)*3f,  area.y, tbw, TabH),
-                           "Ships",  _commsTab == CommsTab.Ships  ? _sTabOn : _sTabOff))
-            { _commsTab = CommsTab.Ships; }
+            const float TabH = 22f;
+            float tbw = Mathf.Floor(w / 4f);
+            (string lbl, CommsTab ct, bool clearMsg)[] cTabs =
+            {
+                ("UNREAD", CommsTab.Unread, true),
+                ("READ",   CommsTab.Read,   true),
+                ("ALL",    CommsTab.All,    true),
+                ("SHIPS",  CommsTab.Ships,  false),
+            };
+            DrawSolid(new Rect(area.x, area.y, w, TabH), ColBar);
+            DrawSolid(new Rect(area.x, area.y + TabH - 1f, w, 1f), ColDivider);
+            for (int ci = 0; ci < cTabs.Length; ci++)
+            {
+                float ctx = area.x + ci * tbw;
+                bool  con = _commsTab == cTabs[ci].ct;
+                DrawSolid(new Rect(ctx, area.y, tbw - 1f, TabH - 1f), con ? ColTabHl : ColBar);
+                if (con) DrawSolid(new Rect(ctx, area.y + TabH - 3f, tbw - 1f, 2f), ColAccent);
+                if (ci > 0) DrawSolid(new Rect(ctx, area.y, 1f, TabH - 1f), ColDivider);
+                GUI.color = con ? ColTextHead : ColTextBase;
+                if (GUI.Button(new Rect(ctx, area.y, tbw - 1f, TabH - 1f),
+                               cTabs[ci].lbl, con ? _sTabOn : _sTabOff))
+                {
+                    _commsTab = cTabs[ci].ct;
+                    if (cTabs[ci].clearMsg) _selectedMsgUid = "";
+                }
+                GUI.color = Color.white;
+            }
 
             if (_commsTab == CommsTab.Ships)
             {
@@ -3917,8 +3962,8 @@ namespace Waystation.UI
             var prev = GUI.color;
 
             // ═══ STATION NAME HEADER (40px) ═════════════════════════════════
-            const float HdrH  = 40f;
-            const float TabH2 = 28f;
+            const float HdrH  = 32f;
+            const float TabH2 = 22f;
             DrawSolid(new Rect(area.x, area.y, w, HdrH), new Color(0.12f, 0.15f, 0.22f, 1f));
 
             // [<] cycle arrow — disabled (single station)
@@ -3973,11 +4018,11 @@ namespace Waystation.UI
 
             (StationSubTab tab, string lbl)[] stTabs =
             {
-                (StationSubTab.Overview, "Overview"),
-                (StationSubTab.Build,    "Build"),
-                (StationSubTab.Rooms,    "Rooms"),
-                (StationSubTab.Crew,     "Crew"),
-                (StationSubTab.Comms,    HasUnreadComms(s) ? "Comms \u25cf" : "Comms"),
+                (StationSubTab.Overview, "OVERVIEW"),
+                (StationSubTab.Build,    "BUILD"),
+                (StationSubTab.Rooms,    "ROOMS"),
+                (StationSubTab.Crew,     "CREW"),
+                (StationSubTab.Comms,    HasUnreadComms(s) ? "COMMS \u25cf" : "COMMS"),
             };
             float stTabW = Mathf.Floor(w / stTabs.Length);
             for (int ti = 0; ti < stTabs.Length; ti++)
@@ -4078,21 +4123,21 @@ namespace Waystation.UI
             float y = 0f;
 
             // ── Station Wealth ────────────────────────────────────────────────
-            Section("Station Wealth", w, ref y);
+            Section("WEALTH", w, ref y);
             float credits = s.GetResource("credits");
-            ResourceBarC("Credits", credits, 5000f, w, ref y,
+            ResourceBarC("CREDITS", credits, 5000f, w, ref y,
                          credits < CreditsWarnFloor ? ColBarCrit : ColCredits);
             Divider(w, ref y);
 
             // ── Production / Resources ────────────────────────────────────────
-            Section("Resources", w, ref y);
-            ResourceBarC("Food",   s.GetResource("food"),   500f, w, ref y, ColResFood);
-            ResourceBarC("Power",  s.GetResource("power"),  500f, w, ref y, ColResPower);
+            Section("RESOURCES", w, ref y);
+            ResourceBarC("FOOD",   s.GetResource("food"),   500f, w, ref y, ColResFood);
+            ResourceBarC("POWER",  s.GetResource("power"),  500f, w, ref y, ColResPower);
             float oxygen = s.GetResource("oxygen");
-            ResourceBarC("Oxygen", oxygen, 500f, w, ref y,
+            ResourceBarC("OXYGEN", oxygen, 500f, w, ref y,
                          oxygen < OxygenCritThreshold ? ColBarCrit : ColResOxygen);
-            ResourceBarC("Parts",  s.GetResource("parts"),  200f, w, ref y, ColResParts);
-            ResourceBarC("Ice",    s.GetResource("ice"),    500f, w, ref y, ColResIce);
+            ResourceBarC("PARTS",  s.GetResource("parts"),  200f, w, ref y, ColResParts);
+            ResourceBarC("ICE",    s.GetResource("ice"),    500f, w, ref y, ColResIce);
 
             // O₂ critical banner (blinks at 0.5 Hz)
             if (oxygen < OxygenCritThreshold)
@@ -4101,7 +4146,7 @@ namespace Waystation.UI
                 var prevCol = GUI.color;
                 GUI.color = new Color(ColBarCrit.r, ColBarCrit.g, ColBarCrit.b, alpha);
                 DrawSolid(new Rect(0, y, w, 20f), new Color(0.6f, 0f, 0f, 0.25f * alpha));
-                GUI.Label(new Rect(0, y, w, 20f), "\u26a0 Oxygen critically low",
+                GUI.Label(new Rect(0, y, w, 20f), "\u26a0 O\u2082 CRITICAL",
                           new GUIStyle(_sSub) { alignment = TextAnchor.MiddleCenter });
                 GUI.color = prevCol;
                 y += 24f;
@@ -4110,15 +4155,15 @@ namespace Waystation.UI
             Divider(w, ref y);
 
             // ── Station Inventory ─────────────────────────────────────────────
-            Section($"Station Inventory  ({capUsed:F0} / {capTotal} units)", w, ref y);
+            Section($"INVENTORY  \u00b7  {capUsed:F0}/{capTotal}", w, ref y);
 
             // Overall capacity bar
             if (capTotal > 0)
             {
                 float pct = Mathf.Clamp01(capUsed / capTotal);
-                DrawSolid(new Rect(0, y + 3f, w, 10f), ColBarBg);
+                DrawSolid(new Rect(0, y + 5f, w, 6f), ColSubDrawer);        /* bg-deep track */
                 Color fc = pct < 0.75f ? ColBarFill : pct < 0.90f ? ColBarWarn : ColBarCrit;
-                DrawSolid(new Rect(0, y + 3f, w * pct, 10f), fc);
+                DrawSolid(new Rect(0, y + 5f, w * pct, 6f), fc);
                 GUI.Label(new Rect(w * 0.78f, y, w * 0.22f, 16f),
                           $"{pct * 100f:F0}%", _sSub);
                 y += 18f;
@@ -4126,18 +4171,29 @@ namespace Waystation.UI
 
             // Search field + Config button
             float configBtnW = 70f;
-            GUI.Label(new Rect(0, y + 2f, 36f, 17f), "Find:", _sSub);
+            GUI.color = ColTextDim;
+            GUI.Label(new Rect(0, y + 2f, 36f, 17f), "FIND:", _sSub);
+            GUI.color = Color.white;
             _inventorySearch = GUI.TextField(new Rect(40f, y + 1f, w - 40f - configBtnW - 4f, 18f),
                                              _inventorySearch, _sTextField);
-            if (GUI.Button(new Rect(w - configBtnW, y, configBtnW, 20f), "\u2699 Config", _sBtnSmall))
+            // Styled Config button — draw bg-base fill + border before the label
+            Rect cfgR = new Rect(w - configBtnW, y, configBtnW, 20f);
+            DrawSolid(cfgR, ColBar);
+            DrawSolid(new Rect(cfgR.x, cfgR.y, cfgR.width, 1f),           ColBarEdge);
+            DrawSolid(new Rect(cfgR.x, cfgR.yMax - 1f, cfgR.width, 1f),   ColBarEdge);
+            DrawSolid(new Rect(cfgR.x, cfgR.y, 1f, cfgR.height),          ColBarEdge);
+            DrawSolid(new Rect(cfgR.xMax - 1f, cfgR.y, 1f, cfgR.height),  ColBarEdge);
+            GUI.color = ColTextBase;
+            if (GUI.Button(cfgR, "\u2699 CONFIG", _sBtnSmall))
                 OpenSub(SubPanel.StationSettings, "");
+            GUI.color = Color.white;
             y += 24f;
 
             string filter = _inventorySearch.Trim();
 
             if (holds.Count == 0)
             {
-                GUI.Label(new Rect(0, y, w, 18f), "No cargo holds built.", _sSub);
+                GUI.Label(new Rect(0, y, w, 18f), "NO CARGO HOLDS BUILT.", _sSub);
                 y += 22f;
             }
 
@@ -4150,7 +4206,7 @@ namespace Waystation.UI
             Divider(w, ref y);
 
             // ── Module Status ─────────────────────────────────────────────────
-            Section("Module Status", w, ref y);
+            Section("MODULES", w, ref y);
             foreach (var mod in s.modules.Values)
             {
                 string status = !mod.active    ? "OFFLINE"
@@ -4213,31 +4269,46 @@ namespace Waystation.UI
             float bodyY = area.y + TbH;
             float bodyH = h - TbH;
 
-            // ── Category list (always visible, 32px rows) ────────────────────
-            (string id, string label)[] cats =
+            // ── Category list (always visible, 26px rows) ────────────────────
+            (string id, string icon, string label, Color accent)[] cats =
             {
-                ("structure",  "\U0001f9f1 Structure"),
-                ("electrical", "\u26a1 Electrical"),
-                ("object",     "\U0001f4e6 Objects"),
-                ("production", "\u2699 Production"),
-                ("plumbing",   "\U0001f527 Plumbing"),
-                ("security",   "\U0001f6e1 Security"),
+                ("structure",  "\u25a1", "STRUCTURE",  new Color(0.784f, 0.627f, 0.188f, 1f)),
+                ("electrical", "\u26a1", "ELECTRICAL", new Color(0.282f, 0.502f, 0.667f, 1f)),
+                ("object",     "\u25c8", "OBJECTS",    new Color(0.188f, 0.659f, 0.471f, 1f)),
+                ("production", "\u229b", "PRODUCTION", new Color(0.753f, 0.408f, 0.157f, 1f)),
+                ("plumbing",   "\u2300", "PLUMBING",   new Color(0.314f, 0.533f, 0.722f, 1f)),
+                ("security",   "\u25ce", "SECURITY",   new Color(0.753f, 0.220f, 0.345f, 1f)),
             };
-            const float CatRowH = 32f;
+            const float CatRowH = 26f;
             float catH = cats.Length * CatRowH;
 
-            DrawSolid(new Rect(area.x, bodyY, w, catH), new Color(0.07f, 0.09f, 0.15f, 1f));
             for (int ci = 0; ci < cats.Length; ci++)
             {
-                float ry = bodyY + ci * CatRowH;
+                float ry  = bodyY + ci * CatRowH;
                 bool  sel = _stationBuildCat == cats[ci].id;
-                if (sel)
-                {
-                    DrawSolid(new Rect(area.x, ry, w, CatRowH - 1f), new Color(0.12f, 0.18f, 0.30f, 1f));
-                    DrawSolid(new Rect(area.x, ry, 2f, CatRowH - 1f), ColAccent);
-                }
-                if (GUI.Button(new Rect(area.x + 4f, ry, w - 4f, CatRowH - 1f),
-                               cats[ci].label, sel ? _sTabOn : _sTabOff))
+                Color ac  = cats[ci].accent;
+
+                // Row background
+                DrawSolid(new Rect(area.x, ry, w, CatRowH - 1f),
+                          sel ? ColTabHl : ColBar);
+                // Bottom separator
+                DrawSolid(new Rect(area.x, ry + CatRowH - 1f, w, 1f), ColDivider);
+                // Left accent stripe (3px, category colour, 60% opacity unselected / 100% selected)
+                DrawSolid(new Rect(area.x, ry, 3f, CatRowH - 1f),
+                          new Color(ac.r, ac.g, ac.b, sel ? 1f : 0.6f));
+                // Bottom accent when selected
+                if (sel) DrawSolid(new Rect(area.x + 3f, ry + CatRowH - 3f, w - 3f, 2f), ColAccent);
+                // Icon (category colour)
+                GUI.color = new Color(ac.r, ac.g, ac.b, sel ? 1f : 0.7f);
+                GUI.Label(new Rect(area.x + 6f, ry, 20f, CatRowH - 1f),
+                          cats[ci].icon, new GUIStyle(_sSub) { alignment = TextAnchor.MiddleCenter, fontSize = 12 });
+                // Label
+                GUI.color = sel ? ColTextHead : ColTextBright;
+                GUI.Label(new Rect(area.x + 28f, ry, w - 36f, CatRowH - 1f),
+                          cats[ci].label, new GUIStyle(_sSub) { alignment = TextAnchor.MiddleLeft, fontSize = FontSize });
+                GUI.color = Color.white;
+                // Transparent click target
+                if (GUI.Button(new Rect(area.x, ry, w, CatRowH - 1f), "", GUIStyle.none))
                     _stationBuildCat = sel ? "" : cats[ci].id;
                 DrawSolid(new Rect(area.x, ry + CatRowH - 1f, w, 1f), ColDivider);
             }
@@ -4903,19 +4974,11 @@ namespace Waystation.UI
         // ── Dev panel (left drawer) ───────────────────────────────────────────
         private void DrawDevPanel(float w, float h)
         {
+            float startY = DrawPanelChrome(w, h, "\u26a1", "DEV TOOLS", "DEVELOPER TOOLS",
+                                           () => _devDrawerOpen = false, "DEV · RUNTIME TOOLS");
+
             float cw = w - Pad * 2f;
-
-            // Close button (mirrors the right-drawer × button)
-            Color cbPrev = GUI.color;
-            GUI.color = new Color(0.55f, 0.60f, 0.70f, 0.85f);
-            if (GUI.Button(new Rect(w - 28f, 10f, 22f, 22f), "\u00d7", _sBtnSmall))
-                _devDrawerOpen = false;
-            GUI.color = cbPrev;
-
-            GUI.Label(new Rect(Pad, 18f, cw - 28f, 26f), "Dev Tools", _sHeader);
-            DrawSolid(new Rect(Pad, 50f, cw, 1f), ColDivider);
-
-            float y = 62f;
+            float y  = startY;
 
             // Asset Editor button (debug-only entry point — no access restrictions)
             GUI.color = new Color(0.82f, 0.55f, 1.00f, 1f);
@@ -5067,8 +5130,12 @@ namespace Waystation.UI
         // ── Drawer helpers ────────────────────────────────────────────────────
         private void Section(string title, float w, ref float y)
         {
-            GUI.Label(new Rect(0, y, w, LineH), title, _sLabel);
-            y += LineH + 4f;
+            // Style-guide section-label: dim 8px text left, 1px border-dark line filling right
+            float lh    = LineH - 4f;
+            float textW = w * 0.5f;
+            GUI.Label(new Rect(0, y, textW, lh), title.ToUpper(), _sHint);
+            DrawSolid(new Rect(textW + 6f, y + lh * 0.5f, w - textW - 6f, 1f), ColDivider);
+            y += lh + 8f;
         }
 
         private void Divider(float w, ref float y)
@@ -5083,9 +5150,9 @@ namespace Waystation.UI
             float pct = Mathf.Clamp01(value / max);
             float lw  = w * 0.34f, bx = w * 0.36f, bw = w * 0.44f;
             GUI.Label(new Rect(0, y, lw, LineH), label, _sSub);
-            DrawSolid(new Rect(bx, y + 3f, bw, 10f), ColBarBg);
+            DrawSolid(new Rect(bx, y + 5f, bw, 6f), ColSubDrawer);   /* bg-deep track per style guide */
             Color fc = pct > 0.5f ? ColBarFill : pct > 0.25f ? ColBarWarn : ColBarCrit;
-            DrawSolid(new Rect(bx, y + 3f, bw * pct, 10f), fc);
+            DrawSolid(new Rect(bx, y + 5f, bw * pct, 6f), fc);
             GUI.Label(new Rect(bx + bw + 4f, y, w - bx - bw - 4f, LineH),
                       value.ToString("F0"), _sSub);
             y += LineH + 4f;
@@ -5097,8 +5164,8 @@ namespace Waystation.UI
             float pct = max > 0f ? Mathf.Clamp01(value / max) : 0f;
             float lw  = w * 0.34f, bx = w * 0.36f, bw = w * 0.44f;
             GUI.Label(new Rect(0, y, lw, LineH), label, _sSub);
-            DrawSolid(new Rect(bx, y + 3f, bw, 10f), ColBarBg);
-            DrawSolid(new Rect(bx, y + 3f, bw * pct, 10f), fill);
+            DrawSolid(new Rect(bx, y + 5f, bw, 6f), ColSubDrawer);   /* bg-deep track per style guide */
+            DrawSolid(new Rect(bx, y + 5f, bw * pct, 6f), fill);
             GUI.Label(new Rect(bx + bw + 4f, y, w - bx - bw - 4f, LineH),
                       value.ToString("F0"), _sSub);
             y += LineH + 4f;
@@ -5132,6 +5199,117 @@ namespace Waystation.UI
             GUI.color = c;
             GUI.DrawTexture(r, _white);
             GUI.color = prev;
+        }
+
+        // ── Panel chrome ──────────────────────────────────────────────────────
+        // Style-guide constants
+        private const float PanelHdrH  = 54f;   // header zone height
+        private const float PanelStatH = 24f;   // status bar height
+        private const int   RivetPx    = 6;     // rivet square side (px)
+
+        // Tab → (icon, subtitle) lookup
+        private static (string icon, string sub) TabMeta(Tab tab) => tab switch
+        {
+            Tab.Station     => ("\u2b21", "STATION OVERVIEW"),   // ⬡
+            Tab.Build       => ("\u2b21", "DESIGNER"),           // ⬡
+            Tab.Crew        => ("\u25cf", "CREW MANAGEMENT"),    // ●
+            Tab.Comms       => ("\u2261", "COMMUNICATIONS"),     // ≡
+            Tab.AwayMission => ("\u25b6", "AWAY MISSIONS"),      // ►
+            Tab.Rooms       => ("\u25a1", "ROOM DESIGNATIONS"),  // □
+            Tab.Research    => ("\u229b", "RESEARCH TREE"),      // ⊛
+            Tab.Map         => ("\u2295", "NAVIGATION"),         // ⊕
+            Tab.Views       => ("\u25c8", "DISPLAY SETTINGS"),   // ◈
+            Tab.Settings    => ("\u25ce", "SYSTEM SETTINGS"),    // ◎
+            _               => ("\u25a1", ""),
+        };
+
+        // SubPanel → (icon, subtitle) lookup
+        private static (string icon, string sub) SubMeta(SubPanel sp) => sp switch
+        {
+            SubPanel.CrewDetail      => ("\u25cf", "CREW MEMBER"),    // ●
+            SubPanel.HoldSettings    => ("\u25c8", "CARGO HOLD"),     // ◈
+            SubPanel.ResearchDetail  => ("\u229b", "RESEARCH NODE"),  // ⊛
+            SubPanel.ModuleDetail    => ("\u25a1", "MODULE INFO"),    // □
+            SubPanel.StationSettings => ("\u25ce", "SETTINGS"),       // ◎
+            SubPanel.StationBuild    => ("\u2b21", "BUILD"),          // ⬡
+            SubPanel.StationRooms    => ("\u25a1", "ROOMS"),          // □
+            SubPanel.StationCrew     => ("\u25cf", "CREW"),           // ●
+            SubPanel.StationComms    => ("\u2261", "COMMS"),          // ≡
+            _                        => ("\u25a1", ""),
+        };
+
+        /// <summary>
+        /// Draws the full industrial-terminal chrome for a panel:
+        ///   • bg-raised header zone (icon · title · subtitle · close button)
+        ///   • border-dark header separator
+        ///   • four corner rivets
+        ///   • bg-base status bar with hint text and LED indicators
+        /// Returns the Y coordinate where panel content should begin.
+        /// </summary>
+        private float DrawPanelChrome(float w, float h,
+            string icon, string title, string subtitle,
+            System.Action onClose,
+            string statusHint,
+            bool ledGreen = true, bool ledAmber = false)
+        {
+            EnsureStyles();
+
+            // ── Header zone (bg-raised, 0 → PanelHdrH) ───────────────────────
+            DrawSolid(new Rect(0, 0, w, PanelHdrH), ColBarBg);               // bg-raised fill
+            DrawSolid(new Rect(0, PanelHdrH, w, 1f), ColDivider);            // header bottom border
+
+            // Icon
+            GUI.Label(new Rect(Pad, 11f, 20f, 20f), icon, _sIconAcc);
+
+            // Title (text-head, 15px bold)
+            GUI.color = ColTextHead;
+            GUI.Label(new Rect(Pad + 22f, 7f, w - Pad * 2f - 50f, 20f), title.ToUpper(), _sHeader);
+            GUI.color = Color.white;
+
+            // Subtitle (text-dim, 8px)
+            GUI.Label(new Rect(Pad + 22f, 28f, w - Pad * 2f - 50f, 14f), subtitle, _sHint);
+
+            // Close button — bg-base normally, red (#c03030) on hover
+            Rect cbR     = new Rect(w - Pad - 20f, PanelHdrH * 0.5f - 10f, 20f, 20f);
+            bool cbHover = cbR.Contains(Event.current.mousePosition);
+            DrawSolid(cbR, cbHover ? ColBarCrit : ColBar);                   // fill
+            DrawSolid(new Rect(cbR.x,        cbR.y,        cbR.width, 1f),  ColBarEdge); // top
+            DrawSolid(new Rect(cbR.x,        cbR.yMax - 1f, cbR.width, 1f), ColBarEdge); // bottom
+            DrawSolid(new Rect(cbR.x,        cbR.y,        1f, cbR.height), ColBarEdge); // left
+            DrawSolid(new Rect(cbR.xMax - 1f, cbR.y,       1f, cbR.height), ColBarEdge); // right
+            GUI.color = cbHover ? Color.white : ColTextMid;
+            if (GUI.Button(cbR, "\u2715", GUIStyle.none))  // ✕ transparent button
+                onClose?.Invoke();
+            GUI.color = Color.white;
+
+            // ── Four corner rivets (bevel-hi squares) ────────────────────────
+            DrawSolid(new Rect(4f,       4f,      RivetPx, RivetPx), ColBevelHi);
+            DrawSolid(new Rect(w - 10f,  4f,      RivetPx, RivetPx), ColBevelHi);
+            DrawSolid(new Rect(4f,      h - 10f,  RivetPx, RivetPx), ColBevelHi);
+            DrawSolid(new Rect(w - 10f, h - 10f,  RivetPx, RivetPx), ColBevelHi);
+
+            // ── Status bar (bg-base, at panel bottom) ────────────────────────
+            float sbY = h - PanelStatH;
+            DrawSolid(new Rect(0, sbY, w, PanelStatH), ColBar);              // bg-base fill
+            DrawSolid(new Rect(0, sbY, w, 1f), ColDivider);                  // top border
+
+            // Hint text (8px, text-dim, uppercase)
+            GUI.Label(new Rect(Pad, sbY + 5f, w * 0.66f, 14f), statusHint.ToUpper(), _sHint);
+
+            // LEDs — right-aligned: green · amber · dark
+            float lx = w - Pad - RivetPx * 3 - 5f * 2;
+            float ly = sbY + (PanelStatH - RivetPx) * 0.5f;
+            DrawSolid(new Rect(lx, ly, RivetPx, RivetPx),
+                      ledGreen ? ColBarGreen : ColTextDim);                   // green
+            lx += RivetPx + 5f;
+            DrawSolid(new Rect(lx, ly, RivetPx, RivetPx),
+                      new Color(ColBarWarn.r, ColBarWarn.g, ColBarWarn.b,
+                                ledAmber ? 0.70f : 0.25f));                  // amber
+            lx += RivetPx + 5f;
+            DrawSolid(new Rect(lx, ly, RivetPx, RivetPx), ColTextDim);      // dark (inactive)
+
+            // ── Return first content Y ────────────────────────────────────────
+            return PanelHdrH + 6f;   // content starts 6px below header separator
         }
 
         // ── Drag-line helpers ─────────────────────────────────────────────────
@@ -5340,7 +5518,7 @@ namespace Waystation.UI
                     DrawSolid(new Rect(tx, iy, tW, 2f), bc);
                 }
                 var prevC = GUI.color;
-                GUI.color = on ? bc : new Color(0.50f, 0.55f, 0.65f);
+                GUI.color = on ? bc : ColTextBase;
                 if (GUI.Button(new Rect(tx + 1f, iy, tW - 2f, BranchTabH),
                                branches[i].ToString(), _sBtnSmall))
                 {
@@ -5509,7 +5687,7 @@ namespace Waystation.UI
             var prevC = GUI.color;
 
             // Dismiss button
-            GUI.color = new Color(0.50f, 0.55f, 0.65f);
+            GUI.color = ColTextBase;
             if (GUI.Button(new Rect(x + w - 20f, y, 20f, 18f), "\u00d7", _sBtnSmall))
                 _selectedResearchNodeId = "";
             GUI.color = prevC;
@@ -5965,29 +6143,28 @@ namespace Waystation.UI
             _white.SetPixel(0, 0, Color.white);
             _white.Apply();
 
-            _sTabOff = new GUIStyle(GUI.skin.button)
+            // GUIStyle() base (NOT GUI.skin.button) — zero Unity skin background, zero bleed-through
+            _sTabOff = new GUIStyle()
             {
                 fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
-                padding   = new RectOffset(2, 2, 4, 4),
-                normal    = { textColor = new Color(0.70f, 0.78f, 0.92f), background = null },
-                hover     = { textColor = Color.white,                     background = null },
-                active    = { textColor = Color.white,                     background = null },
+                padding   = new RectOffset(4, 4, 3, 3),
+                normal    = { textColor = ColTextBright },
+                hover     = { textColor = ColTextHead },
+                active    = { textColor = ColTextHead },
             };
-            _sTabOff.normal.background  = null;
-            _sTabOff.focused.background = null;
 
             _sTabOn = new GUIStyle(_sTabOff)
             {
                 fontStyle = FontStyle.Bold,
-                normal    = { textColor = Color.white, background = null },
+                normal    = { textColor = ColTextHead, background = null },
             };
 
             _sHeader = new GUIStyle(GUI.skin.label)
             {
                 fontSize  = FontSizeHdr,
                 fontStyle = FontStyle.Bold,
-                normal    = { textColor = Color.white },
+                normal    = { textColor = ColTextHead },
             };
 
             _sLabel = new GUIStyle(GUI.skin.label)
@@ -5995,44 +6172,50 @@ namespace Waystation.UI
                 fontSize  = FontSize,
                 fontStyle = FontStyle.Bold,
                 wordWrap  = false,
-                normal    = { textColor = new Color(0.85f, 0.92f, 1.00f) },
+                normal    = { textColor = ColTextBright },
             };
 
             _sSub = new GUIStyle(GUI.skin.label)
             {
                 fontSize = FontSize,
                 wordWrap = false,
-                normal   = { textColor = new Color(0.62f, 0.70f, 0.84f) },
+                normal   = { textColor = ColTextBase },
             };
 
-            _sBtnSmall = new GUIStyle(GUI.skin.button)
+            _sBtnSmall = new GUIStyle()
             {
                 fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 padding   = new RectOffset(2, 2, 2, 2),
-                normal    = { textColor = new Color(0.80f, 0.88f, 1.00f) },
+                normal    = { textColor = Color.white },
+                hover     = { textColor = Color.white },
+                active    = { textColor = Color.white },
             };
 
-            _sBtnWide = new GUIStyle(GUI.skin.button)
+            _sBtnWide = new GUIStyle()
             {
                 fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 padding   = new RectOffset(2, 2, 2, 2),
-                normal    = { textColor = new Color(0.85f, 0.92f, 1.00f) },
+                normal    = { textColor = Color.white },
+                hover     = { textColor = Color.white },
+                active    = { textColor = Color.white },
             };
 
-            _sBtnDanger = new GUIStyle(GUI.skin.button)
+            _sBtnDanger = new GUIStyle()
             {
                 fontSize  = FontSize,
                 alignment = TextAnchor.MiddleCenter,
                 padding   = new RectOffset(2, 2, 2, 2),
-                normal    = { textColor = new Color(1.00f, 0.55f, 0.55f) },
+                normal    = { textColor = ColBarCrit },
+                hover     = { textColor = new Color(0.90f, 0.30f, 0.30f, 1f) },
+                active    = { textColor = new Color(1.00f, 0.40f, 0.40f, 1f) },
             };
 
             _sTextField = new GUIStyle(GUI.skin.textField)
             {
                 fontSize = FontSize,
-                normal   = { textColor = new Color(0.85f, 0.90f, 1.00f) },
+                normal   = { textColor = ColTextHead },  /* --text-head #a8c0d8 */
             };
 
             // Wrapping variant of _sSub — used for multi-line descriptions and message bodies.
@@ -6040,7 +6223,25 @@ namespace Waystation.UI
             {
                 fontSize = FontSize,
                 wordWrap = true,
-                normal   = { textColor = new Color(0.62f, 0.70f, 0.84f) },
+                normal   = { textColor = ColTextMid },
+            };
+
+            // 8px hint text — panel subtitle line and status bar hints
+            _sHint = new GUIStyle(GUI.skin.label)
+            {
+                fontSize  = 8,
+                wordWrap  = false,
+                normal    = { textColor = ColTextDim },
+                alignment = TextAnchor.MiddleLeft,
+            };
+
+            // 13px icon label — panel title icon (acc blue)
+            _sIconAcc = new GUIStyle(GUI.skin.label)
+            {
+                fontSize  = 13,
+                wordWrap  = false,
+                normal    = { textColor = ColAccent },
+                alignment = TextAnchor.MiddleCenter,
             };
 
             _gameFont = Resources.Load<Font>("Fonts/Quango");
@@ -6056,6 +6257,8 @@ namespace Waystation.UI
                 _sBtnWide.font   = _gameFont;
                 _sBtnDanger.font = _gameFont;
                 _sTextField.font = _gameFont;
+                _sHint.font      = _gameFont;
+                _sIconAcc.font   = _gameFont;
             }
         }
 

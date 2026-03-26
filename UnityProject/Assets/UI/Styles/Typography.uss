@@ -1,0 +1,110 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Typography.uss  —  Station Builder: Industrial Terminal Aesthetic
+   Font assignments, size utilities, text-transform rules.
+
+   Required fonts (add to Assets/UI/Fonts/ and assign via Unity font assets):
+     • Barlow Condensed Bold (weight 700)   — display, labels, button text
+     • Barlow Condensed SemiBold (weight 600) — category names
+     • Share Tech Mono (weight 400)          — monospace, status, small text
+
+   Until font assets are imported, USS will fall back to Unity's default font.
+   Assign font-definition assets from C# via FontDefinition or via the
+   -unity-font-definition property once the .fontsettings assets exist:
+
+     .font-display  { -unity-font-definition: url('BarlowCondensed-Bold.asset'); }
+     .font-mono     { -unity-font-definition: url('ShareTechMono.asset'); }
+
+   ═══════════════════════════════════════════════════════════════════════════
+
+   TYPE SCALE (all text is uppercase — enforced below)
+   ──────────────────────────────────────────────────
+     panel-title:   15px  Barlow Condensed 700  letter-spacing 0.2em
+     cat-name:      13px  Barlow Condensed 600  letter-spacing 0.08em
+     btn-label:      9px  Share Tech Mono       letter-spacing 0.12em
+     section-hdr:    7px  Share Tech Mono       letter-spacing 0.2em
+     subtitle:       8px  Share Tech Mono       letter-spacing 0.15em
+     count-meta:     8px  Share Tech Mono       letter-spacing 0.05em
+     badge:          8px  Barlow Condensed 700
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── All text is uppercase — no mixed-case prose in UI ────────────────────── */
+
+Label,
+Button,
+.btn,
+.action-btn,
+.cat-name,
+.status-hint,
+.content-label,
+.section-label > Label,
+.title,
+.title-sub {
+    /* USS does not support text-transform directly; enforce in C# via
+       element.text = element.text.ToUpper() or apply to all labels on bind.
+       The rule is kept here as documentation for the requirement. */
+    /* text-transform: uppercase; */  /* Not supported in USS 2022 */
+}
+
+
+/* ── Font size utilities ───────────────────────────────────────────────────── */
+
+.fs-panel-title  { font-size: 15px; -unity-font-style: bold;  letter-spacing: 2.4px; }
+.fs-cat-name     { font-size: 13px; -unity-font-style: bold;  letter-spacing: 1.0px; }
+.fs-btn          { font-size:  9px;                           letter-spacing: 1.1px; }
+.fs-section-hdr  { font-size:  7px;                           letter-spacing: 2.0px; }
+.fs-subtitle     { font-size:  8px;                           letter-spacing: 1.5px; }
+.fs-meta         { font-size:  8px;                           letter-spacing: 0.5px; }
+.fs-badge        { font-size:  8px; -unity-font-style: bold; }
+
+
+/* ── Monospace utility (Share Tech Mono — assign font-definition in C#) ────── */
+
+.mono {
+    /* -unity-font-definition: url('ShareTechMono.asset'); */
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.mono--sm {
+    /* -unity-font-definition: url('ShareTechMono.asset'); */
+    font-size: 8px;
+    letter-spacing: 1.5px;
+}
+
+.mono--xs {
+    /* -unity-font-definition: url('ShareTechMono.asset'); */
+    font-size: 7px;
+    letter-spacing: 2px;
+}
+
+
+/* ── Display font (Barlow Condensed — assign font-definition in C#) ─────────── */
+
+.display {
+    /* -unity-font-definition: url('BarlowCondensed-Bold.asset'); */
+    font-size: 15px;
+    -unity-font-style: bold;
+    letter-spacing: 2.4px;
+}
+
+.display--sm {
+    /* -unity-font-definition: url('BarlowCondensed-SemiBold.asset'); */
+    font-size: 13px;
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+}
+
+
+/* ── Line-height constraint (1.2–1.4 per style guide) ───────────────────────── */
+
+/* USS does not expose line-height as a property; the tight spacing is
+   achieved by controlling font-size and padding/margin explicitly.
+   Use padding: 0; margin: 0; and set explicit heights on rows. */
+
+
+/* ── Size guard reminders (do not use sizes outside 7–15px) ─────────────────── */
+
+/* Minimum: 7px  (.mono--xs)
+   Maximum: 15px (.display)
+   Never use font sizes outside this range anywhere in UI. */

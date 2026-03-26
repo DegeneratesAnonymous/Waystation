@@ -71,51 +71,21 @@ public class TileAtlasImporter : AssetPostprocessor
         TextureImporter ti = (TextureImporter)assetImporter;
 
         // ── Texture import settings ────────────────────────────────────────────
-        ti.textureType          = TextureImporterType.Sprite;
-        ti.spriteImportMode     = SpriteImportMode.Multiple;
+        // Use Default (not Sprite) so Resources.Load<Texture2D> is guaranteed to
+        // return the texture at runtime.  Sprite.Create() slices it at runtime instead.
+        ti.textureType          = TextureImporterType.Default;
         ti.filterMode           = FilterMode.Point;           // no filtering — pixel art
         ti.textureCompression   = TextureImporterCompression.Uncompressed;
-        ti.isReadable           = false;
+        ti.isReadable           = true;   // required for Sprite.Create at runtime
         ti.maxTextureSize       = 8192;
         ti.spritePixelsPerUnit  = 64; // 64 px = 1 world unit, matching TileAtlas procedural sprites
 
-        // ── Calculate total row count for Y-axis flip ──────────────────────────
-        // The atlas lays out row 0 at the top, but Unity's texture space has
-        // Y=0 at the bottom, so rows must be inverted.
-        int maxRow = 0;
-        foreach (TileEntry tile in manifest.tiles)
-            if (tile.row > maxRow) maxRow = tile.row;
-        int totalRows = maxRow + 1;
-
-        // ── Pivot ──────────────────────────────────────────────────────────────
-        Vector2 pivot = manifest.pivot == "center"
-            ? new Vector2(0.5f, 0.5f)
-            : new Vector2(0f,   0f);  // default: bottom-left
-
-        // ── Build SpriteMetaData slices ────────────────────────────────────────
-        var slices = new SpriteMetaData[manifest.tiles.Count];
-        for (int i = 0; i < manifest.tiles.Count; i++)
-        {
-            TileEntry tile = manifest.tiles[i];
-
-            float x = tile.col * manifest.slot_size.w + manifest.padding;
-            float y = (totalRows - 1 - tile.row) * manifest.slot_size.h + manifest.padding;
-
-            slices[i] = new SpriteMetaData
-            {
-                name      = tile.id,
-                rect      = new Rect(x, y, manifest.tile_size.w, manifest.tile_size.h),
-                alignment = (int)SpriteAlignment.Custom,
-                pivot     = pivot,
-            };
-        }
-
-        // Assign the slice array. Unity applies it during the current import.
-        // SaveAndReimport() is intentionally not called here — invoking it inside
-        // OnPreprocessTexture would queue a recursive reimport. Setting spritesheet
-        // directly on the importer is sufficient; the changes take effect for this
-        // import pass automatically.
-        ti.spritesheet = slices;
+        // Sprite rects are intentionally NOT set here.
+        // The wall atlas (and any atlas loaded via TileAtlas.cs) is sliced at runtime
+        // using Sprite.Create() from the raw Texture2D, so the importer only needs to
+        // ensure the texture has correct pixel-art settings (Point filter, PPU=64, etc.).
+        // Attempting to call ISpriteEditorDataProvider.Apply() inside OnPreprocessTexture
+        // is unreliable in Unity 6 and was causing the atlas to appear unsliced at runtime.
     }
 
     // ── JSON manifest ──────────────────────────────────────────────────────────
@@ -145,5 +115,7 @@ public class TileAtlasImporter : AssetPostprocessor
         public string id;
         public int    col;
         public int    row;
+        public int    w;   // 0 = use manifest tile_size.w
+        public int    h;   // 0 = use manifest tile_size.h
     }
 }

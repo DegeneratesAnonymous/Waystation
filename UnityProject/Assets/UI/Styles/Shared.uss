@@ -1,0 +1,611 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shared.uss  —  Station Builder: Industrial Terminal Aesthetic
+   Palette, common components, reusable utility classes.
+   Every panel's USS must @import or extend this file.
+   Do NOT duplicate palette values in per-panel stylesheets.
+
+   NOTE: USS does not support CSS custom properties (var(--x)).
+   All palette values are written out as rgb() directly.
+   Font assets must be assigned via Unity font-asset references —
+   see Typography.uss and the "Fonts" section below.
+   ═══════════════════════════════════════════════════════════════════════════
+
+   COLOUR PALETTE (reference only — not functional USS comments)
+   ─────────────────────────────────────────────────────────────
+   BACKGROUNDS (darkest → lightest)
+     bg-void:    #060709   rgb(  6,  7,  9)   scene bg, behind all panels
+     bg-deep:    #0a0c11   rgb( 10, 12, 17)   sub-panel insets, scroll areas
+     bg-base:    #0e1118   rgb( 14, 17, 24)   buttons, status bars, insets
+     bg-panel:   #131720   rgb( 19, 23, 32)   primary panel surface
+     bg-raised:  #181d28   rgb( 24, 29, 40)   header backgrounds, elevated zones
+     bg-hover:   #1e2535   rgb( 30, 37, 53)   hover / focus fill
+
+   BORDERS
+     border-dark: #1a1f2c  rgb( 26, 31, 44)   subtle dividers, grout lines
+     border-mid:  #242b3a  rgb( 36, 43, 58)   default panel border
+     border-lit:  #2e3850  rgb( 46, 56, 80)   active, focused, selected borders
+
+   BEVEL
+     bevel-hi: #2a3348     rgb( 42, 51, 72)   top-left edge highlight
+     bevel-lo: #080a0f     rgb(  8, 10, 15)   bottom-right edge shadow
+
+   TEXT (dimmest → brightest)
+     text-dim:    #2e3d52  rgb( 46, 61, 82)   hints, placeholders, inactive
+     text-mid:    #4a6080  rgb( 74, 96,128)   secondary text, counts, arrows
+     text-base:   #6a8aaa  rgb(106,138,170)   default body text, button labels
+     text-bright: #8aaac8  rgb(138,170,200)   hover state text
+     text-head:   #a8c0d8  rgb(168,192,216)   panel titles, selected, headings
+
+   ACCENT
+     acc:         #4880aa  rgb( 72,128,170)   primary blue (LEDs, borders, icons)
+     acc-bright:  #60a0cc  rgb( 96,160,204)   active/selected text
+     amber:       #c8a030  rgb(200,160, 48)   warnings, costs, badges
+     red:         #c03030  rgb(192, 48, 48)   danger, close button, fault
+     green:       #30a050  rgb( 48,160, 80)   online, ready, confirmed
+
+   CATEGORY ACCENTS (stripe + icon tint ONLY)
+     structure:  #c8a030  rgb(200,160, 48)   amber
+     electrical: #4880aa  rgb( 72,128,170)   blue
+     objects:    #30a878  rgb( 48,168,120)   teal
+     production: #c06828  rgb(192,104, 40)   orange
+     plumbing:   #5088b8  rgb( 80,136,184)   steel blue
+     security:   #c03858  rgb(192, 56, 88)   crimson
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESET — applied to all elements                                          */
+
+* {
+    /* No border-radius anywhere — ever */
+    border-radius: 0;
+    /* Tight line height throughout */
+    -unity-paragraph-spacing: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SCENE BACKGROUND                                                         */
+
+.scene-bg {
+    background-color: rgb(6, 7, 9);       /* bg-void */
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PANEL SHELL                                                              */
+
+.panel {
+    background-color: rgb(19, 23, 32);    /* bg-panel */
+    border-color: rgb(36, 43, 58);        /* border-mid */
+    border-width: 1px;
+    border-radius: 0;
+    overflow: hidden;
+    position: relative;
+    flex-direction: column;
+}
+
+/* ── Corner rivets ──────────────────────────────────────────────────────── */
+.rivet {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background-color: rgb(42, 51, 72);    /* bevel-hi */
+}
+.rivet-tl { top: 4px;    left: 4px;  }
+.rivet-tr { top: 4px;    right: 4px; }
+.rivet-bl { bottom: 4px; left: 4px;  }
+.rivet-br { bottom: 4px; right: 4px; }
+
+/* ── Scanline overlay ───────────────────────────────────────────────────── */
+/* USS does not support repeating-linear-gradient; approximate with a
+   low-opacity dark overlay. Replace with a generated texture in C# for
+   the full scanline effect.                                                 */
+.panel-scanlines {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.06);
+    -unity-background-scale-mode: stretch-to-fill;
+    /* pointer-events is implicit none for VisualElement with no interaction */
+}
+
+/* ── Bevel highlight strip (top-left simulation) ────────────────────────── */
+.panel-bevel-hi {
+    position: absolute;
+    top: 0; left: 0;
+    right: 0;
+    height: 1px;
+    background-color: rgb(42, 51, 72);    /* bevel-hi */
+}
+.panel-bevel-lo {
+    position: absolute;
+    bottom: 0; right: 0;
+    left: 0;
+    height: 1px;
+    background-color: rgb(8, 10, 15);     /* bevel-lo */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PANEL HEADER                                                             */
+
+.header {
+    padding: 12px 14px 10px 14px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(26, 31, 44); /* border-dark */
+    background-color: rgb(24, 29, 40);    /* bg-raised */
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.header-top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.title-block {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.title-icon {
+    font-size: 13px;
+    color: rgb(72, 128, 170);             /* acc */
+    width: 18px;
+    height: 18px;
+    -unity-text-align: middle-center;
+}
+
+.title-text {
+    flex-direction: column;
+}
+
+.title {
+    font-size: 15px;
+    color: rgb(168, 192, 216);            /* text-head */
+    -unity-font-style: bold;
+    letter-spacing: 2.4px;               /* 0.2em at 12px base */
+}
+
+.title-sub {
+    font-size: 8px;
+    color: rgb(46, 61, 82);              /* text-dim */
+    letter-spacing: 1.6px;
+    margin-top: 1px;
+}
+
+.action-row {
+    flex-direction: row;
+    gap: 6px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CLOSE BUTTON                                                             */
+
+.close-btn {
+    width: 20px;
+    height: 20px;
+    background-color: rgb(14, 17, 24);   /* bg-base */
+    border-color: rgb(36, 43, 58);       /* border-mid */
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(74, 96, 128);             /* text-mid */
+    font-size: 10px;
+    padding: 0;
+    -unity-text-align: middle-center;
+    cursor: link;
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.15s;
+    transition-timing-function: ease;
+}
+.close-btn:hover {
+    background-color: rgb(192, 48, 48);  /* red */
+    border-color: rgb(192, 48, 48);
+    color: rgb(168, 192, 216);           /* text-head */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DEFAULT BUTTON                                                           */
+
+.btn {
+    background-color: rgb(14, 17, 24);   /* bg-base */
+    border-color: rgb(36, 43, 58);       /* border-mid */
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(106, 138, 170);           /* text-base */
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 6px 8px;
+    -unity-text-align: middle-center;
+    cursor: link;
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.15s;
+    transition-timing-function: ease;
+}
+.btn:hover {
+    background-color: rgb(30, 37, 53);   /* bg-hover */
+    border-color: rgb(46, 56, 80);       /* border-lit */
+    color: rgb(138, 170, 200);           /* text-bright */
+}
+.btn--active,
+.btn:checked {
+    background-color: rgb(30, 37, 53);   /* bg-hover */
+    border-color: rgb(72, 128, 170);     /* acc */
+    color: rgb(96, 160, 204);            /* acc-bright */
+}
+.btn:disabled {
+    opacity: 0.35;
+    cursor: arrow;
+}
+
+/* Action button — fills available width in action-row */
+.action-btn {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background-color: rgb(14, 17, 24);
+    border-color: rgb(36, 43, 58);
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(106, 138, 170);
+    font-size: 9px;
+    letter-spacing: 1px;
+    -unity-text-align: middle-center;
+    cursor: link;
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.15s;
+    transition-timing-function: ease;
+}
+.action-btn:hover {
+    background-color: rgb(30, 37, 53);
+    border-color: rgb(46, 56, 80);
+    color: rgb(138, 170, 200);
+}
+.action-btn--active {
+    background-color: rgb(30, 37, 53);
+    border-color: rgb(72, 128, 170);
+    color: rgb(96, 160, 204);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SECTION DIVIDER                                                          */
+
+.section-label {
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 14px 5px 14px;
+    gap: 8px;
+}
+.section-label > Label {
+    font-size: 7px;
+    color: rgb(46, 61, 82);              /* text-dim */
+    letter-spacing: 2px;
+}
+.section-line {
+    flex: 1;
+    height: 1px;
+    background-color: rgb(26, 31, 44);   /* border-dark */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIST ROW / CATEGORY ITEM                                                 */
+
+/* Outer transparent button wrapper */
+.cat-btn {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    cursor: link;
+}
+.cat-btn:hover { background-color: rgba(0, 0, 0, 0); }
+
+/* Styled row surface */
+.cat-inner {
+    flex-direction: row;
+    align-items: stretch;
+    background-color: rgb(14, 17, 24);   /* bg-base */
+    border-color: rgb(26, 31, 44);       /* border-dark */
+    border-width: 1px;
+    border-radius: 0;
+    transition-property: background-color, border-color;
+    transition-duration: 0.12s;
+    transition-timing-function: ease;
+}
+.cat-btn:hover .cat-inner {
+    background-color: rgb(24, 29, 40);   /* bg-raised */
+    border-color: rgb(36, 43, 58);       /* border-mid */
+}
+.cat-btn--selected .cat-inner {
+    background-color: rgb(30, 37, 53);   /* bg-hover */
+    border-color: rgb(46, 56, 80);       /* border-lit */
+}
+
+/* Accent stripe */
+.cat-stripe {
+    width: 3px;
+    align-self: stretch;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition-property: opacity;
+    transition-duration: 0.15s;
+}
+.cat-btn:hover .cat-stripe     { opacity: 1; }
+.cat-btn--selected .cat-stripe { opacity: 1; }
+
+/* Per-category stripe colours */
+.cat-stripe--structure  { background-color: rgb(200, 160,  48); }
+.cat-stripe--electrical { background-color: rgb( 72, 128, 170); }
+.cat-stripe--objects    { background-color: rgb( 48, 168, 120); }
+.cat-stripe--production { background-color: rgb(192, 104,  40); }
+.cat-stripe--plumbing   { background-color: rgb( 80, 136, 184); }
+.cat-stripe--security   { background-color: rgb(192,  56,  88); }
+
+/* Icon cell */
+.cat-icon-wrap {
+    width: 36px;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-right-width: 1px;
+    border-right-color: rgb(26, 31, 44); /* border-dark */
+    overflow: hidden;
+}
+
+/* Tinted icon bg */
+.cat-icon-bg {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0.06;
+    transition-property: opacity;
+    transition-duration: 0.15s;
+}
+.cat-btn:hover .cat-icon-bg     { opacity: 0.12; }
+.cat-btn--selected .cat-icon-bg { opacity: 0.15; }
+
+.cat-icon-bg--structure  { background-color: rgb(200, 160,  48); }
+.cat-icon-bg--electrical { background-color: rgb( 72, 128, 170); }
+.cat-icon-bg--objects    { background-color: rgb( 48, 168, 120); }
+.cat-icon-bg--production { background-color: rgb(192, 104,  40); }
+.cat-icon-bg--plumbing   { background-color: rgb( 80, 136, 184); }
+.cat-icon-bg--security   { background-color: rgb(192,  56,  88); }
+
+.cat-icon { font-size: 15px; -unity-text-align: middle-center; }
+.cat-icon--structure  { color: rgb(200, 160,  48); }
+.cat-icon--electrical { color: rgb( 72, 128, 170); }
+.cat-icon--objects    { color: rgb( 48, 168, 120); }
+.cat-icon--production { color: rgb(192, 104,  40); }
+.cat-icon--plumbing   { color: rgb( 80, 136, 184); }
+.cat-icon--security   { color: rgb(192,  56,  88); }
+
+/* Category body */
+.cat-body {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+}
+.cat-name {
+    font-size: 13px;
+    color: rgb(106, 138, 170);           /* text-base */
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-name     { color: rgb(138, 170, 200); } /* text-bright */
+.cat-btn--selected .cat-name { color: rgb(168, 192, 216); } /* text-head */
+
+.cat-meta {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+}
+.cat-count {
+    font-size: 8px;
+    color: rgb(46, 61, 82);              /* text-dim */
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-count { color: rgb(74, 96, 128); }      /* text-mid */
+.cat-arrow {
+    font-size: 9px;
+    color: rgb(46, 61, 82);
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-arrow { color: rgb(74, 96, 128); }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   STATUS BAR (always at panel bottom)                                      */
+
+.status-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    border-top-width: 1px;
+    border-top-color: rgb(26, 31, 44);   /* border-dark */
+    background-color: rgb(14, 17, 24);   /* bg-base */
+    flex-shrink: 0;
+}
+.status-hint {
+    font-size: 8px;
+    color: rgb(46, 61, 82);              /* text-dim */
+    letter-spacing: 1.6px;
+}
+.status-lights {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+}
+
+/* LED indicator squares */
+.sled {
+    width: 6px;
+    height: 6px;
+    border-radius: 0;
+}
+.sled--green { background-color: rgb( 48, 160,  80); } /* green  #30a050 */
+.sled--amber { background-color: rgb(200, 160,  48); opacity: 0.7; } /* amber at 70% */
+.sled--dark  { background-color: rgb( 46,  61,  82); } /* text-dim inactive */
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BADGES / COUNTS                                                          */
+
+.badge {
+    background-color: rgb(200, 160, 48); /* amber */
+    color: rgb(0, 0, 0);
+    font-size: 8px;
+    -unity-font-style: bold;
+    padding: 1px 4px;
+    border-radius: 0;
+    -unity-text-align: middle-center;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SCROLL AREAS                                                             */
+
+.scroll-area {
+    background-color: rgb(10, 12, 17);   /* bg-deep */
+    overflow: hidden;
+}
+/* Hide horizontal scrollbar; vertical only on overflow */
+.scroll-area > #unity-content-and-vertical-scroll-container > #unity-content-viewport {
+    overflow: hidden;
+}
+.scroll-area #unity-vertical-scroller {
+    background-color: rgb(10, 12, 17);   /* bg-deep track */
+}
+.scroll-area #unity-vertical-scroller > #unity-tracker {
+    background-color: rgb(36, 43, 58);   /* border-mid thumb */
+    border-radius: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PROGRESS / FILL BARS                                                     */
+
+.bar-track {
+    height: 6px;                         /* primary bar height per style guide */
+    background-color: rgb(10, 12, 17);   /* bg-deep */
+    border-color: rgb(26, 31, 44);       /* border-dark */
+    border-width: 1px;
+    border-radius: 0;
+    overflow: hidden;
+}
+.bar-track--compact {
+    height: 4px;                         /* compact variant */
+}
+.bar-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    /* Width set in C# via style.width */
+    background-color: rgb(72, 128, 170); /* acc — override per system */
+    border-radius: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONTENT INSET (sub-panel, expanded area)                                 */
+
+.content-inner {
+    background-color: rgb(10, 12, 17);   /* bg-deep */
+    border-color: rgb(26, 31, 44);       /* border-dark */
+    border-width: 1px;
+    border-radius: 0;
+    padding: 8px 10px;
+    flex-direction: column;
+}
+.content-label {
+    font-size: 8px;
+    color: rgb(46, 61, 82);              /* text-dim */
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+}
+
+/* Expand/collapse — use max-height transition in C# (0 → explicit px) */
+.expandable {
+    overflow: hidden;
+    max-height: 0;
+    transition-property: max-height;
+    transition-duration: 0.22s;
+    transition-timing-function: ease;
+}
+.expandable--open {
+    max-height: 400px; /* override per context in panel USS */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SUB-ITEM ROW (items within expanded category)                            */
+
+.sub-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background-color: rgb(19, 23, 32);   /* bg-panel */
+    border-color: rgb(26, 31, 44);       /* border-dark */
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(106, 138, 170);           /* text-base */
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: link;
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.1s;
+}
+.sub-item:hover {
+    background-color: rgb(24, 29, 40);   /* bg-raised */
+    border-color: rgb(36, 43, 58);       /* border-mid */
+    color: rgb(138, 170, 200);           /* text-bright */
+}
+.sub-item-cost {
+    font-size: 8px;
+    color: rgb(200, 160, 48);            /* amber */
+    opacity: 0.7;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DEPTH UTILITY CLASSES                                                    */
+
+.bg-void    { background-color: rgb(  6,  7,  9); }
+.bg-deep    { background-color: rgb( 10, 12, 17); }
+.bg-base    { background-color: rgb( 14, 17, 24); }
+.bg-panel   { background-color: rgb( 19, 23, 32); }
+.bg-raised  { background-color: rgb( 24, 29, 40); }
+.bg-hover   { background-color: rgb( 30, 37, 53); }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TEXT UTILITY CLASSES                                                     */
+
+.text-dim    { color: rgb( 46,  61,  82); }
+.text-mid    { color: rgb( 74,  96, 128); }
+.text-base   { color: rgb(106, 138, 170); }
+.text-bright { color: rgb(138, 170, 200); }
+.text-head   { color: rgb(168, 192, 216); }
+.text-acc    { color: rgb( 72, 128, 170); }
+.text-amber  { color: rgb(200, 160,  48); }
+.text-red    { color: rgb(192,  48,  48); }
+.text-green  { color: rgb( 48, 160,  80); }
