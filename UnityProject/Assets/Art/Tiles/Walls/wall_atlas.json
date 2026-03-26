@@ -1,54 +1,53 @@
 {
-  "atlas": "wall_atlas.png",
-  "atlas_size": {
-    "w": 1056,
-    "h": 66
+  "wall_atlas": "wall_atlas.png",
+  "shadow_atlas": "wall_shadow_atlas.png",
+  "tile_size": {
+    "w": 64,
+    "h": 64
   },
   "slot_size": {
     "w": 66,
     "h": 66
   },
   "padding": 1,
-  "tile_size": { "w": 64, "h": 64 },
   "pivot": "bottom-left",
   "perspective": "top-down-north-fixed",
   "category": "wall",
-  "layers": {
-    "base": {
-      "description": "Opaque 64×64 top-down square. No perspective face strip. Render first.",
-      "tile_size": {
-        "w": 64,
-        "h": 64
-      },
-      "col": 0,
-      "row": 0
-    },
-    "interior_overlays": {
-      "description": "Transparent 64×74 overlays. Composite on top of base. Perspective face strip (y=64..73) present only when south edge is interior.",
-      "tile_size": {
-        "w": 64,
-        "h": 74
-      },
-      "cols": "1..15",
-      "row": 0,
-      "face_strip_y_offset": 64,
-      "face_strip_height": 10
-    }
-  },
+  "render_order": [
+    "shadow  → draw wall_shadow at (wx, wy+1) when south neighbour is floor/open — drawn UNDER everything",
+    "base    → draw wall_solid_normal at (wx, wy)",
+    "overlay → draw wall_solid_int_* at (wx, wy) using interior adjacency bitmask"
+  ],
   "notes": [
-    "Base tile (col 0): fully opaque 64×64 flat square, all four edges treated identically.",
-    "Overlay tiles (cols 1-15): 64×74 transparent canvas. Top 64px covers the tile footprint with interior edge treatments. Bottom 10px is the perspective face strip, only painted when s=true.",
-    "The face strip extends BELOW the tile footprint. Position the overlay at the same (x,y) as the base tile — the strip will naturally hang below into the next row of tiles.",
-    "In Unity: render base sprite, then select overlay by interior adjacency bitmask (n<<3|s<<2|e<<1|w<<0), offset 1..15.",
-    "Interior bitmask encoding: n=8, s=4, e=2, w=1. Value 0 = no interior (no overlay needed)."
+    "Shadow tile (wall_shadow_atlas.png, single slot): 64×64 transparent, darkening in top 12px only.",
+    "Place shadow sprite one tile south of the wall (wy+1), rendered below floor decals and the wall itself.",
+    "Only draw shadow when the wall's south neighbour is open space (not another wall tile).",
+    "Base tile (col 0 of wall_atlas): fully opaque 64×64 flat square, all edges identical.",
+    "Overlay tiles (cols 1-15 of wall_atlas): transparent 64×64. Interior edge bevels + face strip (bottom 10px) when s=1.",
+    "Bitmask: n=8, s=4, e=2, w=1. Value 0 = no interior (skip overlay). Values 1-15 = col index."
   ],
   "tiles": [
     {
+      "id": "wall_shadow",
+      "atlas": "wall_shadow_atlas.png",
+      "col": 0,
+      "row": 0,
+      "layer": "shadow",
+      "usage": "draw at (wx,wy+1) when south neighbour is open. render below wall.",
+      "shadow_reach_px": 12,
+      "tags": [
+        "wall",
+        "shadow"
+      ]
+    },
+    {
       "id": "wall_solid_normal",
+      "atlas": "wall_atlas.png",
       "col": 0,
       "row": 0,
       "layer": "base",
       "interior_faces": [],
+      "bitmask": 0,
       "tags": [
         "wall",
         "solid",

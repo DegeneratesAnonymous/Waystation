@@ -1,0 +1,15 @@
+{
+  "tile_size":  { "w": 64, "h": 64 },
+  "slot_size":  { "w": 66, "h": 66 },
+  "padding":    1,
+  "pivot":      "center",
+  "tiles": [
+    { "id": "door_ns_closed",    "col": 0, "row": 0, "_note": "visually OPEN — panels at sides" },
+    { "id": "door_ns_open25",    "col": 1, "row": 0 },
+    { "id": "door_ns_open50",    "col": 2, "row": 0 },
+    { "id": "door_ns_open75",    "col": 3, "row": 0 },
+    { "id": "door_ns_open",      "col": 4, "row": 0, "_note": "visually CLOSED — panels at center" },
+    { "id": "door_ns_damaged",   "col": 5, "row": 0 },
+    { "id": "door_ns_destroyed", "col": 6, "row": 0 }
+  ]
+}

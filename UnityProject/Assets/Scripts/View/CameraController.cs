@@ -1,6 +1,7 @@
 // CameraController — scroll-wheel zoom and right-click drag-to-pan for the
 // orthographic station camera. Self-installs via RuntimeInitializeOnLoadMethod.
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Waystation.UI;
 
 namespace Waystation.View
@@ -16,6 +17,14 @@ namespace Waystation.View
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
+            SceneManager.sceneLoaded -= OnAnySceneLoaded;
+            SceneManager.sceneLoaded += OnAnySceneLoaded;
+            OnAnySceneLoaded(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+
+        private static void OnAnySceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name != "GameScene") return;
             if (FindAnyObjectByType<CameraController>() != null) return;
             new GameObject("CameraController").AddComponent<CameraController>();
         }

@@ -250,6 +250,109 @@ namespace Waystation.View
 
         private static Dictionary<string, Sprite> _wallAtlasCache;
 
+        // ── New wall atlas (wall_atlas.png — base + interior overlays) ────────
+        // The atlas has 16 sprites:
+        //   Col 0  : wall_solid_normal   — 64×64 opaque base tile
+        //   Cols 1-15 : wall_solid_int_* — 64×64 transparent overlay, selected by
+        //              interior adjacency bitmask  (n=8 | s=4 | e=2 | w=1)
+        //
+        // Overlay sprites are 64×64 (same footprint as the base).  The perspective
+        // face strip (bottom 10px when s=1) is baked inside the 64px tile.  Overlays
+        // are placed at the exact same world position as the base tile — no Y offset.
+        //
+        // wall_shadow_atlas contains a single 64×64 sprite whose top 12px darken the
+        // floor tile immediately south of a wall.  Place it at (col, row-1).
+        private static bool   _wallSolidAtlasChecked;
+        private static Sprite   _wallSolidBase;
+        private static Sprite[] _wallInteriorOverlays; // [16]: index = bitmask, [0]=unused
+        private static Sprite   _wallShadow;
+        // Kept for backward compatibility — overlays no longer need a Y shift.
+        public  const  float WallFaceStripH = 0f;
+
+        /// <summary>Returns the opaque 64×64 base wall tile from wall_atlas.</summary>
+        public static Sprite GetWallSolidBase()
+        {
+            EnsureWallSolidAtlas();
+            return _wallSolidBase ?? GetWall(0);
+        }
+
+        /// <summary>
+        /// Returns the 64×64 shadow sprite for the floor tile south of a wall.
+        /// Darkening is in the top 12px only.  Place at (col, row-1), sortOrder 11.
+        /// </summary>
+        public static Sprite GetWallShadow()
+        {
+            if (_wallShadow != null) return _wallShadow;
+            Texture2D tex = Resources.Load<Texture2D>("Walls/wall_shadow_atlas");
+            if (tex == null)
+            {
+                Debug.LogWarning("[TileAtlas] wall_shadow_atlas texture not found at Resources/Walls/wall_shadow_atlas.");
+                return null;
+            }
+            // Single 64×64 tile at the origin of the texture.
+            _wallShadow = Sprite.Create(tex, new Rect(0f, 0f, 64f, 64f),
+                                        new Vector2(0.5f, 0.5f), 64f);
+            return _wallShadow;
+        }
+
+        /// <summary>
+        /// Returns the interior overlay sprite for the given adjacency bitmask.
+        /// Bitmask: n=8, s=4, e=2, w=1 — set each bit when that neighbour is floor/interior.
+        /// Returns null when bitmask is 0 (no interior neighbours — no overlay needed).
+        /// </summary>
+        public static Sprite GetWallInteriorOverlay(int bitmask)
+        {
+            if (bitmask <= 0 || bitmask > 15) return null;
+            EnsureWallSolidAtlas();
+            return _wallInteriorOverlays?[bitmask];
+        }
+
+        private static void EnsureWallSolidAtlas()
+        {
+            if (_wallSolidAtlasChecked) return;
+            _wallSolidAtlasChecked = true;
+            _wallInteriorOverlays = new Sprite[16];
+
+            // Load the raw texture rather than relying on the importer having sliced it.
+            // Resources.Load<Texture2D> works even when the texture is imported as Sprite type.
+            Texture2D tex = Resources.Load<Texture2D>("Walls/wall_atlas");
+            if (tex == null)
+            {
+                Debug.LogWarning("[TileAtlas] wall_atlas texture not found at Resources/Walls/wall_atlas. "
+                    + "Walls will use procedural fallback.");
+                return;
+            }
+
+            // Atlas layout (from wall_atlas.json):
+            //   16 columns × 1 row  |  slot 66×66  |  padding 1px  |  tile 64×64
+            //   col index = sprite index (0 = base, 1-15 = overlays by bitmask value)
+            // In Unity texel space (Y=0 at texture bottom):
+            //   x = col * 66 + 1
+            //   y = 1   (only one row, one padding pixel from the bottom edge)
+            Sprite SliceCol(int col)
+                => Sprite.Create(tex,
+                                 new Rect(col * 66f + 1f, 1f, 64f, 64f),
+                                 new Vector2(0.5f, 0.5f),
+                                 64f);
+
+            _wallSolidBase = SliceCol(0);
+
+            // Bitmask → atlas column  (n=8, s=4, e=2, w=1)
+            // Column index equals the bitmask value for all 15 overlays.
+            var colByMask = new (int mask, int col)[]
+            {
+                ( 4,  1), ( 8,  2), ( 2,  3), ( 1,  4),
+                ( 6,  5), ( 5,  6), (10,  7), ( 9,  8),
+                (12,  9), ( 3, 10), (14, 11), (13, 12),
+                (11, 13), ( 7, 14), (15, 15),
+            };
+            foreach (var (mask, col) in colByMask)
+                _wallInteriorOverlays[mask] = SliceCol(col);
+
+            Debug.Log($"[TileAtlas] wall_atlas sliced at runtime from texture "
+                + $"({tex.width}×{tex.height}). base ok.");
+        }
+
         /// <summary>
         /// Returns a wall sprite from the atlas by connectivity shape and health state.
         /// shape: "straight_ew" | "straight_ns" | "corner_ne" | "corner_nw" | "corner_se" |
@@ -1063,24 +1166,94 @@ namespace Waystation.View
         private static Color32 DGlowDim(string status)    => DAccD(status);
         private static Color32 DGlowBright(string status) => DAcc(status);
 
+        // ── Door atlas sprites ────────────────────────────────────────────────
+        // Loaded via DoorAtlasData ScriptableObject at Resources/Doors/DoorAtlasData.
+        // 12 sprites: door_ns_open0..door_ns_open9 (closed→open) + damaged + destroyed.
+        // NS door: rotation 0°.  EW door: rotation 90° (handled by DoorRenderer).
+        private static Dictionary<string, Sprite> _doorAtlasCache;
+        private static bool                       _doorAtlasChecked;
+
+        private static void EnsureDoorAtlas()
+        {
+            if (_doorAtlasChecked) return;
+            _doorAtlasChecked = true;
+            _doorAtlasCache = new Dictionary<string, Sprite>();
+
+            // Load sprites via DoorAtlasData ScriptableObject (created by DoorAtlasSetup).
+            var doorData = Resources.Load<DoorAtlasData>("Doors/DoorAtlasData");
+            if (doorData == null)
+            {
+                Debug.Log("[TileAtlas] DoorAtlasData not found in Resources/Doors/ "
+                    + "— run Tools → Door → Setup Door Atlas, then procedural sprites are used until then.");
+                return;
+            }
+
+            for (int i = 0; i < doorData.openStages.Length; i++)
+                if (doorData.openStages[i] != null)
+                    _doorAtlasCache[$"door_ns_open{i}"] = doorData.openStages[i];
+
+            if (doorData.damaged   != null) _doorAtlasCache["door_ns_damaged"]   = doorData.damaged;
+            if (doorData.destroyed != null) _doorAtlasCache["door_ns_destroyed"] = doorData.destroyed;
+
+            Debug.Log($"[TileAtlas] Door atlas loaded via DoorAtlasData ({_doorAtlasCache.Count} sprites).");
+        }
+
         private static Dictionary<string, Sprite[]> _doorCache2;
 
-        /// Get door animation frames.
-        /// isH=true  → doorS style: panels slide W↔E, passage runs N-S  (use for H walls).
-        /// isH=false → doorE style: panels slide N↔S, passage runs E-W  (use for V walls).
-        /// status: "powered" | "locked" | "unpowered".
-        /// dmgLevel: 0=normal (animated), 1=worn (closed, faded glow), 2=broken (stuck open).
+        /// <summary>
+        /// Get door animation frames (10 sprites: closed → fully open).
+        ///
+        /// The door_ns_atlas sprites (and MakeDoorE procedural fallback) are drawn for an NS wall
+        /// (wall runs N↔S, passage E↔W, perspective faces on the left and right of the gap).
+        ///
+        /// The same sprites are used for EW walls — the caller rotates the door GO 90° via
+        /// DoorOrientation.EW so the perspective faces land on the north/south sides instead.
+        /// No second atlas or alternative sprite is needed.
+        ///
+        /// isH is accepted for API compatibility and future atlas expansion but does not change
+        /// which sprites are returned.
+        ///
+        /// status:   "powered" | "locked" | "unpowered"
+        /// dmgLevel: 0=normal (animated), 1=worn (stuck closed), 2=broken (jammed ~35% open).
+        /// </summary>
         public static Sprite[] GetDoorFrames(bool isH, string status = "powered", int dmgLevel = 0)
         {
             if (_doorCache2 == null) _doorCache2 = new Dictionary<string, Sprite[]>();
-            string key = $"{(isH ? 'H' : 'V')}_{status}_{dmgLevel}";
+
+            EnsureDoorAtlas();
+
+            // Orientation is handled by Transform rotation on the GO, not by selecting different
+            // sprites.  Cache key omits isH — same Sprite[] for both wall orientations.
+            string key = $"door_{status}_{dmgLevel}";
             if (!_doorCache2.TryGetValue(key, out var frames))
             {
-                frames = new Sprite[5];
-                float[] amts = { 0f, 0.25f, 0.5f, 0.75f, 1.0f };
-                for (int i = 0; i < 5; i++)
-                    frames[i] = isH ? MakeDoorS(amts[i], status, dmgLevel)
-                                    : MakeDoorE(amts[i], status, dmgLevel);
+                // 10 frames: open0 (closed) → open9 (fully open), matching the 10-slot atlas.
+                frames = new Sprite[10];
+                if (dmgLevel == 1)
+                {
+                    // Damaged — door stuck closed; all frames show the same damaged sprite.
+                    _doorAtlasCache.TryGetValue("door_ns_damaged", out var dmg);
+                    var s = dmg ?? MakeDoorE(0f, status, 1);
+                    for (int i = 0; i < 10; i++) frames[i] = s;
+                }
+                else if (dmgLevel == 2)
+                {
+                    // Destroyed — door jammed ~35% open; all frames show the same destroyed sprite.
+                    _doorAtlasCache.TryGetValue("door_ns_destroyed", out var dest);
+                    var s = dest ?? MakeDoorE(0.35f, status, 2);
+                    for (int i = 0; i < 10; i++) frames[i] = s;
+                }
+                else
+                {
+                    // 10 atlas frames: door_ns_open0 (closed) → door_ns_open9 (fully open).
+                    for (int i = 0; i < 10; i++)
+                    {
+                        float  frac = i / 9f;
+                        string name = $"door_ns_open{i}";
+                        frames[i] = (_doorAtlasCache.TryGetValue(name, out var s) && s != null)
+                            ? s : MakeDoorE(frac, status, 0);
+                    }
+                }
                 _doorCache2[key] = frames;
             }
             return frames;
@@ -1089,18 +1262,18 @@ namespace Waystation.View
         private static Sprite[] _doorHFrames;
         private static Sprite[] _doorVFrames;
 
-        /// Five animation frames for a horizontal door (panels slide W↔E).
+        /// Ten animation frames for a door on an EW wall (isH=true; caller rotates GO 90° via DoorOrientation.EW).
         public static Sprite[] GetDoorHFrames() => GetDoorFrames(true);
-        /// Five animation frames for a vertical door (panels slide N↔S).
+        /// Ten animation frames for a door on an NS wall (isH=false; GO stays at 0° rotation).
         public static Sprite[] GetDoorVFrames() => GetDoorFrames(false);
 
-        // ── MakeDoorS — horizontal door (panels slide W↔E, passage runs N-S) ──────
-        // Matches HTML topClosed / topOpening / topOpen layout exactly.
+        // ── MakeDoorS — NS-wall door (panels slide N↔S, passage runs E-W) ──────
+        // Used when isH=false (wall runs N↔S, floor to east or west).
         // open: 0=closed, 1=fully open.
         static Sprite MakeDoorS(float open, string status, int dmgLevel)
         {
             if (dmgLevel == 1) open = 0f;
-            if (dmgLevel == 2) open = 1f;
+            // dmgLevel == 2 no longer forces open = 1f; caller passes the desired fraction (0.35f).
 
             var p = NewPixels();
             Color32 acc  = DAcc(status);
@@ -1226,17 +1399,14 @@ namespace Waystation.View
             return MakeSprite(p);
         }
 
-        // ── MakeDoorE — vertical door perspective tile (passage runs N-S, wall runs E-W) ─
-        // Matches HTML mkPersp layout exactly:
-        //   [LEFT FACE FL=16px][TOP SURFACE FS=32px][RIGHT FACE FR=16px] = 64px
-        // Left face  (x=0..15):  bright outer-left → dark inner-right, door panel content
-        // Top surface (x=16..47): single recessed-panel wall top + frame rails top+bottom,
-        //                          panels slide N↔S (y-axis), void gap grows as door opens
-        // Right face (x=48..63): dark inner-left → bright outer-right (mirror of left face)
+        // ── MakeDoorE — EW-wall door perspective tile (passage runs N-S, wall runs E-W) ─────
+        // Used when isH=true (wall runs E↔W, floor to north or south).
+        // Left face (x=0..15) + top surface strip (x=16..47, panels slide N↔S) + right face (x=48..63).
+        // open: 0=closed, 1=fully open.  No Transform rotation required — sprite faces EW wall.
         static Sprite MakeDoorE(float open, string status, int dmgLevel)
         {
             if (dmgLevel == 1) open = 0f;
-            if (dmgLevel == 2) open = 1f;
+            // dmgLevel == 2 no longer forces open = 1f; caller passes the desired fraction (0.35f).
 
             var p = NewPixels();
             Color32 acc  = DAcc(status);

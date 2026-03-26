@@ -1,0 +1,9 @@
+{
+  "tile_size": { "w": 64, "h": 64 },
+  "slot_size": { "w": 64, "h": 64 },
+  "padding": 0,
+  "pivot": "bottom-left",
+  "tiles": [
+    { "id": "wall_shadow", "col": 0, "row": 0 }
+  ]
+}

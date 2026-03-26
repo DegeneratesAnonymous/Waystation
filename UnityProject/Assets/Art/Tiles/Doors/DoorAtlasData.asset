@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7e3418fa07b75d4bb725a2500cf4dab, type: 3}
+  m_Name: DoorAtlasData
+  m_EditorClassIdentifier: Assembly-CSharp::DoorAtlasData
+  openStages:
+  - {fileID: 4282759508639164546, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -6043050658310913486, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -6423667325185634401, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -3848007626578331260, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -2834665948387832560, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -788433116303128733, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: 1100083285066312773, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -6014618991944293947, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -4270868567257531171, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  - {fileID: -6660536294801252768, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  damaged: {fileID: -1881002267333344045, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}
+  destroyed: {fileID: 4584200968123095063, guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5, type: 3}

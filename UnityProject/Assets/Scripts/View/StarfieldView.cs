@@ -4,6 +4,7 @@
 // irregular rather than a smooth pulse.  Shooting stars spawn at random intervals,
 // streak across the field, then vanish.
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Waystation.View
 {
@@ -51,6 +52,15 @@ namespace Waystation.View
         // ── Auto-install ──────────────────────────────────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
+        {
+            // Subscribe persistently so the starfield is recreated on every scene load.
+            SceneManager.sceneLoaded -= OnAnySceneLoaded;
+            SceneManager.sceneLoaded += OnAnySceneLoaded;
+            // Seed the current scene immediately (the delegate won't fire for it).
+            OnAnySceneLoaded(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+
+        private static void OnAnySceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (FindAnyObjectByType<StarfieldView>() != null) return;
             new GameObject("StarfieldView").AddComponent<StarfieldView>();

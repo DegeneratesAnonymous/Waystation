@@ -1,0 +1,405 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   BuildMenu.uss
+   Unity UI Toolkit stylesheet — matches BuildMenu.html design system exactly
+   Place in: Assets/UI/BuildMenu.uss
+   ═══════════════════════════════════════════════════════════════════════════
+   NOTE: USS does not support CSS custom properties (var(--x)).
+   All palette values are written out directly.
+   Font: assign via Resources or USS font-asset reference (see comments).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── ROOT PANEL ─────────────────────────────────────────────────────────── */
+.panel {
+    width: 280px;
+    background-color: rgb(19, 23, 32);       /* --bg-panel */
+    border-color: rgb(36, 43, 58);           /* --border-mid */
+    border-width: 1px;
+    /* Inset bevel — USS only supports a single border colour, so we approximate
+       the bevel with a slightly lighter top/left via a child element in code,
+       or accept the flat border here. */
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* ── RIVETS ─────────────────────────────────────────────────────────────── */
+.rivet {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background-color: rgb(42, 51, 72);       /* --bevel-hi */
+}
+.rivet-tl { top: 4px;    left: 4px;  }
+.rivet-tr { top: 4px;    right: 4px; }
+.rivet-bl { bottom: 4px; left: 4px;  }
+.rivet-br { bottom: 4px; right: 4px; }
+
+/* ── HEADER ─────────────────────────────────────────────────────────────── */
+.header {
+    padding: 12px 14px 10px 14px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(26, 31, 44);    /* --border-dark */
+    background-color: rgb(24, 29, 40);       /* --bg-raised */
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.header-top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.title-block {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px; /* USS 2022.2+ supports gap; for older use margin */
+}
+
+.title-icon {
+    font-size: 13px;
+    color: rgb(72, 128, 170);               /* --acc */
+    width: 18px;
+    height: 18px;
+    -unity-text-align: middle-center;
+}
+
+.title-text {
+    flex-direction: column;
+}
+
+.title {
+    font-size: 15px;
+    color: rgb(168, 192, 216);             /* --text-head */
+    -unity-font-style: bold;
+    letter-spacing: 2px;
+    /* Font: assign Barlow Condensed Bold via -unity-font-definition in code
+       or reference a font asset: -unity-font: url('path/to/BarlowCondensed-Bold.ttf'); */
+}
+
+.title-sub {
+    font-size: 8px;
+    color: rgb(46, 61, 82);               /* --text-dim */
+    letter-spacing: 2px;
+    margin-top: 1px;
+}
+
+.close-btn {
+    width: 20px;
+    height: 20px;
+    background-color: rgb(14, 17, 24);    /* --bg-base */
+    border-color: rgb(36, 43, 58);        /* --border-mid */
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(74, 96, 128);             /* --text-mid */
+    font-size: 10px;
+    padding: 0;
+    -unity-text-align: middle-center;
+    cursor: link;
+}
+.close-btn:hover {
+    background-color: rgb(192, 48, 48);  /* --red */
+    border-color: rgb(192, 48, 48);
+    color: rgb(255, 255, 255);
+}
+
+/* ── ACTION ROW ─────────────────────────────────────────────────────────── */
+.action-row {
+    flex-direction: row;
+    gap: 6px;
+}
+
+.action-btn {
+    flex: 1;
+    padding: 6px 8px;
+    background-color: rgb(14, 17, 24);   /* --bg-base */
+    border-color: rgb(36, 43, 58);
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(106, 138, 170);           /* --text-base */
+    font-size: 9px;
+    letter-spacing: 1px;
+    -unity-text-align: middle-center;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: link;
+}
+.action-btn:hover {
+    background-color: rgb(30, 37, 53);   /* --bg-hover */
+    border-color: rgb(46, 56, 80);       /* --border-lit */
+    color: rgb(138, 170, 200);           /* --text-bright */
+}
+.action-btn--active {
+    background-color: rgb(30, 37, 53);
+    border-color: rgb(72, 128, 170);     /* --acc */
+    color: rgb(96, 160, 204);            /* --acc-bright */
+}
+
+.queue-badge {
+    background-color: rgb(200, 160, 48); /* --amber */
+    color: rgb(0, 0, 0);
+    font-size: 8px;
+    -unity-font-style: bold;
+    padding: 1px 4px;
+    -unity-text-align: middle-center;
+}
+
+/* ── SECTION LABEL ──────────────────────────────────────────────────────── */
+.section-label {
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 14px 5px 14px;
+    gap: 8px;
+}
+.section-label > Label {
+    font-size: 7px;
+    color: rgb(46, 61, 82);              /* --text-dim */
+    letter-spacing: 2px;
+}
+.section-line {
+    flex: 1;
+    height: 1px;
+    background-color: rgb(26, 31, 44);  /* --border-dark */
+}
+
+/* ── CATEGORY LIST ──────────────────────────────────────────────────────── */
+.category-list {
+    flex-direction: column;
+    padding: 0 10px 10px 10px;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.cat-btn {
+    background-color: rgba(0,0,0,0);
+    border-width: 0;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    cursor: link;
+}
+/* Remove default Button chrome */
+.cat-btn:hover { background-color: rgba(0,0,0,0); }
+
+.cat-inner {
+    flex-direction: row;
+    align-items: stretch;
+    background-color: rgb(14, 17, 24);   /* --bg-base */
+    border-color: rgb(26, 31, 44);       /* --border-dark */
+    border-width: 1px;
+    border-radius: 0;
+    transition-property: background-color, border-color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-inner {
+    background-color: rgb(24, 29, 40);   /* --bg-raised */
+    border-color: rgb(36, 43, 58);       /* --border-mid */
+}
+.cat-btn--selected .cat-inner {
+    background-color: rgb(30, 37, 53);   /* --bg-hover */
+    border-color: rgb(46, 56, 80);       /* --border-lit */
+}
+
+/* Accent stripe */
+.cat-stripe {
+    width: 3px;
+    align-self: stretch;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition-property: opacity;
+    transition-duration: 0.15s;
+}
+.cat-btn:hover .cat-stripe       { opacity: 1; }
+.cat-btn--selected .cat-stripe   { opacity: 1; }
+
+/* Per-category stripe colours */
+.cat-stripe--structure  { background-color: rgb(200, 160,  48); }
+.cat-stripe--electrical { background-color: rgb( 72, 128, 170); }
+.cat-stripe--objects    { background-color: rgb( 48, 168, 120); }
+.cat-stripe--production { background-color: rgb(192, 104,  40); }
+.cat-stripe--plumbing   { background-color: rgb( 80, 136, 184); }
+.cat-stripe--security   { background-color: rgb(192,  56,  88); }
+
+/* Icon cell */
+.cat-icon-wrap {
+    width: 36px;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-right-width: 1px;
+    border-right-color: rgb(26, 31, 44);
+    overflow: hidden;
+}
+
+.cat-icon-bg {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0.06;
+    transition-property: opacity;
+    transition-duration: 0.15s;
+}
+.cat-btn:hover .cat-icon-bg       { opacity: 0.12; }
+.cat-btn--selected .cat-icon-bg   { opacity: 0.15; }
+
+.cat-icon-bg--structure  { background-color: rgb(200, 160,  48); }
+.cat-icon-bg--electrical { background-color: rgb( 72, 128, 170); }
+.cat-icon-bg--objects    { background-color: rgb( 48, 168, 120); }
+.cat-icon-bg--production { background-color: rgb(192, 104,  40); }
+.cat-icon-bg--plumbing   { background-color: rgb( 80, 136, 184); }
+.cat-icon-bg--security   { background-color: rgb(192,  56,  88); }
+
+.cat-icon { font-size: 15px; -unity-text-align: middle-center; }
+.cat-icon--structure  { color: rgb(200, 160,  48); }
+.cat-icon--electrical { color: rgb( 72, 128, 170); }
+.cat-icon--objects    { color: rgb( 48, 168, 120); }
+.cat-icon--production { color: rgb(192, 104,  40); }
+.cat-icon--plumbing   { color: rgb( 80, 136, 184); }
+.cat-icon--security   { color: rgb(192,  56,  88); }
+
+/* Category body */
+.cat-body {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+}
+
+.cat-name {
+    font-size: 13px;
+    color: rgb(106, 138, 170);           /* --text-base */
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-name       { color: rgb(138, 170, 200); }  /* --text-bright */
+.cat-btn--selected .cat-name   { color: rgb(168, 192, 216); }  /* --text-head */
+
+.cat-meta {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+}
+
+.cat-count {
+    font-size: 8px;
+    color: rgb(46, 61, 82);             /* --text-dim */
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-count { color: rgb(74, 96, 128); }
+
+.cat-arrow {
+    font-size: 9px;
+    color: rgb(46, 61, 82);
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+.cat-btn:hover .cat-arrow { color: rgb(74, 96, 128); }
+
+/* ── CONTENT / SUB-ITEM AREA ────────────────────────────────────────────── */
+.content-area {
+    flex-direction: column;
+    overflow: hidden;
+    /* Height animated in C# — USS transition on height works in Unity 2023.1+
+       For older versions control via C# style.maxHeight */
+    max-height: 0;
+    transition-property: max-height;
+    transition-duration: 0.22s;
+    transition-timing-function: ease;
+}
+.content-area--open {
+    max-height: 200px;
+}
+
+.content-inner {
+    margin: 0 10px 8px 10px;
+    background-color: rgb(10, 12, 17);   /* --bg-deep */
+    border-color: rgb(26, 31, 44);
+    border-width: 1px;
+    border-top-width: 0;
+    padding: 8px 10px;
+    flex-direction: column;
+}
+
+.content-label {
+    font-size: 8px;
+    color: rgb(46, 61, 82);
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+}
+
+.sub-item-scroll {
+    max-height: 140px;
+}
+
+.sub-items {
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sub-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background-color: rgb(19, 23, 32);
+    border-color: rgb(26, 31, 44);
+    border-width: 1px;
+    border-radius: 0;
+    color: rgb(106, 138, 170);
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: link;
+    transition-property: background-color, border-color;
+    transition-duration: 0.1s;
+}
+.sub-item:hover {
+    background-color: rgb(24, 29, 40);
+    border-color: rgb(36, 43, 58);
+    color: rgb(138, 170, 200);
+}
+
+.sub-item-cost {
+    font-size: 8px;
+    color: rgb(200, 160, 48);            /* --amber */
+    opacity: 0.7;
+}
+
+/* ── STATUS BAR ─────────────────────────────────────────────────────────── */
+.status-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    border-top-width: 1px;
+    border-top-color: rgb(26, 31, 44);
+    background-color: rgb(14, 17, 24);
+    flex-shrink: 0;
+}
+
+.status-hint {
+    font-size: 8px;
+    color: rgb(46, 61, 82);
+    letter-spacing: 1px;
+}
+
+.status-lights {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+}
+
+.sled {
+    width: 6px;
+    height: 6px;
+    border-radius: 0;
+}
+.sled--green { background-color: rgb(48, 160,  80); }
+.sled--amber { background-color: rgb(200, 160, 48); opacity: 0.7; }
+.sled--dark  { background-color: rgb(46,  61,  82); }

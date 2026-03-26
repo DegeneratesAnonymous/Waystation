@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: c2fcab5e2f8458844819b5f3d34dad82
+guid: b2c3d4e5f6a7b2c3d4e5f6a7b2c3d4e5
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
@@ -44,13 +44,13 @@ TextureImporter:
   lightmap: 0
   compressionQuality: 50
   spriteMode: 2
-  spriteExtrude: 1
+  spriteExtrude: 0
   spriteMeshType: 1
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 64
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
-  spriteGenerateFallbackPhysicsShape: 1
+  spriteGenerateFallbackPhysicsShape: 0
   alphaUsage: 1
   alphaIsTransparency: 1
   spriteTessellationDetail: -1
@@ -69,14 +69,14 @@ TextureImporter:
   platformSettings:
   - serializedVersion: 4
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 8192
+    maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
-    overridden: 0
+    overridden: 1
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
@@ -85,7 +85,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -98,7 +98,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -110,353 +110,265 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: wall_solid_normal
+      name: door_ns_open0
       rect:
         serializedVersion: 2
         x: 1
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: bc66454b007f42c428b223493cb6e661
-      internalID: 5915340412204183853
+      spriteID: 2882dd2051b6f6b30800000000000000
+      internalID: 4282759508639164546
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_s
+      name: door_ns_open1
       rect:
         serializedVersion: 2
         x: 67
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 103222ae2ece5ae499dfe94863574a37
-      internalID: -2906011431024219490
+      spriteID: 23200b79175c22ca0800000000000000
+      internalID: -6043050658310913486
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_n
+      name: door_ns_open2
       rect:
         serializedVersion: 2
         x: 133
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 227d307046c96b642b37e79e8f008d8d
-      internalID: -3564885994784700356
+      spriteID: f9fc60f0a9c8ad6a0800000000000000
+      internalID: -6423667325185634401
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_e
+      name: door_ns_open3
       rect:
         serializedVersion: 2
         x: 199
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 00aaf47c21759844fb463b316e7c5b62
-      internalID: 6660083189167863459
+      spriteID: 489fdc48371299ac0800000000000000
+      internalID: -3848007626578331260
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_w
+      name: door_ns_open4
       rect:
         serializedVersion: 2
         x: 265
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: f9fba88175453c34c9015a3bb661c840
-      internalID: -4285623556387255400
+      spriteID: 01d8271b65e39a8d0800000000000000
+      internalID: -2834665948387832560
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_se
+      name: door_ns_open5
       rect:
         serializedVersion: 2
         x: 331
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 17c9a78c608c3fc42a3eba5b805f2db8
-      internalID: 279317404158207071
+      spriteID: 367099d024cee05f0800000000000000
+      internalID: -788433116303128733
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_sw
+      name: door_ns_open6
       rect:
         serializedVersion: 2
         x: 397
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 3dc307aa939927c44b5d13c07e8b686b
-      internalID: 8912757787769627398
+      spriteID: 54ce8b55be7444f00800000000000000
+      internalID: 1100083285066312773
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_ne
+      name: door_ns_open7
       rect:
         serializedVersion: 2
         x: 463
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 1d289a87808b6c84e992ff41499b05f8
-      internalID: -8190404596267291157
+      spriteID: 5c1a7d5c4e7c78ca0800000000000000
+      internalID: -6014618991944293947
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_nw
+      name: door_ns_open8
       rect:
         serializedVersion: 2
         x: 529
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 78f992f33243155469d49df716c70adb
-      internalID: 3539985224709781934
+      spriteID: ddcbb368aa3dab4c0800000000000000
+      internalID: -4270868567257531171
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_ns
+      name: door_ns_open9
       rect:
         serializedVersion: 2
         x: 595
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: d61d80d91c6a4a34086f29c56f7fdf14
-      internalID: 4827432755345368976
+      spriteID: 06e56c667850193a0800000000000000
+      internalID: -6660536294801252768
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_ew
+      name: door_ns_damaged
       rect:
         serializedVersion: 2
         x: 661
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 5284980876f7eea4eaec4e3cbc3388ce
-      internalID: -3480117167670341546
+      spriteID: 3d444e1676655e5e0800000000000000
+      internalID: -1881002267333344045
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: wall_solid_int_nse
+      name: door_ns_destroyed
       rect:
         serializedVersion: 2
         x: 727
         y: 1
         width: 64
         height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: 0
+      tessellationDetail: -1
       bones: []
-      spriteID: 2cb58e26cbc206c42b7257607477cff3
-      internalID: 4605049329908447043
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: wall_solid_int_nsw
-      rect:
-        serializedVersion: 2
-        x: 793
-        y: 1
-        width: 64
-        height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 88b0002d4fa48444ca111b8ea75e6557
-      internalID: -1831053203777363976
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: wall_solid_int_new
-      rect:
-        serializedVersion: 2
-        x: 859
-        y: 1
-        width: 64
-        height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 9cb701ea92dece44183bdd752191a56c
-      internalID: -7991520934946401211
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: wall_solid_int_sew
-      rect:
-        serializedVersion: 2
-        x: 925
-        y: 1
-        width: 64
-        height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: c8411b1722cf3904799de60452f086bb
-      internalID: 3401307796246023632
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: wall_solid_int_nsew
-      rect:
-        serializedVersion: 2
-        x: 991
-        y: 1
-        width: 64
-        height: 64
-      alignment: 9
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: b06f802fb1984a3458bc2479a2ab440c
-      internalID: 1807194248820979773
+      spriteID: 7189afb0e7a5e9f30800000000000000
+      internalID: 4584200968123095063
       vertices: []
       indices: 
       edges: []
@@ -465,7 +377,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: a37ec304baf16ab42bd18f7db00f2d9b
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -475,22 +387,18 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      wall_solid_int_e: 6660083189167863459
-      wall_solid_int_ew: -3480117167670341546
-      wall_solid_int_n: -3564885994784700356
-      wall_solid_int_ne: -8190404596267291157
-      wall_solid_int_new: -7991520934946401211
-      wall_solid_int_ns: 4827432755345368976
-      wall_solid_int_nse: 4605049329908447043
-      wall_solid_int_nsew: 1807194248820979773
-      wall_solid_int_nsw: -1831053203777363976
-      wall_solid_int_nw: 3539985224709781934
-      wall_solid_int_s: -2906011431024219490
-      wall_solid_int_se: 279317404158207071
-      wall_solid_int_sew: 3401307796246023632
-      wall_solid_int_sw: 8912757787769627398
-      wall_solid_int_w: -4285623556387255400
-      wall_solid_normal: 5915340412204183853
+      door_ns_damaged: -1881002267333344045
+      door_ns_destroyed: 4584200968123095063
+      door_ns_open0: 4282759508639164546
+      door_ns_open1: -6043050658310913486
+      door_ns_open2: -6423667325185634401
+      door_ns_open3: -3848007626578331260
+      door_ns_open4: -2834665948387832560
+      door_ns_open5: -788433116303128733
+      door_ns_open6: 1100083285066312773
+      door_ns_open7: -6014618991944293947
+      door_ns_open8: -4270868567257531171
+      door_ns_open9: -6660536294801252768
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
