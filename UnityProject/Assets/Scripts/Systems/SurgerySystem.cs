@@ -66,11 +66,14 @@ namespace Waystation.Systems
         // ── Main Surgery API ──────────────────────────────────────────────────
 
         /// <summary>
-        /// Returns the facility bonus modifier (+2 roll bonus) when any room on the
-        /// station has an active medical_bay room type assignment.
-        /// Returns 0 if no qualifying active room bonus exists.
+        /// Returns the facility bonus modifier (+2 flat roll bonus) when at least one
+        /// room on the station has an active medical_bay type assignment.  The check is
+        /// station-wide rather than per-patient-location because NPCInstances do not
+        /// carry a tile-grid position, and a single designated bay benefits all surgery
+        /// performed on the station.
+        /// Returns 0 when no qualifying active room bonus exists.
         /// </summary>
-        public static float GetRoomFacilityBonus(NPCInstance patient, StationState station)
+        public static float GetRoomFacilityBonus(StationState station)
         {
             if (station == null) return 0f;
             foreach (var bs in station.roomBonusCache.Values)
@@ -85,8 +88,8 @@ namespace Waystation.Systems
         /// Performs a surgery roll for a surgeon NPC operating on a wound at a given part.
         /// Returns (outcome, roll, criticalFailureResult) where criticalFailureResult is
         /// null unless outcome is CriticalFailure.
-        /// If facilityModifier is not supplied, it is automatically derived from the
-        /// room bonus cache (medical_bay assignment at the patient's location).
+        /// If facilityModifier is not supplied, it is automatically derived from the room
+        /// bonus cache: +2 when any active medical_bay room exists on the station, 0 otherwise.
         /// </summary>
         public (SurgeryOutcome outcome, int roll, CriticalFailureResult? cfResult)
             PerformSurgery(NPCInstance surgeon, NPCInstance patient,
@@ -99,7 +102,7 @@ namespace Waystation.Systems
 
             // Auto-compute facility modifier from room bonus cache when not explicitly supplied
             if (float.IsNaN(facilityModifier))
-                facilityModifier = GetRoomFacilityBonus(patient, station);
+                facilityModifier = GetRoomFacilityBonus(station);
 
             int surgeryLevel = SkillSystem.GetSkillLevel(surgeon, "skill.surgery");
             int medicalLevel = SkillSystem.GetSkillLevel(surgeon, "skill.medical");

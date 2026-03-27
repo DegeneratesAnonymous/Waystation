@@ -519,10 +519,13 @@ namespace Waystation.Systems
                 NetworkRebuildNeeded = true;
 
             // Signal a room bonus cache rebuild when a workbench or structural element
-            // (wall/door) completes — these are the layout changes that affect rooms.
+            // (category=="structure", tileLayer==1) completes — these are the layout
+            // changes that affect room connectivity. Using defn.category rather than
+            // a substring match avoids false positives like "buildable.wall_art".
             if (defn.workbenchRoomType != null ||
-                foundation.buildableId.Contains("wall") ||
-                foundation.buildableId.Contains("door"))
+                (defn.category == "structure" && defn.tileLayer == 1 &&
+                 (foundation.buildableId.Contains("wall") ||
+                  foundation.buildableId.Contains("door"))))
                 RoomRebuildNeeded = true;
 
             station.LogEvent(

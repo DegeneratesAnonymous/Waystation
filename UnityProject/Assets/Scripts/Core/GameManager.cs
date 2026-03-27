@@ -486,14 +486,18 @@ namespace Waystation.Core
             }
             // If a workbench or structural foundation completed, rebuild room bonus
             // cache within the same tick so bonuses are current for Research/Building.
-            if (Building.RoomRebuildNeeded)
+            // Track whether a forced rebuild occurred so the interval-based Rooms.Tick()
+            // is skipped this tick to avoid scanning all foundations twice.
+            bool roomRebuildDoneThisTick = Building.RoomRebuildNeeded;
+            if (roomRebuildDoneThisTick)
             {
                 Rooms.RebuildBonusCache(Station);
                 Building.ClearRoomRebuildFlag();
             }
             Comms.Tick(Station);
             Missions.Tick(Station);
-            Rooms.Tick(Station);
+            // Only run the interval tick when no forced rebuild already occurred this tick.
+            if (!roomRebuildDoneThisTick) Rooms.Tick(Station);
             Research.Tick(Station);
             Map.Tick(Station);
             AsteroidMissions.Tick(Station);

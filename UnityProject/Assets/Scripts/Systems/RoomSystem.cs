@@ -9,11 +9,14 @@
 // RoomBonusState.autoSuggestedRoomType as a non-binding hint for the UI.
 //
 // A bonus room requires:
-//   1. A player-assigned room type whose workbenchCap > 0.
-//   2. One or more workbenches whose workbenchRoomType matches the assignment.
+//   1. A player-assigned, bonus-capable room type (this includes both
+//      workbench-driven types with workbenchCap > 0 and designation-only
+//      types such as medical_bay / hangar where workbenchCap == 0).
+//   2. One or more workbenches whose workbenchRoomType matches the assignment,
+//      if the room type is workbench-driven (workbenchCap > 0).
 //   3. The room's non-workbench furniture meets the type's requirementsPerWorkbench.
-//   4. At most <workbenchCap> workbenches earn the bonus; extras above the cap
-//      still exist but do not receive hasRoomBonus.
+//   4. For types with workbenchCap > 0, at most <workbenchCap> workbenches earn
+//      the bonus; extras above the cap still exist but do not receive hasRoomBonus.
 //
 // When all requirements are met, every qualifying workbench foundation has
 // hasRoomBonus=true and roomBonusMultiplier set from the type's skillBonuses
@@ -22,7 +25,7 @@
 //
 // Layout change hooks: RebuildBonusCache() is called directly by GameHUD after
 // any wall/door/workbench placement or removal, and by BuildingSystem (via
-// GameManager) when a workbench foundation completes construction.
+// GameManager) when a workbench or structural foundation completes construction.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -269,7 +272,25 @@ namespace Waystation.Systems
                 _registry.RoomTypes.TryGetValue(assignedTypeId, out typeDef);
             if (typeDef == null)
                 typeDef = station.customRoomTypes.FirstOrDefault(t => t.id == assignedTypeId);
-            if (typeDef == null) return;
+            if (typeDef == null)
+            {
+                // Assigned type id no longer resolves (e.g. content removed or save from
+                // a different version). Clear the stale assignment and write a non-active
+                // cache entry so the UI and bonus systems stay consistent.
+                station.playerRoomTypeAssignments.Remove(roomKey);
+                station.roomBonusCache[roomKey] = new RoomBonusState
+                {
+                    roomKey               = roomKey,
+                    workbenchRoomType     = null,
+                    displayName           = null,
+                    bonusActive           = false,
+                    workbenchCount        = workbenches.Count,
+                    autoSuggestedRoomType = autoSuggest,
+                    workbenchUids         = workbenches.Select(b => b.uid).ToList(),
+                    requirements          = new List<RoomRequirementProgress>(),
+                };
+                return;
+            }
 
             // Workbenches that match the assigned type
             var matchingBenches = workbenches

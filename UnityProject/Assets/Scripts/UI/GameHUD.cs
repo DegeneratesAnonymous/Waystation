@@ -1541,13 +1541,32 @@ namespace Waystation.UI
                     }
                     GUI.color = colPrev;
 
-                    // Workbench count
+                    // Workbench count — resolve cap from assigned type (registry first,
+                    // then custom types) to handle custom room type caps correctly.
                     int cap = 3;
-                    if (_gm.Registry?.RoomTypes?.TryGetValue(bonusState.workbenchRoomType ?? "", out var rtd) == true)
-                        cap = rtd.workbenchCap;
-                    string wbLabel = bonusState.workbenchCount > cap
-                        ? $"Workbenches: {bonusState.workbenchCount} (cap {cap} earn bonus)"
-                        : $"Workbenches: {bonusState.workbenchCount}/{cap}";
+                    if (!string.IsNullOrEmpty(bonusState.workbenchRoomType))
+                    {
+                        if (_gm.Registry?.RoomTypes?.TryGetValue(bonusState.workbenchRoomType, out var rtd) == true)
+                            cap = rtd.workbenchCap;
+                        else
+                        {
+                            var custRt = s.customRoomTypes.FirstOrDefault(
+                                t => t.id == bonusState.workbenchRoomType);
+                            if (custRt != null) cap = custRt.workbenchCap;
+                        }
+                    }
+                    string wbLabel;
+                    if (cap <= 0)
+                    {
+                        // Designation-only room type — bonus is from room assignment, not workbenches.
+                        wbLabel = "Workbenches: designation-only";
+                    }
+                    else
+                    {
+                        wbLabel = bonusState.workbenchCount > cap
+                            ? $"Workbenches: {bonusState.workbenchCount} (cap {cap} earn bonus)"
+                            : $"Workbenches: {bonusState.workbenchCount}/{cap}";
+                    }
                     GUI.Label(new Rect(10f, y + 22f, cw - 14f, LineH), wbLabel, _sSub);
 
                     float ry2 = y + 28f;
