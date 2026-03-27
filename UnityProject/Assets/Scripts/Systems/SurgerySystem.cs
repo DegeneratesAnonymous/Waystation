@@ -66,18 +66,40 @@ namespace Waystation.Systems
         // ── Main Surgery API ──────────────────────────────────────────────────
 
         /// <summary>
+        /// Returns the facility bonus modifier (+2 roll bonus) when any room on the
+        /// station has an active medical_bay room type assignment.
+        /// Returns 0 if no qualifying active room bonus exists.
+        /// </summary>
+        public static float GetRoomFacilityBonus(NPCInstance patient, StationState station)
+        {
+            if (station == null) return 0f;
+            foreach (var bs in station.roomBonusCache.Values)
+            {
+                if (bs.bonusActive && bs.workbenchRoomType == "medical_bay")
+                    return 2f; // +2 flat roll bonus for a fully equipped, designated Medical Bay
+            }
+            return 0f;
+        }
+
+        /// <summary>
         /// Performs a surgery roll for a surgeon NPC operating on a wound at a given part.
         /// Returns (outcome, roll, criticalFailureResult) where criticalFailureResult is
         /// null unless outcome is CriticalFailure.
+        /// If facilityModifier is not supplied, it is automatically derived from the
+        /// room bonus cache (medical_bay assignment at the patient's location).
         /// </summary>
         public (SurgeryOutcome outcome, int roll, CriticalFailureResult? cfResult)
             PerformSurgery(NPCInstance surgeon, NPCInstance patient,
                           string targetPartId, Wound targetWound,
                           StationState station,
                           float environmentModifier = 0f,
-                          float facilityModifier    = 0f)
+                          float facilityModifier    = float.NaN)
         {
             if (!FeatureFlags.MedicalSystem) return (SurgeryOutcome.Failure, 0, null);
+
+            // Auto-compute facility modifier from room bonus cache when not explicitly supplied
+            if (float.IsNaN(facilityModifier))
+                facilityModifier = GetRoomFacilityBonus(patient, station);
 
             int surgeryLevel = SkillSystem.GetSkillLevel(surgeon, "skill.surgery");
             int medicalLevel = SkillSystem.GetSkillLevel(surgeon, "skill.medical");
