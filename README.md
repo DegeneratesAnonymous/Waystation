@@ -23,6 +23,7 @@ A sci-fi space station management game in early development. You command a front
 - Watch crew morale, friendships, rivalries, and relationships evolve through proximity and conversation
 - Track per-body-part injuries: wounds bleed, infect, and require treatment; skilled surgeons can operate with dramatic consequences
 - Chart a procedurally generated solar system and galaxy of 80+ sectors, each with unique phenomena and discovery states
+- Procedurally Generated Factions that generate with their regional history are also procedurally generated to factor in factions generated later
 
 ---
 
