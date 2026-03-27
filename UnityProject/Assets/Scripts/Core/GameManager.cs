@@ -484,9 +484,20 @@ namespace Waystation.Core
                 UtilityNetworks.RebuildAll(Station);
                 Building.ClearNetworkRebuildFlag();
             }
+            // If a workbench or structural foundation completed, rebuild room bonus
+            // cache within the same tick so bonuses are current for Research/Building.
+            // Track whether a forced rebuild occurred so the interval-based Rooms.Tick()
+            // is skipped this tick to avoid scanning all foundations twice.
+            bool roomRebuildDoneThisTick = Building.RoomRebuildNeeded;
+            if (roomRebuildDoneThisTick)
+            {
+                Rooms.RebuildBonusCache(Station);
+                Building.ClearRoomRebuildFlag();
+            }
             Comms.Tick(Station);
             Missions.Tick(Station);
-            Rooms.Tick(Station);
+            // Only run the interval tick when no forced rebuild already occurred this tick.
+            if (!roomRebuildDoneThisTick) Rooms.Tick(Station);
             Research.Tick(Station);
             Map.Tick(Station);
             AsteroidMissions.Tick(Station);
@@ -687,6 +698,11 @@ namespace Waystation.Core
             if (data.TryGetValue("custom_room_names", out var crn) && crn is Dictionary<string, object> crnDict)
                 foreach (var kv in crnDict) Station.customRoomNames[kv.Key] = kv.Value.ToString();
 
+            if (data.TryGetValue("player_room_type_assignments", out var prta)
+                && prta is Dictionary<string, object> prtaDict)
+                foreach (var kv in prtaDict)
+                    Station.playerRoomTypeAssignments[kv.Key] = kv.Value.ToString();
+
             // Research
             if (data.TryGetValue("research", out var rsr) && rsr is Dictionary<string, object> rsrDict
                 && Station.research != null)
@@ -785,17 +801,18 @@ namespace Waystation.Core
 
             var data = new Dictionary<string, object>
             {
-                { "station_name",         Station.stationName },
-                { "tick",                 Station.tick },
-                { "resources",            Station.resources },
-                { "faction_reputation",   Station.factionReputation },
-                { "active_tags",          new List<string>(Station.activeTags) },
-                { "policy",               Station.policy },
-                { "event_cooldowns",      Station.eventCooldowns },
-                { "log",                  Station.log },
-                { "custom_room_names",    Station.customRoomNames },
-                { "research",             researchData },
-                { "galaxy",               sectorSaveData },
+                { "station_name",                  Station.stationName },
+                { "tick",                          Station.tick },
+                { "resources",                     Station.resources },
+                { "faction_reputation",            Station.factionReputation },
+                { "active_tags",                   new List<string>(Station.activeTags) },
+                { "policy",                        Station.policy },
+                { "event_cooldowns",               Station.eventCooldowns },
+                { "log",                           Station.log },
+                { "custom_room_names",             Station.customRoomNames },
+                { "player_room_type_assignments",  Station.playerRoomTypeAssignments },
+                { "research",                      researchData },
+                { "galaxy",                        sectorSaveData },
                 // Full NPC/ship/module serialisation would go here in a production build
             };
             File.WriteAllText(path, MiniJSON.Json.Serialize(data));

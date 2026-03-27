@@ -80,5 +80,25 @@
     "skill_bonuses": {
       "science": 1.15
     }
+  },
+  {
+    "id": "medical_bay",
+    "display_name": "Medical Bay",
+    "workbench_cap": 0,
+    "requirements_per_workbench": [
+      {
+        "buildable_id_or_tag": "tag:lighting",
+        "count": 1,
+        "display_label": "Overhead Light"
+      },
+      {
+        "buildable_id_or_tag": "tag:storage",
+        "count": 1,
+        "display_label": "Storage Cabinet"
+      }
+    ],
+    "skill_bonuses": {
+      "medicine": 1.15
+    }
   }
 ]

@@ -337,6 +337,7 @@ namespace Waystation.UI
                 foreach (var uid in toUndo)
                     _gm.Building.UndoFoundation(_gm.Station, uid);
                 _gm.UtilityNetworks.RebuildAll(_gm.Station);
+                _gm.Rooms.RebuildBonusCache(_gm.Station);
                 StationRoomView.Instance?.ForceRefreshFoundations();
             }
 
@@ -372,6 +373,7 @@ namespace Waystation.UI
                 {
                     foreach (var (col, row) in _dragLine)
                         DeconstructTile(col, row);
+                    _gm.Rooms.RebuildBonusCache(_gm.Station);
                     StationRoomView.Instance?.ForceRefreshFoundations();
                     _isDragging = false;
                     _dragLine.Clear();
@@ -461,6 +463,7 @@ namespace Waystation.UI
                 if (allNew.Count > 0) _undoStack.Push(allNew);
 
                 _gm.UtilityNetworks.RebuildAll(_gm.Station);
+                _gm.Rooms.RebuildBonusCache(_gm.Station);
                 StationRoomView.Instance?.ForceRefreshFoundations();
                 _isDragging = false;
                 _dragLine.Clear();
@@ -1002,8 +1005,10 @@ namespace Waystation.UI
         private string  _newRoomTypeSkillVal = "1.10";
         // Per-room name edit buffers: key = roomKey, value = text buffer
         private readonly Dictionary<string, string> _roomNameBuffers = new Dictionary<string, string>();
-        // Track which rooms have their role picker open
+        // Track which rooms have their role picker open (legacy visual role)
         private string  _buildRoomRolePicker = "";   // roomKey with open picker, "" = none
+        // Track which rooms have their room-type assignment picker open
+        private string  _buildRoomTypePicker = "";   // roomKey with open type picker, "" = none
 
         // ── Ghost placement ───────────────────────────────────────────────────
         private string _ghostBuildableId = null;
@@ -1290,25 +1295,35 @@ namespace Waystation.UI
                 }
             }
 
+            // Collect all available room types (built-in + custom)
+            var allRoomTypes = new List<RoomTypeDefinition>();
+            if (_gm.Registry?.RoomTypes != null)
+                foreach (var rtKv in _gm.Registry.RoomTypes)
+                    allRoomTypes.Add(rtKv.Value);
+            foreach (var ct in s.customRoomTypes)
+                allRoomTypes.Add(ct);
+
             // ── Estimate content height ───────────────────────────────────────
             float innerH = 8f;
             innerH += 24f; // section header "Rooms"
             foreach (var kv in discovered)
             {
+                string roomKey = kv.Key;
                 innerH += 36f;  // room header
                 innerH += 24f;  // name field row
                 innerH += 24f;  // role row
-                bool hasBonus = false;
-                foreach (var bk in s.roomBonusCache.Keys)
-                    if (bk.StartsWith(kv.Key + "_")) { hasBonus = true; break; }
-                if (hasBonus)
-                {
-                    foreach (var bkv in s.roomBonusCache)
-                        if (bkv.Key.StartsWith(kv.Key + "_"))
-                            innerH += 28f + bkv.Value.requirements.Count * 20f + 16f;
-                }
+                innerH += 26f;  // room type assignment row
+
+                bool typePOpen = _buildRoomTypePicker == roomKey;
+                if (typePOpen)
+                    innerH += (allRoomTypes.Count + 1) * 22f + 8f; // type picker dropdown
+
+                // Bonus card
+                if (s.roomBonusCache.TryGetValue(roomKey, out var bsCached) && bsCached.workbenchRoomType != null)
+                    innerH += 28f + bsCached.requirements.Count * 20f + 16f;
                 else
-                    innerH += 20f;
+                    innerH += 20f; // "no assignment" hint
+
                 innerH += 8f; // gap
             }
             innerH += 24f; // section header "Room Types"
@@ -1337,11 +1352,15 @@ namespace Waystation.UI
             {
                 string roomKey = kv.Key;
 
-                // Look up bonus + role
+                // Look up visual role + player type assignment
                 s.roomRoles.TryGetValue(roomKey, out string roleId);
-                string roleName = "";
+                string roleName  = "";
                 Color  roleColor = new Color(0.40f, 0.40f, 0.45f, 0.40f);
                 foreach (var rr in RoomRoles) if (rr.id == roleId) { roleName = rr.label; roleColor = rr.col; break; }
+
+                s.playerRoomTypeAssignments.TryGetValue(roomKey, out string assignedTypeId);
+                s.roomBonusCache.TryGetValue(roomKey, out var bonusState);
+                string autoSuggest = bonusState?.autoSuggestedRoomType;
 
                 // Custom name
                 if (!_roomNameBuffers.ContainsKey(roomKey))
@@ -1361,7 +1380,10 @@ namespace Waystation.UI
                 }
                 // Role change button
                 if (GUI.Button(new Rect(cw - 78f, y + 5f, 74f, 20f), "Change Role", _sBtnSmall))
+                {
                     _buildRoomRolePicker = _buildRoomRolePicker == roomKey ? "" : roomKey;
+                    _buildRoomTypePicker = "";
+                }
                 y += 36f;
 
                 // ── Role picker ───────────────────────────────────────────────
@@ -1398,20 +1420,112 @@ namespace Waystation.UI
                 }
                 y += 26f;
 
-                // ── Bonus cards ───────────────────────────────────────────────
-                bool anyBonus = false;
-                foreach (var bkv in s.roomBonusCache)
+                // ── Room type assignment row ──────────────────────────────────
                 {
-                    if (!bkv.Key.StartsWith(roomKey + "_")) continue;
-                    anyBonus = true;
-                    var bs = bkv.Value;
+                    string assignedLabel = "Unassigned";
+                    if (!string.IsNullOrEmpty(assignedTypeId))
+                    {
+                        assignedLabel = assignedTypeId;
+                        RoomTypeDefinition rtLookup = null;
+                        _gm.Registry?.RoomTypes?.TryGetValue(assignedTypeId, out rtLookup);
+                        if (rtLookup == null)
+                            rtLookup = s.customRoomTypes.FirstOrDefault(t => t.id == assignedTypeId);
+                        if (rtLookup != null) assignedLabel = rtLookup.displayName;
+                    }
 
-                    float cardH = 28f + bs.requirements.Count * 20f + 16f;
-                    DrawSolid(new Rect(4f, y, cw - 4f, cardH), new Color(ColBarBg.r, ColBarBg.g, ColBarBg.b, 0.75f));
+                    GUI.color = ColTextMid;
+                    GUI.Label(new Rect(4f, y + 4f, 58f, 16f), "Room Type:", _sSub);
+                    GUI.color = string.IsNullOrEmpty(assignedTypeId) ? ColTextMid : ColTextBright;
+                    GUI.Label(new Rect(64f, y + 4f, cw - 160f, 16f), assignedLabel, _sSub);
+                    GUI.color = colPrev;
+
+                    float btnX = cw - 88f;
+                    if (GUI.Button(new Rect(btnX, y, 84f, 22f),
+                        _buildRoomTypePicker == roomKey ? "\u25b2 Close" : "\u25bc Assign", _sBtnSmall))
+                    {
+                        _buildRoomTypePicker = _buildRoomTypePicker == roomKey ? "" : roomKey;
+                        _buildRoomRolePicker = "";
+                    }
+                    y += 26f;
+
+                    // ── Type picker dropdown ──────────────────────────────────
+                    if (_buildRoomTypePicker == roomKey)
+                    {
+                        float pickerH = (allRoomTypes.Count + 1) * 22f + 8f;
+                        DrawSolid(new Rect(4f, y, cw - 4f, pickerH), ColDrawer);
+                        float ty = y + 4f;
+
+                        // Auto-suggest hint
+                        if (!string.IsNullOrEmpty(autoSuggest))
+                        {
+                            string suggestName = autoSuggest;
+                            RoomTypeDefinition suggestDef = null;
+                            _gm.Registry?.RoomTypes?.TryGetValue(autoSuggest, out suggestDef);
+                            if (suggestDef == null)
+                                suggestDef = s.customRoomTypes.FirstOrDefault(t => t.id == autoSuggest);
+                            if (suggestDef != null) suggestName = suggestDef.displayName;
+
+                            GUI.color = new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.75f);
+                            GUI.Label(new Rect(10f, ty, cw - 14f, 16f),
+                                $"\u2605 Suggested: {suggestName}", _sSub);
+                            GUI.color = colPrev;
+                            ty += 18f;
+                        }
+
+                        // "No assignment" option
+                        {
+                            bool cur = string.IsNullOrEmpty(assignedTypeId);
+                            GUI.color = cur ? ColAccent : ColTextBase;
+                            if (GUI.Button(new Rect(8f, ty, cw - 12f, 20f), "— Unassigned (no bonus)", _sBtnSmall))
+                            {
+                                _gm.Rooms.AssignRoomType(s, roomKey, null);
+                                _buildRoomTypePicker = "";
+                            }
+                            GUI.color = colPrev;
+                            ty += 22f;
+                        }
+
+                        // Each available type
+                        foreach (var rt in allRoomTypes)
+                        {
+                            bool cur = assignedTypeId == rt.id;
+                            GUI.color = cur ? ColAccent : ColTextBright;
+
+                            // Build bonus description — accumulate all skill bonuses
+                            var bonusParts = new System.Text.StringBuilder();
+                            foreach (var skv in rt.skillBonuses)
+                            {
+                                if (bonusParts.Length > 0) bonusParts.Append(", ");
+                                bonusParts.Append($"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}");
+                            }
+                            string bonusDesc = bonusParts.ToString();
+                            string btnLabel = string.IsNullOrEmpty(bonusDesc)
+                                ? rt.displayName
+                                : $"{rt.displayName}  [{bonusDesc}]";
+
+                            if (GUI.Button(new Rect(8f, ty, cw - 12f, 20f), btnLabel, _sBtnSmall))
+                            {
+                                _gm.Rooms.AssignRoomType(s, roomKey, rt.id);
+                                _buildRoomTypePicker = "";
+                            }
+                            GUI.color = colPrev;
+                            ty += 22f;
+                        }
+
+                        y += pickerH;
+                    }
+                }
+
+                // ── Bonus card (only shown when a type is assigned) ───────────
+                if (bonusState != null && !string.IsNullOrEmpty(bonusState.workbenchRoomType))
+                {
+                    float cardH = 28f + bonusState.requirements.Count * 20f + 16f;
+                    DrawSolid(new Rect(4f, y, cw - 4f, cardH),
+                        new Color(ColBarBg.r, ColBarBg.g, ColBarBg.b, 0.75f));
 
                     // Header row: type name + status
-                    string typeName = bs.displayName ?? bs.workbenchRoomType ?? "Unknown";
-                    if (bs.bonusActive)
+                    string typeName = bonusState.displayName ?? bonusState.workbenchRoomType;
+                    if (bonusState.bonusActive)
                     {
                         GUI.color = ColBarWarn;
                         GUI.Label(new Rect(10f, y + 4f, cw - 90f, 16f), $"\u2605 {typeName}", _sLabel);
@@ -1427,19 +1541,38 @@ namespace Waystation.UI
                     }
                     GUI.color = colPrev;
 
-                    // Workbench count
+                    // Workbench count — resolve cap from assigned type (registry first,
+                    // then custom types) to handle custom room type caps correctly.
                     int cap = 3;
-                    if (_gm.Registry?.RoomTypes?.TryGetValue(bs.workbenchRoomType ?? "", out var rtd) == true)
-                        cap = rtd.workbenchCap;
-                    string wbLabel = bs.workbenchCount > cap
-                        ? $"Workbenches: {bs.workbenchCount} (cap {cap} earn bonus)"
-                        : $"Workbenches: {bs.workbenchCount}/{cap}";
+                    if (!string.IsNullOrEmpty(bonusState.workbenchRoomType))
+                    {
+                        if (_gm.Registry?.RoomTypes?.TryGetValue(bonusState.workbenchRoomType, out var rtd) == true)
+                            cap = rtd.workbenchCap;
+                        else
+                        {
+                            var custRt = s.customRoomTypes.FirstOrDefault(
+                                t => t.id == bonusState.workbenchRoomType);
+                            if (custRt != null) cap = custRt.workbenchCap;
+                        }
+                    }
+                    string wbLabel;
+                    if (cap <= 0)
+                    {
+                        // Designation-only room type — bonus is from room assignment, not workbenches.
+                        wbLabel = "Workbenches: designation-only";
+                    }
+                    else
+                    {
+                        wbLabel = bonusState.workbenchCount > cap
+                            ? $"Workbenches: {bonusState.workbenchCount} (cap {cap} earn bonus)"
+                            : $"Workbenches: {bonusState.workbenchCount}/{cap}";
+                    }
                     GUI.Label(new Rect(10f, y + 22f, cw - 14f, LineH), wbLabel, _sSub);
 
                     float ry2 = y + 28f;
 
                     // Requirements checklist
-                    foreach (var req in bs.requirements)
+                    foreach (var req in bonusState.requirements)
                     {
                         bool met = req.IsMet;
                         GUI.color = met ? ColBarGreen : ColBarCrit;
@@ -1454,12 +1587,13 @@ namespace Waystation.UI
 
                     y += cardH;
                 }
-
-                if (!anyBonus)
+                else
                 {
                     GUI.color = ColTextMid;
-                    GUI.Label(new Rect(8f, y, cw - 12f, 16f),
-                        "No workbench in this room \u2014 place a workbench to define a room type.", _sSub);
+                    string hint = string.IsNullOrEmpty(autoSuggest)
+                        ? "No workbench in this room \u2014 place a workbench, then assign a room type."
+                        : "Assign a room type above to enable workbench bonuses.";
+                    GUI.Label(new Rect(8f, y, cw - 12f, 16f), hint, _sSub);
                     GUI.color = colPrev;
                     y += 20f;
                 }
@@ -1484,11 +1618,14 @@ namespace Waystation.UI
                     GUI.color = ColTextMid;
                     GUI.Label(new Rect(cw * 0.56f, y + 4f, cw * 0.24f, 16f), "(built-in)", _sSub);
                     GUI.color = colPrev;
-                    // Show skill bonus
-                    string bonusTxt = "";
+                    // Show skill bonuses (accumulate all entries)
+                    var bonusParts2 = new System.Text.StringBuilder();
                     foreach (var skv in rt.skillBonuses)
-                        bonusTxt = $"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}";
-                    GUI.Label(new Rect(cw * 0.80f, y + 4f, cw * 0.20f, 16f), bonusTxt, _sSub);
+                    {
+                        if (bonusParts2.Length > 0) bonusParts2.Append(", ");
+                        bonusParts2.Append($"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}");
+                    }
+                    GUI.Label(new Rect(cw * 0.80f, y + 4f, cw * 0.20f, 16f), bonusParts2.ToString(), _sSub);
                     y += 28f;
                 }
             }
@@ -4435,14 +4572,13 @@ namespace Waystation.UI
                                   ? cn
                                   : $"Room {roomKey.Split('_')[0]}";
 
-                // Requirements status from roomBonusCache
+                // Requirements status from roomBonusCache (keyed by roomKey)
                 bool hasBonus = false;
                 bool allMet   = true;
-                foreach (var bkv in s.roomBonusCache)
+                if (s.roomBonusCache.TryGetValue(roomKey, out var roomBonusDot))
                 {
-                    if (!bkv.Key.StartsWith(roomKey + "_")) continue;
-                    if (!bkv.Value.bonusActive) allMet = false;
-                    hasBonus = true;
+                    hasBonus = roomBonusDot.workbenchRoomType != null;
+                    if (!roomBonusDot.bonusActive) allMet = false;
                 }
                 Color reqDotCol = !hasBonus    ? new Color(0.4f, 0.4f, 0.5f)
                                 : allMet        ? ColBarGreen
@@ -4499,18 +4635,17 @@ namespace Waystation.UI
                              && (Time.realtimeSinceStartup - _stationRoomHoverTime) >= 2.0f;
             if (showPopup && s.roomBonusCache.Count > 0)
             {
-                // Collect requirements for this room
+                // Collect requirements for this room (now keyed by roomKey)
                 var reqLines = new System.Text.StringBuilder();
-                foreach (var bkv in s.roomBonusCache)
+                if (s.roomBonusCache.TryGetValue(_stationRoomHoverKey, out var popupBs)
+                    && popupBs.workbenchRoomType != null)
                 {
-                    if (!bkv.Key.StartsWith(_stationRoomHoverKey + "_")) continue;
-                    var bs = bkv.Value;
-                    string tname = bs.displayName ?? bs.workbenchRoomType ?? "Room";
-                    reqLines.AppendLine(tname + (bs.bonusActive ? " \u2605" : ""));
-                    foreach (var req in bs.requirements)
+                    string tname = popupBs.displayName ?? popupBs.workbenchRoomType;
+                    reqLines.AppendLine(tname + (popupBs.bonusActive ? " \u2605" : ""));
+                    foreach (var req in popupBs.requirements)
                         reqLines.AppendLine($"  {(req.IsMet ? "\u2713" : "\u2717")} {req.displayLabel}: {req.current}/{req.required}");
                 }
-                string popupText = reqLines.Length > 0 ? reqLines.ToString().TrimEnd() : "No room bonuses.";
+                string popupText = reqLines.Length > 0 ? reqLines.ToString().TrimEnd() : "No room type assigned.";
                 float popW = 200f;
                 float lineCount = popupText.Split('\n').Length;
                 float popH = lineCount * 16f + 12f;

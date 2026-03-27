@@ -52,6 +52,17 @@ namespace Waystation.Systems
         public void ClearNetworkRebuildFlag() => NetworkRebuildNeeded = false;
 
         /// <summary>
+        /// Set to true when a workbench or structural foundation (wall/door) transitions
+        /// to "complete".  GameManager checks this after Tick() and calls
+        /// Rooms.RebuildBonusCache() so the bonus cache is current within the same tick.
+        /// Cleared by GameManager after the rebuild.
+        /// </summary>
+        public bool RoomRebuildNeeded { get; private set; }
+
+        /// <summary>Called by GameManager after it has triggered a room bonus rebuild.</summary>
+        public void ClearRoomRebuildFlag() => RoomRebuildNeeded = false;
+
+        /// <summary>
         /// When true, foundations skip the haul phase and complete instantly
         /// without consuming any materials.  Toggled via the in-game Dev Tools button.
         /// </summary>
@@ -506,6 +517,16 @@ namespace Waystation.Systems
             // Signal that utility networks need a rebuild so this tile joins its network.
             if (defn.networkType != null)
                 NetworkRebuildNeeded = true;
+
+            // Signal a room bonus cache rebuild when a workbench or structural element
+            // (category=="structure", tileLayer==1) completes — these are the layout
+            // changes that affect room connectivity. Using defn.category rather than
+            // a substring match avoids false positives like "buildable.wall_art".
+            if (defn.workbenchRoomType != null ||
+                (defn.category == "structure" && defn.tileLayer == 1 &&
+                 (foundation.buildableId.Contains("wall") ||
+                  foundation.buildableId.Contains("door"))))
+                RoomRebuildNeeded = true;
 
             station.LogEvent(
                 $"{defn.displayName} construction complete at " +

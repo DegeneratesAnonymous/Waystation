@@ -1,19 +1,31 @@
 // RoomSystem.cs
 // Evaluates room bonus conditions every 10 ticks.
-// A "bonus room" requires:
-//   1. One or more workbenches of the same workbenchRoomType in the room.
-//   2. The room's non-workbench objects have enough combined beautyScore.
-//   3. The room has enough non-workbench, non-floor, non-wall foundations.
-//   4. At most 3 workbenches of that type (no bonus granted above the cap, but
-//      existing workbenches up to the cap still receive the bonus).
+// Bonuses are only applied to rooms that have a player-assigned room type
+// (StationState.playerRoomTypeAssignments).  Rooms without an assignment
+// receive no bonus — this is the explicit null state required by the
+// acceptance criteria.
 //
-// When all requirements are met, every qualifying workbench in the room has
-// hasRoomBonus=true and roomBonusMultiplier set from workbenchSkillBonuses.
-// The multiplier is the MAXIMUM single-skill value (so one number drives all skill
-// modifiers; individual skill lookups happen in the calling system).
+// Auto-suggest: the dominant workbench type in a room is surfaced in
+// RoomBonusState.autoSuggestedRoomType as a non-binding hint for the UI.
 //
-// The RoomBonusState cache in StationState.roomBonusCache is also populated so
-// the UI can display progress.
+// A bonus room requires:
+//   1. A player-assigned, bonus-capable room type (this includes both
+//      workbench-driven types with workbenchCap > 0 and designation-only
+//      types such as medical_bay / hangar where workbenchCap == 0).
+//   2. One or more workbenches whose workbenchRoomType matches the assignment,
+//      if the room type is workbench-driven (workbenchCap > 0).
+//   3. The room's non-workbench furniture meets the type's requirementsPerWorkbench.
+//   4. For types with workbenchCap > 0, at most <workbenchCap> workbenches earn
+//      the bonus; extras above the cap still exist but do not receive hasRoomBonus.
+//
+// When all requirements are met, every qualifying workbench foundation has
+// hasRoomBonus=true and roomBonusMultiplier set from the type's skillBonuses
+// (maximum single-skill value drives roomBonusMultiplier; per-skill lookup
+// happens in the consuming system).
+//
+// Layout change hooks: RebuildBonusCache() is called directly by GameHUD after
+// any wall/door/workbench placement or removal, and by BuildingSystem (via
+// GameManager) when a workbench or structural foundation completes construction.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -38,6 +50,32 @@ namespace Waystation.Systems
         {
             if (station.tick % TickInterval != 0) return;
             RebuildBonusCache(station);
+        }
+
+        /// <summary>
+        /// Assign a room type to a room and immediately rebuild the bonus cache.
+        /// Pass null or empty string to remove the assignment (room receives no bonus).
+        /// </summary>
+        public void AssignRoomType(StationState station, string roomKey, string roomTypeId)
+        {
+            if (string.IsNullOrEmpty(roomTypeId))
+                station.playerRoomTypeAssignments.Remove(roomKey);
+            else
+                station.playerRoomTypeAssignments[roomKey] = roomTypeId;
+
+            RebuildBonusCache(station);
+        }
+
+        /// <summary>
+        /// Returns the auto-suggested room type for the given room key (dominant
+        /// workbench type in the room), or null if the room has no typed workbenches.
+        /// The suggestion is non-binding — it is only used to pre-populate the UI.
+        /// </summary>
+        public string GetAutoSuggest(StationState station, string roomKey)
+        {
+            if (station.roomBonusCache.TryGetValue(roomKey, out var bs))
+                return bs.autoSuggestedRoomType;
+            return null;
         }
 
         /// Force an immediate cache rebuild (call on game load).
@@ -177,105 +215,165 @@ namespace Waystation.Systems
         {
             if (tiles.Count == 0) return;
 
-            // Collect all foundations within the room tiles
-            var tileSet        = new HashSet<(int, int)>(tiles);
-            var roomFoundations = new List<FoundationInstance>();
-            foreach (var f in station.foundations.Values)
-                if (tileSet.Contains((f.tileCol, f.tileRow)))
-                    roomFoundations.Add(f);
-
-            // Find all typed workbenches
-            var workbenches = roomFoundations
-                .Where(f => GetDef(f) is { } d && d.workbenchRoomType != null)
-                .ToList();
-
-            if (workbenches.Count == 0) return;
-
-            // Group by workbench type — pick the type with the most representatives
-            var groups = workbenches
-                .GroupBy(f => GetDef(f).workbenchRoomType)
-                .OrderByDescending(g => g.Count())
-                .ToList();
-
             // Build canonical room key from the minimum tile position
             int minC = tiles.Min(t => t.col);
             int minR = tiles.Min(t => t.row);
             string roomKey = $"{minC}_{minR}";
 
-            foreach (var group in groups)
+            // Collect all foundations within the room tiles
+            var tileSet         = new HashSet<(int, int)>(tiles);
+            var roomFoundations = new List<FoundationInstance>();
+            foreach (var f in station.foundations.Values)
+                if (tileSet.Contains((f.tileCol, f.tileRow)))
+                    roomFoundations.Add(f);
+
+            // Identify all typed workbenches (complete only)
+            var workbenches = roomFoundations
+                .Where(f => f.status == "complete" &&
+                            GetDef(f) is { } d && d.workbenchRoomType != null)
+                .ToList();
+
+            // Compute auto-suggest: dominant workbench type (non-binding)
+            string autoSuggest = null;
+            if (workbenches.Count > 0)
             {
-                string roomType = group.Key;
-                var    benches  = group.ToList();
-
-                // Look up the RoomTypeDefinition — registry first, then custom
-                RoomTypeDefinition typeDef = null;
-                if (_registry?.RoomTypes != null)
-                    _registry.RoomTypes.TryGetValue(roomType, out typeDef);
-                if (typeDef == null)
-                    typeDef = station.customRoomTypes.FirstOrDefault(t => t.id == roomType);
-                if (typeDef == null) continue;
-
-                int cap              = typeDef.workbenchCap;
-                var eligibleBenches  = benches.Take(cap).ToList();
-                int workbenchCount   = benches.Count;
-                int eligibleCount    = eligibleBenches.Count;
-
-                // Non-workbench, non-floor/wall foundations available as furniture
-                var furnitureFoundations = roomFoundations
-                    .Where(f => !IsFloorOrWall(f) &&
-                                !(GetDef(f) is { } d && d.workbenchRoomType != null))
-                    .ToList();
-
-                // Evaluate each requirement slot
-                var progressList = new List<RoomRequirementProgress>();
-                bool allMet      = true;
-
-                foreach (var req in typeDef.requirementsPerWorkbench)
-                {
-                    int required = req.countPerWorkbench * eligibleCount;
-                    int current  = furnitureFoundations
-                        .Count(f => MatchesRequirement(f, req.buildableIdOrTag));
-
-                    var prog = new RoomRequirementProgress
-                    {
-                        displayLabel = req.displayLabel,
-                        current      = current,
-                        required     = required,
-                    };
-                    progressList.Add(prog);
-                    if (!prog.IsMet) allMet = false;
-                }
-
-                bool bonusActive = allMet && typeDef.requirementsPerWorkbench.Count > 0;
-
-                // Compute multiplier from the type's skill bonus map
-                float multiplier = 1.0f;
-                if (bonusActive && typeDef.skillBonuses.Count > 0)
-                    multiplier = typeDef.skillBonuses.Values.Max();
-
-                // Apply flags to each qualifying workbench foundation
-                if (bonusActive)
-                {
-                    foreach (var bench in eligibleBenches)
-                    {
-                        bench.hasRoomBonus        = true;
-                        bench.roomBonusMultiplier = multiplier;
-                    }
-                }
-
-                // Store state in cache for UI display
-                string cacheKey = $"{roomKey}_{roomType}";
-                station.roomBonusCache[cacheKey] = new RoomBonusState
-                {
-                    roomKey           = roomKey,
-                    workbenchRoomType = roomType,
-                    displayName       = typeDef.displayName,
-                    bonusActive       = bonusActive,
-                    workbenchCount    = workbenchCount,
-                    workbenchUids     = eligibleBenches.Select(b => b.uid).ToList(),
-                    requirements      = progressList,
-                };
+                autoSuggest = workbenches
+                    .GroupBy(f => GetDef(f).workbenchRoomType)
+                    .OrderByDescending(g => g.Count())
+                    .First().Key;
             }
+
+            // Check whether the player has assigned a room type
+            station.playerRoomTypeAssignments.TryGetValue(roomKey, out string assignedTypeId);
+
+            if (string.IsNullOrEmpty(assignedTypeId))
+            {
+                // No player assignment → no bonus, but store auto-suggest so UI can show hint
+                if (autoSuggest != null || workbenches.Count > 0)
+                {
+                    station.roomBonusCache[roomKey] = new RoomBonusState
+                    {
+                        roomKey               = roomKey,
+                        workbenchRoomType     = null,
+                        displayName           = null,
+                        bonusActive           = false,
+                        workbenchCount        = workbenches.Count,
+                        autoSuggestedRoomType = autoSuggest,
+                        workbenchUids         = workbenches.Select(b => b.uid).ToList(),
+                        requirements          = new List<RoomRequirementProgress>(),
+                    };
+                }
+                return;
+            }
+
+            // Resolve assigned type definition
+            RoomTypeDefinition typeDef = null;
+            if (_registry?.RoomTypes != null)
+                _registry.RoomTypes.TryGetValue(assignedTypeId, out typeDef);
+            if (typeDef == null)
+                typeDef = station.customRoomTypes.FirstOrDefault(t => t.id == assignedTypeId);
+            if (typeDef == null)
+            {
+                // Assigned type id no longer resolves (e.g. content removed or save from
+                // a different version). Clear the stale assignment and write a non-active
+                // cache entry so the UI and bonus systems stay consistent.
+                station.playerRoomTypeAssignments.Remove(roomKey);
+                station.roomBonusCache[roomKey] = new RoomBonusState
+                {
+                    roomKey               = roomKey,
+                    workbenchRoomType     = null,
+                    displayName           = null,
+                    bonusActive           = false,
+                    workbenchCount        = workbenches.Count,
+                    autoSuggestedRoomType = autoSuggest,
+                    workbenchUids         = workbenches.Select(b => b.uid).ToList(),
+                    requirements          = new List<RoomRequirementProgress>(),
+                };
+                return;
+            }
+
+            // Workbenches that match the assigned type
+            var matchingBenches = workbenches
+                .Where(f => GetDef(f)?.workbenchRoomType == assignedTypeId)
+                .ToList();
+
+            int cap             = typeDef.workbenchCap;
+            // workbench_cap == 0: this type grants bonuses from room designation alone
+            // (e.g. medical_bay). Eligible bench list is unused for bonus activation.
+            bool workbenchRequired = cap > 0;
+            var eligibleBenches = workbenchRequired ? matchingBenches.Take(cap).ToList()
+                                                    : new List<FoundationInstance>();
+            int workbenchCount  = matchingBenches.Count;
+            int eligibleCount   = eligibleBenches.Count;
+
+            // Non-workbench, non-floor/wall foundations available as furniture
+            var furnitureFoundations = roomFoundations
+                .Where(f => !IsFloorOrWall(f) &&
+                            !(GetDef(f) is { } d && d.workbenchRoomType != null))
+                .ToList();
+
+            // Evaluate each requirement slot
+            var progressList = new List<RoomRequirementProgress>();
+            bool allMet       = true;
+
+            foreach (var req in typeDef.requirementsPerWorkbench)
+            {
+                // For workbench-required types: scale by eligible bench count.
+                // For designation-only types (cap == 0): count per slot is 1.
+                int required = req.countPerWorkbench * (workbenchRequired
+                    ? (eligibleCount > 0 ? eligibleCount : 1)
+                    : 1);
+                int current  = furnitureFoundations
+                    .Count(f => MatchesRequirement(f, req.buildableIdOrTag));
+
+                var prog = new RoomRequirementProgress
+                {
+                    displayLabel = req.displayLabel,
+                    current      = current,
+                    required     = required,
+                };
+                progressList.Add(prog);
+                if (!prog.IsMet) allMet = false;
+            }
+
+            // Bonus is active:
+            //   • Workbench-required types: need ≥1 eligible workbench + all furniture met.
+            //   • Designation-only types (cap == 0): active when all requirements met
+            //     (or no requirements) — the room designation itself provides the bonus.
+            bool bonusActive;
+            if (workbenchRequired)
+                bonusActive = eligibleCount > 0 &&
+                              (typeDef.requirementsPerWorkbench.Count == 0 || allMet);
+            else
+                bonusActive = typeDef.requirementsPerWorkbench.Count == 0 || allMet;
+
+            // Compute multiplier from the type's skill bonus map
+            float multiplier = 1.0f;
+            if (bonusActive && typeDef.skillBonuses.Count > 0)
+                multiplier = typeDef.skillBonuses.Values.Max();
+
+            // Apply flags to each qualifying workbench foundation
+            if (bonusActive)
+            {
+                foreach (var bench in eligibleBenches)
+                {
+                    bench.hasRoomBonus        = true;
+                    bench.roomBonusMultiplier = multiplier;
+                }
+            }
+
+            // Store state in cache (keyed by roomKey so one entry per room when assigned)
+            station.roomBonusCache[roomKey] = new RoomBonusState
+            {
+                roomKey               = roomKey,
+                workbenchRoomType     = assignedTypeId,
+                displayName           = typeDef.displayName,
+                bonusActive           = bonusActive,
+                workbenchCount        = workbenchCount,
+                autoSuggestedRoomType = autoSuggest,
+                workbenchUids         = eligibleBenches.Select(b => b.uid).ToList(),
+                requirements          = progressList,
+            };
         }
 
         private BuildableDefinition GetDef(FoundationInstance f)

@@ -1244,11 +1244,12 @@ namespace Waystation.Models
     // -------------------------------------------------------------------------
     public class RoomBonusState
     {
-        public string       roomKey;            // "minCol_minRow" canonical key
-        public string       workbenchRoomType;  // workbenchRoomType of the dominant workbench
-        public string       displayName;        // human-readable name from RoomTypeDefinition
-        public bool         bonusActive;        // true when all requirements met
-        public int          workbenchCount;     // number of workbenches of the dominant type
+        public string       roomKey;               // "minCol_minRow" canonical key
+        public string       workbenchRoomType;     // player-assigned room type id
+        public string       displayName;           // human-readable name from RoomTypeDefinition
+        public bool         bonusActive;           // true when all requirements met
+        public int          workbenchCount;        // number of workbenches of the assigned type
+        public string       autoSuggestedRoomType; // dominant workbench type (non-binding hint)
         public List<string> workbenchUids = new List<string>();
         public List<RoomRequirementProgress> requirements = new List<RoomRequirementProgress>();
     }
@@ -1528,6 +1529,11 @@ namespace Waystation.Models
         // Room role designations: canonical floor key "col_row" → role label
         // (key = "minCol_minRow" of the connected floor-tile set that forms the room)
         public Dictionary<string, string> roomRoles = new Dictionary<string, string>();
+
+        // Player-assigned room type per room (key = canonical "col_row" room key, value = RoomTypeDefinition.id).
+        // Only rooms with an entry here participate in the bonus system.
+        // Serialised with save data.
+        public Dictionary<string, string> playerRoomTypeAssignments = new Dictionary<string, string>();
 
         // Runtime room bonus cache — rebuilt by RoomSystem.Tick, NOT serialised.
         // (not included in hand-rolled save dictionaries in GameManager.SaveGame)
