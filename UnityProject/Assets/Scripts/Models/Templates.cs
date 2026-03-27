@@ -985,6 +985,11 @@ namespace Waystation.Models
         public float  gasDemandPerTick     = 0f;   // GasConsumer  — litres-equivalent per tick
         public float  gasStorageCapacity   = 0f;   // GasStorage   — max litres-equivalent
 
+        // Fuel Lines
+        public float  fuelProducePerTick   = 0f;   // FuelProducer — litres per tick
+        public float  fuelDemandPerTick    = 0f;   // FuelConsumer — litres per tick
+        public float  fuelStorageCapacity  = 0f;   // FuelStorage  — max litres
+
         public static BuildableDefinition FromDict(Dictionary<string, object> raw)
         {
             var b = new BuildableDefinition
@@ -1033,6 +1038,9 @@ namespace Waystation.Models
             b.gasProducePerTick    = raw.GetFloat("gas_produce_per_tick", 0f);
             b.gasDemandPerTick     = raw.GetFloat("gas_demand_per_tick", 0f);
             b.gasStorageCapacity   = raw.GetFloat("gas_storage_capacity", 0f);
+            b.fuelProducePerTick   = raw.GetFloat("fuel_produce_per_tick", 0f);
+            b.fuelDemandPerTick    = raw.GetFloat("fuel_demand_per_tick", 0f);
+            b.fuelStorageCapacity  = raw.GetFloat("fuel_storage_capacity", 0f);
             foreach (var tag in raw.GetStringList("required_tags"))
                 b.requiredTags.Add(tag);
             if (raw.ContainsKey("required_materials") &&

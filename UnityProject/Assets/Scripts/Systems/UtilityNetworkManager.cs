@@ -1,14 +1,14 @@
-// UtilityNetworkManager — orchestrates all three utility networks (Electrical,
-// Plumbing, Ducting) and exposes the overlay-mode cycling used by the UI.
+// UtilityNetworkManager — orchestrates all four utility networks (Electrical,
+// Plumbing, Ducting, Fuel Lines) and exposes the overlay-mode cycling used by the UI.
 //
 // Usage:
 //   - GameManager owns one instance and calls Tick(station) every game tick.
 //   - Call RebuildAll(station) after any tile placement, removal, or isolator toggle.
-//   - Feature flags (ElectricalEnabled / PlumbingEnabled / DuctingEnabled) allow
+//   - Feature flags (ElectricalEnabled / PlumbingEnabled / DuctingEnabled / FuelEnabled) allow
 //     individual systems to be hot-disabled without removing code (rollback safety).
 //   - OverlayMode is cycled by OverlayModeController via CycleOverlay().
 //
-// Overlay cycle: Off → Electrical → Plumbing → Ducting → Off
+// Overlay cycle: Off → Electrical → Plumbing → Ducting → Fuel → Off
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -23,7 +23,8 @@ namespace Waystation.Systems
         Off,
         Electrical,
         Plumbing,
-        Ducting
+        Ducting,
+        Fuel
     }
 
     public class UtilityNetworkManager
@@ -32,6 +33,7 @@ namespace Waystation.Systems
         public static bool ElectricalEnabled = true;
         public static bool PlumbingEnabled   = true;
         public static bool DuctingEnabled    = true;
+        public static bool FuelEnabled       = true;
 
         // ── Overlay state ─────────────────────────────────────────────────────
         public OverlayMode CurrentOverlay { get; private set; } = OverlayMode.Off;
@@ -54,7 +56,7 @@ namespace Waystation.Systems
         // ── Overlay cycling ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Advance overlay mode: Off → Electrical → Plumbing → Ducting → Off.
+        /// Advance overlay mode: Off → Electrical → Plumbing → Ducting → Fuel → Off.
         /// Called by OverlayModeController when the player presses Tab.
         /// </summary>
         public void CycleOverlay()
@@ -64,6 +66,7 @@ namespace Waystation.Systems
                 OverlayMode.Off        => OverlayMode.Electrical,
                 OverlayMode.Electrical => OverlayMode.Plumbing,
                 OverlayMode.Plumbing   => OverlayMode.Ducting,
+                OverlayMode.Ducting    => OverlayMode.Fuel,
                 _                      => OverlayMode.Off
             };
             OnOverlayChanged?.Invoke(CurrentOverlay);
@@ -157,9 +160,10 @@ namespace Waystation.Systems
                     OutputWatts   = def.outputWatts,
                     DemandWatts   = def.demandWatts,
                     IsEnergised   = f.isEnergised,
-                    IsSupplied    = f.isFluidSupplied || f.isGasSupplied,
+                    IsSupplied    = f.isFluidSupplied || f.isGasSupplied || f.isFuelSupplied,
                     StoredAmount  = net.networkType == "electric" ? f.storedEnergy
                                   : net.networkType == "pipe"     ? f.storedFluid
+                                  : net.networkType == "fuel"     ? f.storedFuel
                                   : f.storedGas,
                 });
             }
@@ -176,7 +180,7 @@ namespace Waystation.Systems
     public class NetworkInspectionData
     {
         public string NetworkId;
-        public string NetworkType;      // "electric" | "pipe" | "duct"
+        public string NetworkType;      // "electric" | "pipe" | "duct" | "fuel"
         public string ContentType;      // fluid/gas type, null for electric
         public float  TotalSupply;
         public float  TotalDemand;

@@ -55,6 +55,7 @@ namespace Waystation.View
         private static Sprite[] _wireCache;     // [16] topology mask 0-15
         private static Sprite[,] _pipeCache;    // [16, 3] mask × state (0=normal,1=pressurized,2=burst)
         private static Sprite[] _ductCache;     // [16] topology mask 0-15
+        private static Sprite[] _fuelLineCache; // [16] topology mask 0-15
         private static Dictionary<string, Sprite> _iceRefinerCache; // 15 named variants
         private static Sprite[] _bedCache;      // [4] rotation steps (0/90/180/270)
         private static Dictionary<string, Sprite> _generatorCache; // keyed by state id
@@ -123,6 +124,7 @@ namespace Waystation.View
             if (buildableId.Contains("wire"))            return GetWire(0xF);
             if (buildableId.Contains("pipe"))            return GetPipe(0xF, "normal");
             if (buildableId.Contains("duct"))            return GetDuct(0xF);
+            if (buildableId.Contains("fuel_line"))       return GetFuelLine(0xF);
             if (buildableId.Contains("ice_refiner"))     return GetIceRefiner("standby");
             if (buildableId.Contains("bed"))             return GetBed(0);
             if (buildableId.Contains("generator"))       return GetGenerator("normal");
@@ -176,6 +178,22 @@ namespace Waystation.View
                 for (int m = 0; m < 16; m++) _ductCache[m] = MakeDuct(m);
             }
             return _ductCache[connectionMask & 0xF];
+        }
+
+        // ── Fuel Line sprites (fuel network) ──────────────────────────────
+
+        /// <summary>
+        /// Fuel line topology sprite for the given 4-bit connection mask.
+        /// Visually distinct from wire/pipe/duct: uses an orange/amber palette.
+        /// </summary>
+        public static Sprite GetFuelLine(int connectionMask)
+        {
+            if (_fuelLineCache == null)
+            {
+                _fuelLineCache = new Sprite[16];
+                for (int m = 0; m < 16; m++) _fuelLineCache[m] = MakeFuelLine(m);
+            }
+            return _fuelLineCache[connectionMask & 0xF];
         }
 
         // ── Ice Refiner sprites (128×64 px) ───────────────────────────────
@@ -1768,6 +1786,72 @@ namespace Waystation.View
             if (E) DuctHA(p, 31, 63);
             if (W) DuctHA(p,  0, 31);
             DuctColl(p);
+            return MakeSprite(p);
+        }
+
+        // ── Fuel Line Make method ─────────────────────────────────────────────────────
+        // Orange/amber palette to distinguish clearly from wire (blue), pipe (steel),
+        // and duct (dark grey-blue).  Uses the same 4px body layout as wire but with
+        // a hexagonal coupling node rendered in burnt-orange tones.
+
+        static readonly Color32 FLGrout  = C("#201008"); // grout border
+        static readonly Color32 FLHi     = C("#886028"); // highlight
+        static readonly Color32 FLMid    = C("#603810"); // mid body
+        static readonly Color32 FLCore   = C("#3a2808"); // dark core
+        static readonly Color32 FLShd    = C("#1e1008"); // shadow
+        static readonly Color32 FLNBase  = C("#704020"); // coupling base
+        static readonly Color32 FLNHi    = C("#a06030"); // coupling highlight
+        static readonly Color32 FLNLo    = C("#301808"); // coupling shadow
+        static readonly Color32 FLNGt    = C("#181008"); // coupling grout
+        static readonly Color32 FLNAcc   = C("#c07020"); // amber accent dot
+        static readonly Color32 FLNAccG  = C("#402808"); // accent glow
+
+        static void FuelLineHA(Color32[] p, int x0, int x1)
+        {
+            int w = x1 - x0 + 1;
+            Fr(p, x0, 29, w, 1, FLGrout);
+            Fr(p, x0, 30, w, 1, FLHi);
+            Fr(p, x0, 31, w, 1, FLMid);
+            Fr(p, x0, 32, w, 1, FLCore);
+            Fr(p, x0, 33, w, 1, FLShd);
+            Fr(p, x0, 34, w, 1, FLShd);
+        }
+
+        static void FuelLineVA(Color32[] p, int y0, int y1)
+        {
+            int h = y1 - y0 + 1;
+            Fr(p, 29, y0, 1, h, FLGrout);
+            Fr(p, 30, y0, 1, h, FLHi);
+            Fr(p, 31, y0, 1, h, FLMid);
+            Fr(p, 32, y0, 1, h, FLCore);
+            Fr(p, 33, y0, 1, h, FLShd);
+            Fr(p, 34, y0, 1, h, FLShd);
+        }
+
+        static void FuelLineND(Color32[] p)
+        {
+            Fr(p, 27, 27, 9, 9, FLNGt);   // outer grout 9×9
+            Fr(p, 28, 28, 7, 7, FLNBase); // base 7×7
+            Fr(p, 28, 28, 7, 1, FLNHi);   // top bevel
+            Fr(p, 28, 28, 1, 7, FLNHi);   // left bevel
+            Fr(p, 28, 34, 7, 1, FLNLo);   // bottom bevel
+            Fr(p, 34, 28, 1, 7, FLNLo);   // right bevel
+            Fr(p, 30, 30, 3, 3, FLNGt);   // inner recess 3×3
+            Px(p, 31, 31, FLNAcc);         // amber accent dot
+            Px(p, 30, 31, FLNAccG);  Px(p, 32, 31, FLNAccG);
+            Px(p, 31, 30, FLNAccG);  Px(p, 31, 32, FLNAccG);
+        }
+
+        static Sprite MakeFuelLine(int mask)
+        {
+            var p = NewPixels();
+            bool N = (mask & 1) != 0, E = (mask & 2) != 0,
+                 S = (mask & 4) != 0, W = (mask & 8) != 0;
+            if (N) FuelLineVA(p,  0, 31);
+            if (S) FuelLineVA(p, 31, 63);
+            if (E) FuelLineHA(p, 31, 63);
+            if (W) FuelLineHA(p,  0, 31);
+            FuelLineND(p);
             return MakeSprite(p);
         }
 

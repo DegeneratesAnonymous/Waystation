@@ -1084,11 +1084,14 @@ namespace Waystation.Models
         public bool  isFluidSupplied  = false;
         // Ducting: true when gas network has enough stored volume for this consumer
         public bool  isGasSupplied    = false;
+        // Fuel Lines: true when fuel network has enough stored fuel for this consumer
+        public bool  isFuelSupplied   = false;
 
         // Storage nodes: persisted amounts (serialised in StationData)
         public float storedEnergy     = 0f;  // Battery — watt-hours currently stored
         public float storedFluid      = 0f;  // Water Tank / Fluid Tank — litres stored
         public float storedGas        = 0f;  // Gas Tank — litres-equivalent stored
+        public float storedFuel       = 0f;  // Fuel Tank — litres stored
 
         // Isolator state: true = open (allows connectivity), false = closed (splits network)
         public bool  isolatorOpen     = true;
