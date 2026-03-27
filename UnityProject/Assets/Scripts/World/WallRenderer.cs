@@ -44,8 +44,8 @@ public class WallRenderer : MonoBehaviour
 
         baseRenderer.sprite = atlasData.baseSprite;
 
-        int mask = (interiorSouth ? 8 : 0)
-                 | (interiorNorth ? 4 : 0)
+        int mask = (interiorNorth ? 8 : 0)
+                 | (interiorSouth ? 4 : 0)
                  | (interiorEast  ? 2 : 0)
                  | (interiorWest  ? 1 : 0);
 

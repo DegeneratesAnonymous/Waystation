@@ -13,8 +13,11 @@ using UnityEditor;
 public static class WallAtlasSetup
 {
     // ── Update these paths if you ever move the atlases ───────────────────────
-    private const string WALL_ATLAS_PATH        = "Assets/Art/Tiles/Walls/wall_atlas.png";
-    private const string WALL_SHADOW_ATLAS_PATH = "Assets/Art/Tiles/Walls/wall_shadow_atlas.png";
+    // These must point to the Resources/Walls folder so that the textures
+    // loaded at runtime via Resources.Load<Texture2D>("Walls/wall_atlas") etc.
+    // receive the correct import settings.
+    private const string WALL_ATLAS_PATH        = "Assets/Art/Tiles/Resources/Walls/wall_atlas.png";
+    private const string WALL_SHADOW_ATLAS_PATH = "Assets/Art/Tiles/Resources/Walls/wall_shadow_atlas.png";
     // ─────────────────────────────────────────────────────────────────────────
 
     [MenuItem("Tools/Wall/Setup Wall Atlas")]
@@ -34,7 +37,7 @@ public static class WallAtlasSetup
         if (ti == null)
         {
             Debug.LogWarning($"[WallAtlasSetup] PNG not found at '{path}'. " +
-                "Make sure the file exists at Assets/Art/Tiles/Walls/.");
+                "Make sure the file exists at Assets/Art/Tiles/Resources/Walls/.");
             return false;
         }
 
