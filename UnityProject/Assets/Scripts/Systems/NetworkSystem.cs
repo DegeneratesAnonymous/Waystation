@@ -1,4 +1,4 @@
-// NetworkSystem — manages connected graphs of wire/pipe/duct foundations.
+// NetworkSystem — manages connected graphs of wire/pipe/duct/fuel-line foundations.
 // Uses Union-Find (disjoint set with path compression + union-by-rank) for
 // efficient network rebuilding whenever the building layout changes.
 // Networks are identified by NetworkInstance.uid stored on each member FoundationInstance.
@@ -8,6 +8,7 @@
 //     Electrical: sums producer OutputWatts, charges/discharges batteries, marks consumers.
 //     Plumbing  : sums fluid producers, fills storage tanks, marks consumers IsFluidSupplied.
 //     Ducting   : sums gas producers,  fills storage tanks, marks consumers IsGasSupplied.
+//     Fuel Lines: sums fuel producers, fills fuel tanks,    marks consumers IsFuelSupplied.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -141,9 +142,18 @@ namespace Waystation.Systems
             {
                 switch (net.networkType)
                 {
-                    case "electric": TickElectrical(station, net); break;
-                    case "pipe":     TickFluid(station, net);      break;
-                    case "duct":     TickGas(station, net);        break;
+                    case "electric":
+                        if (UtilityNetworkManager.ElectricalEnabled) TickElectrical(station, net);
+                        break;
+                    case "pipe":
+                        if (UtilityNetworkManager.PlumbingEnabled)   TickFluid(station, net);
+                        break;
+                    case "duct":
+                        if (UtilityNetworkManager.DuctingEnabled)    TickGas(station, net);
+                        break;
+                    case "fuel":
+                        if (UtilityNetworkManager.FuelEnabled)       TickFuel(station, net);
+                        break;
                 }
             }
         }
@@ -213,7 +223,9 @@ namespace Waystation.Systems
                     if (!station.networks.TryGetValue(nb.networkId, out var net)) continue;
                     if (net.contentType != null && net.contentType != proposedContentType)
                     {
-                        string kind = networkType == "pipe" ? "fluid" : "gas";
+                        string kind = networkType == "pipe" ? "fluid"
+                                    : networkType == "duct" ? "gas"
+                                    : "fuel";
                         return $"Incompatible {kind} network";
                     }
                 }
@@ -466,6 +478,79 @@ namespace Waystation.Systems
             net.storageCapacity = cap3;
         }
 
+        private void TickFuel(StationState station, NetworkInstance net)
+        {
+            float produced = 0f;
+            var consumers = new List<FoundationInstance>();
+            var tanks     = new List<(FoundationInstance f, float cap)>();
+
+            foreach (var uid in net.memberUids)
+            {
+                if (!station.foundations.TryGetValue(uid, out var f)) continue;
+                if (f.status != "complete") continue;
+                if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
+                if (def.nodeRole == null) continue;
+
+                switch (def.nodeRole)
+                {
+                    case "producer":
+                        if (!def.requiresPower || f.isEnergised)
+                            produced += def.fuelProducePerTick * f.Functionality();
+                        break;
+                    case "consumer":
+                        consumers.Add(f);
+                        break;
+                    case "storage":
+                        tanks.Add((f, def.fuelStorageCapacity));
+                        break;
+                }
+            }
+
+            // Pour production into tanks
+            float toStore = produced;
+            foreach (var (tank, cap) in tanks)
+            {
+                float space = cap - tank.storedFuel;
+                float fill  = Mathf.Min(toStore, space);
+                tank.storedFuel = Mathf.Clamp(tank.storedFuel + fill, 0f, cap);
+                toStore -= fill;
+                if (toStore <= 0f) break;
+            }
+
+            // Supply consumers from tanks
+            float totalStored = 0f;
+            foreach (var (tank, _) in tanks) totalStored += tank.storedFuel;
+
+            float totalDemand = 0f;
+            foreach (var c in consumers)
+            {
+                if (_registry.Buildables.TryGetValue(c.buildableId, out var def))
+                    totalDemand += def.fuelDemandPerTick;
+            }
+
+            bool canSupply = totalStored >= totalDemand;
+            if (canSupply && totalDemand > 0f)
+            {
+                float remaining = totalDemand;
+                foreach (var (tank, _) in tanks)
+                {
+                    float draw = Mathf.Min(remaining, tank.storedFuel);
+                    tank.storedFuel = Mathf.Max(0f, tank.storedFuel - draw);
+                    remaining -= draw;
+                    if (remaining <= 0f) break;
+                }
+            }
+            foreach (var c in consumers) c.isFuelSupplied = canSupply;
+
+            net.totalSupply     = produced;
+            net.totalDemand     = totalDemand;
+            float cap4 = 0f; float stored4 = 0f;
+            foreach (var (tank, capv) in tanks) { cap4 += capv; stored4 += tank.storedFuel; }
+            net.contentAmount   = stored4;
+            net.contentCapacity = cap4;
+            net.storageCapacity = cap4;
+        }
+
         // ── Private helpers ───────────────────────────────────────────────────
 
         private static readonly (int x, int y)[] s_Dirs = { (1,0), (-1,0), (0,1), (0,-1) };
@@ -518,6 +603,13 @@ namespace Waystation.Systems
                 if (f.status != "complete" || f.networkId == null) continue;
                 if (!station.networks.TryGetValue(f.networkId, out var net)) continue;
                 if (net.contentType != null) continue;
+
+                // Fuel networks always carry fuel — no per-member inference needed.
+                if (net.networkType == "fuel")
+                {
+                    net.contentType = "fuel";
+                    continue;
+                }
 
                 if (!_registry.Buildables.TryGetValue(f.buildableId, out var def)) continue;
 

@@ -1,7 +1,7 @@
 // OverlayModeController — MonoBehaviour that listens for the Tab key and cycles
 // the station view through utility overlay modes via UtilityNetworkManager.
 //
-// Tab cycle: Off → Electrical → Plumbing → Ducting → Off
+// Tab cycle: Off → Electrical → Plumbing → Ducting → Fuel → Off
 //
 // Auto-installs after scene load. When the overlay changes, this controller
 // also syncs StationRoomView so the correct tile tinting is applied.
@@ -64,6 +64,7 @@ namespace Waystation.UI
                 OverlayMode.Electrical => StationRoomView.ViewMode.Electricity,
                 OverlayMode.Plumbing   => StationRoomView.ViewMode.Pipes,
                 OverlayMode.Ducting    => StationRoomView.ViewMode.Ducts,
+                OverlayMode.Fuel       => StationRoomView.ViewMode.FuelLines,
                 _                      => StationRoomView.ViewMode.Normal,
             });
         }

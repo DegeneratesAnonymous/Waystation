@@ -866,5 +866,142 @@
     "demand_watts": 3.0,
     "network_type": "electric",
     "node_role": "consumer"
+  },
+  {
+    "id": "buildable.fuel_line",
+    "display_name": "Fuel Line",
+    "category": "fuel",
+    "description": "A reinforced fuel conduit that carries liquid fuel between storage tanks and consumers. Visually distinct from electrical wire, fluid pipe, and gas duct.",
+    "build_time_ticks": 12,
+    "layer": 1,
+    "network_type": "fuel",
+    "under_wall_allowed": true,
+    "required_materials": {
+      "item.steel_plate": 1
+    },
+    "required_skills": {
+      "engineering": 1
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 60,
+    "schema_version": "1",
+    "node_role": "conduit"
+  },
+  {
+    "id": "buildable.fuel_valve",
+    "display_name": "Fuel Valve",
+    "category": "fuel",
+    "description": "An inline fuel line valve. Toggle open/closed to connect or isolate fuel line segments.",
+    "build_time_ticks": 14,
+    "layer": 1,
+    "network_type": "fuel",
+    "under_wall_allowed": true,
+    "required_materials": {
+      "item.steel_plate": 1,
+      "item.parts": 1
+    },
+    "required_skills": {
+      "engineering": 1
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 60,
+    "schema_version": "1",
+    "node_role": "isolator"
+  },
+  {
+    "id": "buildable.fuel_tank",
+    "display_name": "Fuel Tank",
+    "category": "fuel",
+    "description": "A pressurised storage vessel for liquid fuel. Connects to fuel line networks. Capacity: 500 L. Fill manually via cargo or a connected fuel refinery.",
+    "build_time_ticks": 20,
+    "layer": 2,
+    "network_type": "fuel",
+    "required_materials": {
+      "item.steel_plate": 4,
+      "item.parts": 2
+    },
+    "required_skills": {
+      "engineering": 2
+    },
+    "required_tags": [],
+    "size": 2,
+    "tile_width": 1,
+    "tile_height": 2,
+    "max_health": 120,
+    "schema_version": "1",
+    "node_role": "storage",
+    "fuel_storage_capacity": 500.0
+  },
+  {
+    "id": "buildable.engine",
+    "display_name": "Station Engine",
+    "category": "fuel",
+    "description": "A primary thrust engine for station manoeuvring. Requires fuel supply from a connected fuel line network. Enters starvation state when fuel is exhausted.",
+    "build_time_ticks": 40,
+    "layer": 2,
+    "network_type": "fuel",
+    "required_materials": {
+      "item.steel_plate": 6,
+      "item.parts": 4
+    },
+    "required_skills": {
+      "engineering": 3
+    },
+    "required_tags": [],
+    "size": 4,
+    "tile_width": 2,
+    "tile_height": 2,
+    "max_health": 200,
+    "schema_version": "1",
+    "node_role": "consumer",
+    "fuel_demand_per_tick": 2.0
+  },
+  {
+    "id": "buildable.thruster",
+    "display_name": "Thruster",
+    "category": "fuel",
+    "description": "A manoeuvring thruster for fine attitude control. Requires fuel supply from a connected fuel line network. Enters starvation state when fuel is exhausted.",
+    "build_time_ticks": 25,
+    "layer": 2,
+    "network_type": "fuel",
+    "required_materials": {
+      "item.steel_plate": 3,
+      "item.parts": 2
+    },
+    "required_skills": {
+      "engineering": 2
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 100,
+    "schema_version": "1",
+    "node_role": "consumer",
+    "fuel_demand_per_tick": 0.5
+  },
+  {
+    "id": "buildable.industrial_furnace",
+    "display_name": "Industrial Furnace",
+    "category": "fuel",
+    "description": "A high-temperature industrial furnace for advanced smelting and material processing. Requires fuel supply from a connected fuel line network. Enters starvation state when fuel is exhausted.",
+    "build_time_ticks": 35,
+    "layer": 2,
+    "network_type": "fuel",
+    "required_materials": {
+      "item.steel_plate": 5,
+      "item.parts": 3
+    },
+    "required_skills": {
+      "engineering": 3
+    },
+    "required_tags": [],
+    "size": 4,
+    "tile_width": 2,
+    "tile_height": 2,
+    "max_health": 180,
+    "schema_version": "1",
+    "node_role": "consumer",
+    "fuel_demand_per_tick": 1.5
   }
 ]

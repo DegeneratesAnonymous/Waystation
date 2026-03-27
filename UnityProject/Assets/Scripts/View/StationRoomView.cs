@@ -131,7 +131,7 @@ namespace Waystation.View
         private readonly Dictionary<string, (int,int)>             _foundPos  = new Dictionary<string, (int,int)>();
 
         // ── View mode ──────────────────────────────────────────────────
-        public enum ViewMode { Normal, Pipes, Ducts, Electricity, Temperature, Beauty, Pressurized }
+        public enum ViewMode { Normal, Pipes, Ducts, Electricity, Temperature, Beauty, Pressurized, FuelLines }
         private ViewMode _viewMode = ViewMode.Normal;
         public ViewMode ActiveViewMode => _viewMode;
         public static StationRoomView Instance { get; private set; }
@@ -147,6 +147,9 @@ namespace Waystation.View
         // Ducting overlay: teal = has gas, grey = empty
         private static readonly Color TintDuctFlowing    = new Color(0.10f, 0.85f, 0.72f); // bright teal
         private static readonly Color TintDuctEmpty      = new Color(0.22f, 0.35f, 0.35f); // dim teal-grey
+        // Fuel overlay: orange = has fuel, brown = empty
+        private static readonly Color TintFuelFlowing    = new Color(1.00f, 0.50f, 0.08f); // bright orange
+        private static readonly Color TintFuelEmpty      = new Color(0.38f, 0.22f, 0.08f); // dim brown
         // Non-relevant network tile (dimmed when a different overlay is active)
         private static readonly Color TintDimmed         = new Color(0.20f, 0.22f, 0.25f); // near-black
 
@@ -775,7 +778,9 @@ namespace Waystation.View
                       || f.buildableId == "buildable.duct"
                       || f.buildableId == "buildable.switch"
                       || f.buildableId == "buildable.valve"
-                      || f.buildableId == "buildable.breaker")
+                      || f.buildableId == "buildable.breaker"
+                      || f.buildableId == "buildable.fuel_line"
+                      || f.buildableId == "buildable.fuel_valve")
                 {
                     Sprite netSprite = GetNetworkSprite(f);
                     var netGO = PlaceTile(_foundRoot.transform, f.tileCol, f.tileRow,
@@ -888,9 +893,10 @@ namespace Waystation.View
             // Classify the foundation by its network role
             string tileNetType = f.buildableId switch
             {
-                "buildable.wire"    or "buildable.switch"  => "electric",
-                "buildable.pipe"    or "buildable.valve"   => "pipe",
-                "buildable.duct"    or "buildable.breaker" => "duct",
+                "buildable.wire"      or "buildable.switch"  => "electric",
+                "buildable.pipe"      or "buildable.valve"   => "pipe",
+                "buildable.duct"      or "buildable.breaker" => "duct",
+                "buildable.fuel_line" or "buildable.fuel_valve" => "fuel",
                 _ => null
             };
 
@@ -929,6 +935,14 @@ namespace Waystation.View
                         return ApplyNetworkHue(net, baseColor);
                     }
 
+                case ViewMode.FuelLines:
+                    if (tileNetType != "fuel") return TintDimmed;
+                    if (net == null)           return TintFuelEmpty;
+                    {
+                        Color baseColor = net.contentAmount > 0f ? TintFuelFlowing : TintFuelEmpty;
+                        return ApplyNetworkHue(net, baseColor);
+                    }
+
                 default:
                     return Color.white;
             }
@@ -956,9 +970,10 @@ namespace Waystation.View
             if (_gm?.Networks == null) return TileAtlas.GetWire(0);
             string netType = f.buildableId switch
             {
-                "buildable.wire"    or "buildable.switch"  => "electric",
-                "buildable.pipe"    or "buildable.valve"   => "pipe",
-                "buildable.duct"    or "buildable.breaker" => "duct",
+                "buildable.wire"      or "buildable.switch"     => "electric",
+                "buildable.pipe"      or "buildable.valve"      => "pipe",
+                "buildable.duct"      or "buildable.breaker"    => "duct",
+                "buildable.fuel_line" or "buildable.fuel_valve" => "fuel",
                 _ => "electric",
             };
             int mask = _gm.Networks.GetConnectionMask(_gm.Station, f.tileCol, f.tileRow, netType);
@@ -966,6 +981,7 @@ namespace Waystation.View
             {
                 "electric" => TileAtlas.GetWire(mask),
                 "pipe"     => TileAtlas.GetPipe(mask, "normal"),
+                "fuel"     => TileAtlas.GetFuelLine(mask),
                 _          => TileAtlas.GetDuct(mask),
             };
         }
@@ -990,14 +1006,16 @@ namespace Waystation.View
         }
 
         private bool IsIsolator(FoundationInstance f)
-            => f.buildableId is "buildable.switch" or "buildable.valve" or "buildable.breaker";
+            => f.buildableId is "buildable.switch" or "buildable.valve" or "buildable.breaker"
+                             or "buildable.fuel_valve";
 
         private static string GetIsolatorLabel(string buildableId) => buildableId switch
         {
-            "buildable.switch"  => "Switch",
-            "buildable.valve"   => "Valve",
-            "buildable.breaker" => "Breaker",
-            _                   => "Isolator",
+            "buildable.switch"     => "Switch",
+            "buildable.valve"      => "Valve",
+            "buildable.breaker"    => "Breaker",
+            "buildable.fuel_valve" => "Fuel Valve",
+            _                      => "Isolator",
         };
 
         private void SelectContextFoundation(int col, int row)
@@ -1199,12 +1217,14 @@ namespace Waystation.View
             foreach (var f in _gm.Station.foundations.Values)
             {
                 if (f.tileCol != col || f.tileRow != row) continue;
-                if (f.buildableId != "buildable.wire"    &&
-                    f.buildableId != "buildable.pipe"    &&
-                    f.buildableId != "buildable.duct"    &&
-                    f.buildableId != "buildable.switch"  &&
-                    f.buildableId != "buildable.valve"   &&
-                    f.buildableId != "buildable.breaker") continue;
+                if (f.buildableId != "buildable.wire"      &&
+                    f.buildableId != "buildable.pipe"      &&
+                    f.buildableId != "buildable.duct"      &&
+                    f.buildableId != "buildable.switch"    &&
+                    f.buildableId != "buildable.valve"     &&
+                    f.buildableId != "buildable.breaker"   &&
+                    f.buildableId != "buildable.fuel_line" &&
+                    f.buildableId != "buildable.fuel_valve") continue;
                 if (!_foundTiles.TryGetValue(f.uid, out var go) || go == null) continue;
                 var sr = go.GetComponent<SpriteRenderer>();
                 if (sr != null) sr.sprite = GetNetworkSprite(f);

@@ -4951,6 +4951,7 @@ namespace Waystation.UI
                 (StationRoomView.ViewMode.Electricity, "Electricity", "Show electric networks"),
                 (StationRoomView.ViewMode.Pipes,       "Pipes",       "Show fluid pipes"),
                 (StationRoomView.ViewMode.Ducts,       "Ducts",       "Show gas ducts"),
+                (StationRoomView.ViewMode.FuelLines,   "Fuel",        "Show fuel line networks"),
                 (StationRoomView.ViewMode.Temperature, "Temperature", "Room temperature heatmap"),
                 (StationRoomView.ViewMode.Beauty,      "Beauty",      "Room beauty heatmap"),
                 (StationRoomView.ViewMode.Pressurized, "Pressurized", "Pressurisation overlay"),
