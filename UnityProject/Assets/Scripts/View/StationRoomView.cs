@@ -1282,14 +1282,20 @@ namespace Waystation.View
         // a placed wall foundation.
         private bool IsWallAtPos(int col, int row)
         {
+            // When the station is foundation-based, rely only on foundation data.
+            // The hardcoded 7×7 boundary would misclassify corridor floor tiles that
+            // happen to fall on the static room's border rows/cols (e.g. row 6 = RoomRows-1).
+            if (_gm?.Station?.foundations != null && _gm.Station.foundations.Count > 0)
+            {
+                foreach (var f in _gm.Station.foundations.Values)
+                    if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("wall"))
+                        return true;
+                return false;
+            }
+            // Fallback for the no-foundation static room.
             bool boundary = col == 0 || col == RoomCols - 1 || row == 0 || row == RoomRows - 1;
             bool isDoor   = row == 0 && col == RoomCols / 2;
-            if (boundary && !isDoor) return true;
-            if (_gm?.Station?.foundations == null) return false;
-            foreach (var f in _gm.Station.foundations.Values)
-                if (f.tileCol == col && f.tileRow == row && f.buildableId.Contains("wall"))
-                    return true;
-            return false;
+            return boundary && !isDoor;
         }
 
         /// <summary>
@@ -1544,7 +1550,32 @@ namespace Waystation.View
         // (passage runs N↔S, panels slide left↔right).
         private bool ClassifyIsDoorH(int col, int row)
         {
-            return IsFloorTile(col, row + 1) || IsFloorTile(col, row - 1);
+            // A door in an NS wall (vertical wall) has strict floor to its east or west.
+            // These doors need EW orientation (90° rotation) so the perspective faces
+            // land on the north/south sides correctly.
+            // A door in an EW wall (horizontal wall) has strict floor to its north or south;
+            // those use NS orientation (0° rotation, sprite is correct as-is).
+            // isH=true → DoorOrientation.EW → 90° rotation (for NS-wall doors).
+            return IsStrictFloor(col + 1, row) || IsStrictFloor(col - 1, row);
+        }
+
+        // Like IsFloorTile but returns false for wall AND door tiles — only plain floor counts.
+        private bool IsStrictFloor(int col, int row)
+        {
+            if (_gm?.Station != null)
+            {
+                bool anyFound = false;
+                bool blocked  = false;
+                foreach (var f in _gm.Station.foundations.Values)
+                {
+                    if (f.tileCol != col || f.tileRow != row) continue;
+                    anyFound = true;
+                    if (f.buildableId.Contains("wall") || f.buildableId.Contains("door"))
+                    { blocked = true; break; }
+                }
+                if (anyFound) return !blocked;
+            }
+            return col >= IntMinC && col <= IntMaxC && row >= IntMinR && row <= IntMaxR;
         }
 
         // ── Floor variant / rotation ──────────────────────────────────────────

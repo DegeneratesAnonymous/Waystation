@@ -305,51 +305,110 @@ namespace Waystation.Core
 
         private void SetupStartingModules()
         {
-            // Three connected 5×5 rooms arranged horizontally:
-            //   Room A  cols  0– 4, rows 0–4
-            //   Room B  cols  6–10, rows 0–4
-            //   Room C  cols 12–16, rows 0–4
+            // Station layout — four rooms connected by a 3-wide central hallway spine:
             //
-            // Doors sit flush in each room's perimeter wall at the connection points
-            // (4,2), (6,2), (10,2), (12,2). A single-tile corridor floor at cols 5
-            // and 11, row 2 is enclosed above and below by wall tiles.
-            var roomOrigins = new[] { (0, 0), (6, 0), (12, 0) };
+            //  col: 0123456  789  0123456   (10-16)
+            //
+            //  row 16: [══ Room A 7×7 ═══]─[═══ Room B 7×7 ══]   ← single cap wall row
+            //  row 15:  A right wall        |||        B left wall ← corridor floor row
+            //  row 13:  A single door (6,13)|||  B single door (10,13)
+            //  row 10: [═════════════════] ─── [══════════════════]
+            //                            │ 3w │
+            //                            │hall│
+            //  row 6:  [═══ Room C 7×7 ═══] ─── [══ Room D 9×5 ══]
+            //  row 3:   C single door (6,3) |||   D single door (10,2)
+            //  row 1:  corridor floor row   |||   corridor floor row ← corridor floor row
+            //  row 0:  [═════════════════] ─── [══════════════════════]  ← single cap wall row
+            //           cols 0-6                cols 10-18
+            //
+            // Each room has exactly one center door connecting to the 3-wide corridor.
+            // The corridor floor runs rows 1-15 (extended by one row at each end vs old 2-14).
+            // Cap walls are a single row at row 0 and row 16, flush with room perimeters.
 
-            foreach (var (ox, oy) in roomOrigins)
+            // ── Room A (7×7) — top-left ───────────────────────────────────────
+            PlaceRoom(0, 10, 7, 7, new HashSet<(int, int)>
             {
-                // Floor: fill the entire 5×5 area
-                for (int dx = 0; dx < 5; dx++)
-                for (int dy = 0; dy < 5; dy++)
-                    PlaceBuilt("buildable.floor", ox + dx, oy + dy);
+                (6, 13),   // single center door → hallway
+            });
 
-                // Walls: top and bottom rows — place door at connection openings, wall elsewhere
-                for (int dx = 0; dx < 5; dx++)
-                {
-                    PlaceBuilt(IsDoorwayConnection(ox + dx, oy)     ? "buildable.door" : "buildable.wall", ox + dx, oy);
-                    PlaceBuilt(IsDoorwayConnection(ox + dx, oy + 4) ? "buildable.door" : "buildable.wall", ox + dx, oy + 4);
-                }
-                // Walls: left and right columns (corners already handled above)
-                for (int dy = 1; dy <= 3; dy++)
-                {
-                    PlaceBuilt(IsDoorwayConnection(ox,     oy + dy) ? "buildable.door" : "buildable.wall", ox,     oy + dy);
-                    PlaceBuilt(IsDoorwayConnection(ox + 4, oy + dy) ? "buildable.door" : "buildable.wall", ox + 4, oy + dy);
-                }
-            }
+            // ── Room B (7×7) — top-right ──────────────────────────────────────
+            PlaceRoom(10, 10, 7, 7, new HashSet<(int, int)>
+            {
+                (10, 13),  // single center door → hallway
+            });
 
-            // Corridor tiles: single-tile floors enclosed by walls above and below.
-            // No door in the corridor itself — doors are flush in the room walls at each end.
-            PlaceBuilt("buildable.floor", 5,  2);
-            PlaceBuilt("buildable.wall",  5,  1);
-            PlaceBuilt("buildable.wall",  5,  3);
-            PlaceBuilt("buildable.floor", 11, 2);
-            PlaceBuilt("buildable.wall",  11, 1);
-            PlaceBuilt("buildable.wall",  11, 3);
+            // ── Room C (7×7) — bottom-left ────────────────────────────────────
+            PlaceRoom(0, 0, 7, 7, new HashSet<(int, int)>
+            {
+                (6, 3),    // single center door → hallway
+            });
+
+            // ── Room D (9×5) — bottom-right (wider utility / bridge room) ─────
+            PlaceRoom(10, 0, 9, 5, new HashSet<(int, int)>
+            {
+                (10, 2),   // single center door → hallway
+            });
+
+            // ── Central hallway spine (3 tiles wide, cols 7-9) ────────────────
+            // Floor: rows 1-15 (one row wider at each end than before).
+            // This keeps the corridor flush with the room perimeters — the single cap
+            // walls at rows 0 and 16 align with the room bottom/top walls.
+            for (int hc = 7; hc <= 9; hc++)
+            for (int hr = 1; hr <= 15; hr++)
+                PlaceBuilt("buildable.floor", hc, hr);
+
+            // Top cap: single wall row at row 16, flush with Room A and B top walls.
+            for (int hc = 7; hc <= 9; hc++)
+                PlaceBuilt("buildable.wall", hc, 16);
+
+            // Bottom cap: single wall row at row 0, flush with Room C and D bottom walls.
+            for (int hc = 7; hc <= 9; hc++)
+                PlaceBuilt("buildable.wall", hc, 0);
+
+            // Left corridor side wall: rows 7-9 bridge the gap between Room C (top wall
+            // row 6) and Room A (bottom wall row 10). Without these the corridor would
+            // be open on the left between the two rooms.
+            for (int hr = 7; hr <= 9; hr++)
+                PlaceBuilt("buildable.wall", 6, hr);
+
+            // Right corridor side wall: rows 5-9 bridge the gap between Room D (top wall
+            // row 4) and Room B (bottom wall row 10).
+            for (int hr = 5; hr <= 9; hr++)
+                PlaceBuilt("buildable.wall", 10, hr);
         }
 
-        /// <summary>Returns true if this position should be a door rather than a wall.</summary>
-        private static bool IsDoorwayConnection(int col, int row) =>
-            (col == 4  && row == 2) || (col == 6  && row == 2) ||
-            (col == 10 && row == 2) || (col == 12 && row == 2);
+        /// <summary>
+        /// Places a rectangular room: interior floor tiles and a perimeter of walls,
+        /// substituting doors at any position listed in <paramref name="doorPositions"/>.
+        /// originCol/originRow is the south-west corner of the room (inclusive).
+        /// </summary>
+        private void PlaceRoom(int originCol, int originRow, int width, int height,
+                               HashSet<(int col, int row)> doorPositions)
+        {
+            // Interior floor
+            for (int dx = 1; dx < width - 1; dx++)
+            for (int dy = 1; dy < height - 1; dy++)
+                PlaceBuilt("buildable.floor", originCol + dx, originRow + dy);
+
+            // Bottom and top perimeter rows
+            for (int dx = 0; dx < width; dx++)
+            {
+                PlaceWallOrDoor(originCol + dx, originRow,              doorPositions);
+                PlaceWallOrDoor(originCol + dx, originRow + height - 1, doorPositions);
+            }
+            // Left and right perimeter columns (skip corners — handled above)
+            for (int dy = 1; dy < height - 1; dy++)
+            {
+                PlaceWallOrDoor(originCol,             originRow + dy, doorPositions);
+                PlaceWallOrDoor(originCol + width - 1, originRow + dy, doorPositions);
+            }
+        }
+
+        private void PlaceWallOrDoor(int col, int row, HashSet<(int col, int row)> doorPositions)
+        {
+            string id = doorPositions.Contains((col, row)) ? "buildable.door" : "buildable.wall";
+            PlaceBuilt(id, col, row);
+        }
 
         private void PlaceBuilt(string buildableId, int col, int row, int rotation = 0)
         {
