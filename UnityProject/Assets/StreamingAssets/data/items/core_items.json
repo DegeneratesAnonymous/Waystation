@@ -136,5 +136,31 @@
     "legal": true,
     "tags": ["datachip", "data", "research"],
     "schema_version": "1"
+  },
+  {
+    "id": "item.backpack",
+    "display_name": "Backpack",
+    "item_type": "Equipment",
+    "subtype": "Wearables",
+    "description": "A standard-issue crew backpack. When equipped in the backpack slot, adds 15 kg of personal carry capacity.",
+    "weight": 0.5,
+    "stack_size": 1,
+    "value": 20.0,
+    "carry_capacity": 15.0,
+    "tags": ["wearable", "backpack"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.large_pack",
+    "display_name": "Large Pack",
+    "item_type": "Equipment",
+    "subtype": "Wearables",
+    "description": "A heavy-duty cargo pack used by haulers and engineers. When equipped in the backpack slot, adds 30 kg of personal carry capacity.",
+    "weight": 1.0,
+    "stack_size": 1,
+    "value": 45.0,
+    "carry_capacity": 30.0,
+    "tags": ["wearable", "backpack"],
+    "schema_version": "1"
   }
 ]

@@ -162,6 +162,9 @@ namespace Waystation.Models
         public List<string>              namePool          = new List<string>();
         public List<string>              equipmentPool     = new List<string>();
         public Dictionary<string, object> spawnRules       = new Dictionary<string, object>();
+        // Base pocket carry capacity (kg) for this NPC type, derived from species physiology.
+        // Total carry capacity = pocketCapacity + equipped backpack's carryCapacity.
+        public float pocketCapacity = 10f;
         public string schemaVersion = "1";
 
         public static NPCTemplate FromDict(Dictionary<string, object> raw)
@@ -170,6 +173,7 @@ namespace Waystation.Models
             {
                 id            = raw.GetString("id"),
                 baseClass     = raw.GetString("base_class"),
+                pocketCapacity = raw.GetFloat("pocket_capacity", 10f),
                 schemaVersion = raw.GetString("schema_version", "1")
             };
             foreach (var s in raw.GetStringList("allowed_subclasses"))  t.allowedSubclasses.Add(s);
@@ -551,6 +555,9 @@ namespace Waystation.Models
         public int    perishableTicks = 0;
         public string quality         = "standard";
         public bool   legal           = true;
+        // Additional carry capacity (kg) added when this item is equipped in the backpack slot.
+        // 0 for most items; positive for bags and packs.
+        public float  carryCapacity   = 0f;
         public List<string> tags      = new List<string>();
         public Dictionary<string, float> buildCost = new Dictionary<string, float>();
         public string schemaVersion = "1";
@@ -570,6 +577,7 @@ namespace Waystation.Models
                 perishableTicks = raw.GetInt("perishable_ticks"),
                 quality         = raw.GetString("quality", "standard"),
                 legal           = raw.GetBool("legal", true),
+                carryCapacity   = raw.GetFloat("carry_capacity", 0f),
                 schemaVersion   = raw.GetString("schema_version", "1")
             };
             foreach (var s in raw.GetStringList("tags")) item.tags.Add(s);
@@ -919,6 +927,9 @@ namespace Waystation.Models
         public int    size              = 1;
         public int    maxHealth         = 100;
         public int    cargoCapacity     = 0;          // > 0 for storage objects (e.g. cabinet)
+        // When true this container can be picked up and hauled to a new location by NPCs.
+        // Non-portable containers (false) are fixed in place once constructed.
+        public bool   portable          = false;
 
         // Tile layer: 1=floor, 2=object/furniture, 3=large object, 4=structural barrier.
         // Loaded from optional "layer" key in YAML; defaults to 1 for "structure" category, 2 otherwise.
@@ -1006,6 +1017,7 @@ namespace Waystation.Models
                 beautyScore    = raw.GetInt("beauty_score", 0),
                 isWorkbench    = raw.GetBool("is_workbench", false),
             };
+            b.portable              = raw.GetBool("portable", false);
             b.furnitureTag          = raw.GetString("furniture_tag", null);
             b.workbenchRoomType     = raw.GetString("workbench_room_type", null);
             b.workbenchBeautyReq    = raw.GetInt("workbench_beauty_req", 0);

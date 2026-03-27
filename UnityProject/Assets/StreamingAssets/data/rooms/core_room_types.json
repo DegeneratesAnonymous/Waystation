@@ -100,5 +100,12 @@
     "skill_bonuses": {
       "medicine": 1.15
     }
+  },
+  {
+    "id": "cargo_hold",
+    "display_name": "Cargo Hold",
+    "workbench_cap": 0,
+    "requirements_per_workbench": [],
+    "skill_bonuses": {}
   }
 ]
