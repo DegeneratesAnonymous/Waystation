@@ -39,6 +39,22 @@ Work through each role in order. Do not skip a role unless it is genuinely not a
 - State a clear recommendation with reasoning.
 - If QA Findings are provided (Required Input §6), incorporate them as additional research context — focus on root causes of the reported defects.
 
+#### Project Context Orientation (mandatory — complete first)
+
+Before any code audit or approach comparison, orient yourself to the project's current state. This prevents proposing work that duplicates in-flight PRs or conflicts with established design decisions.
+
+Perform **all four** of the following orientation checks:
+
+1. **README** — Read `README.md` in the repository root. Extract: project purpose, tech stack, architecture overview, and any setup or constraint notes that bear on the work order scope.
+
+2. **Wiki** — If a GitHub wiki exists for this repository, read every wiki page that is relevant to the work order scope. Note any design decisions, feature flags, or architectural constraints documented there.
+
+3. **Open Work Orders (issues)** — List all open GitHub issues labelled as work orders or feature requests. For each open WO that overlaps with the current work order scope: record its number, title, and status. The implementation plan must not duplicate or conflict with any in-flight WO.
+
+4. **Open Pull Requests** — List all open PRs. For each PR whose changed files overlap with the work order scope: record its number, title, and the files it touches. The implementation plan must account for pending changes — either depend on them, sequence around them, or document the conflict.
+
+Report all findings in the **§ 1 Research Summary** under a dedicated "Project Context" subsection.
+
 #### Codebase Overlap Audit (mandatory — complete before planning)
 
 Before recommending any approach, audit the existing codebase for overlap with the work order scope. Report every finding in the **§ 1 Research Summary** under a dedicated "Existing Code Audit" subsection. The Tech Lead must use this audit to extend, not replace, what already exists.
@@ -108,18 +124,29 @@ Produce all eight sections in order. Use the exact headings below.
 
 **Assumptions:** [Assumptions about the stack, environment, or constraints]
 
+#### Project Context
+
+| Source | Key Finding |
+|---|---|
+| README | [Relevant architecture / stack / constraint notes from README.md] |
+| Wiki | [Relevant design decisions or constraints from wiki pages; "No wiki" if absent] |
+| Open WOs | [Issue #NNN "Title" — overlaps because …; "None" if no overlap] |
+| Open PRs | [PR #NNN "Title" — touches `path/to/file.cs`; "None" if no overlap] |
+
+> Replace each row with actual findings. Do not leave any row blank — write "None" if a source has no relevant findings.
+
 #### Existing Code Audit
 
 | Check | File / Path | Finding |
 |---|---|---|
 | Existing system files | `UnityProject/Assets/Scripts/Systems/XyzSystem.cs` | Already implements A, B, C — do not recreate |
-| Stub / TODO audit | `UnityProject/Assets/Scripts/Systems/Foo.cs:42` | `// TODO: wire X when Y is available` — must be connected by this WO |
+| Stub / TODO audit | `UnityProject/Assets/Scripts/Systems/MedicalTickSystem.cs:87` | `// TODO: apply sanity penalty on wound deterioration` — must be wired up by this WO |
 | Data-model pre-existence | `UnityProject/Assets/Scripts/Models/Instances.cs:NNN` | `FooInstance` already defined — reuse, do not redefine |
 | Content data files | `UnityProject/Assets/StreamingAssets/data/buildables/core_buildables.json` | `buildable.bar` already present |
 | GameManager / registry registration | `UnityProject/Assets/Scripts/Core/GameManager.cs:NNN` | `XyzSystem` already instantiated and ticked |
 | Cross-system dependencies | `UnityProject/Assets/Scripts/Systems/XyzSystem.cs` → `AbcSystem.cs` | `XyzSystem.DoThing()` is called by `AbcSystem`; contract must be preserved |
 
-> Replace each row with actual findings. Remove rows where a check produced no relevant results and note "None" in the Finding column. This table is mandatory — leave nothing blank.
+> Replace each row with actual findings. Keep all six rows — write "None" in the Finding column for any check that produced no relevant results. Do not remove rows or leave any cell blank.
 
 #### Approach Comparison
 
@@ -221,6 +248,7 @@ Produce all eight sections in order. Use the exact headings below.
 
 - Work through all eight sections in order. Do not skip ahead.
 - If a section is not applicable (e.g. no frontend changes), state "Not applicable — [reason]" and move on.
+- **Complete the § 1 Project Context orientation (README, wiki, open WOs, open PRs) before any code audit or approach comparison.** Any implementation plan that conflicts with an in-flight PR or duplicates a pending WO is a defect.
 - **Complete the § 1 Existing Code Audit before writing the § 2 Technical Plan.** The Tech Lead must explicitly reference audit findings when scoping implementation steps. Any work order task that duplicates already-existing code or ignores an existing stub is a defect.
 - Define interface contracts in § 2 before writing any implementation code in § 3 or § 4.
 - Security (§ 6) must pass before QA (§ 7) is considered valid.
