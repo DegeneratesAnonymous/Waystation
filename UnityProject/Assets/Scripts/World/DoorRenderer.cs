@@ -83,7 +83,7 @@ public class DoorRenderer : MonoBehaviour
     }
 
     void ApplyOrientation() =>
-        transform.rotation = Quaternion.Euler(0f, 0f, orientation == DoorOrientation.NS ? 90f : 0f);
+        transform.rotation = Quaternion.Euler(0f, 0f, orientation == DoorOrientation.EW ? 90f : 0f);
 
     void Apply()
     {

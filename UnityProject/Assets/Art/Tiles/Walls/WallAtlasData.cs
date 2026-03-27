@@ -42,6 +42,11 @@
 //   3. Overlay sprite  drawn at wall position            (sorting: Wall/1)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// NOTE: The canonical implementations live in:
+//   Assets/Scripts/World/WallAtlasData.cs
+//   Assets/Scripts/World/WallRenderer.cs
+// This file is reference documentation only — it must NOT compile.
+#if false
 // ─────────────────────────────────────────────────────────────────────────────
 // FILE 1 — WallAtlasData.cs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,3 +195,4 @@ public class WallRenderer : MonoBehaviour
         Apply();
     }
 }
+#endif
