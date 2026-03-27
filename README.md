@@ -8,194 +8,166 @@ A top-down 2D sci-fi space station builder and colony sim in the tradition of Ri
  
 Waystation is built around the idea that emergent storytelling comes from simulating systems deeply and letting them collide. Your crew are not units — they are people with histories, relationships, needs, and breaking points. Your station is not a menu — it is a physical place where pipes freeze, fires spread, and a poorly placed wall means a room goes unpressurised. The galaxy around you is not a backdrop — it is a living network of factions, resources, and threats that evolves whether you engage with it or not.
  
-
+There is no hard win condition. There is no countdown. The game ends when you decide it does, or when your station becomes too broken to sustain — but even then, you keep playing.
+ 
 ---
-
-## Quick Start
-
-### Prerequisites
-
-- **Unity Hub** with **Unity 6000.0.40f1** (or later 6000.x LTS)
-
-### Opening the project
-
-1. Clone the repository and open **Unity Hub**
-2. Click **Add → Add project from disk** and select the `UnityProject/` folder
-3. Open the project in Unity 6000.0.40f1 or newer
-
-### Running in the editor
-
-1. Create `Assets/Scenes/MainMenuScene.unity` and `Assets/Scenes/GameScene.unity`
-2. Wire `MainMenuManager`, `GameManager`, `ContentRegistry`, and `GameViewController` GameObjects in each scene
-3. Add both scenes to **File → Build Settings**
-4. Press **Play**
-
+ 
+## Starting Out
+ 
+Every playthrough begins with a scenario selection. Your starting scenario determines your initial crew composition, station layout, available resources, ship complement, and the disposition of the two factions in your starting sector. Each scenario presents a different challenge profile — a well-stocked commercial hub, a salvaged derelict, a military outpost running low on supplies — and seeds the kind of story that will emerge from it.
+ 
 ---
  
 ## Core Features
  
 ### Station Building
  
-Stations are constructed tile-by-tile on a grid. Rooms are defined explicitly by the player through a room assignment menu. As a convenience, the initial room type can be auto-suggested based on the workbenches and furniture already placed inside, but the player makes the final assignment. Room function matters: a Communications Room needs a Comms Station workbench and may be augmented with a Comms Extender Array for increased range. A Medical Bay needs a Surgery Table. A Hydroponics Bay needs planter tiles, grow lights, and a water connection.
+Stations are constructed tile-by-tile on a grid. Rooms are defined explicitly by the player through a room assignment menu. As a convenience, the initial room type can be auto-suggested based on the workbenches and furniture already placed inside, but the player makes the final call.
  
-Construction is physical — NPCs must be assigned to build, and construction halts if materials run out mid-job. Blueprints must be placed before work begins.
+Room function is determined by what is placed inside it. A room becomes a Medical Bay when a Surgery Table is installed. A Communications Room needs a Comms Station workbench and may be augmented by a Comms Extender Array for range bonuses. Supporting equipment in the same room as a workbench provides passive bonuses to that workbench's output.
  
-Buildings have HP and damage states. Damaged equipment underperforms. Destroyed equipment stops functioning entirely.
+Construction is physical — blueprints must be placed, NPCs must be assigned, materials must be present, and time must pass. Construction halts if materials run out mid-job and resumes when restocked. Buildings have HP. Damaged equipment underperforms; destroyed equipment stops functioning entirely.
  
 ---
  
 ### Utility Networks
  
-Four physical networks run through your station, each requiring the player to manually route conduits through the tile map:
+Four physical utility networks must be manually routed through the station using tile-map conduits:
  
-- **Electrical** — powers all workbenches and equipment. Batteries buffer supply against demand.
-- **Plumbing** — delivers water to sinks, hydroponics, and medical equipment.
-- **Ducting** — circulates air and regulates temperature between rooms.
-- **Fuel Lines** — supplies fuel to engines, thrusters, and industrial equipment.
+- **Electrical** — powers all workbenches and equipment; batteries buffer supply against demand
+- **Plumbing** — delivers water to sinks, hydroponics, and medical equipment
+- **Ducting** — circulates air and regulates temperature between rooms
+- **Fuel Lines** — supplies fuel to engines, thrusters, and industrial equipment
  
-Only modules connected to a functioning network receive supply. A severed pipe means a dark room. A broken duct means a cold one. The `NetworkSystem` manages Union-Find graph traversal for connectivity, and the `UtilityNetworkManager` orchestrates per-tick supply/demand resolution across all four types.
+Only modules connected to a functioning supply network receive that resource. A severed conduit cuts off everything downstream.
  
 ---
  
 ### Crew Simulation
  
-Crew are the heart of Waystation. Every NPC is a fully simulated person.
+Every crew member is a fully simulated person.
  
-**Generation** — NPCs are generated from regional data: the species distribution of the system they originate from, the resource scarcity of their home region, and their faction background all influence their starting trait pool, skill tendencies, and personality profile. Station-born NPCs (Next Gen) derive their trait pools from their parents instead.
+**Acquisition** — Crew join through hiring, rescue, birth, capture, or recruitment from visitors.
  
-**Acquisition** — Crew can join your station through hiring, rescue, birth, capture, or recruitment from visiting ships.
+**Generation** — First-generation NPCs are built from regional data: the species distribution of their home system, sector-wide species weights, and regional resource conditions all influence their starting trait pools and personality profiles. Station-born NPCs derive their trait pools from their parents instead, making lineage a meaningful long-term force.
  
-**Skills** — Skills are organised under six ability score branches (STR, DEX, INT, WIS, CHA, END). The full list of skills is still being finalised. Skills level via a sqrt XP curve with a daily soft cap. A crew member also has an overall character level derived from cumulative XP across all skills, which acts as a broad measure of their experience. Every four skill levels, the player chooses an expertise slot unlock — granting access to higher-risk tasks in that skill. Dangerous tasks are hard-locked without the relevant expertise; less dangerous tasks impose a performance penalty.
+**Species** — A modular species system allows each species to carry distinct trait pools, skill specialisations, personality likelihoods, and different medical and food requirements. Only humans are currently defined; the architecture supports extension.
  
-XP accrues through on-the-job practice, reading research materials, and mentoring from higher-skilled crewmates.
+**Skills** — Skills are divided into Simple Skills (single ability score) and Advanced Skills (composite formula). Six ability scores govern all skill resolution: STR, DEX, INT, WIS, CHA, END. Character level is derived from cumulative XP across all skills. Every four levels in a skill, the player chooses an expertise slot unlock that gates access to higher-risk tasks.
  
-**Needs** — Eight needs are tracked per NPC: Sleep, Hunger, Thirst, Recreation, Social, Hygiene, Mood, and Health. Depletion rates vary by species and traits. When a need hits crisis threshold, the NPC will abandon their current job to seek satisfaction, and their mood takes a sustained hit.
+**Needs** — Eight needs are tracked per NPC: Sleep, Hunger, Thirst, Recreation, Social, Hygiene, Mood, and Health. Depletion rates vary by species and traits. Crisis needs force behaviour changes and accumulate pressure on mood and sanity.
  
-**Mood** — Mood operates on multiple axes (e.g. happy/sad, calm/stressed) and is influenced by needs, traits, room quality, meals, relationships, completed tasks, and witnessed events. A station-wide morale bar gives the player a broad pulse; inspecting an individual NPC reveals a full breakdown of active mood modifiers.
+**Mood** — Multi-axis mood system influenced by needs, traits, room quality, relationships, and life events. A station morale bar gives a broad reading; individual NPC inspection reveals a full modifier breakdown.
  
-**Sanity** — A per-NPC sanity score bounded by WIS modifier (ceiling) and −10 (floor) degrades under prolonged low mood, traumatic events (surgery failures, crew deaths, combat), and consistently unmet needs. Breakdown (≤ −5) triggers erratic behaviour, aggression, work refusal, stat penalties, or self-harm, and halts passive recovery until counselling intervention. Sanity can recover through counselling, time, improved conditions, and medication.
+**Sanity** — Degrades under prolonged low mood, trauma, and consistently unmet needs. Breakdown triggers erratic behaviour, aggression, and work refusal. Recovery requires counselling, medication, and improved conditions.
  
-**Traits** — NPCs carry traits that apply passive modifiers to skill XP gain, work speed, and mood. Traits are gained and lost dynamically through life events — a crew member who witnesses enough death may develop a trauma trait; a skilled mentor relationship may unlock a positive one. Trait conflicts are downgraded, not deleted.
+**Traits** — Gained and lost dynamically through lived experience. Trait conflicts downgrade rather than delete. Parental traits apply probabilistic pressure to next-gen NPC trait pools.
  
-**Tension** — When player decisions conflict with an NPC's traits, or when station conditions deteriorate, that NPC accumulates tension. Tension escalates through four stages: Normal → Disgruntled → WorkSlowdown → DepartureRisk. At DepartureRisk, the NPC announces their intent to leave and the player has a window to intervene. The game issues an alert when tension reaches a critical threshold.
+**Tension** — Tracks conflict between an NPC's traits and their station conditions. Escalates through Normal, Disgruntled, WorkSlowdown, and DepartureRisk. At DepartureRisk the NPC announces intent to leave and the player has a window to intervene.
+ 
+**Death** — When a crew member dies, nearby crew suffer a mood penalty, close relationships trigger events, and the body must be physically handled and removed from the station.
  
 ---
  
 ### Social Simulation
  
-**Relationships** — NPCs form pairwise relationships that progress through Acquaintance → Friend → Rival/Enemy → Lover → Spouse, with Family relationships possible for station-born NPCs. Some relationship types are species or role-gated. Relationships decay slowly without regular contact. Marriages can trigger at affinity ≥ 60 with Lover status.
+**Relationships** — NPCs form pairwise relationships tracked as affinity scores, progressing through Acquaintance, Friend (including Mentor/Student as a sub-type), Rival/Enemy, Lover, Spouse, and Family. Some types are species or role-gated.
  
-**Conversations** — Idle NPCs sharing a room will autonomously converse. Outcomes are weighted by current relationship type and push mood modifiers and affinity changes on both participants. Conversations are visible on the tile map via speech indicators, and notable conversations generate event log entries.
+**Conversations** — Idle NPCs sharing a room converse autonomously. Conversation quality begins with a raw CHA check that either resolves the interaction or opens skill-based follow-up options. Notable conversations appear in the event log.
  
-**Proximity** — Friends sharing a module provide a passive mood boost to each other. Enemies sharing a module impose a mutual mood penalty. Mentors provide a work speed bonus to nearby students.
+**Proximity** — Friends sharing a space boost each other's mood. Enemies penalise it. Mentors provide a work speed bonus to nearby students.
+ 
+**Mentoring** — Mentor/Student bonds form automatically when a high-skill NPC repeatedly works alongside a lower-skill one. Mentoring XP quality scales with the teacher's skill level, Communication skill, relationship affinity, and current mood.
+ 
+---
+ 
+### Departments and Ranks
+ 
+Departments are fully player-defined. The player creates, names, renames, and removes departments freely. Every job is assigned to a department. Department Heads can be appointed to automate department-level decisions including away mission dispatch.
+ 
+NPC rank is derived from overall character level. Higher-ranked crew unlock access to leadership roles and department head appointments.
  
 ---
  
 ### Medical System
  
-Waystation features a full body-part-based injury simulation across ~70 body part nodes. Wounds bleed, infections accumulate and roll, diseases progress, and pain derives from the sum of active injuries. Vital part destruction causes death.
+Full body-part-based injury and illness simulation across approximately 70 body part nodes. Per-tick pipeline covers bleeding, infection, disease progression, wound healing, pain derivation, consciousness, vital part death checks, functional penalties, and scar evaluation.
  
-Any NPC can perform medical procedures on another, including wound treatment and bandaging, surgery, amputation, prosthetic and implant fitting, disease treatment, and psychological treatment. The quality of care required depends on the condition — minor wounds need bandaging and rest; complex injuries require surgery at a proper medical workbench.
- 
-Surgery uses a d20 roll formula (Surgery level + DEX + Medical × 0.5) mapped to five outcome tiers from Critical Success to Critical Failure. Critical Failure triggers a d6 sub-table with results ranging from wrong-part damage to patient death. A failed surgery imposes sanity penalties on the surgeon.
- 
-Recovery depends on condition severity — some injuries resolve with bed rest, others require ongoing medication and regular medical attention.
+Any NPC can perform medical procedures: wound treatment, surgery, amputation, prosthetics, disease treatment, and psychological therapy. Surgery uses a d20 roll mapped to five outcome tiers from Critical Success to Critical Failure, with a d6 sub-table on the worst results.
  
 ---
  
 ### Farming
  
-Hydroponic planter tiles support four crop categories: food, medicinal plants, industrial materials, and exotic/luxury goods. Any room with a planter tile can support crops. Growth rate and yield are affected by light level, water supply, temperature, and NPC tending frequency.
- 
-NPCs perform sow, harvest, and tend tasks autonomously when assigned to a farming role.
+Planter tiles support four crop categories: food, medicinal plants, industrial materials, and exotic/luxury goods. Growth depends on light, water, temperature, and tending frequency. Neglected crops accumulate risk of blight (spreads between planters) and pest infestation (requires NPC intervention). Layout matters — tightly packed planters are efficient but vulnerable to spreading blight.
  
 ---
  
-### Temperature & Atmosphere
+### Temperature and Atmosphere
  
-Temperature is simulated per-tile. Heaters and coolers scale their power draw dynamically toward a target temperature. Vents equalise adjacent rooms via the ducting network. External space provides a fixed cold baseline.
- 
-Temperature affects NPC comfort and mood, crop growth rate, equipment malfunction risk, fire spread rate, and vacuum exposure in the event of a hull breach.
+Per-tile temperature simulation. Heaters and coolers scale dynamically toward target temperatures. Vents equalise adjacent rooms through the ducting network. Temperature affects NPC comfort, crop yield, equipment malfunction risk, fire spread, and vacuum exposure from hull breaches.
  
 ---
  
 ### Factions
  
-Factions are procedurally generated based on regional conditions, resource availability, and population density. Minor factions control a single system; major factions have expanded across multiple systems. Government type emerges from aggregated NPC trait profiles in the faction's population and shapes how that faction behaves diplomatically, economically, and militarily. The full taxonomy of government types is still being developed — the intent is a robust category system tied directly to the trait system rather than a fixed list of named archetypes.
+Factions are procedurally generated from regional conditions and resource availability. Government type emerges from aggregated NPC trait profiles via a voting system across nine defined types: Republic, Technocracy, Oligarchy, Theocracy, Dictatorship, Corporate State, Warlord State, Pirate Collective, and Vassalized.
  
-At game start, two factions operate in nearby systems of your starting sector — one friendly, one unfriendly — and both will interact regularly with your station. As you expand into new sectors, new factions generate according to the density of existing factions and the resources available in the area.
- 
-**Reputation** (−100 to +100) with each faction affects trade prices and access, visitor ship frequency, event eligibility, faction-exclusive technology and items, and hostile escalation and raid frequency.
- 
-Factions engage in autonomous inter-faction diplomacy — wars, alliances, and territorial changes can occur without player involvement.
+Reputation with each faction affects trade access, visitor frequency, event eligibility, exclusive tech and items, and raid thresholds. Factions simulate autonomous diplomacy. Governments can shift during play through population drift, internal crisis, or external pressure.
  
 ---
  
 ### Visitors
  
-Ships arrive at your station with procedurally assigned intent. Visitor roles include Traders, Refugees, Inspectors/Tax Collectors, Raiders/Pirates, Diplomats, Smugglers, Passersby, and Medical Emergency vessels. Some arrivals are handled automatically based on your faction policy; others prompt the player for a docking decision. What happens on denial depends on the visitor type — a trader leaves, a raider may escalate.
+Ships arrive with procedurally assigned intent: Trader, Refugee, Inspector/Tax Collector, Raider/Pirate, Diplomat, Smuggler, Medical Emergency, or Passerby. Visitor crew physically board the station, move through it, and interact with crew and facilities.
  
-Visitor NPCs physically board the station, move to relevant areas, and interact with crew and facilities. Trade with docked ships uses a full manifest system with negotiated pricing (modified by crew skill, supply/demand, and faction reputation) and supports standing buy/sell orders for automation.
+---
+ 
+### Fleet Management
+ 
+The player owns and manages a fleet of ships acquired through purchase or construction. Ship roles include Scout/Exploration, Mining/Resource Extraction, Combat/Defence, Transport/Cargo Hauling, and Diplomatic Courier. Ships crew with NPCs who carry their full simulation with them on missions.
  
 ---
  
 ### Research
  
-Research is organised as a node graph across five branches: Military, Economics, Sciences, Diplomacy, and Exploration. NPCs assigned to branch terminals actively generate research points. When prerequisite nodes are met, unlocks are stored as Datachips in Data Storage Servers.
- 
-Research unlocks new buildable workbenches and supporting equipment, crafting recipes, faction diplomacy options, ship and visitor access, NPC skill cap increases, and map range expansion.
- 
-Relay Nodes allow knowledge sharing between stations using copy semantics with per-branch filter configuration.
+A node graph across five branches: Military, Economics, Sciences, Diplomacy, and Exploration. Completed nodes produce Datachips stored in Data Storage Servers. Research unlocks new buildables, crafting recipes, diplomacy options, ship and visitor access, skill cap increases, and map range expansion.
  
 ---
  
-### Exploration & The Galaxy
+### Exploration and the Galaxy
  
-**Map System** — The map is a dedicated screen showing two levels of zoom: System view and Sector view. As the player researches and builds antenna infrastructure, more of the surrounding sector grid becomes accessible. Sectors generate endlessly as the player expands outward — the galaxy has no hard boundary, just an ever-receding horizon.
- 
-**Exploration Pipeline:**
-1. A basic antenna grants System-level visibility.
-2. A Sector Antenna (researched and built) reveals vague resource data for nearby systems — the three most abundant resources, nothing more.
-3. A scout ship dispatched to a system, crewed with an NPC working a Cartography Station workbench, produces an **Exploration Datachip** tied to that system. Installing the chip in a Cartography Server populates full system data on the map. If the chip is lost or destroyed, so is that knowledge.
-4. An Interstellar Antenna (further research) grants Exploration Points used to unlock new sectors on a grid. Each unlocked sector still requires a scout ship to populate its data.
- 
-**POI Types** — Asteroids, derelicts, anomalies, and enemy outposts can appear as Points of Interest. The system is designed to be modular with Workshop support.
- 
-**Sector Naming** — Sectors follow the convention `[Survey prefix]-[Phenomenon codes] [XX.YY coordinate] "Proper Name"` (e.g. `GSC-NB·OR 22.51 "The Cradle"`), generated procedurally at runtime.
- 
-**Galaxy Generation** — 80 sectors are generated via seeded Poisson disc sampling in a 100×100 coordinate space, with survey prefixes, phenomenon codes, proper names, and discovery states (Uncharted / Detected / Visited).
+Two map views: System and Sector. The galaxy generates endlessly as the player expands. Full system data requires a scout ship crewed with a cartographer who produces an Exploration Datachip. Lose the chip, lose the data — unless the player has researched and built backup capability.
  
 ---
  
-### Away Missions
+### Crafting
  
-Players can manually dispatch crews to Points of Interest, or automate dispatch by assigning Department Heads who will organise away missions independently. Away missions play out as real-time tile-based missions the player can observe. Risks include crew injury or death, equipment damage, mission failure, hostile ambush, and anomaly discovery.
+Workbench-based recipe execution. Recipes are unlocked through research and executed at the relevant workbench by assigned NPCs. Recipe quality and speed scale with the NPC's Crafting/Manufacturing skill.
  
-Asteroid mining missions generate procedural tile maps and calculate mineral yield on crew return based on crew skill and equipment.
+---
+ 
+### Economy
+ 
+Credits flow from trade, faction contracts, mission yields, visitor fees, and sale of manufactured goods. Supply and demand influence prices; faction reputation modifies trade terms.
  
 ---
  
 ### Events
  
-The event system is a data-driven pipeline that fires both on a scheduled tick basis and reactively in response to system state changes — faction reputation shifts, NPC mood crises, station resource thresholds, and more. Events support branching narratives, eligibility conditions, weighted selection, cooldowns, and player choices. Choices are surfaced through the station event log/feed. Events can chain explicitly — a player decision today may trigger a follow-up event days later.
+Data-driven pipeline firing on schedules and reactively to system state. Events carry eligibility conditions, weighted selection, cooldowns, branching choices, and cascading outcomes surfaced through the station event log. Events chain explicitly across time.
  
 ---
  
-### Jobs & Schedules
+### Jobs and Schedules
  
-Players set department priorities and NPCs self-assign tasks within those parameters. Each NPC has a fully customisable personal schedule — the day/night split (work ticks 6–20, rest ticks 21–5) is a default, not a constraint. Critical stations can run 24-hour operations with the right crew rotation.
- 
-Job assignment within a role is weighted by NPC skill level and department assignment. Mood crises auto-reassign affected NPCs to recreational jobs. Work output scales with the NPC's current mood score.
+Players set department priorities; NPCs self-assign within those parameters. Every NPC has a fully customisable personal schedule. Work speed scales with mood. Crisis NPCs are auto-reassigned to recreational jobs.
  
 ---
  
-### Items & Inventory
+### Items and Inventory
  
-Items are stored in physical containers — furniture objects placed in rooms. Cargo containers in designated cargo holds appear in the station's inventory view. Some containers can be hauled by NPCs; crew with backpacks or bags can carry additional items beyond pocket capacity.
- 
-Inventory is weight-based, not slot-based. Food and organics are perishable and decay over time.
- 
-Item categories: Raw Resources, Refined Resources, Exotic Resources, Components, Advanced Components, Exotic Components, Furniture, Workbenches, and Items (wearables, consumables, datachips, and other carried objects).
+Physical container-based storage. Inventory is weight-based. NPCs carry items in pockets and bags. Food decays. Item categories span Raw Resources through to wearables, consumables, and datachips.
  
 ---
  
@@ -205,6 +177,7 @@ Item categories: Raw Resources, Refined Resources, Exotic Resources, Components,
 |---|---|
 | EventSystem | |
 | FactionSystem | |
+| FactionGovernmentSystem | |
 | VisitorSystem | |
 | NPCSystem | |
 | NeedSystem | |
@@ -232,19 +205,24 @@ Item categories: Raw Resources, Refined Resources, Exotic Resources, Components,
 | TensionSystem | |
 | MedicalTickSystem | |
 | SurgerySystem | |
-| FactionGovernmentSystem | |
+| ShipSystem | |
+| CraftingSystem | |
+| EconomySystem | |
+| DepartmentSystem | |
+| RoomSystem | |
 | Horizon Simulation | |
 | Save / Load | |
  
 ---
  
-## Roadmap Highlights
+## Roadmap
  
-- **Horizon Simulation** — procedural region ticking, faction activity simulation beyond player visibility, and region discovery
-- **Multi-Station Founding** — establish and manage multiple waystations across sectors
-- **Planetary Surfaces** — surface missions and ground-side operations
-- **Species System** — modular non-human species with distinct traits, skill specialisations, medical needs, and food requirements
-- **Designer / Asset Editor** — full in-game editor for clothing, furniture, tiles, and animations with per-save template library
+- Horizon Simulation — procedural region ticking, faction activity beyond player visibility, region discovery
+- Species System — non-human species with distinct traits, medical needs, and food requirements
+- Multi-Station Founding — establish and manage multiple waystations across sectors
+- Planetary Surfaces — ground-side missions and surface operations
+- Designer / Asset Editor — in-game editor for clothing, furniture, tiles, and animations
+- Save / Load — full game state serialisation and load
  
 ---
 
