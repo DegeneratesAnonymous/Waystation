@@ -1491,10 +1491,14 @@ namespace Waystation.UI
                             bool cur = assignedTypeId == rt.id;
                             GUI.color = cur ? ColAccent : ColTextBright;
 
-                            // Build bonus description
-                            string bonusDesc = "";
+                            // Build bonus description — accumulate all skill bonuses
+                            var bonusParts = new System.Text.StringBuilder();
                             foreach (var skv in rt.skillBonuses)
-                                bonusDesc = $"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}";
+                            {
+                                if (bonusParts.Length > 0) bonusParts.Append(", ");
+                                bonusParts.Append($"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}");
+                            }
+                            string bonusDesc = bonusParts.ToString();
                             string btnLabel = string.IsNullOrEmpty(bonusDesc)
                                 ? rt.displayName
                                 : $"{rt.displayName}  [{bonusDesc}]";
@@ -1595,11 +1599,14 @@ namespace Waystation.UI
                     GUI.color = ColTextMid;
                     GUI.Label(new Rect(cw * 0.56f, y + 4f, cw * 0.24f, 16f), "(built-in)", _sSub);
                     GUI.color = colPrev;
-                    // Show skill bonus
-                    string bonusTxt = "";
+                    // Show skill bonuses (accumulate all entries)
+                    var bonusParts2 = new System.Text.StringBuilder();
                     foreach (var skv in rt.skillBonuses)
-                        bonusTxt = $"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}";
-                    GUI.Label(new Rect(cw * 0.80f, y + 4f, cw * 0.20f, 16f), bonusTxt, _sSub);
+                    {
+                        if (bonusParts2.Length > 0) bonusParts2.Append(", ");
+                        bonusParts2.Append($"+{(skv.Value - 1f) * 100f:F0}% {skv.Key}");
+                    }
+                    GUI.Label(new Rect(cw * 0.80f, y + 4f, cw * 0.20f, 16f), bonusParts2.ToString(), _sSub);
                     y += 28f;
                 }
             }
