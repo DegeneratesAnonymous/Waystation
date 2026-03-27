@@ -1,0 +1,211 @@
+name: Set Work Order Blocked-By Dependencies
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-blocked-by:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create WO-INF-006 if missing, then apply Blocked By sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+
+            // ── 1. Ensure WO-INF-006 (ResourceSystem) exists ─────────────────────────
+            const inf006Title = '[Work Order] INF-006 — ResourceSystem: Core Resource Cascade and Morale Scaling';
+            const inf006Body = `### Goal
+
+            Confirm the core resource cascade operates correctly: per-tick production and consumption applied to all active modules, soft caps enforced, and the morale modifier scaling production output based on average crew mood.
+
+            ### Research & Context
+
+            ResourceSystem.cs applies module resource_effects each tick with a morale multiplier derived from average crew mood (range 0.70–1.15). Soft caps prevent uncapped passive accumulation. Critical threshold warnings fire via StationLog when resources fall below defined minimums.
+            The morale modifier is the primary link between NPC simulation depth and economic output — it must scale correctly across the full mood range.
+            Six tracked resources: food, power, oxygen, parts, credits, ice. Each has a defined critical threshold and soft cap.
+
+            ### Project Context
+
+            ResourceSystem.cs is implemented and registered in GameManager.InitSystems(). The gaps are: confirming the cascade fires correctly for all active modules, confirming morale modifier scaling is correct at boundary values, and confirming critical threshold warnings reach the player.
+            The soft cap clamping logic (production delta clamped so it does not push resources past cap) must be verified — over-cap resources must not generate negative deltas.
+            MoraleModifier() is called once per tick and applied uniformly — if crew count is zero it returns 1.0 (neutral), which is the correct fallback.
+
+            ### Scope
+
+            In scope:
+
+            Per-tick production and consumption applied to all active, undamaged modules
+            Damage scalar applied: efficiency = 1 − damage, reducing both production and consumption
+            Morale modifier applied to production only (not consumption)
+            Soft cap clamping confirmed: production delta clamped to available headroom under cap
+            Critical threshold warnings confirmed for all six resources
+            Zero-crew fallback confirmed: MoraleModifier returns 1.0 when crew list is empty
+
+            Out of scope:
+
+            New resource types beyond the existing six
+            Resource trading or market pricing (EconomySystem, WO-FAC-005)
+            Per-room resource routing (NetworkSystem, WO-INF-003)
+
+            ### Acceptance Criteria
+
+             Given an active module with positive resource_effects, when a tick fires, then the resource increases by the morale-scaled, damage-reduced delta
+             Given an active module with negative resource_effects, when a tick fires, then the resource decreases by the damage-reduced delta (morale modifier does not apply to consumption)
+             Given a resource is at its soft cap, when a tick fires, then no further production delta is added
+             Given average crew mood is at its maximum positive value, when MoraleModifier is called, then the returned multiplier is 1.15
+             Given average crew mood is at its maximum negative value, when MoraleModifier is called, then the returned multiplier is 0.70
+             Given a resource falls below its critical threshold, when CheckThresholds runs, then a warning is posted to StationLog
+
+            ### Test Plan
+
+            Unit: test MoraleModifier at avg mood +1.0, 0.0, −1.0, and empty crew
+            Unit: test production delta with damage scalar at 0%, 50%, and 100% damage
+            Unit: test soft cap clamping when resource is at cap, below cap, and above cap
+            Unit: test critical threshold warning fires for each of the six resources
+            Integration: test full tick pipeline with a station containing a mix of producing and consuming modules
+
+            ### Rollback Plan
+
+            ResourceSystem is an existing system — no feature flag required; behaviour changes revert by reverting code
+            Morale modifier formula change is isolated to MoraleModifier() — reverting that method restores prior behaviour
+
+            ### Priority
+
+            🟡 Medium
+
+            ### Agents Required
+
+            - [x] Research Agent
+            - [x] Tech Lead Agent
+            - [x] Backend Agent
+            - [ ] Frontend Agent
+            - [x] Security Agent
+            - [x] DevOps Agent
+            - [x] QA Agent
+            - [x] Documentation Agent`;
+
+            let inf006Number = null;
+
+            // Search for existing INF-006 issue
+            const search = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${owner}/${repo} is:issue "INF-006" in:title`,
+            });
+
+            if (search.data.items.length > 0) {
+              inf006Number = search.data.items[0].number;
+              console.log(`WO-INF-006 already exists as #${inf006Number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title: inf006Title,
+                body: inf006Body,
+                labels: ['work-order'],
+              });
+              inf006Number = created.data.number;
+              console.log(`Created WO-INF-006 as #${inf006Number}`);
+            }
+
+            // ── 2. Layer → issue-number map ───────────────────────────────────────────
+            // Layer 1 — Physical World Foundation (no blocked-by, except INF-002 → INF-001)
+            const layer1 = [88, 89, 90, 91, inf006Number];
+
+            // Layer 2 — NPC Capability Foundation
+            const layer2 = [83, 84, 85];
+
+            // Layer 3 — Organisation and Simulation Depth
+            const layer3 = [92, 81, 80, 86];
+
+            // Layer 4 — Social and Mental Simulation
+            const layer4 = [87, 82];
+
+            // Layer 5 — World Simulation
+            const layer5 = [93, 94, 96, 95, 97];
+
+            // Layer 6 — Exploration and Fleet
+            const layer6 = [99, 100, 98, 101, 102];
+
+            // Layer 7 — Station Life and Long-Running Systems
+            const layer7 = [103, 104, 105, 106, 108];
+
+            // Layer 8 — Terminal
+            const layer8 = [107];
+
+            // Map each issue number to the list of issues that block it
+            const blockedBy = {};
+
+            // Layer 1: only INF-002 (#89) is blocked by INF-001 (#88)
+            blockedBy[89] = [88];
+
+            // Layers 2–8 are each blocked by the entire prior layer
+            for (const n of layer2)  blockedBy[n] = layer1;
+            for (const n of layer3)  blockedBy[n] = layer2;
+            for (const n of layer4)  blockedBy[n] = layer3;
+            for (const n of layer5)  blockedBy[n] = layer4;
+            for (const n of layer6)  blockedBy[n] = layer5;
+            for (const n of layer7)  blockedBy[n] = layer6;
+            for (const n of layer8)  blockedBy[n] = layer7;
+
+            // ── 3. Fetch issue titles for display ─────────────────────────────────────
+            const titleCache = {};
+            const allIssueNumbers = [...new Set([...layer1, ...layer2, ...layer3, ...layer4, ...layer5, ...layer6, ...layer7, ...layer8])];
+
+            for (const n of allIssueNumbers) {
+              try {
+                const { data } = await github.rest.issues.get({ owner, repo, issue_number: n });
+                // Strip the "[Work Order] " prefix for a compact display
+                titleCache[n] = data.title.replace(/^\[Work Order\]\s*/, '');
+              } catch (e) {
+                titleCache[n] = `Issue #${n}`;
+              }
+            }
+
+            // ── 4. Update each issue body ─────────────────────────────────────────────
+            const SECTION_HEADER = '### Blocked By';
+            const SECTION_MARKER = '<!-- blocked-by -->';
+
+            for (const [issueNumStr, blockingNums] of Object.entries(blockedBy)) {
+              const issueNum = Number(issueNumStr);
+              const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNum });
+              const currentBody = issue.body || '';
+
+              // Build the new section
+              const blockingList = blockingNums
+                .map(n => `- #${n} — ${titleCache[n]}`)
+                .join('\n');
+
+              const newSection = [
+                SECTION_MARKER,
+                SECTION_HEADER,
+                '',
+                '_This work order cannot begin until the following work orders are resolved:_',
+                '',
+                blockingList,
+              ].join('\n');
+
+              let updatedBody;
+              if (currentBody.includes(SECTION_MARKER)) {
+                // Replace existing section (everything from the marker to end-of-body or next ## heading)
+                updatedBody = currentBody.replace(
+                  new RegExp(`${SECTION_MARKER}[\\s\\S]*$`),
+                  newSection,
+                );
+              } else {
+                updatedBody = currentBody.trimEnd() + '\n\n' + newSection;
+              }
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issueNum,
+                body: updatedBody,
+              });
+
+              console.log(`Updated #${issueNum} with Blocked By: ${blockingNums.join(', ')}`);
+            }
+
+            console.log('All blocked-by sections applied successfully.');
