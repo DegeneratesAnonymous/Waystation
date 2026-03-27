@@ -142,10 +142,18 @@ namespace Waystation.Systems
             {
                 switch (net.networkType)
                 {
-                    case "electric": TickElectrical(station, net); break;
-                    case "pipe":     TickFluid(station, net);      break;
-                    case "duct":     TickGas(station, net);        break;
-                    case "fuel":     TickFuel(station, net);       break;
+                    case "electric":
+                        if (UtilityNetworkManager.ElectricalEnabled) TickElectrical(station, net);
+                        break;
+                    case "pipe":
+                        if (UtilityNetworkManager.PlumbingEnabled)   TickFluid(station, net);
+                        break;
+                    case "duct":
+                        if (UtilityNetworkManager.DuctingEnabled)    TickGas(station, net);
+                        break;
+                    case "fuel":
+                        if (UtilityNetworkManager.FuelEnabled)       TickFuel(station, net);
+                        break;
                 }
             }
         }
