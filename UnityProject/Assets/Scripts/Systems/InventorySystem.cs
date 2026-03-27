@@ -26,7 +26,11 @@ namespace Waystation.Systems
     {
         private readonly ContentRegistry _registry;
 
-        /// <summary>Default Commitment Cooldown duration in game ticks.</summary>
+        /// <summary>
+        /// Default Commitment Cooldown duration in game ticks.
+        /// At the standard tick rate (1 tick = 15 in-game minutes) this equals
+        /// 15 in-game hours (~30 real-time seconds at 0.5 s/tick).
+        /// </summary>
         public const int DefaultCommitmentCooldownTicks = 60;
 
         public InventorySystem(ContentRegistry registry) => _registry = registry;
