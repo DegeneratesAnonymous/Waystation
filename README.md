@@ -12,7 +12,7 @@ A sci-fi space station management game in early development. You command a front
 
 - Admit or deny incoming ships based on faction standing, contraband checks, and available docking
 - Respond to faction demands, crises, and random incidents — every choice ripples outward
-- Manage crew needs (hunger, rest, morale) and assign them to day/night shift jobs
+- Manage crew needs (hunger, rest, thirst, recreation, and social) and assign them to day/night shift jobs
 - Balance seven station resources (power, food, oxygen, credits, parts, ice, water)
 - Trade with docked ships, negotiate prices, and manage cargo holds
 - Survive boarding actions and repair hull damage
@@ -21,6 +21,8 @@ A sci-fi space station management game in early development. You command a front
 - Wire up electrical, plumbing, and ducting utility networks — every powered buildable must be connected to a working supply
 - Grow food and resources in greenhouse modules through the hydroponics farming system
 - Watch crew morale, friendships, rivalries, and relationships evolve through proximity and conversation
+- Track per-body-part injuries: wounds bleed, infect, and require treatment; skilled surgeons can operate with dramatic consequences
+- Chart a procedurally generated solar system and galaxy of 80+ sectors, each with unique phenomena and discovery states
 
 ---
 
@@ -50,10 +52,13 @@ A sci-fi space station management game in early development. You command a front
 | System | Description |
 |---|---|
 | **EventSystem** | Data-driven event pipeline with branching narratives, eligibility conditions, weighted selection, cooldowns, and player choices that trigger cascading outcomes |
-| **FactionSystem** | Six major factions with per-faction reputation (−100 → +100), inter-faction diplomacy, and behavior tags that shape which ships and events appear |
-| **VisitorSystem** | Procedural ship arrivals, docking decisions, contraband checks, and faction-based traffic |
-| **NPCSystem** | Crew generation from class templates; skills, traits, needs (hunger/rest/social), mood calculation, and skill XP |
-| **JobSystem** | Day/night shift assignment with per-job resource and crew-need effects |
+| **FactionSystem** | Four major factions with per-faction reputation (−100 → +100), inter-faction diplomacy, and behavior tags that shape which ships and events appear |
+| **VisitorSystem** | Procedural ship arrivals with role-weighted intent (trader, refugee, inspector, raider, etc.); docking decisions, contraband checks, hostile escalation on denial, and visitor NPC spawning |
+| **NPCSystem** | Crew generation from class templates; 27 skills across ability score branches, trait pools, needs tracking, mood calculation, and skill XP award |
+| **NeedSystem** | Five granular crew needs — Sleep, Hunger, Thirst, Recreation, Social — each with individual per-tick depletion rates, seek thresholds, crisis states (malnutrition, burnout), and backward-compatible mood integration |
+| **SanitySystem** | Per-NPC mental health score bounded by WIS modifier (ceiling) and −10 (floor); evaluated daily against average mood and need fulfillment; breakdown state (≤ −5) halts passive recovery until counselling intervention |
+| **SkillSystem** | 27 skills with sqrt-XP level curve; character level (totalXP / 1000) awards expertise slots every 5 levels; daily 500 XP soft cap (70% rate above cap); mood bonuses on level-up and slot unlock; capability-locked tasks gated by expertise via TaskEligibilityResolver |
+| **JobSystem** | Day/night shift assignment with per-job resource and crew-need effects; work modifier scaled by mood score; crisis NPCs auto-reassigned to recreational jobs |
 | **TradeSystem** | Trade manifests for docked ships, price negotiation (crew skill modifies prices), and cargo execution |
 | **InventorySystem** | Per-module cargo holds with capacity limits, type filters, reserved fractions, and perishable decay |
 | **ResourceSystem** | Per-tick production and consumption across seven resources; morale scaling |
@@ -67,12 +72,20 @@ A sci-fi space station management game in early development. You command a front
 | **AsteroidMissionSystem** | Dispatches crews on multi-tick asteroid mining away missions; generates procedural asteroid tile maps; calculates mineral yield on crew return |
 | **FarmingSystem** | Hydroponics planter tile lifecycle (sow → grow → harvest); NPC sow/harvest/tend task generation; growth rate gated on light level, water supply, and ambient temperature |
 | **TemperatureSystem** | Per-room and per-tile temperature simulation; heaters/coolers dynamically scale power draw toward a target; vents equalise adjacent rooms; planter tiles read temperature each tick |
-| **MoodSystem** | 0–100 mood score per crew member drifting downward during waking hours and resetting on sleep; named time-limited modifiers stack additively; crisis state (< 20) clears the task queue until mood recovers |
-| **RelationshipRegistry** | Pairwise NPC affinity scores (None → Acquaintance → Friend → Lover → Spouse); slow decay after 7-day inactivity; affinity thresholds trigger relationship-type changes |
+| **MoodSystem** | 0–100 mood score per crew member drifting toward 50 each tick; named time-limited modifiers stack additively and deduplicate by (eventId, source); crisis state (< 20) clears task queue; sanity accumulator updated every tick |
+| **RelationshipRegistry** | Pairwise NPC affinity scores (None → Acquaintance → Friend → Lover → Spouse); slow decay after 7-day inactivity; affinity thresholds trigger relationship-type changes; marriage event at affinity ≥ 60 + Lover |
 | **ConversationSystem** | Idle co-module NPCs autonomously converse; outcome probability weighted by current relationship type; updates affinity and pushes mood modifiers on both participants |
 | **ProximitySystem** | Friends sharing a module receive a passive mood boost each tick; enemies share a mood penalty; modifier expires naturally after NPCs separate |
-| **TraitSystem** | NPC trait acquisition, conflict resolution, and decay; positive and negative traits apply passive modifiers to skill XP, work speed, and mood; wired to trait pools for condition-based assignment |
+| **TraitSystem** | NPC trait acquisition, conflict resolution, and decay; positive and negative traits apply passive modifiers to skill XP, work speed, and mood; wired to trait pools and lineage tables for condition-based assignment |
+| **TensionSystem** | Per-NPC tension score tracking player-vs-trait conflict; stages Normal → Disgruntled → WorkSlowdown → DepartureRisk with passive decay during conflict-free periods; applies work modifier penalties at WorkSlowdown; fires departure-risk warning at 90+ |
 | **FactionGovernmentSystem** | Faction leader resolution per NPC; succession candidate pooling; pirate-region government aggregation (partial — full succession and pirate mechanics deferred) |
+| **MedicalTickSystem** | Full body-part-based injury simulation: 15-step per-tick pipeline covering bleeding, infection accumulation and roll, disease progression, wound healing, pain derivation, consciousness calculation, vital-part death checks, functional penalty application, mood modifiers, and scar evaluation. Feature-gated via `FeatureFlags.MedicalSystem` |
+| **SurgerySystem** | d20 + Surgery level + DEX + Medical×0.5 roll mapped to 5 outcome tiers (Critical Success → Critical Failure); Critical Failure triggers a d6 sub-table with results ranging from wrong-part damage to patient death; on failure, surgeon takes sanity hits and fear lineage pressure |
+| **SolarSystemGenerator** | Produces a deterministic `SolarSystemState` from the station name seed: star type, colour, orbital bodies (rocky planets, gas giants, ice planets, asteroid belts) with Keplerian orbital parameters, moon generation, and planetary class tags (T1–T7, G1–G5, I1–I3, E1–E5) |
+| **GalaxyGenerator** | Generates 80 sectors via seeded Poisson disc sampling in a 100×100 coordinate space; assigns survey prefixes (GSC/FRN/ANC/IND/UNK), phenomenon codes (primary stellar + resource/hazard modifiers), proper names from word pools, and sector discovery states (Uncharted / Detected / Visited) |
+| **RoomSystem** | Assigns workbench bonuses to buildables based on the room type they reside in; rebuilds the bonus cache whenever the layout changes |
+| **BeautyScorer** | Scores `ClothingTemplate` designs 0–100 using per-layer base points, explicit colour bonuses, department colour bonuses, and a colour-harmony bonus (complementary, analogous, or triadic hue detection); also exposes a `MagicPalette` helper that infers the dominant harmony rule and fills unassigned colour slots |
+| **DepartmentRegistry** | Runtime registry for crew department primary and accent colours; fires `OnDeptColourChanged` events that trigger live shader re-resolution on all NPCs wearing garments with `DeptColour` bindings |
 
 ---
 
@@ -87,7 +100,88 @@ A sci-fi space station management game in early development. You command a front
 
 ---
 
-## Data-Driven Architecture
+## Medical & Surgery System
+
+The medical system models each NPC's body as a tree of **72 body parts** covering the full human anatomy (head, skull, brain, face, eyes, ears, neck, torso, spine, all chest organs, abdomen organs, pelvis, both arms with fingers, both legs with toes). All processing is feature-gated via `FeatureFlags.MedicalSystem`.
+
+### Body Part Tree
+
+Parts are organised in a parent–child hierarchy with **functional tags** (`locomotion`, `manipulation`, `sight`, `hearing`, `respiration`, `circulation`, `digestion`, `excretion`, `neural`) and **coverage region tags** (`head_region`, `facial_region`, `torso_region`, `left/right_arm_region`, `left/right_leg_region`). Destroying a part with `InstantDeath` vital-rule kills the NPC immediately; paired organs (lungs, kidneys) trigger a death timer when both are destroyed.
+
+### Wound Types & Severity
+
+Every wound has a **type** and a **severity tier**:
+
+| Severity | Tier |
+|---|---|
+| Minor | Tier 1 |
+| Moderate | Tier 2 |
+| Severe | Tier 3 |
+| Critical | Tier 4 |
+
+Six wound types each carry distinct bleed rates per severity tier, infection chance modifiers, pain multipliers, and scar chance values:
+
+| Wound Type | Notes |
+|---|---|
+| **Laceration** | Cuts / slashes; moderate bleed, high scar chance |
+| **Puncture** | Stabs; slow initial bleed, highest infection risk |
+| **Gunshot** | Ballistic entry; highest bleed rate at critical severity |
+| **Blunt** | Bludgeon / bruise; minimal bleed, high pain, may fracture |
+| **Burn** | Thermal / chemical; highest infection modifier and scar rate |
+| **Fracture** | Bone break; minimal direct bleed, high pain, responds to SetFracture treatment |
+
+### Per-Tick Pipeline
+
+`MedicalTickSystem` runs 15 processing steps per NPC per tick:
+
+1. **BleedingSystem** — reduces blood volume from active wound bleed rates
+2. **Infection accumulation** — untreated wounds accumulate infection chance each tick
+3. **Infection roll** — every 12 ticks, a d20 roll against accumulated chance can trigger wound infection
+4. **Disease progression** — active diseases advance through stages; antibiotic courses slow or reverse progression
+5. **Wound healing** — treated wounds progress toward full heal; untreated wounds do not heal
+6. **Analgesic / antibiotic countdown** — timed medication states expire
+7. **PainSystem** — derives total pain (0–100) from all wound contributions, disease, modified by analgesic strength
+8. **ConsciousnessSystem** — derives consciousness (0–100) from pain, blood volume, and brain health
+9. **Blood volume recovery** — natural recovery boosted when well-fed and well-rested
+10. **Vital part death checks** — InstantDeath organs trigger immediate NPC death
+11. **Paired organ timers** — both lungs destroyed → death in 5 ticks; both kidneys → death in 192 ticks
+12. **Functional penalty application** — derives locomotion, manipulation, sight, hearing, respiration, circulation, digestion modifiers from part health values
+13. **Mood modifiers** — pain tiers (Low / Medium / High / Severe) and low blood volume (< 60%) push named mood debuffs
+14. **Scar evaluation** — fully healed wounds may leave permanent scars based on wound type and treatment quality
+15. **Consciousness state** — sets NPC unconscious flag; suppresses need-seeking while unconscious
+
+### Treatment Actions
+
+Six treatment actions are implemented. Treatment quality is computed as `Clamp01(skillCheck/20) × environment × facility × supplyQuality`:
+
+| Action | Effect |
+|---|---|
+| **Bandage** | Marks wound treated; reduces bleed rate by up to 50% at perfect quality |
+| **CleanWound** | Resets infection accumulation; must precede bandaging for best infection protection |
+| **AdministerPainkiller** | Sets 16-tick analgesic state (0.2–0.7 strength); longer/stronger at higher quality |
+| **SetFracture** | Fracture only; bone alignment gives 1.5–2.0× healing rate multiplier and reduces pain |
+| **AdministerAntibiotics** | Clears infection accumulation; sets 192-tick antibiotic course to slow/regress infection stages |
+| **IVDrip** | Immediately restores 5–30% blood volume scaled by treatment quality |
+
+### Surgery System
+
+Surgery uses a d20 roll modified by surgeon's Surgery level, DEX modifier, Medical skill×0.5, environment modifier, and facility modifier:
+
+| Roll | Outcome | Effect |
+|---|---|---|
+| ≥ 22 | **Critical Success** | Wound fully stabilised, bleeding stopped, 40% immediate healing progress, no scar |
+| 16–21 | **Success** | Wound treated, bleed halved, pain −30%, 20% healing progress |
+| 10–15 | **Partial Success** | Wound treated, bleed −25%, pain −15%, 10% healing progress |
+| 5–9 | **Failure** | No benefit; patient takes 5% damage to the target part |
+| ≤ 4 | **Critical Failure** | d6 sub-table rolls one of: wrong-part damage, excessive bleeding (×3), instrument left (infection 100%), nerve damage (permanent −5% locomotion/manipulation), cardiac incident (heart −20%), or patient death |
+
+On any critical failure the surgeon takes −1 sanity (−2 if the patient dies) and fear lineage pressure is applied via the TraitSystem.
+
+### Scars
+
+Fully healed wounds may leave permanent scars. Each scar contributes a small permanent functional penalty (1–4% per severity tier) to the NPC's FunctionalPenaltyProfile. Scars are tracked by body region for cosmetic and social scoring (e.g. facial scars accumulate and can influence NPC interactions).
+
+---
 
 All game content lives in JSON files under `UnityProject/Assets/StreamingAssets/data/` — zero hardcoded game data.
 
@@ -104,10 +198,11 @@ data/
 ├── missions/      # Away-mission templates (mining runs, trade routes, patrol circuits)
 ├── modules/       # Station module types with resource effects and capacity
 ├── npcs/          # NPC class templates (skills, traits, starting equipment)
+│   └── lineages/  # NPC trait lineage definitions (condition-based lineage pressure rules)
 ├── research/      # Research node definitions (branch, prerequisites, cost, unlock tags)
 ├── rooms/         # Room type definitions (workbench bonuses, greenhouse climate rules)
 ├── ships/         # Ship templates (role, cargo, threat level)
-├── skills/        # NPC skill definitions (id, display name, governing attribute)
+├── skills/        # NPC skill definitions (id, display name, governing attribute) — 27 skills
 ├── trait_pools/   # Trait pool definitions controlling condition-based trait acquisition
 └── traits/        # NPC trait definitions (positive/negative status effects and modifiers)
 ```
@@ -129,6 +224,8 @@ Waystation uses a **layered NPC sprite system** inspired by RimWorld and Prison 
 ### Sprite Atlases
 
 All 9 atlases live in `atlases/`. Each sprite is **32×48 px** of content inside a **34×50 px** slot (1 px transparent padding). The atlases ship in the repository pre-generated; use the HTML generators to regenerate them if needed.
+
+Clothing and hair atlases use **neutral-tone master atlases** accompanied by companion `_mask.png` files. The `NpcApparel.shader` performs mask-keyed tinting at runtime using the `FEATURE_SHADER_RECOLOUR` keyword — each atlas JSON includes `colour_slots` and `mask_atlas` fields describing which mask regions map to which colour slot. Department colour bindings (`ColourSource.DeptColour`) resolve live via `DepartmentRegistry` so the entire crew can be recoloured without re-baking sprites.
 
 | Atlas | Dimensions | Variants | Layout |
 |---|---|---|---|
@@ -199,7 +296,7 @@ Scripts live in `unity/` (copy into your Unity project's `Assets/Scripts/NPC/` f
 
 ```
 Waystation/
-├── atlases/               # Pre-generated NPC sprite PNG atlases + JSON sidecars
+├── atlases/               # Pre-generated NPC sprite PNG atlases + JSON sidecars (incl. _mask.png files)
 ├── generators/            # Browser-based HTML sprite generators (open in browser to re-export)
 │   └── npc_composite_test.html  # Visual QA: composite all 9 layers
 ├── unity/                 # Unity C# scripts (copy into Assets/Scripts/NPC/)
@@ -210,11 +307,18 @@ Waystation/
 ├── UnityProject/
 │   ├── Assets/
 │   │   ├── Scripts/
-│   │   │   ├── Core/          # GameManager, ContentRegistry, MiniJSON
+│   │   │   ├── Core/          # GameManager, ContentRegistry, FeatureFlags, MiniJSON
 │   │   │   ├── Models/        # Templates (definitions) and Instances (runtime state)
-│   │   │   ├── Systems/       # One file per game system (BuildingSystem, CommsSystem, …)
-│   │   │   ├── UI/            # GameHUD (IMGUI overlay with all tabs)
-│   │   │   └── View/          # StationRoomView, TileAtlas, StarfieldView
+│   │   │   │                  # Includes MedicalDefinitions, MedicalRuntime, SolarSystemModels, SectorData
+│   │   │   ├── Systems/       # One file per game system (50+ systems)
+│   │   │   │                  # Includes MedicalTickSystem, SurgerySystem, HumanBodyTree,
+│   │   │   │                  # TreatmentActions, SanitySystem, SkillSystem, NeedSystem,
+│   │   │   │                  # SolarSystemGenerator, GalaxyGenerator, BeautyScorer,
+│   │   │   │                  # DepartmentRegistry, TaskEligibilityResolver, VisitorSystem
+│   │   │   ├── UI/            # GameHUD (IMGUI), SystemMapController, AssetEditorController,
+│   │   │   │                  # BuildMenuController, OverlayModeController, MainMenuManager
+│   │   │   ├── View/          # StationRoomView, TileAtlas, StarfieldView, UIRing, CameraController
+│   │   │   └── World/         # World-level controllers (if present)
 │   │   └── StreamingAssets/
 │   │       └── data/          # JSON game content (see Data-Driven Architecture)
 │   └── Packages/              # Unity package manifest
@@ -234,22 +338,25 @@ The following systems are defined in the codebase but are not yet fully implemen
 
 | System | File(s) | Status | Notes |
 |---|---|---|---|
-| **Horizon Simulation** | `RegionSimulationStub.cs`, `IRegionSimulation.cs` | No-op stub | `RegionSimulationStub` implements `IRegionSimulation` with empty methods (all log TODO markers). Registered in `GameManager.InitSystems()` as the active implementation. Intended to be replaced by a full Horizon Simulation work order that adds procedural region ticking, horizon expansion, and region discovery. |
-| **Faction History** | `RegionSimulationStub.cs` (`FactionHistoryStub` class), `IFactionHistoryProvider.cs` | No-op stub | `FactionHistoryStub` (co-located in `RegionSimulationStub.cs`) implements `IFactionHistoryProvider`; `GetFactionHistory` always returns an empty list and `RecordFactionEvent` does not persist. Registered alongside `RegionSimulationStub` and intended for replacement in the same Horizon Simulation work order. |
-| **Visitor NPC Shop & Wander Behaviour** | `NPCTaskQueue.cs` | Immediate-succeed stub | `ShopVisitTask` and `IdleInHangarTask` both exist as named task types but complete immediately without executing any behaviour. Visitor NPCs are spawned and walk to the landing pad (via `CommunicationsTask`), then stand in place. A future Visitor Behaviour work order is expected to wire these tasks to shop modules and wander waypoints. |
-| **Faction Government — Pirate Region Mechanics** | `FactionGovernmentSystem.cs` | Partial stub | Pirate faction government aggregation returns `null` instead of a resolved leader; only individual NPC resolution is implemented. Full pirate-region mechanics are deferred to a follow-on work order. |
-| **Faction Government — Leader Succession** | `FactionGovernmentSystem.cs` | Partial stub | `SuccessionEvaluator` selects a candidate pool but the auto-selection and promotion logic is not executed; the method exits early with a TODO comment. Deferred to a succession-condition work order. |
-| **NPC Tension — Crew Departure** | `TensionSystem.cs` | Partial stub | `TensionSystem` calculates per-NPC departure risk and pushes a mood penalty, but the actual departure attempt is not triggered; the TODO comment notes it requires a crew/roster system to be implemented first. |
-| **Trait System — Medical/Therapy Event Removal** | `TraitSystem.cs` | Partial stub | `TriggerEventRemoval()` is defined on the trait system but has no wired triggers; the TODO comment notes that medical/therapy system hooks are required before trait-removal events can fire. |
-| **Farming — Fertiliser & Pruning Mechanics** | `FarmingSystem.cs` | Partial stub | The NPC `TendTask` completes without any gameplay effect. A TODO comment marks it as a stub pending fertiliser and pruning mechanics. |
-| **Temperature — Duct Integration** | `TemperatureSystem.cs` | Partial stub | Vent processing equalises temperature between adjacent rooms, but integration with the ducting utility network (i.e. duct-driven airflow affecting temperature) is marked as a TODO stub. |
-| **Horizon — Resource Flow Recording** | `RegionSystem.cs` | Partial stub | `RegionSystem` has a hook to record resource flows per region, but the actual recording is a TODO pending Horizon Simulation providing real flow data. |
-| **Save / Load Game** | `GameHUD.cs`, `MainMenuManager.cs` | UI stub | The **Load Game** button exists in both the main menu and the in-game settings panel but is disabled and labelled *"coming soon"*. Save serialises station resources; load is not yet implemented. |
-| **Graphics Settings** | `GameHUD.cs` | UI stub | The Graphics settings panel displays *"Graphics settings coming soon."* with no controls. |
-| **Sound Settings** | `GameHUD.cs` | UI stub | The Sound settings panel displays *"Sound settings coming soon."* with no controls. |
-| **Template Library — File Picker** | `GameHUD.cs` | UI stub | The **Import** button in the Template Library logs a TODO message instead of opening a file dialog. |
-| **Multi-Station Founding** | `AntennaSystem.cs`, `SystemMapController.cs` | Future work | `AntennaSystem` explicitly limits antenna-range bonuses to the home sector because multi-station founding is out of scope; `SystemMapController` contains a matching note. Full multi-station support is deferred to a future work order. |
-| **Galaxy Outer-Fringe Survey Density** | `GalaxyGenerator.cs` | Partial stub | Sectors beyond the outer fringe (x > 85) return a `SurveyPrefix.UNK` (Unknown) designation because the density-threshold algorithm that would classify them is not yet implemented. |
+| **Horizon Simulation** | `RegionSimulationStub.cs`, `IRegionSimulation.cs` | No-op stub | `RegionSimulationStub` implements `IRegionSimulation` with empty methods (all log TODO markers). Registered in `GameManager.InitSystems()` as the active implementation. Intended to be replaced by a full Horizon Simulation work order that adds procedural region ticking, horizon expansion, and region discovery. Depends on: RegionSystem, FactionSystem, MapSystem. |
+| **Faction History** | `RegionSimulationStub.cs` (`FactionHistoryStub` class), `IFactionHistoryProvider.cs` | No-op stub | `FactionHistoryStub` (co-located in `RegionSimulationStub.cs`) implements `IFactionHistoryProvider`; `GetFactionHistory` always returns an empty list and `RecordFactionEvent` does not persist. Registered alongside `RegionSimulationStub` and intended for replacement in the same Horizon Simulation work order. Depends on: FactionSystem, RegionSystem. |
+| **Visitor NPC Shop & Wander Behaviour** | `NPCTaskQueue.cs` | Immediate-succeed stub | `ShopVisitTask` and `IdleInHangarTask` both exist as named task types but complete immediately without executing any behaviour. Visitor NPCs are spawned and walk to the landing pad (via `CommunicationsTask`), then stand in place. A future Visitor Behaviour work order is expected to wire these tasks to shop modules and wander waypoints. Depends on: VisitorSystem, BuildingSystem, NPCPathfinder. |
+| **Faction Government — Pirate Region Mechanics** | `FactionGovernmentSystem.cs` | Partial stub | Pirate faction government aggregation returns `null` instead of a resolved leader; only individual NPC resolution is implemented. Full pirate-region mechanics are deferred to a follow-on work order. Depends on: FactionSystem, RegionSystem (Horizon Simulation). |
+| **Faction Government — Leader Succession** | `FactionGovernmentSystem.cs` | Partial stub | `SuccessionEvaluator` selects a candidate pool but the auto-selection and promotion logic is not executed; the method exits early with a TODO comment. Deferred to a succession-condition work order. Depends on: FactionSystem, RelationshipRegistry, TraitSystem. |
+| **NPC Tension — Crew Departure** | `TensionSystem.cs` | Partial stub | `TensionSystem` calculates per-NPC departure risk and pushes a mood penalty, but the actual departure attempt is not triggered; the TODO comment notes it requires a crew/roster system to be implemented first. Depends on: TraitSystem, MoodSystem, NPCSystem (roster management). |
+| **Trait System — Medical/Therapy Event Removal** | `TraitSystem.cs` | Partial stub | `TriggerEventRemoval()` is defined on the trait system but has no wired triggers; the TODO comment notes that medical/therapy system hooks are required before trait-removal events can fire. The MedicalSystem is now fully implemented and can be wired. Depends on: MedicalTickSystem, SurgerySystem. |
+| **Medical System — Non-Human Species** | `MedicalTickSystem.cs` | Partial stub | `GetTreeForSpecies()` always returns the Human body tree regardless of `npc.species`. A TODO comment marks non-human species support as pending. Depends on: HumanBodyTree (or a future species registry). |
+| **Medical System — Fortitude Trait Integration** | `MedicalTickSystem.cs` | Partial stub | Pain derivation has a TODO comment to check for `trait.fortitude` and reduce pain by 10%. The trait data and TraitSystem are available; only the lookup call in PainSystem.Derive is missing. Depends on: TraitSystem, MedicalTickSystem. |
+| **Sanity — Counselling Intervention** | `SanitySystem.cs` | Partial stub | `RegisterIntervention()` marks that a counselling interaction has occurred (halts passive breakdown drain), but no EventSystem trigger wires to this method yet. Depends on: EventSystem, SanitySystem. |
+| **Farming — Fertiliser & Pruning Mechanics** | `FarmingSystem.cs` | Partial stub | The NPC `TendTask` completes without any gameplay effect. A TODO comment marks it as a stub pending fertiliser and pruning mechanics. Depends on: FarmingSystem, InventorySystem (fertiliser items). |
+| **Temperature — Duct Integration** | `TemperatureSystem.cs` | Partial stub | Vent processing equalises temperature between adjacent rooms, but integration with the ducting utility network (i.e. duct-driven airflow affecting temperature) is marked as a TODO stub. Depends on: TemperatureSystem, NetworkSystem (ducting). |
+| **Horizon — Resource Flow Recording** | `RegionSystem.cs` | Partial stub | `RegionSystem` has a hook to record resource flows per region, but the actual recording is a TODO pending Horizon Simulation providing real flow data. Depends on: RegionSystem, IRegionSimulation (Horizon Simulation). |
+| **Galaxy — Outer-Fringe Survey Density** | `GalaxyGenerator.cs` | Partial stub | Sectors beyond the outer fringe (x > 85) receive a `SurveyPrefix.UNK` (Unknown) designation because the density-threshold algorithm that would classify them is not yet implemented. Depends on: GalaxyGenerator, SectorData. |
+| **Save / Load Game** | `GameHUD.cs`, `MainMenuManager.cs` | UI stub | The **Load Game** button exists in both the main menu and the in-game settings panel but is disabled and labelled *"coming soon"*. Save serialises station resources; load is not yet implemented. Depends on: GameManager, StationState (all runtime systems). |
+| **Graphics Settings** | `GameHUD.cs` | UI stub | The Graphics settings panel displays *"Graphics settings coming soon."* with no controls. Depends on: Unity rendering pipeline. |
+| **Sound Settings** | `GameHUD.cs` | UI stub | The Sound settings panel displays *"Sound settings coming soon."* with no controls. Depends on: Unity audio system. |
+| **Template Library — File Picker** | `GameHUD.cs` | UI stub | The **Import** button in the Template Library logs a TODO message instead of opening a file dialog. Depends on: Unity file dialog API. |
+| **Multi-Station Founding** | `AntennaSystem.cs`, `SystemMapController.cs` | Future work | `AntennaSystem` explicitly limits antenna-range bonuses to the home sector because multi-station founding is out of scope; `SystemMapController` contains a matching note. Full multi-station support is deferred to a future work order. Depends on: AntennaSystem, GalaxyGenerator, SectorData, MapSystem. |
 
 ---
 
