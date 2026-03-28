@@ -609,7 +609,7 @@ namespace Waystation.Models
         /// Returns the schedule slot for the given hour (0–23), using the per-NPC
         /// custom schedule when set, or the station default day/night split otherwise.
         /// <paramref name="hourOfDay"/> is clamped to 0–23 to guard against
-        /// out-of-range values from <see cref="TimeSystem.HourOfDay"/>.
+        /// out-of-range values from TimeSystem.HourOfDay.
         /// </summary>
         public ScheduleSlot GetScheduleSlot(int hourOfDay)
         {

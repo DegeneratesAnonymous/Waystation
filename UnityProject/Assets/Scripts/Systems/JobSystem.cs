@@ -97,6 +97,16 @@ namespace Waystation.Systems
 
         private void AssignJob(NPCInstance npc, StationState station)
         {
+            // Crisis guard: a crisis NPC must always receive a recreational task,
+            // regardless of their current schedule slot or department.  This ensures
+            // that when jobInterrupted fires due to crisis entry or recovery the
+            // schedule gate below cannot accidentally assign Rest or a work job.
+            if (npc.inCrisis)
+            {
+                AssignRecreationalTask(npc, station);
+                return;
+            }
+
             // ── Schedule-slot gate ────────────────────────────────────────────
             int hourOfDay = TimeSystem.HourOfDay(station);
             ScheduleSlot slot = npc.GetScheduleSlot(hourOfDay);
