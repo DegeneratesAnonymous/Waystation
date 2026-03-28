@@ -433,6 +433,7 @@ namespace Waystation.Systems
 
         private void TickHealing(NPCInstance npc, MedicalProfile profile, StationState station)
         {
+            bool woundHealedThisTick = false;
             foreach (var kv in profile.parts)
             {
                 var part = kv.Value;
@@ -458,6 +459,36 @@ namespace Waystation.Systems
                         // Wound fully healed — evaluate scar chance
                         EvaluateScarChance(npc, part, w, partDef, station);
                         part.wounds.RemoveAt(i);
+                        woundHealedThisTick = true;
+                    }
+                }
+            }
+
+            // Medical recovery milestone: fire only when a wound healed this tick AND
+            // no wounds remain, so we trigger on the healing-to-healthy transition rather
+            // than every tick an already-healthy NPC is processed.
+            if (_traits != null && FeatureFlags.NpcTraits && npc.traitProfile != null
+                && woundHealedThisTick)
+            {
+                bool hasAnyWound = false;
+                foreach (var part in profile.parts.Values)
+                {
+                    if (part.wounds.Count > 0) { hasAnyWound = true; break; }
+                }
+
+                if (!hasAnyWound)
+                {
+                    var traitsCopy = new System.Collections.Generic.List<string>();
+                    foreach (var at in npc.traitProfile.traits)
+                        traitsCopy.Add(at.traitId);
+
+                    foreach (var tid in traitsCopy)
+                    {
+                        if (_traits.TryGetTrait(tid, out var def) && def.medicalRemovable)
+                        {
+                            _traits.TriggerEventRemoval(npc, tid, station.tick);
+                            station?.LogEvent($"{npc.name}: medical recovery — '{def.displayName}' trait removed.");
+                        }
                     }
                 }
             }

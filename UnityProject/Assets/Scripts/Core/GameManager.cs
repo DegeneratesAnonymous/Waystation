@@ -112,6 +112,12 @@ namespace Waystation.Core
         private float _tickTimer;
         private List<PendingEvent> _pendingEventsBuffer = new List<PendingEvent>();
 
+        /// <summary>
+        /// Tracks the UIDs of crew NPCs that were alive at the start of each tick.
+        /// Used to detect newly-dead crew this tick and fire witness events.
+        /// </summary>
+        private readonly HashSet<string> _livingCrewIds = new HashSet<string>();
+
         // ── Unity lifecycle ───────────────────────────────────────────────────
 
         private void Awake()
@@ -204,6 +210,7 @@ namespace Waystation.Core
 
             // Trait, Tension, Faction Government, Region systems
             Traits = new TraitSystem();
+            Traits.SetMoodSystem(Mood);
             foreach (var kv in Registry.Traits)      Traits.RegisterTrait(kv.Value);
             foreach (var kv in Registry.TraitPools)  Traits.RegisterPool(kv.Value);
             foreach (var kv in Registry.TraitLineages) Traits.RegisterTraitLineage(kv.Value);
@@ -469,6 +476,13 @@ namespace Waystation.Core
 
             Station.tick++;
 
+            // Snapshot living crew UIDs before any systems run this tick so we can detect
+            // newly-dead NPCs after all damage/medical/surgery systems have processed.
+            _livingCrewIds.Clear();
+            foreach (var npc in Station.npcs.Values)
+                if (npc.IsCrew() && !npc.statusTags.Contains("dead"))
+                    _livingCrewIds.Add(npc.uid);
+
             // Tick all systems in deterministic order
             Resources.Tick(Station);
             Npcs.Tick(Station);
@@ -520,6 +534,17 @@ namespace Waystation.Core
             // included in the current-tick mood score and therefore in Sanity's daily accumulator.
             if (FeatureFlags.MedicalSystem)
                 Medical?.Tick(Station);
+
+            // Death witness events: detect crew that died this tick and apply WitnessDeath
+            // condition pressure to all surviving crew so the trauma trait system can fire.
+            if (FeatureFlags.NpcTraits)
+            {
+                foreach (var npc in Station.npcs.Values)
+                {
+                    if (_livingCrewIds.Contains(npc.uid) && npc.statusTags.Contains("dead"))
+                        Traits.NotifyCrewDeath(npc, Station);
+                }
+            }
 
             Mood.Tick(Station);
             Sanity.Tick(Station);

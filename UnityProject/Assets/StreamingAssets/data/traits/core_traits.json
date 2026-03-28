@@ -175,5 +175,116 @@
       { "target": "LoyaltyModifier", "magnitude": -0.2 },
       { "target": "SocialModifier", "magnitude": -0.1 }
     ]
+  },
+  {
+    "id": "trait.death_witness_trauma",
+    "display_name": "Witness Trauma",
+    "description": "Psychological scars from witnessing a crew member's death. Impairs work and social function.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": true,
+    "therapy_removable": true,
+    "medical_removable": false,
+    "conflict_axis": "trauma_response",
+    "conflict_downgrade_target": "trait.haunted",
+    "conflicting_trait_ids": ["trait.resilient", "trait.composed"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.12 },
+      { "target": "MoodModifier", "magnitude": -8.0 },
+      { "target": "SocialModifier", "magnitude": -0.2 }
+    ]
+  },
+  {
+    "id": "trait.haunted",
+    "display_name": "Haunted",
+    "description": "Residual unease from past trauma. Milder than full witness trauma but still affects mood.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.02,
+    "requires_event_to_remove": false,
+    "therapy_removable": true,
+    "medical_removable": false,
+    "conflict_axis": "trauma_response",
+    "conflict_downgrade_target": "",
+    "conflicting_trait_ids": [],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.05 },
+      { "target": "MoodModifier", "magnitude": -4.0 }
+    ]
+  },
+  {
+    "id": "trait.surgery_fear",
+    "display_name": "Surgery Fear",
+    "description": "Repeated surgical failures have instilled a deep fear of operating. Concentration suffers.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": true,
+    "therapy_removable": true,
+    "medical_removable": false,
+    "conflict_axis": "surgical_confidence",
+    "conflict_downgrade_target": "trait.anxious",
+    "conflicting_trait_ids": [],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.10 },
+      { "target": "MoodModifier", "magnitude": -6.0 }
+    ]
+  },
+  {
+    "id": "trait.hardened",
+    "display_name": "Hardened",
+    "description": "Extended exposure to combat has toughened this NPC's resolve.",
+    "category": "Psychological",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.01,
+    "requires_event_to_remove": false,
+    "therapy_removable": false,
+    "medical_removable": false,
+    "conflict_axis": "trauma_response",
+    "conflict_downgrade_target": "trait.haunted",
+    "conflicting_trait_ids": ["trait.brittle", "trait.anxious"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": 0.05 },
+      { "target": "MoodModifier", "magnitude": 3.0 },
+      { "target": "HostilityModifier", "magnitude": 0.05 }
+    ]
+  },
+  {
+    "id": "trait.desperate",
+    "display_name": "Desperate",
+    "description": "Prolonged starvation has made this NPC take dangerous risks to meet basic needs.",
+    "category": "Psychological",
+    "valence": "Negative",
+    "decay_rate_per_day": 0.0,
+    "requires_event_to_remove": false,
+    "therapy_removable": false,
+    "medical_removable": true,
+    "conflict_axis": "",
+    "conflict_downgrade_target": "",
+    "conflicting_trait_ids": ["trait.composed"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": -0.08 },
+      { "target": "MoodModifier", "magnitude": -5.0 },
+      { "target": "HostilityModifier", "magnitude": 0.15 }
+    ]
+  },
+  {
+    "id": "trait.mentored",
+    "display_name": "Mentored",
+    "description": "Benefited from sustained guidance. Improved cooperation and a slight work speed bonus.",
+    "category": "Social",
+    "valence": "Positive",
+    "decay_rate_per_day": 0.005,
+    "requires_event_to_remove": false,
+    "therapy_removable": false,
+    "medical_removable": false,
+    "conflict_axis": "",
+    "conflict_downgrade_target": "",
+    "conflicting_trait_ids": ["trait.distrustful"],
+    "effects": [
+      { "target": "WorkSpeedModifier", "magnitude": 0.07 },
+      { "target": "SocialModifier", "magnitude": 0.1 }
+    ]
   }
 ]

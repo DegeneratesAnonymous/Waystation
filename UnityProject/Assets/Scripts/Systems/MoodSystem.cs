@@ -223,6 +223,28 @@ namespace Waystation.Systems
             EvaluateThresholds(npc);
         }
 
+        /// <summary>
+        /// Immediately reverses and removes the mood modifier with the given eventId and source.
+        /// No-op if no such modifier exists.
+        /// </summary>
+        public void RemoveModifier(NPCInstance npc, string eventId, string source = "")
+        {
+            if (npc.moodModifiers == null) return;
+            for (int i = npc.moodModifiers.Count - 1; i >= 0; i--)
+            {
+                var mod = npc.moodModifiers[i];
+                if (mod.eventId == eventId && mod.source == source)
+                {
+                    // Undo the original delta: PushModifier did moodScore += delta, so reversing
+                    // requires moodScore -= delta (same pattern as ExpireModifiers above).
+                    npc.moodScore = Mathf.Clamp(npc.moodScore - mod.delta, 0f, 100f);
+                    npc.moodModifiers.RemoveAt(i);
+                    EvaluateThresholds(npc);
+                    return;
+                }
+            }
+        }
+
         // ── Static helpers ────────────────────────────────────────────────────
 
         /// <summary>Returns the threshold label for a given MoodScore.</summary>
