@@ -2929,17 +2929,22 @@ namespace Waystation.UI
                 float thirV  = npc.thirstNeed     != null ? npc.thirstNeed.value     / 100f : 1f;
                 float recreV = npc.recreationNeed != null ? npc.recreationNeed.value / 100f : 1f;
                 float socV   = npc.socialNeed     != null ? npc.socialNeed.value     / 100f : GetNeed(npc, "social");
+                float hygV   = FeatureFlags.HygieneNeed && npc.hygieneNeed != null
+                                   ? npc.hygieneNeed.value / 100f : 1f;
 
-                string sleepBadge = npc.sleepNeed      != null && npc.sleepNeed.isSeeking        ? "Seeking"   : null;
-                string hungBadge  = npc.hungerNeed     != null && npc.hungerNeed.isMalnourished  ? "Malnour."  : null;
-                string burntBadge = npc.recreationNeed != null && npc.recreationNeed.isBurntOut  ? "Burnt Out" : null;
-                string reclBadge  = npc.socialNeed     != null && npc.socialNeed.isReclusive     ? "Reclusive" : null;
+                string sleepBadge  = npc.sleepNeed      != null && npc.sleepNeed.isSeeking        ? "Seeking"   : null;
+                string hungBadge   = npc.hungerNeed     != null && npc.hungerNeed.isMalnourished  ? "Malnour."  : null;
+                string burntBadge  = npc.recreationNeed != null && npc.recreationNeed.isBurntOut  ? "Burnt Out" : null;
+                string reclBadge   = npc.socialNeed     != null && npc.socialNeed.isReclusive     ? "Reclusive" : null;
+                string hygieneBadge = FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.inCrisis ? "Crisis" : null;
 
                 NBar("Sleep",      sleepV, sleepV < 0.30f ? ColBarCrit : sleepV < 0.60f ? ColBarWarn : ColBarGreen, sleepBadge);
                 NBar("Hunger",     hungV,  hungV  < 0.30f ? ColBarCrit : hungV  < 0.60f ? ColBarWarn : ColBarGreen, hungBadge);
                 NBar("Thirst",     thirV,  thirV  < 0.30f ? ColBarCrit : thirV  < 0.60f ? ColBarWarn : ColBarGreen);
                 NBar("Recreation", recreV, recreV < 0.30f ? ColBarCrit : recreV < 0.60f ? ColBarWarn : ColBarGreen, burntBadge);
                 NBar("Social",     socV,   socV   < 0.30f ? ColBarCrit : socV   < 0.60f ? ColBarWarn : ColBarGreen, reclBadge);
+                if (FeatureFlags.HygieneNeed)
+                    NBar("Hygiene", hygV,  hygV   < 0.15f ? ColBarCrit : hygV   < 0.40f ? ColBarWarn : ColBarGreen, hygieneBadge);
                 y += 6f;
 
                 // --- Ability Scores -----------------------------------------

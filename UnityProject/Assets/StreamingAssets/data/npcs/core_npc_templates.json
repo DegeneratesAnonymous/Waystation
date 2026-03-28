@@ -37,7 +37,10 @@
     "equipment_pool": [],
     "pocket_capacity": 10.0,
     "spawn_rules": {},
-    "schema_version": "1"
+    "schema_version": "1",
+    "need_depletion_rates": {
+      "hygiene": 1.2
+    }
   },
   {
     "id": "npc.security_officer",
@@ -69,7 +72,11 @@
     "equipment_pool": [],
     "pocket_capacity": 10.0,
     "spawn_rules": {},
-    "schema_version": "1"
+    "schema_version": "1",
+    "need_depletion_rates": {
+      "sleep": 1.1,
+      "hygiene": 1.1
+    }
   },
   {
     "id": "npc.scientist",
@@ -106,7 +113,11 @@
     "equipment_pool": [],
     "pocket_capacity": 10.0,
     "spawn_rules": {},
-    "schema_version": "1"
+    "schema_version": "1",
+    "need_depletion_rates": {
+      "hunger": 0.9,
+      "social": 0.85
+    }
   },
   {
     "id": "npc.trader",
@@ -133,7 +144,10 @@
     },
     "pocket_capacity": 10.0,
     "spawn_rules": {},
-    "schema_version": "1"
+    "schema_version": "1",
+    "need_depletion_rates": {
+      "social": 0.8
+    }
   },
   {
     "id": "npc.refugee",
@@ -155,7 +169,12 @@
     },
     "pocket_capacity": 10.0,
     "spawn_rules": {},
-    "schema_version": "1"
+    "schema_version": "1",
+    "need_depletion_rates": {
+      "hunger": 1.15,
+      "thirst": 1.15,
+      "hygiene": 1.2
+    }
   },
   {
     "id": "npc.inspector",
@@ -234,6 +253,10 @@
     },
     "pocket_capacity": 10.0,
     "spawn_rules": {},
-    "schema_version": "1"
+    "schema_version": "1",
+    "need_depletion_rates": {
+      "hygiene": 1.3,
+      "sleep": 1.1
+    }
   }
 ]

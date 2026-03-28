@@ -167,6 +167,12 @@ namespace Waystation.Models
         public float pocketCapacity = 10f;
         public string schemaVersion = "1";
 
+        // Per-need depletion rate multipliers for this species/template.
+        // Keys: "sleep" | "hunger" | "thirst" | "recreation" | "social" | "hygiene"
+        // Values: multiplier (1.0 = baseline, >1 depletes faster, <1 depletes slower).
+        // Omitted keys default to 1.0.
+        public Dictionary<string, float> needDepletionRates = new Dictionary<string, float>();
+
         public static NPCTemplate FromDict(Dictionary<string, object> raw)
         {
             var t = new NPCTemplate
@@ -186,6 +192,9 @@ namespace Waystation.Models
             if (raw.ContainsKey("faction_bias") && raw["faction_bias"] is Dictionary<string, object> fb)
                 foreach (var kv in fb)
                     t.factionBias[kv.Key] = Convert.ToSingle(kv.Value);
+            if (raw.ContainsKey("need_depletion_rates") && raw["need_depletion_rates"] is Dictionary<string, object> ndr)
+                foreach (var kv in ndr)
+                    t.needDepletionRates[kv.Key] = Convert.ToSingle(kv.Value);
             return t;
         }
     }

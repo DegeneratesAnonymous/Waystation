@@ -1,4 +1,4 @@
-// NeedSystem — drives Sleep, Hunger, Thirst, Recreation, and Social needs.
+// NeedSystem — drives Sleep, Hunger, Thirst, Recreation, Social, and Hygiene needs.
 //
 // Tick rates (0-100 scale, 1 tick = 15 in-game minutes, 96 ticks = 1 in-game day):
 //   Sleep depletion (awake):  100/64  = ~1.5625 / tick  → empty in 16h waking
@@ -8,9 +8,16 @@
 //   Recreation (work tick):   -1 pt  / tick of work     → 8h work = -32
 //   Recreation (rec tick):    +4 pts / tick of rec      → 2h rec = +32 (8:2 restore ratio)
 //   Social decay:             100/192 = ~0.5208 / tick  → empty in 2 in-game days
+//   Hygiene depletion:        100/192 = ~0.5208 / tick  → empty in 2 in-game days
+//
+// Mood and Health are read-only aggregates sourced from MoodSystem and
+// MedicalTickSystem respectively — they have no independent depletion in NeedSystem.
 //
 // Backward compatibility: mirrors new float profiles back to the legacy npc.needs dict
 // so existing code reading npc.needs["hunger"] etc. continues to work.
+//
+// Species and trait depletion rate modifiers: each need tick applies a combined
+// multiplier from npc.needDepletionRates (species) and trait checks (individual).
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -51,6 +58,20 @@ namespace Waystation.Systems
         public const float SocialIncompatibleRestoration =  2f;
         public const float SocialNeutralRestoration      =  5f;
 
+        // Hygiene
+        public const float HygieneDepletionPerTick = 100f / 192f;  // ~0.5208  per tick → empty in 2 in-game days
+        public const float HygieneSeekThreshold    = 35f;
+        public const float HygieneCrisisThreshold  = 10f;
+        // Mood penalty applied when Hygiene is in crisis
+        public const float HygieneCrisisMoodPenalty   = -15f;
+        // Social interaction quality penalty applied while in hygiene crisis (multiplier on restoration)
+        public const float HygieneCrisisSocialPenalty = 0.5f;
+        // Hygiene restoration amounts from facilities
+        public const float ShowerRestorationAmount    = 80f;
+        public const float SinkRestorationAmount      = 40f;
+        // Threshold above which a need counts as "satisfied" for the sanity check
+        public const float NeedSatisfactionThreshold  = 50f;
+
         // ── Dependencies ──────────────────────────────────────────────────────
         private MoodSystem    _mood;
         private SanitySystem  _sanity;
@@ -84,6 +105,8 @@ namespace Waystation.Systems
                 TickThirst    (npc, station, suppressSeeking);
                 TickRecreation(npc);
                 TickSocial    (npc, population);
+                if (FeatureFlags.HygieneNeed)
+                    TickHygiene(npc, station, suppressSeeking);
                 ApplyMoodModifiers(npc, station);
                 MirrorToLegacyNeeds(npc);
                 npc.RecalculateMood();          // keep legacy -1..1 mood float in sync
@@ -125,6 +148,7 @@ namespace Waystation.Systems
             float decay = SleepDepletionPerTick;
             if (HasTrait(npc, "trait.fatigued"))            decay *= 1.10f;
             if (HasTrait(npc, "trait.exhausted_disposition")) decay *= 1.20f;
+            decay *= GetSpeciesMultiplier(npc, "sleep");
 
             s.value     = Mathf.Max(0f, s.value - decay);
             s.isSeeking = s.value <= SleepSeekThreshold;
@@ -172,6 +196,7 @@ namespace Waystation.Systems
             if (HasTrait(npc, "trait.iron_stomach")) decay *= 0.80f;
             if (HasTrait(npc, "trait.hardy"))        decay *= 0.90f;
             if (HasTrait(npc, "trait.hungry"))       decay *= 1.10f; // debuff threshold shifts earlier
+            decay *= GetSpeciesMultiplier(npc, "hunger");
 
             h.value     = Mathf.Max(0f, h.value - decay);
             h.isSeeking = h.value <= HungerSeekThreshold;
@@ -221,7 +246,8 @@ namespace Waystation.Systems
 
             if (npc.isSleeping) return;
 
-            t.value     = Mathf.Max(0f, t.value - ThirstDepletionPerTick);
+            float thirstDecay = ThirstDepletionPerTick * GetSpeciesMultiplier(npc, "thirst");
+            t.value     = Mathf.Max(0f, t.value - thirstDecay);
             t.isSeeking = t.value <= ThirstSeekThreshold;
 
             if (t.isSeeking && !suppressSeeking && station.GetResource("water") > 0f)
@@ -239,8 +265,9 @@ namespace Waystation.Systems
             var r = npc.recreationNeed;
 
             // While working → spend; while idle → recover
+            // Apply species modifier to work cost only (how fast this archetype fatigues during work)
             if (!string.IsNullOrEmpty(npc.currentJobId))
-                r.value = Mathf.Max(0f, r.value - RecWorkCostPerTick);
+                r.value = Mathf.Max(0f, r.value - RecWorkCostPerTick * GetSpeciesMultiplier(npc, "recreation"));
             else
                 r.value = Mathf.Min(100f, r.value + RecRecoveryPerTick);
 
@@ -276,6 +303,7 @@ namespace Waystation.Systems
             if (HasTrait(npc, "trait.gregarious"))         decay *= 0.70f;
             if (HasTrait(npc, "trait.social_comfortable")) decay *= 0.85f;
             if (HasTrait(npc, "trait.withdrawn"))          decay *= 1.00f; // no change but debuff threshold shifts
+            decay *= GetSpeciesMultiplier(npc, "social");
 
             s.value = Mathf.Max(0f, s.value - decay);
 
@@ -294,7 +322,65 @@ namespace Waystation.Systems
         public static void RegisterSocialInteraction(NPCInstance npc, float quality)
         {
             if (npc?.socialNeed == null || npc.socialNeed.isReclusive) return;
-            npc.socialNeed.value = Mathf.Min(100f, npc.socialNeed.value + quality);
+            // Apply hygiene crisis social penalty: poor hygiene reduces social restoration
+            float effectiveQuality = quality;
+            if (npc.hygieneNeed != null && npc.hygieneNeed.inCrisis)
+                effectiveQuality *= HygieneCrisisSocialPenalty;
+            npc.socialNeed.value = Mathf.Min(100f, npc.socialNeed.value + effectiveQuality);
+        }
+
+        // ── Hygiene ───────────────────────────────────────────────────────────
+
+        private void TickHygiene(NPCInstance npc, StationState station, bool suppressSeeking = false)
+        {
+            var h = npc.hygieneNeed;
+
+            if (npc.isSleeping) return;
+
+            float decay = HygieneDepletionPerTick;
+            if (HasTrait(npc, "trait.clean"))   decay *= 0.80f; // fastidious cleanliness
+            if (HasTrait(npc, "trait.slovenly")) decay *= 1.20f; // hygiene degrades faster
+            decay *= GetSpeciesMultiplier(npc, "hygiene");
+
+            h.value     = Mathf.Max(0f, h.value - decay);
+            h.isSeeking = h.value <= HygieneSeekThreshold;
+
+            // Crisis state: sustained low hygiene applies mood and social penalties
+            bool wasInCrisis = h.inCrisis;
+            h.inCrisis = h.value <= HygieneCrisisThreshold;
+
+            if (h.inCrisis && !wasInCrisis)
+                station.LogEvent($"{npc.name} is in dire need of a wash.");
+
+            // Seek hygiene facility when below threshold and able
+            if (h.isSeeking && !suppressSeeking)
+                TryUseHygieneFacility(npc, station);
+        }
+
+        private static void TryUseHygieneFacility(NPCInstance npc, StationState station)
+        {
+            // Prefer showers over sinks: collect the best candidate and use it.
+            // Showers give a larger restore (ShowerRestorationAmount); sinks give a smaller one.
+            FoundationInstance best = null;
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete") continue;
+                if (f.buildableId != "buildable.shower" && f.buildableId != "buildable.sink") continue;
+
+                // Always prefer a shower over a sink
+                if (best == null) { best = f; continue; }
+                if (f.buildableId == "buildable.shower" && best.buildableId != "buildable.shower")
+                    best = f;
+            }
+
+            if (best == null) return;
+
+            // Use facility: restore hygiene
+            // Shower gives a large hygiene restore; sink gives a smaller partial wash
+            float restoration = best.buildableId == "buildable.shower" ? ShowerRestorationAmount : SinkRestorationAmount;
+            npc.hygieneNeed.value     = Mathf.Min(100f, npc.hygieneNeed.value + restoration);
+            npc.hygieneNeed.isSeeking = npc.hygieneNeed.value <= HygieneSeekThreshold;
+            npc.hygieneNeed.inCrisis  = npc.hygieneNeed.value <= HygieneCrisisThreshold;
         }
 
         // ── Daily boundary checks ─────────────────────────────────────────────
@@ -339,14 +425,16 @@ namespace Waystation.Systems
             // Sanity pipeline
             if (_sanity != null)
             {
-                bool anyDepleted = h.value <= 0f || t.value <= 0f || s.value <= 0f;
+                bool anyDepleted = h.value <= 0f || t.value <= 0f || s.value <= 0f ||
+                                   (FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.value <= 0f);
                 if (anyDepleted)
                     _sanity.RegisterNeedDepleted(npc, station);
 
                 int above50 = 0;
-                if (h.value > 50f) above50++;
-                if (t.value > 50f) above50++;
-                if (s.value > 50f) above50++;
+                if (h.value > NeedSatisfactionThreshold) above50++;
+                if (t.value > NeedSatisfactionThreshold) above50++;
+                if (s.value > NeedSatisfactionThreshold) above50++;
+                if (FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.value > NeedSatisfactionThreshold) above50++;
                 if (above50 > 0)
                     _sanity.RegisterNeedsSatisfied(npc, above50, station);
             }
@@ -415,6 +503,14 @@ namespace Waystation.Systems
             else if (social <= 20f) p -= 10f;
             else if (social <= 30f) p -=  5f; // debuff starts at 30%
 
+            if (FeatureFlags.HygieneNeed && npc.hygieneNeed != null)
+            {
+                float hygiene = npc.hygieneNeed.value;
+                if      (hygiene <= HygieneCrisisThreshold)  p += HygieneCrisisMoodPenalty; // -15
+                else if (hygiene <= 20f)                     p -=  8f;
+                else if (hygiene <= HygieneSeekThreshold)    p -=  4f;
+            }
+
             return p;
         }
 
@@ -454,6 +550,8 @@ namespace Waystation.Systems
             if (npc.hungerNeed.isMalnourished)         mod *= 0.90f;
             if (npc.thirstNeed.value <= 20f)           mod *= 0.80f;
             if (npc.socialNeed.value <= 10f)           mod *= 0.90f;
+            if (FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.inCrisis)
+                mod *= 0.85f;
             return Mathf.Max(0.35f, mod);
         }
 
@@ -466,6 +564,7 @@ namespace Waystation.Systems
             else if (npc.sleepNeed.value <= 20f) mod -= 1;
             if (npc.thirstNeed.value <= 20f)     mod -= 1;
             if (npc.hungerNeed.isMalnourished)   mod -= 1;
+            if (FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.inCrisis) mod -= 1;
             return Mathf.Max(-4, mod);
         }
 
@@ -473,14 +572,27 @@ namespace Waystation.Systems
 
         private static void MirrorToLegacyNeeds(NPCInstance npc)
         {
-            npc.needs["sleep"]  = npc.sleepNeed.value  / 100f;
-            npc.needs["hunger"] = npc.hungerNeed.value / 100f;
-            npc.needs["rest"]   = npc.sleepNeed.value  / 100f;   // rest = sleep alias
-            npc.needs["social"] = npc.socialNeed.value / 100f;
+            npc.needs["sleep"]   = npc.sleepNeed.value   / 100f;
+            npc.needs["hunger"]  = npc.hungerNeed.value  / 100f;
+            npc.needs["rest"]    = npc.sleepNeed.value   / 100f;   // rest = sleep alias
+            npc.needs["social"]  = npc.socialNeed.value  / 100f;
+            if (FeatureFlags.HygieneNeed && npc.hygieneNeed != null)
+                npc.needs["hygiene"] = npc.hygieneNeed.value / 100f;
             if (!npc.needs.ContainsKey("safety")) npc.needs["safety"] = 1f;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the species depletion rate multiplier for the given need.
+        /// Reads from npc.needDepletionRates (populated at spawn from NPCTemplate).
+        /// Returns 1.0 if no species modifier is defined.
+        /// </summary>
+        private static float GetSpeciesMultiplier(NPCInstance npc, string needId)
+        {
+            if (npc.needDepletionRates == null) return 1f;
+            return npc.needDepletionRates.TryGetValue(needId, out float m) ? m : 1f;
+        }
 
         private static bool HasTrait(NPCInstance npc, string traitId)
         {
@@ -497,6 +609,7 @@ namespace Waystation.Systems
             if (npc.thirstNeed     == null) npc.thirstNeed     = new ThirstNeedProfile();
             if (npc.recreationNeed == null) npc.recreationNeed = new RecreationNeedProfile();
             if (npc.socialNeed     == null) npc.socialNeed     = new SocialNeedProfile();
+            if (FeatureFlags.HygieneNeed && npc.hygieneNeed == null) npc.hygieneNeed = new HygieneNeedProfile();
 
             // One-time migration: seed new profiles from legacy needs dict values
             if (npc.sleepNeed.value >= 100f && npc.needs.TryGetValue("sleep", out var ls) && ls < 1f)
