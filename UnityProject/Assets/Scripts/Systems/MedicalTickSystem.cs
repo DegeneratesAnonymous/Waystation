@@ -461,6 +461,35 @@ namespace Waystation.Systems
                     }
                 }
             }
+
+            // Medical recovery milestone: if the NPC has no remaining active wounds, remove
+            // any medically-removable traits (e.g. trait.desperate gained from starvation
+            // after the medical emergency has resolved).
+            if (_traits != null && FeatureFlags.NpcTraits && npc.traitProfile != null)
+            {
+                bool hasAnyWound = false;
+                foreach (var part in profile.parts.Values)
+                {
+                    if (part.wounds.Count > 0) { hasAnyWound = true; break; }
+                }
+
+                if (!hasAnyWound)
+                {
+                    // Iterate in reverse so index stays valid after removal
+                    var traitsCopy = new System.Collections.Generic.List<string>();
+                    foreach (var at in npc.traitProfile.traits)
+                        traitsCopy.Add(at.traitId);
+
+                    foreach (var tid in traitsCopy)
+                    {
+                        if (_traits.TryGetTrait(tid, out var def) && def.medicalRemovable)
+                        {
+                            _traits.TriggerEventRemoval(npc, tid);
+                            station?.LogEvent($"{npc.name}: medical recovery — '{def.displayName}' trait removed.");
+                        }
+                    }
+                }
+            }
         }
 
         // ── Scar chance evaluation ────────────────────────────────────────────

@@ -5,6 +5,12 @@
 //   • RegisterConditionPressure(npc, category, deltaPerDay) — called by external
 //     systems (mood system, environment system, etc.) once per day tick.
 //   • TriggerEventRemoval(npc, traitId) — called by events to remove event-gated traits.
+//   • NotifyCrewDeath(deadNpc, station) — called when a crew member dies; applies
+//     WitnessDeath pressure to all surviving crew on the station.
+//   • OnExtendedCombat(npc, station) — called when an NPC has been in extended combat.
+//   • OnMentoringSession(npc, station) — called when an NPC completes a mentoring session.
+//   • OnCounsellingComplete(npc, station) — called by therapy/counselling system to
+//     remove all therapy-removable traits from the NPC (WO-NPC-003 integration point).
 //   • Tick(station, currentTick) — called once per game tick from GameManager.
 //
 // Gated by FeatureFlags.NpcTraits.
@@ -38,6 +44,12 @@ namespace Waystation.Systems
             new Dictionary<TraitConditionCategory, TraitPoolDefinition>();
         private readonly Dictionary<string, TraitLineageDefinition> _lineages =
             new Dictionary<string, TraitLineageDefinition>();
+
+        // ── Dependencies ─────────────────────────────────────────────────────
+
+        private MoodSystem _mood;
+
+        public void SetMoodSystem(MoodSystem m) => _mood = m;
 
         // ── Registration ─────────────────────────────────────────────────────
 
@@ -170,8 +182,10 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Attempts to add a trait to an NPC.
-        /// Resolves conflicts (same category) — if a conflict exists both traits are removed
-        /// and no new trait is added.
+        /// Resolves conflicts on the same conflict axis:
+        ///   — if both traits share a conflictAxis AND a conflictDowngradeTarget is defined,
+        ///     both traits are replaced by the downgrade target trait.
+        ///   — otherwise, both traits are removed and no new trait is added (prior behaviour).
         /// </summary>
         public void TryAddTrait(NPCInstance npc, string traitId, int currentTick)
         {
@@ -183,6 +197,7 @@ namespace Waystation.Systems
 
             // Conflict resolution — check conflictingTraitIds in the incoming trait's definition
             bool conflictFound = false;
+            string downgradeTarget = null;
             for (int i = profile.traits.Count - 1; i >= 0; i--)
             {
                 var active = profile.traits[i];
@@ -193,15 +208,36 @@ namespace Waystation.Systems
 
                 if (def.conflictingTraitIds.Contains(active.traitId))
                 {
-                    // Both removed; no new trait added
+                    // Determine downgrade target: prefer the incoming trait's definition,
+                    // fall back to the existing trait's definition.
+                    if (downgradeTarget == null)
+                    {
+                        if (!string.IsNullOrEmpty(def.conflictAxis) &&
+                            !string.IsNullOrEmpty(def.conflictDowngradeTarget) &&
+                            def.conflictAxis == existingDef.conflictAxis)
+                        {
+                            downgradeTarget = def.conflictDowngradeTarget;
+                        }
+                        else if (!string.IsNullOrEmpty(existingDef.conflictAxis) &&
+                                 !string.IsNullOrEmpty(existingDef.conflictDowngradeTarget) &&
+                                 existingDef.conflictAxis == def.conflictAxis)
+                        {
+                            downgradeTarget = existingDef.conflictDowngradeTarget;
+                        }
+                    }
+
                     profile.traits.RemoveAt(i);
                     conflictFound = true;
                 }
             }
             if (conflictFound)
             {
-                // Traits were removed due to conflict; recompute effects to avoid stale modifiers.
                 ApplyTraitEffects(npc);
+
+                // If a downgrade target is defined, add it now instead of leaving both deleted.
+                if (!string.IsNullOrEmpty(downgradeTarget))
+                    TryAddTrait(npc, downgradeTarget, currentTick);
+
                 return;
             }
 
@@ -250,9 +286,10 @@ namespace Waystation.Systems
         // ── Event-gated removal ───────────────────────────────────────────────
 
         /// <summary>
-        /// Removes an event-gated trait from an NPC.
-        /// Called by external event systems (e.g. medical care, therapy).
-        /// TODO: Wire specific event triggers here when medical/therapy systems are implemented.
+        /// Removes an event-gated trait from an NPC and fires a mood modifier event
+        /// to reflect the positive change of losing a negative trait (or vice versa).
+        /// Called by external event systems (e.g. MedicalTickSystem on wound recovery,
+        /// counselling system on therapy completion).
         /// </summary>
         public void TriggerEventRemoval(NPCInstance npc, string traitId)
         {
@@ -262,13 +299,90 @@ namespace Waystation.Systems
 
             for (int i = profile.traits.Count - 1; i >= 0; i--)
             {
-                if (profile.traits[i].traitId == traitId)
+                if (profile.traits[i].traitId != traitId) continue;
+
+                profile.traits.RemoveAt(i);
+                ApplyTraitEffects(npc);
+
+                // Fire a mood modifier event reflecting the trait removal.
+                // Negative traits being removed are a positive mood event; positive traits
+                // being removed are a negative mood event.
+                if (_traits.TryGetValue(traitId, out var def) && _mood != null)
                 {
-                    profile.traits.RemoveAt(i);
-                    ApplyTraitEffects(npc);
-                    return;
+                    float moodDelta = def.valence == TraitValence.Negative ? 5f : -3f;
+                    // Use tick=0 as a placeholder — the mood system will store the record;
+                    // the caller's station tick is not available here so we use a permanent modifier
+                    // with a short natural duration (48 ticks ≈ half a day).
+                    _mood.PushModifier(npc, $"trait_removed_{traitId}", moodDelta,
+                                       48, 0, "trait_system");
                 }
+
+                return;
             }
+        }
+
+        // ── Life event trigger APIs ───────────────────────────────────────────
+
+        /// <summary>
+        /// Called when a crew member dies.  Registers a WitnessDeath condition pressure
+        /// spike on every other living crew NPC — the pressure can eventually cause a
+        /// trauma trait to fire if it accumulates past the acquisition threshold.
+        /// </summary>
+        public void NotifyCrewDeath(NPCInstance deadNpc, StationState station)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+            foreach (var npc in station.npcs.Values)
+            {
+                if (npc.uid == deadNpc.uid) continue;
+                if (!npc.IsCrew()) continue;
+                if (npc.statusTags.Contains("dead")) continue;
+                RegisterConditionPressure(npc, TraitConditionCategory.WitnessDeath, 3f);
+            }
+            station.LogEvent($"Crew death witnessed by station. Trauma pressure applied.");
+        }
+
+        /// <summary>
+        /// Called when an NPC has been involved in extended combat for a significant period.
+        /// Registers an ExtendedCombat condition pressure event.
+        /// </summary>
+        public void OnExtendedCombat(NPCInstance npc, StationState station)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+            RegisterConditionPressure(npc, TraitConditionCategory.ExtendedCombat, 2f);
+        }
+
+        /// <summary>
+        /// Called when an NPC completes a mentoring session with another crew member.
+        /// Registers a LongTermMentoring condition pressure event on the mentee.
+        /// </summary>
+        public void OnMentoringSession(NPCInstance mentee, StationState station)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+            RegisterConditionPressure(mentee, TraitConditionCategory.LongTermMentoring, 2f);
+        }
+
+        /// <summary>
+        /// Called by the counselling/therapy system (WO-NPC-003) when a session completes
+        /// successfully.  Removes all therapy-removable traits from the NPC.
+        /// </summary>
+        public void OnCounsellingComplete(NPCInstance npc, StationState station)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+            var profile = npc.traitProfile;
+            if (profile == null) return;
+
+            // Collect removable trait IDs first to avoid modifying the list mid-iteration.
+            var toRemove = new List<string>();
+            foreach (var at in profile.traits)
+            {
+                if (_traits.TryGetValue(at.traitId, out var def) && def.therapyRemovable)
+                    toRemove.Add(at.traitId);
+            }
+
+            foreach (var tid in toRemove)
+                TriggerEventRemoval(npc, tid);
+
+            station?.LogEvent($"{npc.name}: counselling complete — therapy-removable traits cleared.");
         }
 
         // ── Effect Application ────────────────────────────────────────────────

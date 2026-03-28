@@ -312,6 +312,11 @@ namespace Waystation.Systems
                 npc.injuries = Mathf.Min(npc.injuries + 1, 10);
                 if      (h.starvationDayCount >= 21) station.LogEvent($"⚠ {npc.name} is dying of starvation.");
                 else if (h.starvationDayCount >= 7)  station.LogEvent($"⚠ {npc.name} is starving (day {h.starvationDayCount}).");
+
+                // Sustained starvation (≥ 3 days) registers trait condition pressure:
+                // repeated pressure can eventually trigger a desperation or resourcefulness trait.
+                if (h.starvationDayCount >= 3)
+                    _traits?.RegisterConditionPressure(npc, TraitConditionCategory.SustainedStarvation, 2f);
             }
             else if (h.starvationDayCount > 0)
             {

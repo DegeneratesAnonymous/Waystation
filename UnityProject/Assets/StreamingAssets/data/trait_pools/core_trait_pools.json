@@ -73,5 +73,52 @@
       { "trait_id": "trait.composed",    "weight": 2.5 },
       { "trait_id": "trait.sociable",    "weight": 2.0 }
     ]
+  },
+  {
+    "id": "pool.witness_death",
+    "condition_category": "WitnessDeath",
+    "entries": [
+      { "trait_id": "trait.death_witness_trauma", "weight": 2.5 },
+      { "trait_id": "trait.traumatised",          "weight": 2.0 },
+      { "trait_id": "trait.haunted",              "weight": 1.5 },
+      { "trait_id": "trait.resilient",            "weight": 1.0 }
+    ]
+  },
+  {
+    "id": "pool.surgery_failure",
+    "condition_category": "SurgeryFailure",
+    "entries": [
+      { "trait_id": "trait.surgery_fear", "weight": 3.0 },
+      { "trait_id": "trait.anxious",      "weight": 2.0 },
+      { "trait_id": "trait.brittle",      "weight": 1.5 }
+    ]
+  },
+  {
+    "id": "pool.extended_combat",
+    "condition_category": "ExtendedCombat",
+    "entries": [
+      { "trait_id": "trait.hardened",    "weight": 3.0 },
+      { "trait_id": "trait.vigilant",    "weight": 2.5 },
+      { "trait_id": "trait.traumatised", "weight": 2.0 },
+      { "trait_id": "trait.anxious",     "weight": 1.5 }
+    ]
+  },
+  {
+    "id": "pool.long_term_mentoring",
+    "condition_category": "LongTermMentoring",
+    "entries": [
+      { "trait_id": "trait.mentored",    "weight": 3.0 },
+      { "trait_id": "trait.composed",    "weight": 2.0 },
+      { "trait_id": "trait.sociable",    "weight": 1.5 }
+    ]
+  },
+  {
+    "id": "pool.sustained_starvation",
+    "condition_category": "SustainedStarvation",
+    "entries": [
+      { "trait_id": "trait.desperate",    "weight": 3.0 },
+      { "trait_id": "trait.resourceful",  "weight": 2.0 },
+      { "trait_id": "trait.distrustful",  "weight": 1.5 }
+    ]
   }
 ]

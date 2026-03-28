@@ -318,6 +318,12 @@ namespace Waystation.Models
         Stability,
         LowMood,
         HighMood,
+        // Life event categories — added by NPC-005
+        WitnessDeath,
+        SurgeryFailure,
+        ExtendedCombat,
+        LongTermMentoring,
+        SustainedStarvation,
         // Extend as needed — append-only
     }
 
@@ -372,6 +378,31 @@ namespace Waystation.Models
         /// <summary>Trait IDs (same category) that conflict with this one on acquisition.</summary>
         public List<string>      conflictingTraitIds = new List<string>();
 
+        /// <summary>
+        /// Named axis shared with conflicting traits.
+        /// When a conflict is detected on this axis, both traits are replaced by
+        /// conflictDowngradeTarget (if defined) rather than simply being deleted.
+        /// </summary>
+        public string conflictAxis;
+
+        /// <summary>
+        /// Trait ID to add when two traits on the same conflictAxis collide.
+        /// If null or empty, the conflict falls back to deleting both traits.
+        /// </summary>
+        public string conflictDowngradeTarget;
+
+        /// <summary>
+        /// When true, this trait can be removed by a completed counselling/therapy session.
+        /// External systems should check this flag before calling TriggerEventRemoval().
+        /// </summary>
+        public bool therapyRemovable;
+
+        /// <summary>
+        /// When true, this trait can be removed when a medical recovery milestone is reached
+        /// (e.g., all wounds healed).  MedicalTickSystem checks this flag automatically.
+        /// </summary>
+        public bool medicalRemovable;
+
         /// <summary>Stat/behaviour modifiers applied while this trait is active.</summary>
         public List<TraitEffect> effects             = new List<TraitEffect>();
 
@@ -379,11 +410,15 @@ namespace Waystation.Models
         {
             var def = new NpcTraitDefinition
             {
-                traitId               = raw.GetString("id"),
-                displayName           = raw.GetString("display_name", raw.GetString("id")),
-                description           = raw.GetString("description", ""),
-                decayRatePerDay       = raw.GetFloat("decay_rate_per_day"),
-                requiresEventToRemove = raw.GetBool("requires_event_to_remove"),
+                traitId                 = raw.GetString("id"),
+                displayName             = raw.GetString("display_name", raw.GetString("id")),
+                description             = raw.GetString("description", ""),
+                decayRatePerDay         = raw.GetFloat("decay_rate_per_day"),
+                requiresEventToRemove   = raw.GetBool("requires_event_to_remove"),
+                therapyRemovable        = raw.GetBool("therapy_removable"),
+                medicalRemovable        = raw.GetBool("medical_removable"),
+                conflictAxis            = raw.GetString("conflict_axis", ""),
+                conflictDowngradeTarget = raw.GetString("conflict_downgrade_target", ""),
             };
 
             var catStr = raw.GetString("category");

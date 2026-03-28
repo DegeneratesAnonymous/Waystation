@@ -136,12 +136,17 @@ namespace Waystation.Systems
                     break;
                 case SurgeryOutcome.Failure:
                     ApplyFailure(patient, targetPartId, profile);
+                    // Surgery failure: register condition pressure on the surgeon so that
+                    // repeated failures can eventually trigger a fear or anxiety trait.
+                    _traits?.RegisterConditionPressure(surgeon, TraitConditionCategory.SurgeryFailure, 2f);
                     break;
                 case SurgeryOutcome.CriticalFailure:
                     int d6 = Random.Range(1, 7);
                     cfResult = (CriticalFailureResult)d6;
                     ApplyCriticalFailure(cfResult.Value, patient, surgeon, targetPartId,
                                          targetWound, profile, partDefs, station);
+                    // Critical failure: stronger pressure spike on the surgeon.
+                    _traits?.RegisterConditionPressure(surgeon, TraitConditionCategory.SurgeryFailure, 4f);
                     break;
             }
 
