@@ -1,6 +1,8 @@
 // Job System — NPC maintenance and work loops.
-// Every crew member has a job during day phase; they rest at night.
-// Events can interrupt the current job temporarily.
+// Crew members follow a per-NPC 24-slot schedule (Work/Rest/Recreation).
+// Department membership pre-filters the job pool; cross-department fallback
+// applies when no eligible department job is available.
+// Crisis NPCs (mood < 20) are immediately switched to recreational tasks.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -95,43 +97,84 @@ namespace Waystation.Systems
 
         private void AssignJob(NPCInstance npc, StationState station)
         {
-            bool isDay = TimeSystem.IsDayPhase(station);
-            string jobId = RestJob;
+            // ── Schedule-slot gate ────────────────────────────────────────────
+            int hourOfDay = TimeSystem.HourOfDay(station);
+            ScheduleSlot slot = npc.GetScheduleSlot(hourOfDay);
 
-            if (isDay && ClassDayJobs.TryGetValue(npc.classId, out var candidates))
+            if (slot == ScheduleSlot.Rest)
             {
-                // Respect per-NPC work assignments if set
-                List<string> allowed = null;
-                if (station.workAssignments.TryGetValue(npc.uid, out var assigned) &&
-                    assigned != null && assigned.Count > 0)
+                SetJob(npc, RestJob, station);
+                return;
+            }
+            if (slot == ScheduleSlot.Recreation)
+            {
+                AssignRecreationalTask(npc, station);
+                return;
+            }
+
+            // slot == ScheduleSlot.Work — proceed with normal assignment
+            // ── Department pre-filter ─────────────────────────────────────────
+            // Build the candidate list from class defaults first.
+            if (!ClassDayJobs.TryGetValue(npc.classId, out var classCandidates))
+            {
+                // No class match → wander
+                SetWander(npc, station);
+                return;
+            }
+
+            // Respect per-NPC work assignments if set
+            List<string> allowed = null;
+            if (station.workAssignments.TryGetValue(npc.uid, out var assigned) &&
+                assigned != null && assigned.Count > 0)
+            {
+                allowed = new List<string>();
+                foreach (var j in classCandidates)
+                    if (assigned.Contains(j)) allowed.Add(j);
+                if (allowed.Count == 0) allowed = null; // no overlap → use all class candidates
+            }
+
+            var classPool = allowed ?? classCandidates;
+
+            // Department pre-filter: if the NPC belongs to a department, prefer
+            // jobs that appear in that department's allowedJobs list AND are also
+            // in the class candidate pool.  Fall back to the full class pool if no
+            // intersection is found.
+            List<string> pool = classPool;
+            if (!string.IsNullOrEmpty(npc.departmentId))
+            {
+                Department dept = null;
+                foreach (var d in station.departments)
                 {
-                    allowed = new List<string>();
-                    foreach (var j in candidates)
-                        if (assigned.Contains(j)) allowed.Add(j);
-                    if (allowed.Count == 0) allowed = null; // no overlap → use all
+                    if (d.uid == npc.departmentId) { dept = d; break; }
                 }
 
-                var pool = allowed ?? candidates;
-                var available = new List<string>();
-                foreach (var j in pool)
-                    if (_registry.Jobs.ContainsKey(j)) available.Add(j);
-
-                if (available.Count > 0)
+                if (dept != null && dept.allowedJobs.Count > 0)
                 {
-                    jobId = available[UnityEngine.Random.Range(0, available.Count)];
-                    SetJob(npc, jobId, station);
-                    // If no suitable module was found, fall back to wandering
-                    if (npc.jobModuleUid == null)
-                        SetWander(npc, station);
-                    return;
+                    var deptPool = new List<string>();
+                    foreach (var j in classPool)
+                        if (dept.allowedJobs.Contains(j)) deptPool.Add(j);
+                    if (deptPool.Count > 0)
+                        pool = deptPool;   // department jobs take priority
+                    // else fall through to full classPool (cross-department fallback)
                 }
             }
 
-            // Night, no class match, or all candidates missing — rest or wander
-            if (isDay)
-                SetWander(npc, station);
-            else
+            var available = new List<string>();
+            foreach (var j in pool)
+                if (_registry.Jobs.ContainsKey(j)) available.Add(j);
+
+            if (available.Count > 0)
+            {
+                string jobId = available[UnityEngine.Random.Range(0, available.Count)];
                 SetJob(npc, jobId, station);
+                // If no suitable module was found, fall back to wandering
+                if (npc.jobModuleUid == null)
+                    SetWander(npc, station);
+                return;
+            }
+
+            // No available jobs for this class/department — wander
+            SetWander(npc, station);
         }
 
         private void SetWander(NPCInstance npc, StationState station)
