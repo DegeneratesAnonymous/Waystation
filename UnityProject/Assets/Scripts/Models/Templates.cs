@@ -1413,4 +1413,38 @@ namespace Waystation.Models
             };
         }
     }
+
+    // =========================================================================
+    // Game Balance Config
+    // =========================================================================
+
+    /// <summary>
+    /// Top-level game balance parameters loaded from
+    /// StreamingAssets/data/balance/game_balance.json.
+    /// Parsed once at startup by ContentRegistry; consumed by TensionSystem
+    /// and other systems that expose configurable tuning values.
+    /// </summary>
+    public class GameBalanceConfig
+    {
+        /// <summary>
+        /// Number of ticks the player has to intervene once a DepartureRisk NPC
+        /// announces intent to leave.  Defaults to 3 in-game days (3 × TicksPerDay).
+        /// </summary>
+        public int interventionWindowTicks = 1080;
+
+        /// <summary>
+        /// Minimum skill-check roll required for a successful intervention attempt.
+        /// A roll of (skill level + ability modifier) must meet or exceed this DC.
+        /// </summary>
+        public int interventionSkillCheckDC = 10;
+
+        public static GameBalanceConfig FromDict(Dictionary<string, object> raw)
+        {
+            return new GameBalanceConfig
+            {
+                interventionWindowTicks  = raw.GetInt("intervention_window_ticks",  1080),
+                interventionSkillCheckDC = raw.GetInt("intervention_skill_check_dc", 10),
+            };
+        }
+    }
 }

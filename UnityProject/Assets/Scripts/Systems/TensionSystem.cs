@@ -11,6 +11,7 @@
 //   DepartureRisk: 90+
 //
 // Gated by FeatureFlags.NpcTraits.
+// Departure execution additionally gated by FeatureFlags.NpcDeparture.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -34,25 +35,53 @@ namespace Waystation.Systems
         public float WorkSlowdownModifier   = 0.85f;
 
         /// <summary>
-        /// Probability per day that a DepartureRisk NPC attempts to leave.
-        /// TODO: Wire departure attempt into crew/roster system when available.
+        /// Probability per day that a DepartureRisk NPC triggers a departure
+        /// announcement (if none is already pending).
         /// </summary>
         public float DepartureAttemptChancePerDay = 0.1f;
 
-        // ── Dependency ───────────────────────────────────────────────────────
+        /// <summary>
+        /// Number of ticks the player has to intervene after a departure announcement.
+        /// Loaded from balance data (game_balance.json) by GameManager; defaults to
+        /// 3 in-game days (3 × TicksPerDay = 1080 ticks).
+        /// </summary>
+        public int InterventionWindowTicks = 1080;
+
+        /// <summary>
+        /// Minimum skill-check result required for a successful intervention.
+        /// Loaded from balance data by GameManager; defaults to 10.
+        /// </summary>
+        public int InterventionSkillCheckDC = 10;
+
+        // ── Dependencies ─────────────────────────────────────────────────────
         private readonly TraitSystem _traits;
-        private MoodSystem _mood;
+        private MoodSystem  _mood;
+        private SkillSystem _skills;
 
         // ── Events ────────────────────────────────────────────────────────────
 
         /// <summary>Fired when an NPC's tension stage changes. Payload: (npc, newStage).</summary>
         public event Action<NPCInstance, TensionStage> OnTensionStageChanged;
 
+        /// <summary>
+        /// Fired when a DepartureRisk NPC announces intent to leave.
+        /// Payload: (npc, interventionDeadlineTick).
+        /// Subscribe in GameManager / UI to surface the player alert.
+        /// </summary>
+        public event Action<NPCInstance, int> OnDepartureAnnounced;
+
+        /// <summary>
+        /// Fired when an NPC physically departs (after failed/expired intervention).
+        /// Payload: npc (already removed from active roster, added to departedNpcs).
+        /// </summary>
+        public event Action<NPCInstance> OnNpcDeparted;
+
         // ── Constructor ──────────────────────────────────────────────────────
 
         public TensionSystem(TraitSystem traits) => _traits = traits;
 
-        public void SetMoodSystem(MoodSystem mood) => _mood = mood;
+        public void SetMoodSystem(MoodSystem mood)   => _mood   = mood;
+        public void SetSkillSystem(SkillSystem skills) => _skills = skills;
 
         // ── Tick ─────────────────────────────────────────────────────────────
 
@@ -68,6 +97,10 @@ namespace Waystation.Systems
                 ApplyPassiveDecay(npc, station);
                 ApplyStageEffects(npc, station);
             }
+
+            // Process departure windows (checked every daily tick regardless of decay)
+            if (FeatureFlags.NpcDeparture)
+                ProcessDepartureWindows(station);
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -87,6 +120,44 @@ namespace Waystation.Systems
 
             profile.tensionScore = Mathf.Clamp(profile.tensionScore + delta, 0f, 100f);
             UpdateTensionStage(npc, station);
+        }
+
+        /// <summary>
+        /// Attempt a player intervention on a DepartureRisk NPC.
+        /// Performs a skill roll using <paramref name="skillId"/> against
+        /// <see cref="InterventionSkillCheckDC"/>.
+        /// On success: tension drops to Disgruntled range and departure is cancelled.
+        /// On failure: tension is unchanged; departure will proceed at deadline.
+        /// </summary>
+        /// <returns>True if the intervention was successful.</returns>
+        public bool AttemptIntervention(NPCInstance npc, string skillId, StationState station)
+        {
+            if (!FeatureFlags.NpcDeparture) return false;
+            if (npc.traitProfile?.departure == null || !npc.traitProfile.departure.announced)
+                return false;
+
+            // Resolve skill check
+            int roll = _skills != null
+                ? _skills.GetSkillCheckResult(npc, skillId) + UnityEngine.Random.Range(1, 21)
+                : UnityEngine.Random.Range(1, 21);
+
+            bool success = roll >= InterventionSkillCheckDC;
+
+            if (success)
+            {
+                // Reset tension to Disgruntled range (just below WorkSlowdown threshold)
+                npc.traitProfile.tensionScore = DisgruntledThreshold + 1f;
+                UpdateTensionStage(npc, station);
+                // Cancel departure
+                npc.traitProfile.departure = null;
+                station.LogEvent($"✓ Intervention succeeded: {npc.name} has agreed to stay (roll {roll} vs DC {InterventionSkillCheckDC}).");
+            }
+            else
+            {
+                station.LogEvent($"✗ Intervention failed: {npc.name} remains set on leaving (roll {roll} vs DC {InterventionSkillCheckDC}).");
+            }
+
+            return success;
         }
 
         // ── Tension delta calculation ─────────────────────────────────────────
@@ -163,6 +234,13 @@ namespace Waystation.Systems
             profile.tensionStage = newStage;
             OnTensionStageChanged?.Invoke(npc, newStage);
 
+            // Cancel a pending departure if tension has improved below DepartureRisk
+            if (newStage < TensionStage.DepartureRisk && profile.departure != null)
+            {
+                profile.departure = null;
+                station.LogEvent($"{npc.name}'s morale has improved; departure cancelled.");
+            }
+
             // Log stage transitions
             if (newStage > oldStage)
                 station.LogEvent($"{npc.name}'s morale has deteriorated: {newStage}.");
@@ -202,19 +280,113 @@ namespace Waystation.Systems
                     _mood?.PushModifier(npc, "tension_departure_risk", -15f,
                                         TimeSystem.TicksPerDay, station.tick, "tension");
                     npc.tensionWorkModifier = WorkSlowdownModifier;   // same penalty as WorkSlowdown
-                    // Evaluate departure attempt
-                    if (UnityEngine.Random.value < DepartureAttemptChancePerDay)
-                    {
-                        // TODO: Trigger departure attempt via crew/roster system
-                        // when that system is implemented.
+
+                    if (FeatureFlags.NpcDeparture)
+                        EvaluateDepartureAnnouncement(npc, station);
+                    else
                         station.LogEvent($"⚠ {npc.name} is considering leaving the station.");
-                    }
                     break;
 
                 case TensionStage.Normal:
                 default:
                     npc.tensionWorkModifier = 1.0f;
                     break;
+            }
+        }
+
+        // ── Departure announcement ────────────────────────────────────────────
+
+        private void EvaluateDepartureAnnouncement(NPCInstance npc, StationState station)
+        {
+            var profile = npc.traitProfile;
+
+            // Only announce once; if already announced, the window ticker handles the rest.
+            if (profile.departure != null && profile.departure.announced) return;
+
+            // Random daily chance to trigger announcement
+            if (UnityEngine.Random.value >= DepartureAttemptChancePerDay) return;
+
+            int deadline = station.tick + InterventionWindowTicks;
+            profile.departure = new DepartureAnnouncementState
+            {
+                announced               = true,
+                announcedAtTick         = station.tick,
+                interventionDeadlineTick = deadline,
+            };
+
+            station.LogEvent($"⚠ {npc.name} has announced intent to leave the station.");
+            OnDepartureAnnounced?.Invoke(npc, deadline);
+        }
+
+        // ── Departure window processing ───────────────────────────────────────
+
+        private void ProcessDepartureWindows(StationState station)
+        {
+            // Collect NPCs whose intervention window has expired this tick.
+            var departing = new List<NPCInstance>();
+            foreach (var npc in station.npcs.Values)
+            {
+                var dep = npc.traitProfile?.departure;
+                if (dep == null || !dep.announced) continue;
+                if (station.tick >= dep.interventionDeadlineTick)
+                    departing.Add(npc);
+            }
+
+            foreach (var npc in departing)
+                ExecuteDeparture(npc, station);
+        }
+
+        // ── Departure execution ───────────────────────────────────────────────
+
+        private void ExecuteDeparture(NPCInstance npc, StationState station)
+        {
+            // Move NPC to landing pad (or exit tile if no pad available)
+            MoveToExit(npc, station);
+
+            // Remove from active roster
+            station.RemoveNpc(npc.uid);
+
+            // Add to departed pool with full state preserved
+            var record = new DepartedNpcRecord
+            {
+                departedAtTick        = station.tick,
+                reason                = "tension",
+                eligibleForReinjection = true,
+                npc                   = npc,
+            };
+            station.departedNpcs[npc.uid] = record;
+
+            station.LogEvent($"{npc.name} has departed the station.");
+            OnNpcDeparted?.Invoke(npc);
+        }
+
+        private static void MoveToExit(NPCInstance npc, StationState station)
+        {
+            // Prefer a docked ship's landing pad; fall back to the station's
+            // first available landing pad foundation; final fallback leaves NPC at (0,0).
+            ShipInstance boardingShip = null;
+            foreach (var ship in station.ships.Values)
+            {
+                if (ship.status == "docked" || ship.visitState == ShipVisitState.Docked)
+                {
+                    boardingShip = ship;
+                    break;
+                }
+            }
+
+            if (boardingShip != null && boardingShip.shuttleUid != null &&
+                station.shuttles.TryGetValue(boardingShip.shuttleUid, out var shuttle) &&
+                station.landingPads.TryGetValue(shuttle.landingPadUid, out var pad) &&
+                station.foundations.TryGetValue(pad.foundationUid, out var foundation))
+            {
+                npc.pathTargetCol = foundation.tileCol;
+                npc.pathTargetRow = foundation.tileRow;
+            }
+            else
+            {
+                // No docked ship — move to station origin (designated exit tile)
+                npc.pathTargetCol = 0;
+                npc.pathTargetRow = 0;
             }
         }
 

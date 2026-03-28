@@ -58,5 +58,14 @@ namespace Waystation.Core
         /// modifiers for all six needs are always active regardless of this flag.
         /// </summary>
         public static bool HygieneNeed = true;
+
+        /// <summary>
+        /// Enables crew departure execution: departure announcement events, player
+        /// intervention window, physical departure sequence (NPC moves to landing pad
+        /// or exit tile), and removal from active roster to the departed NPC pool.
+        /// Set to false to revert TensionSystem to mood-penalty-only behaviour at
+        /// DepartureRisk (the pre-NPC-007 default).
+        /// </summary>
+        public static bool NpcDeparture = true;
     }
 }

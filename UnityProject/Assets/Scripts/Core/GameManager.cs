@@ -232,6 +232,13 @@ namespace Waystation.Core
 
             Tension    = new TensionSystem(Traits);
             Tension.SetMoodSystem(Mood);
+            Tension.SetSkillSystem(Skills);
+            // Apply balance-data values loaded by ContentRegistry
+            if (Registry != null && Registry.Balance != null)
+            {
+                Tension.InterventionWindowTicks  = Registry.Balance.interventionWindowTicks;
+                Tension.InterventionSkillCheckDC = Registry.Balance.interventionSkillCheckDC;
+            }
             FactionGov = new FactionGovernmentSystem(Traits);
             Regions    = new RegionSystem();
 
@@ -244,6 +251,16 @@ namespace Waystation.Core
             {
                 if (stage != TensionStage.Normal)
                     Station?.LogEvent($"{npc.name}: tension stage → {TensionSystem.GetTensionStageLabel(stage)}");
+            };
+
+            // Wire departure events: surface player alert and log departure
+            Tension.OnDepartureAnnounced += (npc, deadline) =>
+            {
+                OnNewEvent?.Invoke(MakeDepartureAlertEvent(npc, deadline));
+            };
+            Tension.OnNpcDeparted += npc =>
+            {
+                Station?.LogEvent($"{npc.name} has left the station and will not return.");
             };
 
             // Wire sleep/wake events from NPCSystem → MoodSystem
@@ -635,6 +652,27 @@ namespace Waystation.Core
         /// </summary>
         public string TryHailShip(string shipUid) => CommSystem.TryHailShip(shipUid, Station);
 
+        /// <summary>
+        /// Attempt a player intervention to persuade a DepartureRisk NPC to stay.
+        /// Uses the supplied skill for the check roll.
+        /// Returns (success, message) — on success tension resets to Disgruntled and
+        /// the departure announcement is cancelled.
+        /// </summary>
+        public (bool ok, string msg) AttemptDepartureIntervention(string npcUid, string skillId = "leadership")
+        {
+            if (!FeatureFlags.NpcDeparture)
+                return (false, "Departure system is disabled.");
+            if (!Station.npcs.TryGetValue(npcUid, out var npc))
+                return (false, "NPC not found.");
+            if (npc.traitProfile?.departure == null || !npc.traitProfile.departure.announced)
+                return (false, $"{npc.name} has no pending departure announcement.");
+
+            bool success = Tension.AttemptIntervention(npc, skillId, Station);
+            return success
+                ? (true,  $"Intervention succeeded — {npc.name} has agreed to stay.")
+                : (false, $"Intervention failed — {npc.name} remains determined to leave.");
+        }
+
         public (bool ok, string msg) RecruitVisitor(string npcUid)
         {
             if (!Station.npcs.TryGetValue(npcUid, out var npc))
@@ -683,6 +721,31 @@ namespace Waystation.Core
         {
             Station.LogEvent(msg);
             OnLogMessage?.Invoke(msg);
+        }
+
+        /// <summary>
+        /// Builds a synthetic PendingEvent to surface a departure announcement
+        /// as a player alert (same path as EventSystem events in the UI).
+        /// </summary>
+        private static PendingEvent MakeDepartureAlertEvent(NPCInstance npc, int interventionDeadlineTick)
+        {
+            var def = new EventDefinition
+            {
+                id          = $"departure_alert_{npc.uid}",
+                category    = "crew",
+                title       = $"⚠ {npc.name} Plans to Leave",
+                description = $"{npc.name} has announced intent to depart the station. " +
+                              $"You have until tick {interventionDeadlineTick} to intervene.",
+                weight      = 0,
+                hostile     = false,
+            };
+            var pending = new PendingEvent
+            {
+                definition  = def,
+                expiresAt   = interventionDeadlineTick,
+            };
+            pending.context["npc_uid"] = npc.uid;
+            return pending;
         }
 
         private void ApplyPolicyEffects(string key, string value, string oldValue)
