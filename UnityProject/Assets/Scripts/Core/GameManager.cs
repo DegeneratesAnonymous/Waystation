@@ -98,6 +98,9 @@ namespace Waystation.Core
         // ── Medical system ─────────────────────────────────────────────────────────────────────
         public MedicalTickSystem        Medical       { get; private set; }
         public SurgerySystem            Surgery       { get; private set; }
+
+        // ── Death handling system ──────────────────────────────────────────────────────────────
+        public DeathHandlingSystem      DeathHandling { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -278,6 +281,13 @@ namespace Waystation.Core
                 Surgery = new SurgerySystem();
                 Surgery.SetSanitySystem(Sanity);
                 Surgery.SetTraitSystem(Traits);
+            }
+
+            // Death handling system
+            if (FeatureFlags.NpcDeathHandling)
+            {
+                DeathHandling = new DeathHandlingSystem();
+                DeathHandling.SetMoodSystem(Mood);
             }
         }
 
@@ -546,6 +556,19 @@ namespace Waystation.Core
                     if (_livingCrewIds.Contains(npc.uid) && npc.statusTags.Contains("dead"))
                         Traits.NotifyCrewDeath(npc, Station);
                 }
+            }
+
+            // Death handling: spawn bodies, grief modifiers, haul task assignment.
+            // Runs in the same detection window as trait death events so both systems
+            // observe the same set of newly-dead crew this tick.
+            if (FeatureFlags.NpcDeathHandling)
+            {
+                foreach (var npc in Station.npcs.Values)
+                {
+                    if (_livingCrewIds.Contains(npc.uid) && npc.statusTags.Contains("dead"))
+                        DeathHandling?.OnNPCDied(npc, Station);
+                }
+                DeathHandling?.Tick(Station);
             }
 
             Mood.Tick(Station);

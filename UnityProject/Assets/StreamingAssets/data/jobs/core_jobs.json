@@ -450,5 +450,27 @@
     },
     "station_effects": {},
     "schema_version": "1"
+  },
+  {
+    "id": "job.haul_body",
+    "display_name": "Body Disposal",
+    "schema_version": "1",
+    "phase": "day",
+    "allowed_classes": [
+      "class.security",
+      "class.engineering",
+      "class.operations"
+    ],
+    "preferred_module_category": "utility",
+    "fallback_module_category": "cargo",
+    "duration_ticks": 20,
+    "skill_used": null,
+    "resource_effects": {},
+    "need_effects": {
+      "hunger": -0.04,
+      "rest": -0.04,
+      "social": -0.02
+    },
+    "station_effects": {}
   }
 ]

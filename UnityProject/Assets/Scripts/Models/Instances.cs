@@ -1279,6 +1279,59 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Body Instance — a corpse left on the station map after an NPC dies.
+    // Created by DeathHandlingSystem when an NPC's death tick fires.
+    // Status lifecycle: spawned → haul_pending → hauling → removed
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class BodyInstance
+    {
+        public string uid;
+        public string npcUid;       // source NPC uid (for reference)
+        public string npcName;      // cached display name (NPC is "dead" by this point)
+
+        // Tile-grid position where the NPC died
+        public int tileCol;
+        public int tileRow;
+
+        // Module location at time of death (used for proximity checks)
+        public string location;
+
+        // Game tick when the body was spawned
+        public int spawnedAtTick;
+
+        // Haul task state
+        public bool   haulTaskGenerated = false;   // true once a haul task has been issued
+        public bool   haulBlocked       = false;   // true when no disposal tile is designated
+        public string haulerNpcUid      = null;    // UID of the NPC currently hauling this body
+        public int    haulJobTimer      = 0;       // countdown ticks remaining on the haul task
+
+        // Escalation step — tracks the current penalty tier to avoid redundant remove+push
+        public int escalationStep = 0;
+
+        public static BodyInstance Create(NPCInstance npc, int tick,
+                                          int? deathTileCol = null, int? deathTileRow = null)
+        {
+            // Prefer explicitly provided death-tile coordinates from the calling system.
+            // Falls back to pathTargetCol/Row (the NPC's last movement destination), then (0,0).
+            int resolvedCol = deathTileCol ?? (npc.pathTargetCol >= 0 ? npc.pathTargetCol : 0);
+            int resolvedRow = deathTileRow ?? (npc.pathTargetRow >= 0 ? npc.pathTargetRow : 0);
+
+            return new BodyInstance
+            {
+                uid           = Guid.NewGuid().ToString("N").Substring(0, 8),
+                npcUid        = npc.uid,
+                npcName       = npc.name,
+                tileCol       = resolvedCol,
+                tileRow       = resolvedRow,
+                location      = npc.location,
+                spawnedAtTick = tick,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Network Instance — a connected graph of wire/pipe/duct foundations
     // -------------------------------------------------------------------------
 
@@ -1622,6 +1675,18 @@ namespace Waystation.Models
         // ── Farming system ───────────────────────────────────────────────────
         // Pending and in-progress farming tasks for NPC workers.
         public List<FarmingTaskInstance> farmingTasks = new List<FarmingTaskInstance>();
+
+        // ── Death handling system ────────────────────────────────────────────
+        // Bodies on the station map, keyed by BodyInstance.uid.
+        public Dictionary<string, BodyInstance> bodies = new Dictionary<string, BodyInstance>();
+
+        // Designated disposal tile for body hauling.
+        // Defaults to (0,0) so haul tasks can proceed before the player explicitly
+        // designates a site.  Set via the player designation action when a specific
+        // tile is chosen.
+        public bool disposalTileDesignated = true;
+        public int  disposalTileCol        = 0;
+        public int  disposalTileRow        = 0;
 
         // Per-room temperature (°C), keyed by canonical "minCol_minRow" room key.
         // Populated and updated by TemperatureSystem. Default = 20°C when absent.
