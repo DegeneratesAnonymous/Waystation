@@ -1,0 +1,149 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   WaystationVariables.uss
+   Shared USS custom properties — single source of truth for the Waystation
+   visual language. Import this file first in every panel-level USS file.
+
+   Usage:
+     @import url('WaystationVariables.uss');
+     .my-element { background-color: var(--ws-bg-panel); }
+
+   Requirements: Unity 2023.1+ (USS custom properties / var() support).
+
+   Font setup (place TTF/OTF files in Assets/UI/Fonts/ and create
+   UnityFont assets, then uncomment the font-family declarations):
+     • Barlow Condensed Bold 700   → Assets/UI/Fonts/BarlowCondensed-Bold.ttf
+     • Barlow Condensed SemiBold 600 → Assets/UI/Fonts/BarlowCondensed-SemiBold.ttf
+     • Share Tech Mono 400         → Assets/UI/Fonts/ShareTechMono-Regular.ttf
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+
+    /* ── Backgrounds (darkest → lightest) ───────────────────────────────── */
+    /* --ws-bg-void   hex: #060709  — scene bg, behind all panels           */
+    --ws-bg-void:   rgb(  6,   7,   9);
+    /* --ws-bg-deep   hex: #0a0c11  — sub-panel insets, scroll areas        */
+    --ws-bg-deep:   rgb( 10,  12,  17);
+    /* --ws-bg-base   hex: #0e1118  — buttons, status bars, insets          */
+    --ws-bg-base:   rgb( 14,  17,  24);
+    /* --ws-bg-panel  hex: #131720  — primary panel surface                 */
+    --ws-bg-panel:  rgb( 19,  23,  32);
+    /* --ws-bg-raised hex: #181d28  — header backgrounds, elevated zones    */
+    --ws-bg-raised: rgb( 24,  29,  40);
+    /* --ws-bg-hover  hex: #1e2535  — hover / focus fill                    */
+    --ws-bg-hover:  rgb( 30,  37,  53);
+
+    /* ── Borders ────────────────────────────────────────────────────────── */
+    /* --ws-border-dark hex: #1a1f2c — subtle dividers, grout lines         */
+    --ws-border-dark: rgb( 26,  31,  44);
+    /* --ws-border-mid  hex: #242b3a — default panel border                 */
+    --ws-border-mid:  rgb( 36,  43,  58);
+    /* --ws-border-lit  hex: #2e3850 — active, focused, selected borders    */
+    --ws-border-lit:  rgb( 46,  56,  80);
+
+    /* ── Bevel ──────────────────────────────────────────────────────────── */
+    /* --ws-bevel-hi hex: #2a3348 — top-left edge highlight                 */
+    --ws-bevel-hi: rgb( 42,  51,  72);
+    /* --ws-bevel-lo hex: #080a0f — bottom-right edge shadow                */
+    --ws-bevel-lo: rgb(  8,  10,  15);
+
+    /* ── Text (dimmest → brightest) ─────────────────────────────────────── */
+    /* --ws-text-dim    hex: #2e3d52 — hints, placeholders, inactive        */
+    --ws-text-dim:    rgb( 46,  61,  82);
+    /* --ws-text-mid    hex: #4a6080 — secondary text, counts, arrows       */
+    --ws-text-mid:    rgb( 74,  96, 128);
+    /* --ws-text-base   hex: #6a8aaa — default body text, button labels     */
+    --ws-text-base:   rgb(106, 138, 170);
+    /* --ws-text-bright hex: #8aaac8 — hover state text                     */
+    --ws-text-bright: rgb(138, 170, 200);
+    /* --ws-text-head   hex: #a8c0d8 — panel titles, selected, headings     */
+    --ws-text-head:   rgb(168, 192, 216);
+
+    /* ── Accent ─────────────────────────────────────────────────────────── */
+    /* --ws-acc        hex: #4880aa — primary blue (LEDs, borders, icons)   */
+    --ws-acc:        rgb( 72, 128, 170);
+    /* --ws-acc-bright hex: #60a0cc — active/selected text                  */
+    --ws-acc-bright: rgb( 96, 160, 204);
+    /* --ws-amber      hex: #c8a030 — warnings, costs, badges               */
+    --ws-amber:      rgb(200, 160,  48);
+    /* --ws-red        hex: #c03030 — danger, close button, fault           */
+    --ws-red:        rgb(192,  48,  48);
+    /* --ws-green      hex: #30a050 — online, ready, confirmed              */
+    --ws-green:      rgb( 48, 160,  80);
+    /* --ws-cyan       hex: #30c8b8 — oxygen, life-support indicators       */
+    --ws-cyan:       rgb( 48, 200, 184);
+
+    /* ── Category accents (stripe + icon tint only) ─────────────────────── */
+    /* --ws-cat-structure  hex: #c8a030 — amber                             */
+    --ws-cat-structure:  rgb(200, 160,  48);
+    /* --ws-cat-electrical hex: #4880aa — blue                              */
+    --ws-cat-electrical: rgb( 72, 128, 170);
+    /* --ws-cat-objects    hex: #30a878 — teal                              */
+    --ws-cat-objects:    rgb( 48, 168, 120);
+    /* --ws-cat-production hex: #c06828 — orange                            */
+    --ws-cat-production: rgb(192, 104,  40);
+    /* --ws-cat-plumbing   hex: #5088b8 — steel blue                        */
+    --ws-cat-plumbing:   rgb( 80, 136, 184);
+    /* --ws-cat-security   hex: #c03858 — crimson                           */
+    --ws-cat-security:   rgb(192,  56,  88);
+
+    /* ── Resource colours ───────────────────────────────────────────────── */
+    --ws-resource-food:    rgb( 48, 160,  80);   /* green  — #30a050        */
+    --ws-resource-power:   rgb(200, 160,  48);   /* amber  — #c8a030        */
+    --ws-resource-oxygen:  rgb( 48, 200, 184);   /* cyan   — #30c8b8        */
+    --ws-resource-parts:   rgb( 72, 128, 170);   /* blue   — #4880aa        */
+    --ws-resource-credits: rgb( 72, 128, 170);   /* blue   — #4880aa        */
+
+    /* ── Typography scale ───────────────────────────────────────────────── */
+    /* --ws-font-ui   — Barlow Condensed (display, labels, button text)
+       Assign via -unity-font-definition once the UnityFont asset exists.
+       -unity-font-definition: url('../Fonts/BarlowCondensed-Bold.asset');  */
+    /* --ws-font-mono — Share Tech Mono (status text, small labels, badges)
+       -unity-font-definition: url('../Fonts/ShareTechMono.asset');         */
+
+    --ws-fs-title:      15px;
+    --ws-fs-cat-name:   13px;
+    --ws-fs-btn:         9px;
+    --ws-fs-section:     7px;
+    --ws-fs-subtitle:    8px;
+    --ws-fs-meta:        8px;
+    --ws-fs-badge:       8px;
+
+    --ws-ls-title:    2.4px;
+    --ws-ls-cat-name: 1.0px;
+    --ws-ls-btn:      1.1px;
+    --ws-ls-section:  2.0px;
+    --ws-ls-subtitle: 1.5px;
+    --ws-ls-meta:     0.5px;
+
+    /* ── Spacing scale ──────────────────────────────────────────────────── */
+    --ws-space-xs:  4px;
+    --ws-space-sm:  6px;
+    --ws-space-md:  8px;
+    --ws-space-lg: 12px;
+    --ws-space-xl: 16px;
+
+    /* ── Border radii — zero throughout per style guide ─────────────────── */
+    --ws-radius: 0;
+
+    /* ── Animation durations ────────────────────────────────────────────── */
+    --ws-anim-fast:   0.10s;
+    --ws-anim-normal: 0.15s;
+    --ws-anim-slow:   0.22s;
+
+    /* ── Rivet dimensions ───────────────────────────────────────────────── */
+    --ws-rivet-size:   6px;
+    --ws-rivet-offset: 4px;
+
+    /* ── StatusPip / LED dimensions ─────────────────────────────────────── */
+    --ws-pip-size: 6px;
+
+    /* ── ResourceMeter dimensions ───────────────────────────────────────── */
+    --ws-meter-height:         6px;
+    --ws-meter-height-compact: 4px;
+
+    /* ── DrawerPanel transition ─────────────────────────────────────────── */
+    --ws-drawer-duration: 0.22s;
+
+    /* ── Modal overlay opacity ──────────────────────────────────────────── */
+    --ws-modal-overlay-bg: rgba(0, 0, 0, 0.72);
+}
