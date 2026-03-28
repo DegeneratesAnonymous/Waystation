@@ -55,7 +55,7 @@
     "id": "buildable.storage_cabinet",
     "display_name": "Storage Cabinet",
     "category": "object",
-    "description": "A reinforced storage cabinet with locking lid. Holds up to 48 kg and can be configured to accept specific item types only. Rotatable to face any direction. Non-portable; cannot be hauled by NPCs once placed.",
+    "description": "A reinforced storage cabinet with locking lid. Holds up to 48 items and can be configured to accept specific item types only. Rotatable to face any direction. Non-portable; cannot be hauled by NPCs once placed.",
     "build_time_ticks": 8,
     "required_materials": {
       "item.steel_plate": 2
@@ -73,7 +73,7 @@
     "id": "buildable.storage_crate",
     "display_name": "Storage Crate",
     "category": "object",
-    "description": "A sturdy portable cargo crate. Holds up to 20 kg of goods. Can be hauled to a new location by NPCs.",
+    "description": "A sturdy portable cargo crate. Holds up to 20 items of goods. Can be hauled to a new location by NPCs.",
     "build_time_ticks": 6,
     "required_materials": {
       "item.steel_plate": 1

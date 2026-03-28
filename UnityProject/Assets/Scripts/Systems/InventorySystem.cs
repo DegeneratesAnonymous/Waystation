@@ -129,25 +129,31 @@ namespace Waystation.Systems
             return typeId == "cargo_hold";
         }
 
-        /// <summary>Weight-based capacity used by a foundation container.</summary>
+        /// <summary>
+        /// Item-count capacity used by a foundation container.
+        /// This interprets foundation.cargoCapacity as a maximum number of item
+        /// units (sum of all stack quantities), consistent with ResearchSystem,
+        /// FarmingSystem, and FoundationInstance.CargoItemCount().
+        /// </summary>
         public float GetCapacityUsed(FoundationInstance foundation)
         {
             float total = 0f;
             foreach (var kv in foundation.cargo)
-            {
-                float weight = _registry.Items.TryGetValue(kv.Key, out var item) ? item.weight : 1f;
-                total += weight * kv.Value;
-            }
+                total += kv.Value;
             return total;
         }
 
-        /// <summary>Remaining weight capacity of a foundation container.</summary>
+        /// <summary>
+        /// Remaining item-count capacity of a foundation container.
+        /// Returns how many additional item units can be stored before reaching
+        /// foundation.cargoCapacity.
+        /// </summary>
         public float GetCapacityFree(FoundationInstance foundation)
             => Mathf.Max(0f, foundation.cargoCapacity - GetCapacityUsed(foundation));
 
         /// <summary>
         /// Returns true when qty units of itemId can be added to the container
-        /// without exceeding weight capacity or violating type filters.
+        /// without exceeding item-count capacity or violating type filters.
         /// </summary>
         public bool CanStoreItem(FoundationInstance foundation, string itemId, int qty = 1)
         {
@@ -158,15 +164,14 @@ namespace Waystation.Systems
             if (foundation.cargoSettings != null && itemDefn != null)
                 if (!foundation.cargoSettings.AllowsType(itemDefn.itemType)) return false;
 
-            float weight = itemDefn != null ? itemDefn.weight : 1f;
-            return GetCapacityFree(foundation) >= weight * qty;
+            return GetCapacityFree(foundation) >= qty;
         }
 
         // ── Foundation-based mutation helpers ─────────────────────────────────
 
         /// <summary>
         /// Add up to qty units of itemId to a foundation container, enforcing
-        /// weight capacity and type filters.  Returns the number of units added.
+        /// item-count capacity and type filters.  Returns the number of units added.
         /// A Commitment Cooldown is applied automatically on successful placement.
         /// </summary>
         public int AddItemToContainer(StationState station, string foundationUid,
@@ -187,10 +192,8 @@ namespace Waystation.Systems
             if (foundation.cargoSettings != null && itemDefn != null)
                 if (!foundation.cargoSettings.AllowsType(itemDefn.itemType)) return 0;
 
-            float weight     = itemDefn != null ? itemDefn.weight : 1f;
-            float free       = GetCapacityFree(foundation);
-            int   maxAddable = weight > 0f ? (int)(free / weight) : qty;
-            int   actual     = Mathf.Min(qty, maxAddable);
+            int free       = (int)GetCapacityFree(foundation);
+            int actual     = Mathf.Min(qty, free);
             if (actual <= 0) return 0;
 
             foundation.cargo[itemId] = (foundation.cargo.ContainsKey(itemId)
@@ -329,8 +332,11 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Returns the combined capacity (used kg, total kg) across all module cargo
-        /// holds and all foundation containers in "cargo_hold" rooms.
+        /// Returns the combined capacity across all module cargo holds and all
+        /// foundation containers in "cargo_hold" rooms.
+        /// Note: module holds use weight (kg) for 'used'; foundation containers
+        /// use item-count for 'used'.  Total is similarly mixed — callers that need
+        /// a precise fill ratio should query each source separately.
         /// </summary>
         public (float used, int total) GetStationCapacity(StationState station)
         {
