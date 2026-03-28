@@ -105,6 +105,18 @@ namespace Waystation.Systems
         public void RegisterSpeciesTree(string speciesId, BodyPartTreeDefinition tree)
         {
             if (string.IsNullOrEmpty(speciesId) || tree == null) return;
+
+            // Ensure the tree's internal speciesId matches the registry key used here.
+            if (string.IsNullOrEmpty(tree.speciesId))
+            {
+                tree.speciesId = speciesId;
+            }
+            else if (tree.speciesId != speciesId)
+            {
+                Debug.LogWarning($"[MedicalTickSystem] RegisterSpeciesTree species mismatch: key='{speciesId}' tree.speciesId='{tree.speciesId}'. Normalizing to key.");
+                tree.speciesId = speciesId;
+            }
+
             _speciesTreeRegistry[speciesId] = tree;
         }
 
@@ -127,7 +139,13 @@ namespace Waystation.Systems
                     return tree;
                 Debug.LogWarning($"[MedicalTickSystem] No body tree registered for species '{species}'; falling back to human tree.");
             }
-            return _speciesTreeRegistry["human"];
+
+            if (_speciesTreeRegistry.TryGetValue("human", out var humanTree))
+                return humanTree;
+
+            // Initialise() has not been called yet — return the default human tree as a last resort.
+            Debug.LogWarning("[MedicalTickSystem] No human body tree registered; falling back to HumanBodyTree.Get().");
+            return HumanBodyTree.Get();
         }
 
         // ── Main tick ─────────────────────────────────────────────────────────

@@ -52,7 +52,11 @@ namespace Waystation.Tests
             Assert.IsNotNull(part, "torso part must exist in the human body tree");
             var wound = Wound.Create(WoundType.Blunt, WoundSeverity.Minor,
                                      bleedRate: 0f, painContrib: painContrib, currentTick: 0);
-            wound.isTreated = true; // prevent infection roll accumulation from affecting test
+            // Mark as treated: slower infection accumulation with a higher DC.
+            // Infection rolls are also avoided because MakeStation() sets tick=1,
+            // which is not a multiple of InfectionRollInterval (12).
+            // bleedRate=0 keeps blood volume constant throughout the test.
+            wound.isTreated = true;
             part.wounds.Add(wound);
 
             if (fortitude)
@@ -226,6 +230,39 @@ namespace Waystation.Tests
             Assert.DoesNotThrow(() => sys.RegisterSpeciesTree(null, null));
             Assert.DoesNotThrow(() => sys.RegisterSpeciesTree("", new BodyPartTreeDefinition()));
             Assert.DoesNotThrow(() => sys.RegisterSpeciesTree("valid_id", null));
+        }
+
+        /// <summary>
+        /// RegisterSpeciesTree normalizes tree.speciesId to match the registry key when they differ.
+        /// </summary>
+        [Test]
+        public void RegisterSpeciesTree_MismatchedSpeciesId_NormalizesToKey()
+        {
+            var sys = MedicalTestHelpers.MakeSystem();
+            var tree = new BodyPartTreeDefinition { speciesId = "wrong_id" };
+
+            LogAssert.Expect(LogType.Warning,
+                "[MedicalTickSystem] RegisterSpeciesTree species mismatch: key='correct_id' tree.speciesId='wrong_id'. Normalizing to key.");
+
+            sys.RegisterSpeciesTree("correct_id", tree);
+
+            Assert.AreEqual("correct_id", tree.speciesId,
+                "tree.speciesId should be normalized to the registry key after registration.");
+        }
+
+        /// <summary>
+        /// RegisterSpeciesTree sets tree.speciesId when the tree's speciesId is empty.
+        /// </summary>
+        [Test]
+        public void RegisterSpeciesTree_EmptyTreeSpeciesId_PopulatesFromKey()
+        {
+            var sys = MedicalTestHelpers.MakeSystem();
+            var tree = new BodyPartTreeDefinition { speciesId = "" };
+
+            sys.RegisterSpeciesTree("my_species", tree);
+
+            Assert.AreEqual("my_species", tree.speciesId,
+                "tree.speciesId should be set from the registry key when it is empty.");
         }
     }
 }
