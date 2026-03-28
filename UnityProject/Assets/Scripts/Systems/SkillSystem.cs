@@ -69,6 +69,7 @@ namespace Waystation.Systems
 
         private readonly ContentRegistry _registry;
         private MoodSystem               _mood;
+        private MentoringSystem          _mentoring;
 
         // ── Notification events ───────────────────────────────────────────────
 
@@ -94,6 +95,9 @@ namespace Waystation.Systems
         /// <summary>Wire up mood system after construction (called from GameManager.InitSystems).</summary>
         public void SetMoodSystem(MoodSystem mood) => _mood = mood;
 
+        /// <summary>Wire up mentoring system after construction (called from GameManager.InitSystems).</summary>
+        public void SetMentoringSystem(MentoringSystem mentoring) => _mentoring = mentoring;
+
         // ── Tick ──────────────────────────────────────────────────────────────
 
         /// <summary>Called once per game tick from GameManager to handle periodic skill work.</summary>
@@ -115,11 +119,15 @@ namespace Waystation.Systems
             if (!Enabled || npc == null) return;
             EnsureSkillInstances(npc);
 
+            // Mentoring multiplier is the same for all skills in this task completion.
+            float mentoringMult = _mentoring?.GetMentoringXPMultiplier(npc, station) ?? 1f;
+
             foreach (var skill in _registry.Skills.Values)
             {
                 if (!skill.associatedTaskTypes.Contains(taskType)) continue;
                 var inst = GetOrCreateSkillInstance(npc, skill.skillId);
                 float xp = ApplyXPGainModifier(npc, skill.skillId, skill.xpPerTaskCompletion);
+                xp *= mentoringMult;
                 int priorCharLevel  = GetCharacterLevel(npc);
                 int priorSkillLevel = inst.Level;
                 AddXPWithDiminishing(npc, inst, xp, station);
@@ -142,6 +150,7 @@ namespace Waystation.Systems
             var inst = GetOrCreateSkillInstance(npc, skillId);
             float rawXP = xpPerSecond * deltaTime;
             float xp    = ApplyXPGainModifier(npc, skillId, rawXP);
+            xp *= _mentoring?.GetMentoringXPMultiplier(npc, station) ?? 1f;
             int priorCharLevel  = GetCharacterLevel(npc);
             int priorSkillLevel = inst.Level;
             AddXPWithDiminishing(npc, inst, xp, station);
@@ -161,6 +170,7 @@ namespace Waystation.Systems
             EnsureSkillInstances(npc);
             var inst = GetOrCreateSkillInstance(npc, skillId);
             float xp = ApplyXPGainModifier(npc, skillId, amount);
+            xp *= _mentoring?.GetMentoringXPMultiplier(npc, station) ?? 1f;
             int priorCharLevel  = GetCharacterLevel(npc);
             int priorSkillLevel = inst.Level;
             AddXPWithDiminishing(npc, inst, xp, station);

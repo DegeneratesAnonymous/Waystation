@@ -174,7 +174,8 @@ namespace Waystation.Models
         Friend,         // AffinityScore ≥ 20
         Enemy,          // AffinityScore ≤ -5
         Lover,          // AffinityScore ≥ 40
-        Spouse          // AffinityScore ≥ 60, approved by player
+        Spouse,         // AffinityScore ≥ 60, approved by player
+        Mentor          // Friend sub-type: high-skill NPC mentoring a lower-skill NPC
     }
 
     // -------------------------------------------------------------------------
@@ -200,6 +201,17 @@ namespace Waystation.Models
         // Tick at which marriage event was last fired (for re-fire interval)
         public int    lastMarriageEventTick = -1;
 
+        // ── Mentor / Student bond ─────────────────────────────────────────────
+        // UID of the NPC who is the Mentor in this bond.  Non-null only when
+        // relationshipType == RelationshipType.Mentor.
+        public string mentorUid = null;
+        // Running total of ticks this pair has spent co-working in the same room.
+        // Accumulates until CoWorkingTicksThreshold is reached; not reset after bond forms.
+        public int    coWorkingTicks = 0;
+        // Game tick of the last co-working session — used for 7-day inactivity check.
+        // -1 means the pair has never co-worked.
+        public int    lastCoWorkingTick = -1;
+
         /// <summary>
         /// Returns a canonical string key for a pair, using lexicographic ordering
         /// so (A,B) and (B,A) always resolve to the same record.
@@ -213,16 +225,32 @@ namespace Waystation.Models
 
         /// <summary>
         /// Derives RelationshipType from the current affinityScore.
-        /// Spouse is preserved if already set (it requires player approval to set).
+        /// Spouse and Mentor are preserved — they are managed by dedicated systems
+        /// (player approval and MentoringSystem respectively) and must not be
+        /// overwritten by the affinity-threshold logic.
         /// </summary>
         public void UpdateTypeFromAffinity()
         {
             if (relationshipType == RelationshipType.Spouse) return;
+            if (relationshipType == RelationshipType.Mentor) return;
             if      (affinityScore >=  40f) relationshipType = RelationshipType.Lover;
             else if (affinityScore >=  20f) relationshipType = RelationshipType.Friend;
             else if (affinityScore >=   5f) relationshipType = RelationshipType.Acquaintance;
             else if (affinityScore <=  -5f) relationshipType = RelationshipType.Enemy;
             else                            relationshipType = RelationshipType.None;
+        }
+
+        /// <summary>
+        /// Clears the Mentor/Student designation and re-derives the relationship type
+        /// from the current affinityScore.  Called by RelationshipRegistry when the
+        /// 7-day co-working inactivity threshold is exceeded.
+        /// </summary>
+        public void ClearMentorBond()
+        {
+            mentorUid = null;
+            // Temporarily clear Mentor so UpdateTypeFromAffinity will re-derive properly.
+            relationshipType = RelationshipType.None;
+            UpdateTypeFromAffinity();
         }
     }
 
