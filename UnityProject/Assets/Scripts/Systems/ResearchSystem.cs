@@ -135,25 +135,32 @@ namespace Waystation.Systems
         // ── Datachip storage helpers ──────────────────────────────────────────
 
         /// <summary>
-        /// Returns the effective terminal multiplier for the given branch.
-        /// If a complete terminal of the matching branch exists with an active
-        /// research_lab room bonus, the room bonus multiplier is returned.
-        /// The result is additionally scaled by the terminal's Functionality()
-        /// so that damaged or destroyed terminals produce reduced (or zero) output.
-        /// Returns 1.0 when no qualifying terminal is present.
+        /// Returns the best effective terminal multiplier across all complete terminals
+        /// of the given branch.  For each terminal the effective value is:
+        ///   (hasRoomBonus ? roomBonusMultiplier : 1.0) × Functionality()
+        /// Non-functional terminals (Functionality == 0, i.e. destroyed) are skipped.
+        /// The maximum across all qualifying terminals is returned so that a damaged
+        /// terminal never reduces output when a healthier one is present.
+        /// Returns 1.0 when no qualifying terminal exists.
         /// </summary>
         private static float GetTerminalMultiplier(ResearchBranch branch, StationState station)
         {
+            float best = 1.0f;
+            bool  found = false;
             foreach (var f in station.foundations.Values)
             {
                 if (f.status != "complete") continue;
                 if (!TerminalBranch.TryGetValue(f.buildableId, out var fb) || fb != branch) continue;
                 float func = f.Functionality();
-                if (func <= 0f) continue;  // destroyed or non-functional terminal
-                if (f.hasRoomBonus) return f.roomBonusMultiplier * func;
-                return func;
+                if (func <= 0f) continue;  // destroyed terminal — no contribution
+                float effective = (f.hasRoomBonus ? f.roomBonusMultiplier : 1.0f) * func;
+                if (!found || effective > best)
+                {
+                    best  = effective;
+                    found = true;
+                }
             }
-            return 1.0f;
+            return best;
         }
 
         /// <summary>
