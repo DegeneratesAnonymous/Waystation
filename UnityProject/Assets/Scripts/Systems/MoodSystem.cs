@@ -144,7 +144,8 @@ namespace Waystation.Systems
             // Crisis recovery
             else if (npc.inCrisis && score >= CrisisRecoveryThreshold)
             {
-                npc.inCrisis = false;
+                npc.inCrisis       = false;
+                npc.jobInterrupted = true;   // force immediate return to normal assignment
                 OnNpcRecoveredFromCrisis?.Invoke(npc);
             }
 

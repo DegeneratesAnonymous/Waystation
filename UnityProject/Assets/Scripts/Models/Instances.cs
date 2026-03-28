@@ -57,6 +57,23 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Schedule Slot — per-hour activity state for per-NPC custom schedules
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// What an NPC is allowed to do during a given hour of the day.
+    /// Work   — normal job assignment applies.
+    /// Rest   — NPC is assigned the rest job; no productive work.
+    /// Recreation — NPC is assigned a recreational task; no productive work.
+    /// </summary>
+    public enum ScheduleSlot
+    {
+        Work,
+        Rest,
+        Recreation
+    }
+
+    // -------------------------------------------------------------------------
     // Department — a named crew department grouping jobs together
     // -------------------------------------------------------------------------
 
@@ -582,6 +599,38 @@ namespace Waystation.Models
         public string jobModuleUid;
         public int    jobTimer       = 0;
         public bool   jobInterrupted = false;
+
+        // Per-NPC 24-slot schedule (index = hour 0–23).
+        // null means "use default day/night split" (hours 6–17 = Work, rest = Rest).
+        // Players may override individual slots via the schedule editor.
+        public ScheduleSlot[] npcSchedule = null;
+
+        /// <summary>
+        /// Returns the schedule slot for the given hour (0–23), using the per-NPC
+        /// custom schedule when set, or the station default day/night split otherwise.
+        /// <paramref name="hourOfDay"/> is clamped to 0–23 to guard against
+        /// out-of-range values from TimeSystem.HourOfDay.
+        /// </summary>
+        public ScheduleSlot GetScheduleSlot(int hourOfDay)
+        {
+            hourOfDay = Math.Max(0, Math.Min(23, hourOfDay));
+            if (npcSchedule != null && npcSchedule.Length == 24)
+                return npcSchedule[hourOfDay];
+            // Default: Work during day hours (06:00–17:59), Rest otherwise
+            return (hourOfDay >= 6 && hourOfDay < 18) ? ScheduleSlot.Work : ScheduleSlot.Rest;
+        }
+
+        /// <summary>
+        /// Initialises the per-NPC schedule array from the station default day/night
+        /// split.  Hours 6–17 become Work, all others become Rest.
+        /// Call this once to create a schedule the player can then customise.
+        /// </summary>
+        public void InitDefaultSchedule()
+        {
+            npcSchedule = new ScheduleSlot[24];
+            for (int h = 0; h < 24; h++)
+                npcSchedule[h] = (h >= 6 && h < 18) ? ScheduleSlot.Work : ScheduleSlot.Rest;
+        }
 
         public string       factionId;
         public List<string> statusTags = new List<string>();
