@@ -4,6 +4,10 @@
 //   1. Player calls PlaceFoundation() to create a FoundationInstance on the station.
 //   2. Tick() detects "awaiting_haul" foundations; an idle Engineer NPC hauls the
 //      required materials from station cargo holds to the build site.
+//      Partial haul is allowed — construction starts as soon as any materials arrive
+//      and progresses only as far as the proportion of materials on-site allows.
+//      When the material ceiling is reached, construction reverts to "awaiting_haul"
+//      until more stock is available, then resumes automatically.
 //   3. Once all materials are present the foundation transitions to "constructing"
 //      and the engineer spends buildTimeTicks advancing buildProgress to 1.0.
 //   4. On completion the foundation is marked "complete" and the engineer is freed.
@@ -13,6 +17,11 @@
 //   75–50 % HP   →  linearly degraded
 //   < 50 % HP    →  0.0 (non-functional; still pulls power if applicable)
 //   0 % HP       →  0.0 (destroyed)
+//
+// Damage & repair:
+//   Call DamageFoundation() to apply HP damage to a complete foundation.
+//   When HP reaches 0, pendingRepair is set and the repair pipeline runs:
+//   an engineer hauls the required materials and restores HP to maxHealth.
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -25,6 +34,7 @@ namespace Waystation.Systems
         // ── Constants ─────────────────────────────────────────────────────────
 
         private const string BuildJobId         = "job.build";
+        private const string RepairJobId        = "job.repair";
         private const string EngineerClassId    = "class.engineering";
 
         /// <summary>
@@ -64,9 +74,15 @@ namespace Waystation.Systems
 
         /// <summary>
         /// When true, foundations skip the haul phase and complete instantly
-        /// without consuming any materials.  Toggled via the in-game Dev Tools button.
+        /// without consuming any materials.  Toggled via the in-game Dev Tools button,
+        /// or forced on when FeatureFlags.ConstructionPipeline is false.
         /// </summary>
-        public static bool DevMode = false;
+        public static bool DevMode
+        {
+            get => _devMode || !FeatureFlags.ConstructionPipeline;
+            set => _devMode = value;
+        }
+        private static bool _devMode = false;
 
         public BuildingSystem(ContentRegistry registry) => _registry = registry;
 
@@ -299,23 +315,26 @@ namespace Waystation.Systems
                 if (f.status == "awaiting_haul" || f.status == "constructing")
                     pending.Add(f);
 
-            if (pending.Count == 0) return;
-
             // Compute the best active workbench room-bonus multiplier once per tick
             // so TickConstructing doesn't scan all foundations for every pending build.
+            // Multiplied by Functionality() so damaged workbenches give reduced bonuses.
             float roomBonusMultiplier = 1f;
             foreach (var f in station.foundations.Values)
             {
                 if (f.status != "complete" || !f.hasRoomBonus || f.roomBonusMultiplier <= roomBonusMultiplier)
                     continue;
                 if (_registry.Buildables.TryGetValue(f.buildableId, out var wb) && wb.workbenchRoomType != null)
-                    roomBonusMultiplier = f.roomBonusMultiplier;
+                {
+                    float effective = f.roomBonusMultiplier * f.Functionality();
+                    if (effective > roomBonusMultiplier)
+                        roomBonusMultiplier = effective;
+                }
             }
 
             // Track which engineer UIDs have been claimed this tick.
             // An engineer already assigned to *this* foundation may still work on it.
             var usedEngineerUids = new HashSet<string>();
-            var idleJobs         = new HashSet<string> { null, "job.rest", "job.eat", BuildJobId };
+            var idleJobs         = new HashSet<string> { null, "job.rest", "job.eat", BuildJobId, RepairJobId };
 
             foreach (var foundation in pending)
             {
@@ -346,7 +365,87 @@ namespace Waystation.Systems
                 if (foundation.assignedNpcUid != null)
                     usedEngineerUids.Add(foundation.assignedNpcUid);
             }
+
+            // ── Repair pipeline ───────────────────────────────────────────────
+            // Process complete foundations flagged for repair. Each uses a separate
+            // engineer pool entry (repairAssignedNpcUid) so repairs and new builds
+            // don't contend for the same worker.
+            var repairJobs = new HashSet<string> { null, "job.rest", "job.eat", BuildJobId, RepairJobId };
+            foreach (var foundation in station.foundations.Values)
+            {
+                if (foundation.status != "complete" || !foundation.pendingRepair) continue;
+                if (foundation.health >= foundation.maxHealth)
+                {
+                    // Repair already at full HP — clear state without logging again.
+                    foundation.pendingRepair         = false;
+                    foundation.repairProgress        = 0f;
+                    foundation.repairAssignedNpcUid  = null;
+                    foundation.repairHauledMaterials.Clear();
+                    continue;
+                }
+
+                if (!_registry.Buildables.TryGetValue(foundation.buildableId, out var repairDefn))
+                    continue;
+
+                string repairAssigned = foundation.repairAssignedNpcUid;
+                var repairIdle = new List<NPCInstance>();
+                foreach (var npc in station.npcs.Values)
+                {
+                    if (!npc.IsCrew()) continue;
+                    if (npc.classId != EngineerClassId) continue;
+                    if (!repairJobs.Contains(npc.currentJobId)) continue;
+                    if (usedEngineerUids.Contains(npc.uid) &&
+                        (repairAssigned == null || npc.uid != repairAssigned)) continue;
+                    repairIdle.Add(npc);
+                }
+
+                bool repairMaterialsReady = MaterialsComplete(
+                    foundation.repairHauledMaterials, repairDefn.requiredMaterials);
+
+                if (!repairMaterialsReady)
+                    TickRepairHaul(foundation, repairDefn, station, repairIdle);
+                else
+                    TickRepairing(foundation, repairDefn, station, repairIdle, roomBonusMultiplier);
+
+                if (foundation.repairAssignedNpcUid != null)
+                    usedEngineerUids.Add(foundation.repairAssignedNpcUid);
+            }
         }
+
+        // ── Public damage / repair API ────────────────────────────────────────
+
+        /// <summary>
+        /// Apply <paramref name="damage"/> HP to a complete foundation.
+        /// When HP drops to 0 the building is flagged as destroyed and a repair task
+        /// is queued automatically.  Has no effect on incomplete foundations.
+        /// </summary>
+        public void DamageFoundation(StationState station, string foundationUid, int damage)
+        {
+            if (!station.foundations.TryGetValue(foundationUid, out var foundation)) return;
+            if (foundation.status != "complete") return;
+            if (damage <= 0) return;
+
+            foundation.health = Mathf.Max(0, foundation.health - damage);
+
+            float func = foundation.Functionality();
+            if (foundation.health == 0)
+                foundation.operatingState = "broken";
+            else if (func < 1f)
+                foundation.operatingState = "damaged";
+
+            if (foundation.health == 0 && !foundation.pendingRepair)
+            {
+                foundation.pendingRepair = true;
+                foundation.repairProgress = 0f;
+                foundation.repairHauledMaterials.Clear();
+                _registry.Buildables.TryGetValue(foundation.buildableId, out var defn);
+                string name = defn != null ? defn.displayName : foundation.buildableId;
+                station.LogEvent(
+                    $"{name} at ({foundation.tileCol},{foundation.tileRow}) destroyed — repair required.");
+            }
+        }
+
+
 
         // ── Private helpers ───────────────────────────────────────────────────
 
@@ -377,7 +476,10 @@ namespace Waystation.Systems
                 return;
             }
 
-            // Gather what's still missing from station cargo holds
+            // Gather what's still missing from station cargo holds.
+            // Partial haul is allowed: haul whatever stock is available right now
+            // so construction can begin immediately and halt only when the materials
+            // on-site ceiling is reached (see TickConstructing).
             bool hauledSomething = false;
             foreach (var kv in required)
             {
@@ -394,10 +496,13 @@ namespace Waystation.Systems
                     if (mod.inventory != null && mod.inventory.ContainsKey(itemId))
                         available += mod.inventory[itemId];
 
-                if (available < still) continue;  // Not enough stock; wait
+                if (available <= 0) continue;  // Nothing in stock for this item; skip
+
+                // Haul as much as is available, up to the remaining need.
+                int toHaul = Mathf.Min(available, still);
 
                 // Deduct from cargo holds
-                int remaining = still;
+                int remaining = toHaul;
                 foreach (var mod in station.modules.Values)
                 {
                     if (mod.inventory == null) continue;
@@ -412,7 +517,7 @@ namespace Waystation.Systems
                     if (remaining <= 0) break;
                 }
 
-                foundation.hauledMaterials[itemId] = qtyNeeded;
+                foundation.hauledMaterials[itemId] = already + (toHaul - remaining);
                 hauledSomething = true;
             }
 
@@ -429,7 +534,17 @@ namespace Waystation.Systems
             // Refresh timer to keep JobSystem from reassigning the engineer
             RefreshEngineerTimer(foundation, idle);
 
-            if (foundation.MaterialsComplete(required))
+            // Transition to constructing once any materials are on-site.
+            // TickConstructing will impose a materials-ratio ceiling on progress.
+            bool anyOnSite = false;
+            foreach (var kv in required)
+            {
+                if (foundation.hauledMaterials.ContainsKey(kv.Key) &&
+                    foundation.hauledMaterials[kv.Key] > 0)
+                { anyOnSite = true; break; }
+            }
+
+            if (anyOnSite)
                 foundation.status = "constructing";
         }
 
@@ -445,6 +560,36 @@ namespace Waystation.Systems
                 foundation.buildProgress = 1f;
                 CompleteFoundation(foundation, defn, station, null);
                 return;
+            }
+
+            // Material-ceiling check: construction can only advance as far as the
+            // fraction of required materials that have been hauled.  When progress
+            // reaches the ceiling with materials still missing, revert to awaiting_haul
+            // so more stock can be fetched before work continues.
+            var required = defn.requiredMaterials;
+            if (required != null && required.Count > 0)
+            {
+                int totalRequired = 0, totalHauled = 0;
+                foreach (var kv in required)
+                {
+                    totalRequired += kv.Value;
+                    int hauled = foundation.hauledMaterials.ContainsKey(kv.Key)
+                                 ? foundation.hauledMaterials[kv.Key] : 0;
+                    totalHauled += Mathf.Min(hauled, kv.Value);
+                }
+                float materialsRatio = totalRequired > 0
+                    ? (float)totalHauled / totalRequired : 1f;
+
+                if (materialsRatio < 1f &&
+                    foundation.buildProgress >= materialsRatio - 0.0001f)
+                {
+                    // All hauled materials have been consumed.  Halt construction
+                    // and go back to haul phase to fetch the remaining items.
+                    foundation.status = "awaiting_haul";
+                    station.LogEvent(
+                        $"{defn.displayName} construction halted — waiting for materials.");
+                    return;
+                }
             }
 
             // Ensure an engineer is assigned
@@ -481,6 +626,156 @@ namespace Waystation.Systems
                 CompleteFoundation(foundation, defn, station, assigned);
         }
 
+        // ── Repair helpers ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Haul repair materials from station cargo holds to the repair site.
+        /// Uses the same required_materials as the original build.
+        /// </summary>
+        private void TickRepairHaul(FoundationInstance foundation,
+                                     BuildableDefinition defn,
+                                     StationState station,
+                                     List<NPCInstance> idle)
+        {
+            if (DevMode)
+            {
+                // Skip haul in dev mode; restore HP directly.
+                foundation.repairHauledMaterials.Clear();
+                foreach (var kv in defn.requiredMaterials)
+                    foundation.repairHauledMaterials[kv.Key] = kv.Value;
+                return;
+            }
+
+            var required = defn.requiredMaterials;
+            if (required == null || required.Count == 0) return;
+
+            bool hauledSomething = false;
+            foreach (var kv in required)
+            {
+                string itemId    = kv.Key;
+                int    qtyNeeded = kv.Value;
+                int    already   = foundation.repairHauledMaterials.ContainsKey(itemId)
+                                   ? foundation.repairHauledMaterials[itemId] : 0;
+                int    still     = qtyNeeded - already;
+                if (still <= 0) continue;
+
+                int available = 0;
+                foreach (var mod in station.modules.Values)
+                    if (mod.inventory != null && mod.inventory.ContainsKey(itemId))
+                        available += mod.inventory[itemId];
+
+                if (available <= 0) continue;
+
+                int toHaul    = Mathf.Min(available, still);
+                int remaining = toHaul;
+                foreach (var mod in station.modules.Values)
+                {
+                    if (mod.inventory == null || !mod.inventory.ContainsKey(itemId)) continue;
+                    int have = mod.inventory[itemId];
+                    if (have <= 0) continue;
+                    int used = Mathf.Min(have, remaining);
+                    mod.inventory[itemId] -= used;
+                    if (mod.inventory[itemId] == 0) mod.inventory.Remove(itemId);
+                    remaining -= used;
+                    if (remaining <= 0) break;
+                }
+
+                foundation.repairHauledMaterials[itemId] = already + (toHaul - remaining);
+                hauledSomething = true;
+            }
+
+            if (hauledSomething && idle.Count > 0 && foundation.repairAssignedNpcUid == null)
+            {
+                var eng = idle[0];
+                eng.currentJobId                = RepairJobId;
+                eng.jobTimer                    = BuildJobTimerTicks;
+                foundation.repairAssignedNpcUid = eng.uid;
+                station.LogEvent($"{eng.name} hauls materials to repair {defn.displayName}.");
+            }
+
+            RefreshRepairEngineerTimer(foundation, idle);
+        }
+
+        /// <summary>
+        /// Engineer repairs the foundation, advancing repairProgress toward 1.0
+        /// and restoring HP proportionally.
+        /// </summary>
+        private void TickRepairing(FoundationInstance foundation,
+                                    BuildableDefinition defn,
+                                    StationState station,
+                                    List<NPCInstance> idle,
+                                    float roomBonusMultiplier)
+        {
+            if (DevMode)
+            {
+                foundation.health            = foundation.maxHealth;
+                foundation.repairProgress    = 1f;
+                foundation.pendingRepair     = false;
+                foundation.repairAssignedNpcUid = null;
+                foundation.repairHauledMaterials.Clear();
+                foundation.operatingState    = "standby";
+                _registry.Buildables.TryGetValue(foundation.buildableId, out var dv);
+                station.LogEvent($"{(dv != null ? dv.displayName : foundation.buildableId)} repair complete.");
+                return;
+            }
+
+            NPCInstance assigned = null;
+            if (foundation.repairAssignedNpcUid != null)
+                station.npcs.TryGetValue(foundation.repairAssignedNpcUid, out assigned);
+
+            if (assigned == null && idle.Count > 0)
+            {
+                assigned = idle[0];
+                foundation.repairAssignedNpcUid = assigned.uid;
+            }
+
+            if (assigned == null) return;
+
+            assigned.currentJobId = RepairJobId;
+            RefreshRepairEngineerTimer(foundation, idle);
+
+            int buildTime  = defn.buildTimeTicks > 0 ? defn.buildTimeTicks : DefaultBuildTimeTicks;
+            int skillLevel = assigned.skills.ContainsKey("technical") ? assigned.skills["technical"] : 5;
+            float skillScale = 0.5f + skillLevel / 10f;
+            if (roomBonusMultiplier > 1f) skillScale *= roomBonusMultiplier;
+
+            float increment = (1f / buildTime) * skillScale;
+            foundation.repairProgress = Mathf.Min(1f, foundation.repairProgress + increment);
+
+            // Restore HP proportionally as repair advances
+            foundation.health = Mathf.RoundToInt(foundation.maxHealth * foundation.repairProgress);
+
+            if (foundation.repairProgress >= 1f)
+            {
+                foundation.health            = foundation.maxHealth;
+                foundation.pendingRepair     = false;
+                foundation.repairProgress    = 0f;
+                foundation.operatingState    = "standby";
+                foundation.repairAssignedNpcUid = null;
+                foundation.repairHauledMaterials.Clear();
+
+                if (assigned != null) assigned.currentJobId = null;
+
+                _registry.Buildables.TryGetValue(foundation.buildableId, out var defnR);
+                string name = defnR != null ? defnR.displayName : foundation.buildableId;
+                station.LogEvent(
+                    $"{name} repair complete at ({foundation.tileCol},{foundation.tileRow}).");
+                if (defnR?.workbenchRoomType != null) RoomRebuildNeeded = true;
+            }
+        }
+
+        private static bool MaterialsComplete(Dictionary<string, int> hauled,
+                                               Dictionary<string, int> required)
+        {
+            if (required == null || required.Count == 0) return true;
+            foreach (var kv in required)
+            {
+                int have = hauled != null && hauled.ContainsKey(kv.Key) ? hauled[kv.Key] : 0;
+                if (have < kv.Value) return false;
+            }
+            return true;
+        }
+
         /// <summary>
         /// Set job_timer = BuildJobTimerTicks on the assigned engineer (if present in
         /// the idle pool) so JobSystem does not reassign them mid-construction.
@@ -492,6 +787,24 @@ namespace Waystation.Systems
             foreach (var npc in idle)
             {
                 if (npc.uid == foundation.assignedNpcUid)
+                {
+                    npc.jobTimer = BuildJobTimerTicks;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Set job_timer = BuildJobTimerTicks on the assigned repair engineer (if present
+        /// in the idle pool) so JobSystem does not reassign them mid-repair.
+        /// </summary>
+        private static void RefreshRepairEngineerTimer(FoundationInstance foundation,
+                                                        List<NPCInstance> idle)
+        {
+            if (foundation.repairAssignedNpcUid == null) return;
+            foreach (var npc in idle)
+            {
+                if (npc.uid == foundation.repairAssignedNpcUid)
                 {
                     npc.jobTimer = BuildJobTimerTicks;
                     return;

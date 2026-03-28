@@ -1045,6 +1045,17 @@ namespace Waystation.Models
         // uid of the Engineer NPC currently assigned here, or null
         public string assignedNpcUid;
 
+        // ── Repair pipeline ──────────────────────────────────────────────────
+        // Set by BuildingSystem when health reaches 0 on a complete foundation.
+        // Cleared when repair finishes and health is restored to maxHealth.
+        public bool                      pendingRepair            = false;
+        // uid of the Engineer NPC assigned to this repair task, or null.
+        public string                    repairAssignedNpcUid     = null;
+        // Materials already moved to the repair site: item_id → qty.
+        public Dictionary<string, int>   repairHauledMaterials    = new Dictionary<string, int>();
+        // 0.0 → 1.0; reaches 1.0 when repair work is done.
+        public float                     repairProgress           = 0f;
+
         // Cargo storage — mirrors ModuleInstance capability for placed storage objects.
         // cargoCapacity > 0 means this foundation acts as a cargo hold.
         public int                       cargoCapacity = 0;

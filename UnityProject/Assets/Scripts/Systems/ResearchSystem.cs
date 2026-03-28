@@ -135,8 +135,12 @@ namespace Waystation.Systems
         // ── Datachip storage helpers ──────────────────────────────────────────
 
         /// <summary>
-        /// Returns the room bonus multiplier from any complete terminal of the given
-        /// branch that has an active research_lab room bonus, or 1.0 if none exist.
+        /// Returns the effective terminal multiplier for the given branch.
+        /// If a complete terminal of the matching branch exists with an active
+        /// research_lab room bonus, the room bonus multiplier is returned.
+        /// The result is additionally scaled by the terminal's Functionality()
+        /// so that damaged or destroyed terminals produce reduced (or zero) output.
+        /// Returns 1.0 when no qualifying terminal is present.
         /// </summary>
         private static float GetTerminalMultiplier(ResearchBranch branch, StationState station)
         {
@@ -144,7 +148,10 @@ namespace Waystation.Systems
             {
                 if (f.status != "complete") continue;
                 if (!TerminalBranch.TryGetValue(f.buildableId, out var fb) || fb != branch) continue;
-                if (f.hasRoomBonus) return f.roomBonusMultiplier;
+                float func = f.Functionality();
+                if (func <= 0f) continue;  // destroyed or non-functional terminal
+                if (f.hasRoomBonus) return f.roomBonusMultiplier * func;
+                return func;
             }
             return 1.0f;
         }
