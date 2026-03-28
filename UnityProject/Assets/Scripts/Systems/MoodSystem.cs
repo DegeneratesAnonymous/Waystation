@@ -157,7 +157,6 @@ namespace Waystation.Systems
         private void EvaluateThresholds(NPCInstance npc)
         {
             float score = npc.moodScore;
-            bool wasCrisis = npc.inCrisis;
 
             // Crisis entry (happy/sad axis only)
             if (score < CrisisThreshold && !npc.inCrisis)
@@ -196,14 +195,29 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Called by NPCSystem when an NPC wakes up (isSleeping becomes false).
-        /// Resets both MoodScore and StressScore to SleepRecoveryScore (50) so rest is rewarding.
+        /// Resets both axes to SleepRecoveryScore (50) then re-applies any still-active
+        /// modifiers so that (a) modifiers pushed on or before wake (e.g. NeedSystem's
+        /// "well_rested" boost) are preserved and (b) expiring modifiers later reverse
+        /// only the delta that was re-applied here, preventing double-reversal.
         /// </summary>
         public void OnNPCWakes(NPCInstance npc)
         {
-            npc.moodScore   = SleepRecoveryScore;
-            npc.stressScore = SleepRecoveryScore;
-            // Re-evaluate thresholds immediately so WorkModifier is correct from tick 1
+            npc.moodScore   = RecomputeFromModifiers(npc.moodModifiers,   SleepRecoveryScore);
+            npc.stressScore = RecomputeFromModifiers(npc.stressModifiers, SleepRecoveryScore);
             EvaluateThresholds(npc);
+        }
+
+        /// <summary>
+        /// Returns baseline + sum of all active modifier deltas, clamped to [0, 100].
+        /// Used by OnNPCWakes to keep modifier lists consistent with the reset score.
+        /// </summary>
+        private static float RecomputeFromModifiers(List<MoodModifierRecord> modifiers, float baseline)
+        {
+            float score = baseline;
+            if (modifiers != null)
+                foreach (var m in modifiers)
+                    score += m.delta;
+            return Mathf.Clamp(score, 0f, 100f);
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -324,11 +338,15 @@ namespace Waystation.Systems
         /// </summary>
         public static float GetStationMorale(StationState station)
         {
-            var crew = station.GetCrew();
-            if (crew.Count == 0) return 50f;
-            float sum = 0f;
-            foreach (var npc in crew) sum += npc.moodScore;
-            return sum / crew.Count;
+            float sum  = 0f;
+            int   count = 0;
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew()) continue;
+                sum += npc.moodScore;
+                count++;
+            }
+            return count == 0 ? 50f : sum / count;
         }
 
         // ── Per-NPC modifier breakdown ────────────────────────────────────────

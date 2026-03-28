@@ -443,10 +443,8 @@ namespace Waystation.Tests
             station.tick = 6;
             _mood.Tick(station);
 
-            // After expiry, delta reversed; only drift effect remains
-            float expected = Mathf.Max(50f, 60f - MoodSystem.DriftRate);
-            // The modifier reversed the +10, then drift ran once
-            // After reversal: moodScore would be 50, then drift from 50 = no change
+            // The modifier reversed the +10, then drift ran once.
+            // After reversal moodScore returns to 50; drift at exactly 50 produces no change.
             Assert.AreEqual(50f, npc.moodScore, 0.5f,
                 "After modifier expiry the delta should be reversed and score returns toward 50.");
         }
@@ -522,7 +520,7 @@ namespace Waystation.Tests
     public class MoodWakeResetTests
     {
         [Test]
-        public void OnNPCWakes_ResetsBothAxesToBaseline()
+        public void OnNPCWakes_ResetsBothAxesToBaseline_WhenNoActiveModifiers()
         {
             var mood = new MoodSystem();
             var npc  = MoodTestHelpers.MakeCrewNpc(moodScore: 10f, stressScore: 20f);
@@ -533,6 +531,47 @@ namespace Waystation.Tests
                 "Happy/sad score should reset to baseline on wake.");
             Assert.AreEqual(MoodSystem.SleepRecoveryScore, npc.stressScore, 0.001f,
                 "Calm/stressed score should reset to baseline on wake.");
+        }
+
+        [Test]
+        public void OnNPCWakes_PreservesActiveModifiers_AddedBeforeWake()
+        {
+            // Simulate NeedSystem pushing "well_rested" then calling OnNPCWakes.
+            var mood = new MoodSystem();
+            var npc  = MoodTestHelpers.MakeCrewNpc(moodScore: 10f, stressScore: 20f);
+
+            // Push a modifier before waking (e.g. NeedSystem "well_rested")
+            mood.PushModifier(npc, "well_rested", 8f, 300, 0, MoodAxis.HappySad, "need_system");
+            mood.OnNPCWakes(npc);
+
+            // Score should be baseline (50) + active modifier delta (8) = 58
+            Assert.AreEqual(58f, npc.moodScore, 0.001f,
+                "Wake reset should incorporate already-active modifiers (e.g. well_rested +8).");
+        }
+
+        [Test]
+        public void OnNPCWakes_ActiveModifierExpiresCleanly_AfterWake()
+        {
+            // After OnNPCWakes recomputes from baseline + modifiers, expiry should
+            // reverse only the delta that was re-applied — no double-reversal.
+            var mood    = new MoodSystem();
+            var station = MoodTestHelpers.MakeStation();
+            var npc     = MoodTestHelpers.MakeCrewNpc(moodScore: 10f, stressScore: 20f);
+            npc.isSleeping = false;
+            station.npcs[npc.uid] = npc;
+
+            // Push +8 modifier expiring at tick 5
+            mood.PushModifier(npc, "well_rested", 8f, 5, 0, MoodAxis.HappySad, "need_system");
+            // Simulate wake — score becomes 50 + 8 = 58
+            mood.OnNPCWakes(npc);
+            Assert.AreEqual(58f, npc.moodScore, 0.001f, "Score after wake should be 50+8=58.");
+
+            // Advance past expiry — modifier reverses, score returns to ~50
+            station.tick = 6;
+            mood.Tick(station);
+
+            Assert.AreEqual(50f, npc.moodScore, 0.5f,
+                "After modifier expires, score should return to baseline (no double-reversal).");
         }
     }
 }
