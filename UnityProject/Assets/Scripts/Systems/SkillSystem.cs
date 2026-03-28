@@ -353,11 +353,21 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Performs a raw ability check using only the raw stat value — no skill modifier applied.
+        /// Performs a raw ability check using the raw stat value — no modifier applied.
         /// Useful for pure stat-based rolls (e.g. carrying capacity, environmental resist).
+        /// Returns the raw score (e.g. INT 18 → 18), not the derived modifier.
         /// </summary>
         public static int GetRawAbilityCheck(NPCInstance npc, string ability)
-            => ResolveAbilityMod(npc, ability);
+            => ability switch
+            {
+                "STR" => npc.abilityScores.STR,
+                "DEX" => npc.abilityScores.DEX,
+                "INT" => npc.abilityScores.INT,
+                "WIS" => npc.abilityScores.WIS,
+                "CHA" => npc.abilityScores.CHA,
+                "END" => npc.abilityScores.END,
+                _     => 0,
+            };
 
         /// <summary>
         /// Returns the hauling destination search radius in tiles for an NPC.

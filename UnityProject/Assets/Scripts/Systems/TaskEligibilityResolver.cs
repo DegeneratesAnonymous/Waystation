@@ -108,6 +108,8 @@ namespace Waystation.Systems
         public static float GetPerformancePenalty(NPCInstance npc, string taskType)
         {
             if (npc == null) return 1.0f;
+            // Treat null/empty task as not soft-locked (no penalty), consistent with CanPerform
+            if (string.IsNullOrEmpty(taskType)) return 1.0f;
             if (!SkillSystem.CapabilityChecksEnabled) return 1.0f;
             if (!SoftLockRegistry.TryGetValue(taskType, out var reqExp)) return 1.0f;
             return npc.chosenExpertise.Contains(reqExp) ? 1.0f : SoftLockPenalty;

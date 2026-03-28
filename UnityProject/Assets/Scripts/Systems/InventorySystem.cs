@@ -432,7 +432,7 @@ namespace Waystation.Systems
         /// </summary>
         public List<FoundationInstance> FindHaulCandidates(
             int originCol, int originRow, int radius,
-            StationState station, int currentTick)
+            StationState station)
         {
             var result = new List<FoundationInstance>();
             foreach (var foundation in station.foundations.Values)

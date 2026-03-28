@@ -188,6 +188,8 @@ namespace Waystation.UI
         /// When set, the panel filters expertise to those belonging to this skill.
         /// </summary>
         private string  _expertisePanelSkillFilter = "";
+        /// <summary>Reused buffer for filtered expertise list — avoids per-frame GC allocation.</summary>
+        private readonly List<ExpertiseDefinition> _filteredExpBuf = new List<ExpertiseDefinition>();
         private Vector2 _expertisePanelScroll;
         private Vector2 _skillsScroll;
         private float   _crewDetailOverlayH = 420f;   // updated each frame; drives overlay box height
@@ -6491,14 +6493,22 @@ namespace Waystation.UI
             Rect detailRect = new Rect(area.x, area.y + SelectorH + 4f, w, h - SelectorH - 4f);
             float detailH   = h - SelectorH - 4f;
 
-            // Auto-open expertise panel for pending skill-based slot prompts
+            // Auto-open expertise panel for pending skill-based slot prompts.
+            // Only triggers once per pending entry: if the user closed the panel with "← Back"
+            // for the same skillId, _expertisePanelSkillFilter still holds that ID and the
+            // block won't fire again until a different skillId is pending.
             if (!_expertisePanelOpen &&
                 npc.pendingExpertiseSkillIds != null &&
                 npc.pendingExpertiseSkillIds.Count > 0)
             {
-                _swapTargetExpertiseId     = "";
-                _expertisePanelSkillFilter = npc.pendingExpertiseSkillIds[0];
-                _expertisePanelOpen        = true;
+                var pendingSkillId = npc.pendingExpertiseSkillIds[0];
+                if (!string.IsNullOrEmpty(pendingSkillId) &&
+                    _expertisePanelSkillFilter != pendingSkillId)
+                {
+                    _swapTargetExpertiseId     = "";
+                    _expertisePanelSkillFilter = pendingSkillId;
+                    _expertisePanelOpen        = true;
+                }
             }
 
             if (_expertisePanelOpen)
@@ -6557,8 +6567,6 @@ namespace Waystation.UI
 
                 // Skill type badge: "A" = Advanced, "S" = Simple
                 string typeBadge = skillDef.skillType == SkillType.Advanced ? "A" : "S";
-                // Slot marker: show "⬡" for each slot earned from this skill
-                int slotsFromSkill = level / SkillSystem.SlotEverySkillLevels;
 
                 float cw2     = w - 14f;
                 float snameW  = CharW * 14f;
@@ -6691,18 +6699,17 @@ namespace Waystation.UI
 
             float listTop = area.y + hdrH;
             float listH   = h - hdrH;
-            // Apply skill filter: when triggered from a per-skill slot, show only expertise for that skill
-            var allExpRaw = _gm.Registry.Expertises.Values;
-            var filteredExp = new System.Collections.Generic.List<ExpertiseDefinition>();
-            foreach (var e in allExpRaw)
+            // Rebuild the filtered list into the reusable buffer to avoid per-frame allocation.
+            _filteredExpBuf.Clear();
+            foreach (var e in _gm.Registry.Expertises.Values)
             {
                 if (!string.IsNullOrEmpty(_expertisePanelSkillFilter) &&
                     e.requiredSkillId != _expertisePanelSkillFilter)
                     continue;
-                filteredExp.Add(e);
+                _filteredExpBuf.Add(e);
             }
             float expCardH = LineH * 2f + BtnH + 14f;
-            float innerH  = Mathf.Max(listH, filteredExp.Count * expCardH);
+            float innerH  = Mathf.Max(listH, _filteredExpBuf.Count * expCardH);
 
             _expertisePanelScroll = GUI.BeginScrollView(
                 new Rect(area.x, listTop, w, listH),
@@ -6710,7 +6717,7 @@ namespace Waystation.UI
                 new Rect(0, 0, w - 14f, innerH));
 
             float y = 0f;
-            foreach (var exp in filteredExp)
+            foreach (var exp in _filteredExpBuf)
             {
                 // Skip already-chosen (unless it's the one being swapped out)
                 bool isChosenAlready = npc.chosenExpertise.Contains(exp.expertiseId) &&
