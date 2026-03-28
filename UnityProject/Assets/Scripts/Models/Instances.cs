@@ -1051,6 +1051,11 @@ namespace Waystation.Models
         public CargoHoldSettings         cargoSettings;
         public Dictionary<string, int>   cargo         = new Dictionary<string, int>();
 
+        // Commitment Cooldown — runtime-only haul lock applied when items are placed.
+        // itemId → game tick at which the cooldown expires (NPC haul tasks skip items
+        // whose entry here has not yet expired). Not serialised to saves; cleared on load.
+        public Dictionary<string, int>   commitmentCooldowns = new Dictionary<string, int>();
+
         /// Total number of item units currently stored (unweighted).
         public int CargoItemCount()
         {
