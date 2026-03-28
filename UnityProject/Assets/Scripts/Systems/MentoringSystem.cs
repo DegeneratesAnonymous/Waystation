@@ -34,7 +34,7 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Minimum highest-skill level a potential mentor must have.
-        /// Defined in balance data (NPC-008).
+        /// Hard-coded constant; adjust here to tune the threshold.
         /// </summary>
         public const int MentorMinSkillLevel = 8;
 
@@ -145,10 +145,12 @@ namespace Waystation.Systems
         {
             var rec = RelationshipRegistry.GetOrCreate(station, a.uid, b.uid);
 
-            // Increment co-working ticks and refresh timestamps.
+            // Increment co-working ticks and refresh co-working timestamp.
+            // lastInteractionTick is intentionally NOT updated here: merely sharing a
+            // room is not a social interaction, and updating it would suppress affinity
+            // decay for pairs that never actually converse.
             rec.coWorkingTicks++;
-            rec.lastCoWorkingTick   = station.tick;
-            rec.lastInteractionTick = station.tick;
+            rec.lastCoWorkingTick = station.tick;
 
             // Bond already formed — nothing more to do this tick.
             if (rec.relationshipType == RelationshipType.Mentor) return;
@@ -180,12 +182,45 @@ namespace Waystation.Systems
 
             if (mentor == null) return;
 
+            // Enforce the constraint of no multiple simultaneous mentors per student:
+            // if the prospective student is already the student in another active bond,
+            // skip formation rather than creating a second mentor relationship.
+            if (StudentAlreadyHasMentor(station, student.uid, mentor.uid)) return;
+
             // Form the bond.
             rec.relationshipType = RelationshipType.Mentor;
             rec.mentorUid        = mentor.uid;
 
             station.LogEvent(
                 $"{mentor.name} has taken {student.name} under their wing as a mentor.");
+        }
+
+        /// <summary>
+        /// Returns true if <paramref name="studentUid"/> is already the student
+        /// (i.e. NOT the mentor) in any active <see cref="RelationshipType.Mentor"/> bond,
+        /// excluding the record that involves <paramref name="proposedMentorUid"/>.
+        /// </summary>
+        private static bool StudentAlreadyHasMentor(StationState station,
+                                                     string studentUid,
+                                                     string proposedMentorUid)
+        {
+            foreach (var existing in station.relationships.Values)
+            {
+                if (existing.relationshipType != RelationshipType.Mentor) continue;
+                if (existing.mentorUid == null) continue;
+
+                // studentUid must be in this bond AND must be the student (not the mentor).
+                bool isStudentInThisBond = (existing.npcUid1 == studentUid ||
+                                            existing.npcUid2 == studentUid) &&
+                                           existing.mentorUid != studentUid;
+                if (!isStudentInThisBond) continue;
+
+                // Ignore the record that is being formed right now (same pair).
+                if (existing.mentorUid == proposedMentorUid) continue;
+
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Returns the highest current skill level across all skill instances.</summary>

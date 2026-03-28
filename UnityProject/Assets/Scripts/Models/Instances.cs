@@ -244,10 +244,14 @@ namespace Waystation.Models
         /// Clears the Mentor/Student designation and re-derives the relationship type
         /// from the current affinityScore.  Called by RelationshipRegistry when the
         /// 7-day co-working inactivity threshold is exceeded.
+        /// Co-working state is reset so the pair must rebuild ticks from scratch to
+        /// re-form the bond — preventing instant re-formation on the next shared-room tick.
         /// </summary>
         public void ClearMentorBond()
         {
-            mentorUid = null;
+            mentorUid        = null;
+            coWorkingTicks   = 0;
+            lastCoWorkingTick = -1;
             // Temporarily clear Mentor so UpdateTypeFromAffinity will re-derive properly.
             relationshipType = RelationshipType.None;
             UpdateTypeFromAffinity();

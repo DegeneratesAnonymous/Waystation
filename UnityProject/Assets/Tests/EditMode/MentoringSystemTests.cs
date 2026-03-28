@@ -283,6 +283,40 @@ namespace Waystation.Tests
             Assert.AreEqual(b.uid, rec.mentorUid,
                 "mentorUid should be the higher-skilled NPC (b).");
         }
+
+        [Test]
+        public void BondDoesNotForm_WhenStudentAlreadyHasMentor()
+        {
+            // Pre-establish M1 as S's mentor, then verify M2 cannot also become S's mentor
+            // even after accumulating enough co-working ticks.
+            var m1 = MentoringTestHelpers.MakeCrewNpc("M1", "skill.engineering", 10, location: "room1");
+            var m2 = MentoringTestHelpers.MakeCrewNpc("M2", "skill.engineering", 10, location: "room1");
+            var s  = MentoringTestHelpers.MakeCrewNpc("S",  "skill.engineering",  2, location: "room1");
+            _station.npcs[m1.uid] = m1;
+            _station.npcs[m2.uid] = m2;
+            _station.npcs[s.uid]  = s;
+
+            // Directly create the M1–S Mentor bond (bypassing the accumulator).
+            var recM1S = RelationshipRegistry.GetOrCreate(_station, m1.uid, s.uid);
+            recM1S.affinityScore     = 25f;
+            recM1S.relationshipType  = RelationshipType.Mentor;
+            recM1S.mentorUid         = m1.uid;
+            recM1S.coWorkingTicks    = MentoringSystem.CoWorkingTicksThreshold;
+            recM1S.lastCoWorkingTick = 0;
+
+            // Set up M2–S at just below threshold with Friend affinity.
+            var recM2S = RelationshipRegistry.GetOrCreate(_station, m2.uid, s.uid);
+            recM2S.affinityScore     = 25f;
+            recM2S.relationshipType  = RelationshipType.Friend;
+            recM2S.coWorkingTicks    = MentoringSystem.CoWorkingTicksThreshold - 1;
+            recM2S.lastCoWorkingTick = 0;
+
+            // One tick: M2-S accumulates past threshold, but the guard must prevent formation.
+            _mentoring.Tick(_station);
+
+            Assert.AreNotEqual(RelationshipType.Mentor, recM2S.relationshipType,
+                "Student must not gain a second simultaneous mentor bond.");
+        }
     }
 
     // ── XP multiplier formula tests ───────────────────────────────────────────
@@ -477,6 +511,7 @@ namespace Waystation.Tests
             rec.relationshipType = RelationshipType.Mentor;
             rec.mentorUid        = mentor.uid;
             rec.lastCoWorkingTick = 0;
+            rec.coWorkingTicks    = MentoringSystem.CoWorkingTicksThreshold + 10;
 
             // Advance station tick past the 7-day inactivity window.
             station.tick = RelationshipRegistry.DecayIntervalTicks + 1;
@@ -489,6 +524,11 @@ namespace Waystation.Tests
             // Affinity (25) is still >= Friend threshold (20), so type should be Friend.
             Assert.AreEqual(RelationshipType.Friend, rec.relationshipType,
                 "Bond should decay to Friend when affinity is still >= 20.");
+            // co-working state must be reset so the bond can't re-form instantly.
+            Assert.AreEqual(0, rec.coWorkingTicks,
+                "coWorkingTicks must be reset to 0 on bond lapse.");
+            Assert.AreEqual(-1, rec.lastCoWorkingTick,
+                "lastCoWorkingTick must be reset to -1 on bond lapse.");
         }
 
         [Test]
