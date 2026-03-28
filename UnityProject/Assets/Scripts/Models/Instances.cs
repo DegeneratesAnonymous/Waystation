@@ -1005,6 +1005,16 @@ namespace Waystation.Models
         public Dictionary<string, int> inventory  = new Dictionary<string, int>();
         public CargoHoldSettings       cargoSettings;                     // null = not a cargo hold
 
+        /// <summary>
+        /// Resources currently depriving this module.  Non-empty → module is in a resource-
+        /// deprived degraded state (all effects suspended) independently of other modules.
+        /// Populated and cleared by ResourceSystem during cascade evaluation.
+        /// </summary>
+        public HashSet<string> resourceDeprived = new HashSet<string>();
+
+        /// <summary>True when at least one required resource has been cut off.</summary>
+        public bool IsResourceDeprived => resourceDeprived.Count > 0;
+
         public static ModuleInstance Create(string definitionId, string displayName, string category)
         {
             return new ModuleInstance
@@ -1593,7 +1603,8 @@ namespace Waystation.Models
         public Dictionary<string, float> resources = new Dictionary<string, float>
         {
             { "credits", 500f }, { "food", 100f }, { "power", 100f },
-            { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f }
+            { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f },
+            { "fuel",     50f }
         };
 
         // Entity registries (keyed by uid)
@@ -1606,6 +1617,12 @@ namespace Waystation.Models
 
         // Active state tags on the station
         public HashSet<string>            activeTags  = new HashSet<string>();
+
+        /// <summary>
+        /// Player actions blocked by resource depletion (e.g. "hire", "purchase" when credits = 0).
+        /// Populated and cleared by ResourceSystem; UI and action handlers check this set.
+        /// </summary>
+        public HashSet<string>            playerActionRestrictions = new HashSet<string>();
 
         // Policy flags (player decisions)
         public Dictionary<string, string> policy      = new Dictionary<string, string>();
@@ -1759,7 +1776,8 @@ namespace Waystation.Models
             resources = new Dictionary<string, float>
             {
                 { "credits", 500f }, { "food", 100f }, { "power", 100f },
-                { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f }
+                { "oxygen",  100f }, { "parts",  50f }, { "ice", 200f },
+                { "fuel",     50f }
             };
             research = ResearchState.Create();
             InitDefaultDepartments();
@@ -1806,6 +1824,10 @@ namespace Waystation.Models
         public void   SetTag(string tag)     => activeTags.Add(tag);
         public void   ClearTag(string tag)   => activeTags.Remove(tag);
         public bool   HasTag(string tag)     => activeTags.Contains(tag);
+
+        public void   RestrictAction(string action)   => playerActionRestrictions.Add(action);
+        public void   UnrestrictAction(string action) => playerActionRestrictions.Remove(action);
+        public bool   IsActionRestricted(string action) => playerActionRestrictions.Contains(action);
 
         // -- Faction rep helpers ---------------------------------------------
 

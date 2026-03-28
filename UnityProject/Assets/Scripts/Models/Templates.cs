@@ -1342,4 +1342,75 @@ namespace Waystation.Models
             return def;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Resource Definition — data-driven configuration for a station resource.
+    // Loaded from StreamingAssets/data/resources/*.json.
+    // Adding a new resource type requires only a new JSON entry here; no code changes.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ResourceDefinition
+    {
+        public string id;
+
+        /// <summary>Player alert fires when the resource falls below this amount.</summary>
+        public float warningThreshold = 0f;
+
+        /// <summary>Resources will not be produced beyond this passive cap.</summary>
+        public float softCap = float.MaxValue;
+
+        /// <summary>
+        /// When true, modules that consume this resource enter a degraded state when
+        /// the resource hits zero (cascade failure).  Set false for credits.
+        /// </summary>
+        public bool causesModuleCascade = true;
+
+        /// <summary>
+        /// When true, NPCs receive a need-deprivation mood penalty when this resource
+        /// hits zero — enforcing the sequence: NPC suffering → module degradation.
+        /// </summary>
+        public bool causesNpcDeprivation = false;
+
+        /// <summary>
+        /// Mood penalty magnitude applied to each crew NPC when this resource is depleted
+        /// (used when <see cref="causesNpcDeprivation"/> is true).  Stored as a positive value;
+        /// applied as a negative delta to moodScore.  Defined in balance data.
+        /// </summary>
+        public float npcDeprivationPenalty = 10f;
+
+        /// <summary>
+        /// When true, depletion restricts player actions (hire / purchase) rather than
+        /// triggering a module cascade.  Intended for credits only.
+        /// </summary>
+        public bool isCreditResource = false;
+
+        /// <summary>
+        /// Maximum production bonus from high morale (e.g. 0.15 = +15 %).
+        /// Effective only on the entry with id == "morale_balance".
+        /// </summary>
+        public float moraleScalarMax = 0.15f;
+
+        /// <summary>
+        /// Maximum production penalty from low morale (e.g. -0.15 = −15 %).
+        /// Effective only on the entry with id == "morale_balance".
+        /// </summary>
+        public float moraleScalarMin = -0.15f;
+
+        public static ResourceDefinition FromDict(Dictionary<string, object> raw)
+        {
+            return new ResourceDefinition
+            {
+                id                   = raw.GetString("id"),
+                warningThreshold     = raw.GetFloat("warning_threshold", 0f),
+                softCap              = raw.GetFloat("soft_cap", float.MaxValue),
+                causesModuleCascade  = raw.GetBool("causes_module_cascade", true),
+                causesNpcDeprivation = raw.GetBool("causes_npc_deprivation", false),
+                npcDeprivationPenalty = raw.GetFloat("npc_deprivation_penalty", 10f),
+                isCreditResource     = raw.GetBool("is_credit_resource", false),
+                moraleScalarMax      = raw.GetFloat("morale_scalar_max", 0.15f),
+                moraleScalarMin      = raw.GetFloat("morale_scalar_min", -0.15f),
+            };
+        }
+    }
 }

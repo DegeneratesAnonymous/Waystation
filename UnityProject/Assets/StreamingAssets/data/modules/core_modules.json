@@ -111,5 +111,25 @@
     "resource_effects": { "power": -1.0 },
     "tags": ["storage", "cargo", "dedicated_cargo"],
     "schema_version": "1"
+  },
+  {
+    "id": "module.fuel_depot",
+    "display_name": "Fuel Depot",
+    "category": "production",
+    "description": "Processes raw materials into station fuel. Keeps thruster reserves and emergency systems topped up.",
+    "capacity": 2,
+    "resource_effects": { "power": -2.0, "ice": -1.0, "fuel": 3.0 },
+    "tags": ["fuel_production"],
+    "schema_version": "1"
+  },
+  {
+    "id": "module.thruster_array",
+    "display_name": "Thruster Array",
+    "category": "utility",
+    "description": "Station-keeping thrusters. Maintains orbital position and enables slow repositioning maneuvers.",
+    "capacity": 1,
+    "resource_effects": { "power": -1.0, "fuel": -0.5 },
+    "tags": ["propulsion"],
+    "schema_version": "1"
   }
 ]
