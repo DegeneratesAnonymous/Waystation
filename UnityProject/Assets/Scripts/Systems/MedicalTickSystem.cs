@@ -433,6 +433,7 @@ namespace Waystation.Systems
 
         private void TickHealing(NPCInstance npc, MedicalProfile profile, StationState station)
         {
+            bool woundHealedThisTick = false;
             foreach (var kv in profile.parts)
             {
                 var part = kv.Value;
@@ -458,14 +459,16 @@ namespace Waystation.Systems
                         // Wound fully healed — evaluate scar chance
                         EvaluateScarChance(npc, part, w, partDef, station);
                         part.wounds.RemoveAt(i);
+                        woundHealedThisTick = true;
                     }
                 }
             }
 
-            // Medical recovery milestone: if the NPC has no remaining active wounds, remove
-            // any medically-removable traits (e.g. trait.desperate gained from starvation
-            // after the medical emergency has resolved).
-            if (_traits != null && FeatureFlags.NpcTraits && npc.traitProfile != null)
+            // Medical recovery milestone: fire only when a wound healed this tick AND
+            // no wounds remain, so we trigger on the healing-to-healthy transition rather
+            // than every tick an already-healthy NPC is processed.
+            if (_traits != null && FeatureFlags.NpcTraits && npc.traitProfile != null
+                && woundHealedThisTick)
             {
                 bool hasAnyWound = false;
                 foreach (var part in profile.parts.Values)
@@ -475,7 +478,6 @@ namespace Waystation.Systems
 
                 if (!hasAnyWound)
                 {
-                    // Iterate in reverse so index stays valid after removal
                     var traitsCopy = new System.Collections.Generic.List<string>();
                     foreach (var at in npc.traitProfile.traits)
                         traitsCopy.Add(at.traitId);
@@ -484,7 +486,7 @@ namespace Waystation.Systems
                     {
                         if (_traits.TryGetTrait(tid, out var def) && def.medicalRemovable)
                         {
-                            _traits.TriggerEventRemoval(npc, tid);
+                            _traits.TriggerEventRemoval(npc, tid, station.tick);
                             station?.LogEvent($"{npc.name}: medical recovery — '{def.displayName}' trait removed.");
                         }
                     }

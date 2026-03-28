@@ -4,7 +4,7 @@
 // Integration points:
 //   • RegisterConditionPressure(npc, category, deltaPerDay) — called by external
 //     systems (mood system, environment system, etc.) once per day tick.
-//   • TriggerEventRemoval(npc, traitId) — called by events to remove event-gated traits.
+//   • TriggerEventRemoval(npc, traitId, currentTick) — called by events to remove event-gated traits.
 //   • NotifyCrewDeath(deadNpc, station) — called when a crew member dies; applies
 //     WitnessDeath pressure to all surviving crew on the station.
 //   • OnExtendedCombat(npc, station) — called when an NPC has been in extended combat.
@@ -35,6 +35,10 @@ namespace Waystation.Systems
         /// <summary>Weight multiplier applied to a condition category when an NPC already
         /// has traits in the same category (reduces additional accumulation).</summary>
         public float SaturatedCategoryDampening = 0.5f;
+
+        /// <summary>Sentinel value passed to MoodSystem.PushModifier for modifiers that
+        /// should never expire on their own (e.g., per-trait mood impact).</summary>
+        private const int PermanentDuration = -1;
 
         // ── Registry — trait definitions and pools ───────────────────────────
 
@@ -183,9 +187,9 @@ namespace Waystation.Systems
         /// <summary>
         /// Attempts to add a trait to an NPC.
         /// Resolves conflicts on the same conflict axis:
-        ///   — if both traits share a conflictAxis AND a conflictDowngradeTarget is defined,
-        ///     both traits are replaced by the downgrade target trait.
-        ///   — otherwise, both traits are removed and no new trait is added (prior behaviour).
+        ///   — if a conflictDowngradeTarget is defined and the axes are compatible (equal or
+        ///     one/both unspecified), both conflicting traits are replaced by the downgrade target.
+        ///   — otherwise, the existing conflicting trait is removed and the new one is not added.
         /// </summary>
         public void TryAddTrait(NPCInstance npc, string traitId, int currentTick)
         {
@@ -210,23 +214,26 @@ namespace Waystation.Systems
                 {
                     // Determine downgrade target: prefer the incoming trait's definition,
                     // fall back to the existing trait's definition.
+                    // Downgrade is allowed when axes match OR when one/both axes are unspecified
+                    // (a trait without a conflictAxis is compatible with any axis).
                     if (downgradeTarget == null)
                     {
-                        if (!string.IsNullOrEmpty(def.conflictAxis) &&
-                            !string.IsNullOrEmpty(def.conflictDowngradeTarget) &&
-                            def.conflictAxis == existingDef.conflictAxis)
+                        if (!string.IsNullOrEmpty(def.conflictDowngradeTarget) &&
+                            AxesCompatible(def.conflictAxis, existingDef.conflictAxis))
                         {
                             downgradeTarget = def.conflictDowngradeTarget;
                         }
-                        else if (!string.IsNullOrEmpty(existingDef.conflictAxis) &&
-                                 !string.IsNullOrEmpty(existingDef.conflictDowngradeTarget) &&
-                                 existingDef.conflictAxis == def.conflictAxis)
+                        else if (!string.IsNullOrEmpty(existingDef.conflictDowngradeTarget) &&
+                                 AxesCompatible(existingDef.conflictAxis, def.conflictAxis))
                         {
                             downgradeTarget = existingDef.conflictDowngradeTarget;
                         }
                     }
 
+                    // Reverse the conflicting trait's permanent mood modifier before removing it.
+                    string removedTraitId = active.traitId;
                     profile.traits.RemoveAt(i);
+                    _mood?.RemoveModifier(npc, TraitMoodEventId(removedTraitId), "trait_system");
                     conflictFound = true;
                 }
             }
@@ -250,6 +257,19 @@ namespace Waystation.Systems
             });
 
             ApplyTraitEffects(npc);
+
+            // Push a permanent mood modifier for traits with MoodModifier effects.
+            // PermanentDuration (-1) ensures the impact persists while the trait is held;
+            // it is reversed by RemoveModifier when the trait is removed.
+            if (_mood != null)
+            {
+                foreach (var effect in def.effects)
+                {
+                    if (effect.target == TraitEffectTarget.MoodModifier)
+                        _mood.PushModifier(npc, TraitMoodEventId(traitId), effect.magnitude,
+                                           PermanentDuration, currentTick, "trait_system");
+                }
+            }
         }
 
         // ── Decay ─────────────────────────────────────────────────────────────
@@ -291,7 +311,7 @@ namespace Waystation.Systems
         /// Called by external event systems (e.g. MedicalTickSystem on wound recovery,
         /// counselling system on therapy completion).
         /// </summary>
-        public void TriggerEventRemoval(NPCInstance npc, string traitId)
+        public void TriggerEventRemoval(NPCInstance npc, string traitId, int currentTick)
         {
             if (!FeatureFlags.NpcTraits) return;
             var profile = npc.traitProfile;
@@ -304,17 +324,17 @@ namespace Waystation.Systems
                 profile.traits.RemoveAt(i);
                 ApplyTraitEffects(npc);
 
-                // Fire a mood modifier event reflecting the trait removal.
-                // Negative traits being removed are a positive mood event; positive traits
-                // being removed are a negative mood event.
                 if (_traits.TryGetValue(traitId, out var def) && _mood != null)
                 {
+                    // Reverse the permanent mood modifier that was applied at acquisition.
+                    _mood.RemoveModifier(npc, TraitMoodEventId(traitId), "trait_system");
+
+                    // Fire a short mood boost/penalty to mark the trait-removal event itself.
+                    // Negative traits being removed are a positive mood event; positive traits
+                    // being removed are a negative mood event.
                     float moodDelta = def.valence == TraitValence.Negative ? 5f : -3f;
-                    // Use tick=0 as a placeholder — the mood system will store the record;
-                    // the caller's station tick is not available here so we use a permanent modifier
-                    // with a short natural duration (48 ticks ≈ half a day).
                     _mood.PushModifier(npc, $"trait_removed_{traitId}", moodDelta,
-                                       48, 0, "trait_system");
+                                       48, currentTick, "trait_system");
                 }
 
                 return;
@@ -380,7 +400,7 @@ namespace Waystation.Systems
             }
 
             foreach (var tid in toRemove)
-                TriggerEventRemoval(npc, tid);
+                TriggerEventRemoval(npc, tid, station?.tick ?? 0);
 
             station?.LogEvent($"{npc.name}: counselling complete — therapy-removable traits cleared.");
         }
@@ -411,8 +431,9 @@ namespace Waystation.Systems
                             workSpeedDelta += effect.magnitude * scale;
                             break;
                         case TraitEffectTarget.MoodModifier:
-                            // Intentionally not applied here: MoodSystem observes trait changes
-                            // and applies mood modifiers via MoodSystem.PushModifier.
+                            // Mood effects are applied as permanent modifiers via MoodSystem.PushModifier
+                            // in TryAddTrait and reversed via MoodSystem.RemoveModifier in TriggerEventRemoval.
+                            // ApplyTraitEffects only manages workSpeedDelta; mood is handled separately.
                             break;
                         default:
                             // Surface unsupported effect targets so data in core_traits.json
@@ -446,6 +467,23 @@ namespace Waystation.Systems
                 if (t.traitId == traitId) return t;
             return null;
         }
+
+        /// <summary>
+        /// Returns the MoodSystem event-ID used for the permanent per-trait mood modifier.
+        /// Centralised here so addition (TryAddTrait) and removal (TriggerEventRemoval,
+        /// conflict resolution) always refer to the same key.
+        /// </summary>
+        private static string TraitMoodEventId(string traitId) => $"trait_mood_{traitId}";
+
+        /// <summary>
+        /// Returns true when two conflict axes are compatible for downgrade purposes.
+        /// Compatibility holds when axes are equal OR when one or both are unspecified
+        /// (an empty axis means "compatible with any axis").
+        /// </summary>
+        private static bool AxesCompatible(string axisA, string axisB) =>
+            string.IsNullOrEmpty(axisA) ||
+            string.IsNullOrEmpty(axisB) ||
+            axisA == axisB;
 
         // ── Lineage API ───────────────────────────────────────────────────────
 
