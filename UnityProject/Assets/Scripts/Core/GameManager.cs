@@ -200,6 +200,10 @@ namespace Waystation.Core
             Conversations = new ConversationSystem();
             Proximity     = new ProximitySystem();
 
+            // Wire MoodSystem into ResourceSystem so deprivation penalties use PushModifier
+            // (deduped by eventId+source) instead of stacking direct moodScore deltas.
+            Resources.SetMoodSystem(Mood);
+
             // Skill & Expertise system
             Skills = new SkillSystem(Registry);
             Skills.SetMoodSystem(Mood);
@@ -310,6 +314,9 @@ namespace Waystation.Core
 
             // Initialise skill instances for all starting crew.
             Skills.InitialiseNpcSkills(Station);
+
+            // Reset threshold crossing state so warnings fire correctly from tick 1.
+            Resources.ResetWarningState();
 
             Log($"Waystation '{stationName}' operational. All systems nominal.");
 
@@ -799,6 +806,9 @@ namespace Waystation.Core
             Skills.InitialiseNpcSkills(Station);
             Rooms.RebuildBonusCache(Station);
             UtilityNetworks.RebuildAll(Station);
+
+            // Reset threshold crossing state so warnings fire correctly on the first tick.
+            Resources.ResetWarningState();
 
             Log($"Save loaded: '{stationName}' at tick {Station.tick}.");
             IsPaused = false;

@@ -10,7 +10,18 @@ using Waystation.Models;
 
 namespace Waystation.Core
 {
-    public class ContentRegistry : MonoBehaviour
+    /// <summary>
+    /// Minimal registry surface required by ResourceSystem and other systems
+    /// that need access to module and resource definitions.
+    /// Implemented by ContentRegistry in production and by test stubs in EditMode tests.
+    /// </summary>
+    public interface IRegistryAccess
+    {
+        Dictionary<string, ModuleDefinition>   Modules   { get; }
+        Dictionary<string, ResourceDefinition> Resources { get; }
+    }
+
+    public class ContentRegistry : MonoBehaviour, IRegistryAccess
     {
         // ── Public content tables ────────────────────────────────────────────
         public Dictionary<string, EventDefinition>  Events     { get; private set; } = new Dictionary<string, EventDefinition>();

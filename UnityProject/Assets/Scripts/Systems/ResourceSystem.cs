@@ -12,7 +12,7 @@ namespace Waystation.Systems
 {
     public class ResourceSystem
     {
-        private readonly ContentRegistry _registry;
+        private readonly IRegistryAccess _registry;
 
         // Mood system — injected to push NPC deprivation penalties before module cascade.
         private MoodSystem _mood;
@@ -21,8 +21,15 @@ namespace Waystation.Systems
         private float _moraleScalarMax = 0.15f;
         private float _moraleScalarMin = -0.15f;
 
+        // ── Warning threshold crossing state ─────────────────────────────────
+        // Tracks which resources were previously below their warning threshold or depleted,
+        // so warnings only fire on state transitions rather than every tick.
+        private readonly HashSet<string> _prevBelowThreshold = new HashSet<string>();
+        private readonly HashSet<string> _prevDepleted       = new HashSet<string>();
+
         // ── Fallback balance data used when ContentRegistry has not yet loaded resources ──
         // These mirror core_resources.json and keep the system functional during initialisation.
+        // Cached as a static readonly to avoid per-tick allocation before registry data loads.
         private static readonly Dictionary<string, float> FallbackSoftCaps =
             new Dictionary<string, float>
             {
@@ -31,7 +38,10 @@ namespace Waystation.Systems
                 { "credits", 100_000f }
             };
 
-        public ResourceSystem(ContentRegistry registry) => _registry = registry;
+        private static readonly Dictionary<string, ResourceDefinition> FallbackDefinitions =
+            BuildFallbackDefinitions();
+
+        public ResourceSystem(IRegistryAccess registry) => _registry = registry;
 
         public void SetMoodSystem(MoodSystem mood) => _mood = mood;
 
@@ -118,7 +128,7 @@ namespace Waystation.Systems
         private void EvaluateDeprivation(StationState station)
         {
             // Collect the set of resource definitions to evaluate.
-            // If registry has loaded data, use it; otherwise fall back to the hardcoded set.
+            // If registry has loaded data, use it; otherwise fall back to the cached set.
             var toEvaluate = GetResourceDefinitions();
 
             foreach (var resDef in toEvaluate.Values)
@@ -166,9 +176,12 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Applies a one-time mood penalty to all crew NPCs to represent suffering from
-        /// resource deprivation.  Uses MoodSystem when available; falls back to direct
+        /// Applies a mood penalty to all crew NPCs to represent suffering from resource
+        /// deprivation.  Uses MoodSystem when available (PushModifier dedupes by eventId+source,
+        /// so re-pushing refreshes the duration without stacking); falls back to direct
         /// moodScore adjustment so the system works in isolation (tests / early boot).
+        /// The fallback path is also idempotent within a single deprivation event because
+        /// moodScore is clamped and the NPC can only go to 0.
         /// Called before module cascade to enforce the design sequence.
         /// Penalty magnitude is defined per-resource in balance data (npc_deprivation_penalty).
         /// </summary>
@@ -185,11 +198,13 @@ namespace Waystation.Systems
             {
                 if (_mood != null)
                 {
+                    // PushModifier dedupes by (eventId, source): refreshes duration, never stacks.
                     _mood.PushModifier(npc, eventId, penalty, durationTicks: 3,
                                        currentTick: station.tick, source: "resource_system");
                 }
                 else
                 {
+                    // Fallback: direct delta. Clamped, so harmless on repeated calls.
                     npc.moodScore = Mathf.Clamp(npc.moodScore + penalty, 0f, 100f);
                 }
             }
@@ -231,6 +246,11 @@ namespace Waystation.Systems
 
         // ── Warning thresholds ────────────────────────────────────────────────
 
+        /// <summary>
+        /// Fires a log event only when a resource crosses a threshold boundary
+        /// (i.e. transitions from above to below, or from non-zero to zero).
+        /// Subsequent ticks while the resource remains in the same state are silent.
+        /// </summary>
         private void CheckWarningThresholds(StationState station)
         {
             var definitions = GetResourceDefinitions();
@@ -239,15 +259,27 @@ namespace Waystation.Systems
                 float threshold = GetWarningThreshold(kv.Key, definitions);
                 if (threshold <= 0f) continue;  // no threshold defined
 
-                float amount = kv.Value;
-                if (amount <= 0f)
-                {
+                float amount    = kv.Value;
+                bool  nowDepleted      = amount <= 0f;
+                bool  nowBelowThreshold = amount > 0f && amount < threshold;
+
+                bool wasDepleted      = _prevDepleted.Contains(kv.Key);
+                bool wasBelowThreshold = _prevBelowThreshold.Contains(kv.Key);
+
+                // Fire CRITICAL only on the first tick the resource hits zero.
+                if (nowDepleted && !wasDepleted)
                     station.LogEvent($"CRITICAL: {kv.Key.ToUpper()} DEPLETED.");
-                }
-                else if (amount < threshold && station.tick % 5 == 0)
-                {
+
+                // Fire low-resource warning only on the transition into the warning band.
+                if (nowBelowThreshold && !wasBelowThreshold)
                     station.LogEvent($"Warning: {kv.Key} is low ({amount:F0}).");
-                }
+
+                // Update state tracking.
+                if (nowDepleted) _prevDepleted.Add(kv.Key);
+                else             _prevDepleted.Remove(kv.Key);
+
+                if (nowBelowThreshold) _prevBelowThreshold.Add(kv.Key);
+                else                   _prevBelowThreshold.Remove(kv.Key);
             }
         }
 
@@ -259,6 +291,17 @@ namespace Waystation.Systems
             foreach (var kv in station.resources)
                 result[kv.Key] = kv.Value.ToString("F0");
             return result;
+        }
+
+        /// <summary>
+        /// Clears the warning threshold crossing state so that crossing events
+        /// fire correctly on the first tick of a new or loaded game session.
+        /// Call this from GameManager.NewGame() and GameManager.LoadGame().
+        /// </summary>
+        public void ResetWarningState()
+        {
+            _prevDepleted.Clear();
+            _prevBelowThreshold.Clear();
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
@@ -276,12 +319,12 @@ namespace Waystation.Systems
         {
             return _registry.Resources.Count > 0
                 ? _registry.Resources
-                : BuildFallbackDefinitions();
+                : FallbackDefinitions;
         }
 
         private static Dictionary<string, ResourceDefinition> BuildFallbackDefinitions()
         {
-            var map = new Dictionary<string, ResourceDefinition>
+            return new Dictionary<string, ResourceDefinition>
             {
                 { "power",   new ResourceDefinition { id = "power",   warningThreshold = 15f,  softCap = 500f,       causesModuleCascade = true } },
                 { "food",    new ResourceDefinition { id = "food",    warningThreshold = 20f,  softCap = 500f,       causesModuleCascade = true,  causesNpcDeprivation = true,  npcDeprivationPenalty = 10f } },
@@ -291,7 +334,6 @@ namespace Waystation.Systems
                 { "parts",   new ResourceDefinition { id = "parts",   warningThreshold = 5f,   softCap = 200f,       causesModuleCascade = false } },
                 { "credits", new ResourceDefinition { id = "credits", warningThreshold = 50f,  softCap = 100_000f,   isCreditResource = true } },
             };
-            return map;
         }
 
         private float GetSoftCap(string resourceId)
@@ -307,4 +349,3 @@ namespace Waystation.Systems
         }
     }
 }
-

@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
 
@@ -12,10 +13,10 @@ namespace Waystation.Tests
     // ── Minimal stubs ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Minimal ContentRegistry stand-in for unit tests.
+    /// Minimal IRegistryAccess stand-in for unit tests.
     /// Provides a populated resource and module dictionary without loading Unity assets.
     /// </summary>
-    internal class StubRegistry
+    internal class StubRegistry : IRegistryAccess
     {
         public Dictionary<string, ModuleDefinition> Modules   { get; } = new();
         public Dictionary<string, ResourceDefinition> Resources { get; } = new();
@@ -67,170 +68,28 @@ namespace Waystation.Tests
     }
 
     /// <summary>
-    /// Thin ResourceSystem subclass that uses the stub registry dictionaries
-    /// instead of the Unity ContentRegistry MonoBehaviour.
+    /// Thin adapter around the real ResourceSystem that allows tests to supply
+    /// a stubbed registry (StubRegistry implements IRegistryAccess) while exercising
+    /// the actual production code paths introduced in this PR.
     /// </summary>
     internal class TestableResourceSystem
     {
-        private readonly StubRegistry _stub;
-        private MoodSystem _mood;
-        private float _moraleScalarMax = 0.15f;
-        private float _moraleScalarMin = -0.15f;
+        private readonly ResourceSystem _inner;
 
         public TestableResourceSystem(StubRegistry stub)
         {
-            _stub = stub;
-            if (stub.Resources.TryGetValue("morale_balance", out var mb))
-            {
-                _moraleScalarMax = mb.moraleScalarMax;
-                _moraleScalarMin = mb.moraleScalarMin;
-            }
+            // Construct the real ResourceSystem with the stub implementing IRegistryAccess.
+            _inner = new ResourceSystem(stub);
         }
 
-        public void SetMoodSystem(MoodSystem m) => _mood = m;
+        /// <summary>Forwards the MoodSystem into the real ResourceSystem.</summary>
+        public void SetMoodSystem(MoodSystem m) => _inner.SetMoodSystem(m);
 
-        public void Tick(StationState station)
-        {
-            float moraleMod = MoraleModifier(station);
-            ApplyModuleEffects(station, moraleMod);
-            EvaluateDeprivation(station);
-            CheckWarningThresholds(station);
-        }
+        /// <summary>Delegates the per-tick update to the real ResourceSystem.</summary>
+        public void Tick(StationState station) => _inner.Tick(station);
 
-        public float MoraleModifier(StationState station)
-        {
-            var crew = station.GetCrew();
-            if (crew.Count == 0) return 1f;
-            float avg = 0f;
-            foreach (var crewMember in crew) avg += crewMember.moodScore;
-            avg /= crew.Count;
-            float normalised = (avg - 50f) / 50f;
-            float scalar = normalised >= 0f
-                ? normalised * _moraleScalarMax
-                : normalised * Mathf.Abs(_moraleScalarMin);
-            return 1f + scalar;
-        }
-
-        private void ApplyModuleEffects(StationState station, float moraleMod)
-        {
-            foreach (var module in station.modules.Values)
-            {
-                if (!module.active || module.damage >= 1f) continue;
-                if (module.IsResourceDeprived) continue;
-                if (!_stub.Modules.TryGetValue(module.definitionId, out var defn)) continue;
-
-                float baseEff = 1f - module.damage;
-                foreach (var kv in defn.resourceEffects)
-                {
-                    float delta;
-                    if (kv.Value > 0f)
-                    {
-                        float efficiency = baseEff * moraleMod;
-                        float current    = station.GetResource(kv.Key);
-                        float cap        = _stub.Resources.TryGetValue(kv.Key, out var rd)
-                            ? rd.softCap : float.MaxValue;
-                        delta = Mathf.Max(0f, Mathf.Min(kv.Value * efficiency, cap - current));
-                    }
-                    else
-                    {
-                        delta = kv.Value * baseEff;
-                    }
-                    station.ModifyResource(kv.Key, delta);
-                }
-            }
-        }
-
-        private void EvaluateDeprivation(StationState station)
-        {
-            foreach (var resDef in _stub.Resources.Values)
-            {
-                if (!station.resources.ContainsKey(resDef.id)) continue;
-
-                float amount  = station.GetResource(resDef.id);
-                bool  depleted = amount <= 0f;
-
-                if (depleted)
-                {
-                    if (resDef.causesNpcDeprivation)
-                        ApplyNpcDeprivation(station, resDef.id);
-
-                    if (resDef.isCreditResource)
-                    {
-                        if (!station.IsActionRestricted("hire"))
-                        {
-                            station.RestrictAction("hire");
-                            station.RestrictAction("purchase");
-                            station.LogEvent("Credits depleted: hiring and purchasing suspended.");
-                        }
-                        continue;
-                    }
-
-                    if (resDef.causesModuleCascade)
-                        ApplyModuleCascade(station, resDef.id);
-                }
-                else
-                {
-                    if (resDef.isCreditResource)
-                    {
-                        station.UnrestrictAction("hire");
-                        station.UnrestrictAction("purchase");
-                    }
-                    if (resDef.causesModuleCascade)
-                        RestoreModulesFromCascade(station, resDef.id);
-                }
-            }
-        }
-
-        private void ApplyNpcDeprivation(StationState station, string resourceId)
-        {
-            float magnitude = 10f;
-            if (_stub.Resources.TryGetValue(resourceId, out var def))
-                magnitude = def.npcDeprivationPenalty;
-
-            float penalty = -Mathf.Abs(magnitude);
-            string eventId = $"resource_deprived_{resourceId}";
-
-            foreach (var npc in station.GetCrew())
-            {
-                if (_mood != null)
-                    _mood.PushModifier(npc, eventId, penalty, 3, station.tick, "resource_system");
-                else
-                    npc.moodScore = Mathf.Clamp(npc.moodScore + penalty, 0f, 100f);
-            }
-            station.LogEvent($"Station {resourceId} depleted — crew suffering.");
-        }
-
-        private void ApplyModuleCascade(StationState station, string resourceId)
-        {
-            foreach (var module in station.modules.Values)
-            {
-                if (module.resourceDeprived.Contains(resourceId)) continue;
-                if (!_stub.Modules.TryGetValue(module.definitionId, out var defn)) continue;
-                if (defn.resourceEffects.TryGetValue(resourceId, out float effect) && effect < 0f)
-                    module.resourceDeprived.Add(resourceId);
-            }
-        }
-
-        private void RestoreModulesFromCascade(StationState station, string resourceId)
-        {
-            foreach (var module in station.modules.Values)
-                module.resourceDeprived.Remove(resourceId);
-        }
-
-        private void CheckWarningThresholds(StationState station)
-        {
-            foreach (var kv in station.resources)
-            {
-                if (!_stub.Resources.TryGetValue(kv.Key, out var def)) continue;
-                if (def.warningThreshold <= 0f) continue;
-
-                float amount = kv.Value;
-                if (amount <= 0f)
-                    station.LogEvent($"CRITICAL: {kv.Key.ToUpper()} DEPLETED.");
-                else if (amount < def.warningThreshold && station.tick % 5 == 0)
-                    station.LogEvent($"Warning: {kv.Key} is low ({amount:F0}).");
-            }
-        }
+        /// <summary>Delegates morale scaling calculation to the real ResourceSystem.</summary>
+        public float MoraleModifier(StationState station) => _inner.MoraleModifier(station);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
