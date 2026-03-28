@@ -10,7 +10,18 @@ using Waystation.Models;
 
 namespace Waystation.Core
 {
-    public class ContentRegistry : MonoBehaviour
+    /// <summary>
+    /// Minimal registry surface required by ResourceSystem and other systems
+    /// that need access to module and resource definitions.
+    /// Implemented by ContentRegistry in production and by test stubs in EditMode tests.
+    /// </summary>
+    public interface IRegistryAccess
+    {
+        Dictionary<string, ModuleDefinition>   Modules   { get; }
+        Dictionary<string, ResourceDefinition> Resources { get; }
+    }
+
+    public class ContentRegistry : MonoBehaviour, IRegistryAccess
     {
         // ── Public content tables ────────────────────────────────────────────
         public Dictionary<string, EventDefinition>  Events     { get; private set; } = new Dictionary<string, EventDefinition>();
@@ -28,6 +39,7 @@ namespace Waystation.Core
         public Dictionary<string, CropDataDefinition> Crops    { get; private set; } = new Dictionary<string, CropDataDefinition>();
         public Dictionary<string, SkillDefinition>   Skills    { get; private set; } = new Dictionary<string, SkillDefinition>();
         public Dictionary<string, ExpertiseDefinition> Expertises { get; private set; } = new Dictionary<string, ExpertiseDefinition>();
+        public Dictionary<string, ResourceDefinition> Resources  { get; private set; } = new Dictionary<string, ResourceDefinition>();
 
         // ── Trait system tables ──────────────────────────────────────────────
         public Dictionary<string, NpcTraitDefinition>   Traits       { get; private set; } = new Dictionary<string, NpcTraitDefinition>();
@@ -73,6 +85,7 @@ namespace Waystation.Core
             yield return StartCoroutine(LoadFolder(dataRoot, "traits",           LoadTrait));
             yield return StartCoroutine(LoadFolder(dataRoot, "trait_pools",      LoadTraitPool));
             yield return StartCoroutine(LoadFolder(dataRoot, "npcs/lineages",    LoadTraitLineage));
+            yield return StartCoroutine(LoadFolder(dataRoot, "resources",        LoadResource));
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
                       $"ships:{Ships.Count} classes:{Classes.Count} factions:{Factions.Count} " +
@@ -81,7 +94,7 @@ namespace Waystation.Core
                       $"roomTypes:{RoomTypes.Count} researchNodes:{ResearchNodes.Count} " +
                       $"crops:{Crops.Count} skills:{Skills.Count} expertises:{Expertises.Count} " +
                       $"traits:{Traits.Count} traitPools:{TraitPools.Count} " +
-                      $"traitLineages:{TraitLineages.Count}");
+                      $"traitLineages:{TraitLineages.Count} resources:{Resources.Count}");
         }
 
         // ── Folder loader ────────────────────────────────────────────────────
@@ -135,6 +148,7 @@ namespace Waystation.Core
         private void LoadTrait         (Dictionary<string, object> d) => Traits      [d.GetString("id")] = NpcTraitDefinition   .FromDict(d);
         private void LoadTraitPool     (Dictionary<string, object> d) => TraitPools  [d.GetString("id")] = TraitPoolDefinition  .FromDict(d);
         private void LoadTraitLineage  (Dictionary<string, object> d) => TraitLineages[d.GetString("id")] = TraitLineageDefinition.FromDict(d);
+        private void LoadResource      (Dictionary<string, object> d) => Resources   [d.GetString("id")] = ResourceDefinition   .FromDict(d);
         private void LoadRoomType(Dictionary<string, object> d)
         {
             var rt = new RoomTypeDefinition

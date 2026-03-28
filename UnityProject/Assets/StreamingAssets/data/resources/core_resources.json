@@ -1,0 +1,66 @@
+[
+  {
+    "id": "power",
+    "warning_threshold": 15,
+    "soft_cap": 500,
+    "causes_module_cascade": true,
+    "causes_npc_deprivation": false,
+    "is_credit_resource": false
+  },
+  {
+    "id": "food",
+    "warning_threshold": 20,
+    "soft_cap": 500,
+    "causes_module_cascade": true,
+    "causes_npc_deprivation": true,
+    "npc_deprivation_penalty": 10,
+    "is_credit_resource": false
+  },
+  {
+    "id": "oxygen",
+    "warning_threshold": 10,
+    "soft_cap": 500,
+    "causes_module_cascade": true,
+    "causes_npc_deprivation": true,
+    "npc_deprivation_penalty": 25,
+    "is_credit_resource": false
+  },
+  {
+    "id": "ice",
+    "warning_threshold": 30,
+    "soft_cap": 500,
+    "causes_module_cascade": false,
+    "causes_npc_deprivation": true,
+    "npc_deprivation_penalty": 10,
+    "is_credit_resource": false
+  },
+  {
+    "id": "fuel",
+    "warning_threshold": 10,
+    "soft_cap": 200,
+    "causes_module_cascade": true,
+    "causes_npc_deprivation": false,
+    "is_credit_resource": false
+  },
+  {
+    "id": "parts",
+    "warning_threshold": 5,
+    "soft_cap": 200,
+    "causes_module_cascade": false,
+    "causes_npc_deprivation": false,
+    "is_credit_resource": false
+  },
+  {
+    "id": "credits",
+    "warning_threshold": 50,
+    "soft_cap": 100000,
+    "causes_module_cascade": false,
+    "causes_npc_deprivation": false,
+    "is_credit_resource": true
+  },
+  {
+    "id": "morale_balance",
+    "morale_scalar_max": 0.15,
+    "morale_scalar_min": -0.15
+  }
+]
