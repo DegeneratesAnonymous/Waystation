@@ -39,5 +39,15 @@ namespace Waystation.Core
         /// and surgery without removing code.
         /// </summary>
         public static bool MedicalSystem = true;
+
+        /// <summary>
+        /// Enables NPC death consequences: body object spawned at death tile,
+        /// proximity mood penalty, close-relationship grief events, body haul task
+        /// generation, escalating unhandled-body penalty, and body removal on
+        /// successful haul to a designated disposal tile.
+        /// Body object is a new prefab — can be disabled via this flag without
+        /// affecting existing death logic.
+        /// </summary>
+        public static bool NpcDeathHandling = true;
     }
 }
