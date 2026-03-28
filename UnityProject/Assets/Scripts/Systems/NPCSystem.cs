@@ -85,6 +85,10 @@ namespace Waystation.Systems
             // Assign standard array ability scores by archetype
             AssignAbilityScores(npc, templateId);
 
+            // Copy species-level need depletion rate multipliers from template
+            if (template.needDepletionRates != null && template.needDepletionRates.Count > 0)
+                npc.needDepletionRates = new System.Collections.Generic.Dictionary<string, float>(template.needDepletionRates);
+
             npc.RecalculateMood();
             return npc;
         }

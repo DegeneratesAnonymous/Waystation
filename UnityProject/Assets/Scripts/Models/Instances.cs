@@ -516,6 +516,15 @@ namespace Waystation.Models
         public int   lastInteractionTick = -1;
     }
 
+    [Serializable]
+    public class HygieneNeedProfile
+    {
+        public float value      = 100f;  // 0-100
+        public bool  isSeeking  = false;
+        // True when Hygiene has been at crisis level long enough to apply social penalty
+        public bool  inCrisis   = false;
+    }
+
     // -------------------------------------------------------------------------
     // Sanity Profile
     // -------------------------------------------------------------------------
@@ -662,6 +671,13 @@ namespace Waystation.Models
         public ThirstNeedProfile     thirstNeed     = new ThirstNeedProfile();
         public RecreationNeedProfile recreationNeed = new RecreationNeedProfile();
         public SocialNeedProfile     socialNeed     = new SocialNeedProfile();
+        public HygieneNeedProfile    hygieneNeed    = new HygieneNeedProfile();
+
+        // ── Species depletion rate modifiers ──────────────────────────────────
+        // Keyed by need name (e.g. "sleep", "hygiene"), value is a multiplier.
+        // Populated at spawn from NPCTemplate.needDepletionRates.
+        // Null or empty = all multipliers are 1.0 (no species modifier).
+        public Dictionary<string, float> needDepletionRates = null;
 
         // ── Sanity ────────────────────────────────────────────────────────────
         public SanityProfile sanity = null;

@@ -1022,5 +1022,45 @@
     "schema_version": "1",
     "node_role": "consumer",
     "fuel_demand_per_tick": 1.5
+  },
+  {
+    "id": "buildable.shower",
+    "display_name": "Crew Shower",
+    "category": "object",
+    "description": "A basic shower unit for crew hygiene. NPCs with a low Hygiene need will seek this facility to restore their hygiene fully. Requires a connected water supply.",
+    "build_time_ticks": 30,
+    "layer": 2,
+    "required_materials": {
+      "item.steel_plate": 3,
+      "item.parts": 1
+    },
+    "required_skills": {},
+    "required_tags": [],
+    "size": 1,
+    "max_health": 80,
+    "cargo_capacity": 0,
+    "beauty_score": 1,
+    "furniture_tag": "hygiene",
+    "schema_version": "1"
+  },
+  {
+    "id": "buildable.sink",
+    "display_name": "Washbasin",
+    "category": "object",
+    "description": "A simple washbasin for a quick clean. Provides a partial Hygiene need restoration. Requires a connected water supply.",
+    "build_time_ticks": 20,
+    "layer": 2,
+    "required_materials": {
+      "item.steel_plate": 1,
+      "item.parts": 1
+    },
+    "required_skills": {},
+    "required_tags": [],
+    "size": 1,
+    "max_health": 50,
+    "cargo_capacity": 0,
+    "beauty_score": 0,
+    "furniture_tag": "hygiene",
+    "schema_version": "1"
   }
 ]
