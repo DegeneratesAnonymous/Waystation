@@ -731,7 +731,7 @@ namespace Waystation.Core
         {
             var def = new EventDefinition
             {
-                id          = $"departure_alert_{npc.uid}",
+                id          = $"crew_departure_alert_{npc.uid}",
                 category    = "crew",
                 title       = $"⚠ {npc.name} Plans to Leave",
                 description = $"{npc.name} has announced intent to depart the station. " +

@@ -42,8 +42,9 @@ namespace Waystation.Tests
         {
             var traits  = new TraitSystem();
             var tension = new TensionSystem(traits);
-            // Set departure chance > 1.0 so announcement always fires deterministically
-            // (Random.value is [0,1] so Random.value >= 2f is always false → never early-returns).
+            // Set departure chance to 2f so Random.value (always in [0,1]) is always < 2f,
+            // meaning the guard `if (Random.value >= DepartureAttemptChancePerDay) return;`
+            // never fires — departure announcement always triggers deterministically.
             tension.DepartureAttemptChancePerDay = 2f;
             tension.InterventionWindowTicks      = 720; // 2 in-game days for test speed
             tension.InterventionSkillCheckDC     = 1;   // low DC; success/failure controlled per-test

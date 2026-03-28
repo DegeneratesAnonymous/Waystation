@@ -58,6 +58,18 @@ namespace Waystation.Systems
         private MoodSystem  _mood;
         private SkillSystem _skills;
 
+        // ── Internal constants ────────────────────────────────────────────────
+
+        /// <summary>Number of faces on the intervention skill-check die.</summary>
+        private const int SkillCheckDieFaces = 20;
+
+        /// <summary>
+        /// Tension score applied after a successful intervention: just above
+        /// <see cref="DisgruntledThreshold"/> so the NPC is visibly disgruntled
+        /// but not at risk of departing again immediately.
+        /// </summary>
+        private const float PostInterventionTensionScore = 31f;
+
         // ── Events ────────────────────────────────────────────────────────────
 
         /// <summary>Fired when an NPC's tension stage changes. Payload: (npc, newStage).</summary>
@@ -136,17 +148,18 @@ namespace Waystation.Systems
             if (npc.traitProfile?.departure == null || !npc.traitProfile.departure.announced)
                 return false;
 
-            // Resolve skill check
+            // Resolve skill check: d20 roll + skill modifier vs DC
+            int dieRoll = UnityEngine.Random.Range(1, SkillCheckDieFaces + 1);
             int roll = _skills != null
-                ? _skills.GetSkillCheckResult(npc, skillId) + UnityEngine.Random.Range(1, 21)
-                : UnityEngine.Random.Range(1, 21);
+                ? _skills.GetSkillCheckResult(npc, skillId) + dieRoll
+                : dieRoll;
 
             bool success = roll >= InterventionSkillCheckDC;
 
             if (success)
             {
-                // Reset tension to Disgruntled range (just below WorkSlowdown threshold)
-                npc.traitProfile.tensionScore = DisgruntledThreshold + 1f;
+                // Reset tension to just above Disgruntled threshold
+                npc.traitProfile.tensionScore = PostInterventionTensionScore;
                 UpdateTensionStage(npc, station);
                 // Cancel departure
                 npc.traitProfile.departure = null;
