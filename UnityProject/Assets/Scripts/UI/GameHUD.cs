@@ -183,6 +183,11 @@ namespace Waystation.UI
         private string  _skillsSelectedNpcUid  = "";
         private bool    _expertisePanelOpen     = false;
         private string  _swapTargetExpertiseId  = "";   // expertise being replaced (empty = spend slot)
+        /// <summary>
+        /// Skill ID that triggered the current expertise panel open (empty = spend any slot).
+        /// When set, the panel filters expertise to those belonging to this skill.
+        /// </summary>
+        private string  _expertisePanelSkillFilter = "";
         private Vector2 _expertisePanelScroll;
         private Vector2 _skillsScroll;
         private float   _crewDetailOverlayH = 420f;   // updated each frame; drives overlay box height
@@ -2778,12 +2783,9 @@ namespace Waystation.UI
             // ── XP / level data ───────────────────────────────────────────────
             int   charLevel     = SkillSystem.GetCharacterLevel(npc);
             float totalXP       = SkillSystem.GetTotalXP(npc);
-            int   curThreshold  = (charLevel / SkillSystem.SlotEveryNLevels)
-                                  * SkillSystem.SlotEveryNLevels
-                                  * SkillSystem.CharLevelDivisor;
-            int   nextThreshold = (charLevel / SkillSystem.SlotEveryNLevels + 1)
-                                  * SkillSystem.SlotEveryNLevels
-                                  * SkillSystem.CharLevelDivisor;
+            // XP bar shows progress toward next character level (CharLevelDivisor intervals)
+            int   curThreshold  = charLevel  * SkillSystem.CharLevelDivisor;
+            int   nextThreshold = (charLevel + 1) * SkillSystem.CharLevelDivisor;
             float xpPct         = Mathf.Clamp01((totalXP - curThreshold)
                                   / Mathf.Max(1f, nextThreshold - curThreshold));
             int   slotCount     = SkillSystem.GetExpertiseSlotCount(npc);
@@ -3092,8 +3094,9 @@ namespace Waystation.UI
                         GUI.Label(new Rect(6f, y + 2f, cw * 0.65f, LineH), exp.displayName, _sSub);
                         if (GUI.Button(new Rect(cw - 66f, y + 2f, 58f, LineH), "Replace", _sBtnSmall))
                         {
-                            _swapTargetExpertiseId = eid;
-                            _expertisePanelOpen    = true;
+                            _swapTargetExpertiseId     = eid;
+                            _expertisePanelSkillFilter = "";
+                            _expertisePanelOpen        = true;
                         }
                         float r2y = y + 2f + LineH + 2f;
                         GUI.Label(new Rect(6f, r2y, cw - 72f, LineH),
@@ -3107,7 +3110,7 @@ namespace Waystation.UI
                 if (slotCount == 0)
                 {
                     GUI.color = new Color(0.40f, 0.44f, 0.54f);
-                    GUI.Label(new Rect(4f, y + 2f, cw, SmH), "Expertise slots unlock at Lv 5", _sSub);
+                    GUI.Label(new Rect(4f, y + 2f, cw, SmH), "Expertise slots unlock at skill level 4", _sSub);
                     GUI.color = prevC;
                     y += LblH;
                 }
@@ -3116,8 +3119,9 @@ namespace Waystation.UI
                     if (GUI.Button(new Rect(4f, y, cw - 6f, 22f),
                                    $"Spend Expertise Slot ({unspent} available)", _sBtnWide))
                     {
-                        _swapTargetExpertiseId = "";
-                        _expertisePanelOpen    = true;
+                        _swapTargetExpertiseId     = "";
+                        _expertisePanelSkillFilter = "";
+                        _expertisePanelOpen        = true;
                     }
                     y += 26f;
                 }
@@ -6474,8 +6478,9 @@ namespace Waystation.UI
                                n.name,
                                sel ? _sTabOn : _sTabOff))
                 {
-                    _skillsSelectedNpcUid  = n.uid;
-                    _expertisePanelOpen    = false;
+                    _skillsSelectedNpcUid      = n.uid;
+                    _expertisePanelOpen        = false;
+                    _expertisePanelSkillFilter = "";
                 }
                 sx += btnW;
             }
@@ -6485,6 +6490,16 @@ namespace Waystation.UI
 
             Rect detailRect = new Rect(area.x, area.y + SelectorH + 4f, w, h - SelectorH - 4f);
             float detailH   = h - SelectorH - 4f;
+
+            // Auto-open expertise panel for pending skill-based slot prompts
+            if (!_expertisePanelOpen &&
+                npc.pendingExpertiseSkillIds != null &&
+                npc.pendingExpertiseSkillIds.Count > 0)
+            {
+                _swapTargetExpertiseId     = "";
+                _expertisePanelSkillFilter = npc.pendingExpertiseSkillIds[0];
+                _expertisePanelOpen        = true;
+            }
 
             if (_expertisePanelOpen)
             {
@@ -6502,9 +6517,6 @@ namespace Waystation.UI
             int slotCount   = SkillSystem.GetExpertiseSlotCount(npc);
             int unspent     = SkillSystem.GetUnspentSlots(npc);
             float totalXP   = SkillSystem.GetTotalXP(npc);
-            int nextThreshold = (charLevel / SkillSystem.SlotEveryNLevels + 1)
-                                * SkillSystem.SlotEveryNLevels
-                                * SkillSystem.CharLevelDivisor;
 
             float innerH = Mathf.Max(h, 600f);
             _skillsScroll = GUI.BeginScrollView(
@@ -6515,7 +6527,7 @@ namespace Waystation.UI
             float y = 4f;
 
             // ── Character level summary ───────────────────────────────────────
-            float summaryH = 4f + LineH * 2f + 4f + 8f + LineH + 4f;
+            float summaryH = 4f + LineH * 2f + 4f;
             DrawSolid(new Rect(0, y, w - 14f, summaryH), ColSummaryBg);
             GUI.Label(new Rect(4f, y + 2f, 80f, 28f),
                       $"Lv {charLevel}", _sHeader);
@@ -6523,20 +6535,6 @@ namespace Waystation.UI
                       $"Character Level", _sSub);
             GUI.Label(new Rect(84f, y + 4f + LineH, w - 100f, LineH),
                       $"Total XP: {totalXP:F0}   Slots: {slotCount}   Unspent: {unspent}", _sSub);
-            // XP bar toward next slot — progress within the current interval [currentThreshold, nextThreshold]
-            int currentThreshold = (charLevel / SkillSystem.SlotEveryNLevels)
-                                   * SkillSystem.SlotEveryNLevels
-                                   * SkillSystem.CharLevelDivisor;
-            float xpPct = Mathf.Clamp01((totalXP - currentThreshold)
-                          / Mathf.Max(1, nextThreshold - currentThreshold));
-            float barW  = w - 18f;
-            float xpBarY = y + 4f + LineH * 2f + 4f;
-            DrawSolid(new Rect(4f, xpBarY, barW, 8f), ColBarBg);
-            DrawSolid(new Rect(4f, xpBarY, barW * xpPct, 8f), ColAccent);
-            // Label drawn AFTER bar so it renders on top
-            GUI.Label(new Rect(4f, xpBarY + 10f, barW, LineH),
-                      $"  {totalXP:F0} / {nextThreshold} XP  ·  next slot: Lv {(charLevel / SkillSystem.SlotEveryNLevels + 1) * SkillSystem.SlotEveryNLevels}",
-                      _sSub);
             y += summaryH + 4f;
 
             // ── Skill list ────────────────────────────────────────────────────
@@ -6557,19 +6555,28 @@ namespace Waystation.UI
                     ? (xp - levelFloorXP) / (levelCeilXP - levelFloorXP)
                     : 1f);
 
-                // Skill name | L{level} | XP bar — level label drawn before bar so it isn't covered
+                // Skill type badge: "A" = Advanced, "S" = Simple
+                string typeBadge = skillDef.skillType == SkillType.Advanced ? "A" : "S";
+                // Slot marker: show "⬡" for each slot earned from this skill
+                int slotsFromSkill = level / SkillSystem.SlotEverySkillLevels;
+
                 float cw2     = w - 14f;
-                float snameW  = CharW * 14f;   // fits "Engineering" (11 ch) + buffer
+                float snameW  = CharW * 14f;
                 float slevW   = CharW * 4f;
-                float sbarX   = snameW + slevW + 8f;
+                float stypeW  = CharW * 2f;
+                float sbarX   = snameW + slevW + stypeW + 10f;
                 GUI.Label(new Rect(4f, y, snameW, LineH), skillDef.displayName, _sSub);
                 GUI.Label(new Rect(snameW + 4f, y, slevW, LineH), $"L{level}", _sSub);
+                GUI.Label(new Rect(snameW + slevW + 6f, y, stypeW, LineH), typeBadge, _sSub);
 
-                // XP bar (starts after level badge, stays within content boundary)
+                // XP bar (starts after level + type badges)
                 float bx = sbarX, bw = cw2 - sbarX - 2f;
                 DrawSolid(new Rect(bx, y + LineH * 0.25f, bw, 8f), ColBarBg);
                 Color barCol = level >= 15 ? new Color(0.92f, 0.75f, 0.20f) :
                                level >= 8  ? ColBarGreen : ColBarFill;
+                // Highlight bar gold when level is at a slot milestone (multiple of 4)
+                if (level > 0 && level % SkillSystem.SlotEverySkillLevels == 0)
+                    barCol = new Color(0.92f, 0.75f, 0.20f);
                 DrawSolid(new Rect(bx, y + LineH * 0.25f, bw * withinLevel, 8f), barCol);
 
                 y += LineH;
@@ -6597,8 +6604,9 @@ namespace Waystation.UI
                     // Replace button
                     if (GUI.Button(new Rect(w - 74f, y + 2f, 58f, LineH), "Replace", _sBtnSmall))
                     {
-                        _swapTargetExpertiseId = eid;
-                        _expertisePanelOpen    = true;
+                        _swapTargetExpertiseId     = eid;
+                        _expertisePanelSkillFilter = "";
+                        _expertisePanelOpen        = true;
                     }
                     float row2Y = y + 2f + LineH + 2f;
                     if (!string.IsNullOrEmpty(exp.requiredSkillId))
@@ -6617,16 +6625,38 @@ namespace Waystation.UI
             }
             y += 4f;
 
+            // ── Pending slot prompt notification ──────────────────────────────
+            if (npc.pendingExpertiseSkillIds != null && npc.pendingExpertiseSkillIds.Count > 0)
+            {
+                string pendingSkill = npc.pendingExpertiseSkillIds[0];
+                string skillName = _gm.Registry.Skills.TryGetValue(pendingSkill, out var ps)
+                    ? ps.displayName : pendingSkill;
+                var prev2 = GUI.color; GUI.color = new Color(0.92f, 0.75f, 0.20f);
+                GUI.Label(new Rect(4f, y, w - 18f, LineH),
+                          $"▲ {skillName} expertise slot ready!", _sSub);
+                GUI.color = prev2;
+                if (GUI.Button(new Rect(4f, y + LineH + 2f, w - 18f, 22f),
+                               $"Choose {skillName} Expertise", _sBtnWide))
+                {
+                    _swapTargetExpertiseId     = "";
+                    _expertisePanelSkillFilter = pendingSkill;
+                    _expertisePanelOpen        = true;
+                }
+                y += LineH + 26f;
+            }
+
             // ── Spend slot button ─────────────────────────────────────────────
-            bool canSpend = unspent > 0;
+            int unspentForBtn = SkillSystem.GetUnspentSlots(npc);
+            bool canSpend = unspentForBtn > 0;
             var  prevCol  = GUI.color;
             if (!canSpend) GUI.color = new Color(0.5f, 0.5f, 0.5f);
             if (GUI.Button(new Rect(4f, y, w - 18f, 22f),
-                           canSpend ? $"Spend Expertise Slot ({unspent} available)" : "No Slots Available",
+                           canSpend ? $"Spend Expertise Slot ({unspentForBtn} available)" : "No Slots Available",
                            _sBtnWide) && canSpend)
             {
-                _swapTargetExpertiseId = "";
-                _expertisePanelOpen    = true;
+                _swapTargetExpertiseId     = "";
+                _expertisePanelSkillFilter = "";
+                _expertisePanelOpen        = true;
             }
             GUI.color = prevCol;
 
@@ -6636,7 +6666,11 @@ namespace Waystation.UI
         private void DrawExpertiseSelectionPanel(Rect area, float w, float h, NPCInstance npc)
         {
             bool isSwap = !string.IsNullOrEmpty(_swapTargetExpertiseId);
-            string title = isSwap ? "Select Replacement Expertise" : "Select Expertise";
+            bool isSkillFiltered = !string.IsNullOrEmpty(_expertisePanelSkillFilter);
+            string title = isSwap ? "Select Replacement Expertise"
+                         : isSkillFiltered
+                           ? $"Choose Expertise — {(_gm.Registry.Skills.TryGetValue(_expertisePanelSkillFilter, out var fsdef) ? fsdef.displayName : _expertisePanelSkillFilter)}"
+                           : "Select Expertise";
             GUI.Label(new Rect(area.x + 4f, area.y, w - 8f, 18f), title, _sLabel);
 
             if (isSwap && _gm.Registry.Expertises.TryGetValue(_swapTargetExpertiseId, out var swapDef))
@@ -6650,15 +6684,25 @@ namespace Waystation.UI
             float hdrH = LineH * 2f + BtnH + 10f;
             if (GUI.Button(new Rect(area.x + 4f, area.y + LineH * 2f + 4f, 60f, BtnH), "← Back", _sBtnSmall))
             {
-                _expertisePanelOpen = false;
+                _expertisePanelOpen        = false;
+                _expertisePanelSkillFilter = "";
                 return;
             }
 
             float listTop = area.y + hdrH;
             float listH   = h - hdrH;
-            var allExp    = _gm.Registry.Expertises.Values;
+            // Apply skill filter: when triggered from a per-skill slot, show only expertise for that skill
+            var allExpRaw = _gm.Registry.Expertises.Values;
+            var filteredExp = new System.Collections.Generic.List<ExpertiseDefinition>();
+            foreach (var e in allExpRaw)
+            {
+                if (!string.IsNullOrEmpty(_expertisePanelSkillFilter) &&
+                    e.requiredSkillId != _expertisePanelSkillFilter)
+                    continue;
+                filteredExp.Add(e);
+            }
             float expCardH = LineH * 2f + BtnH + 14f;
-            float innerH  = Mathf.Max(listH, allExp.Count * expCardH);
+            float innerH  = Mathf.Max(listH, filteredExp.Count * expCardH);
 
             _expertisePanelScroll = GUI.BeginScrollView(
                 new Rect(area.x, listTop, w, listH),
@@ -6666,7 +6710,7 @@ namespace Waystation.UI
                 new Rect(0, 0, w - 14f, innerH));
 
             float y = 0f;
-            foreach (var exp in allExp)
+            foreach (var exp in filteredExp)
             {
                 // Skip already-chosen (unless it's the one being swapped out)
                 bool isChosenAlready = npc.chosenExpertise.Contains(exp.expertiseId) &&
@@ -6714,7 +6758,8 @@ namespace Waystation.UI
 
                         if (result.ok)
                         {
-                            _expertisePanelOpen = false;
+                            _expertisePanelOpen        = false;
+                            _expertisePanelSkillFilter = "";
                         }
                         else
                         {

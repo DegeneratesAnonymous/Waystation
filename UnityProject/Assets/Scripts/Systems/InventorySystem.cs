@@ -421,6 +421,41 @@ namespace Waystation.Systems
             return currentTick < expiry;
         }
 
+        // ── Hauling destination search ────────────────────────────────────────
+
+        /// <summary>
+        /// Returns storage foundations (cargoCapacity &gt; 0, status "complete") within
+        /// <paramref name="radius"/> tiles (Manhattan distance) of the given origin tile.
+        /// Foundations with any item under a Commitment Cooldown are still included as
+        /// destinations — the cooldown applies to item re-evaluation, not to placing new items.
+        /// Results are sorted by distance (closest first).
+        /// </summary>
+        public List<FoundationInstance> FindHaulCandidates(
+            int originCol, int originRow, int radius,
+            StationState station, int currentTick)
+        {
+            var result = new List<FoundationInstance>();
+            foreach (var foundation in station.foundations.Values)
+            {
+                if (foundation.cargoCapacity <= 0) continue;
+                if (foundation.status != "complete") continue;
+                int dist = UnityEngine.Mathf.Abs(foundation.tileCol - originCol)
+                         + UnityEngine.Mathf.Abs(foundation.tileRow - originRow);
+                if (dist > radius) continue;
+                result.Add(foundation);
+            }
+            // Sort by proximity
+            result.Sort((a, b) =>
+            {
+                int dA = UnityEngine.Mathf.Abs(a.tileCol - originCol)
+                       + UnityEngine.Mathf.Abs(a.tileRow - originRow);
+                int dB = UnityEngine.Mathf.Abs(b.tileCol - originCol)
+                       + UnityEngine.Mathf.Abs(b.tileRow - originRow);
+                return dA.CompareTo(dB);
+            });
+            return result;
+        }
+
         // ── Settings management ───────────────────────────────────────────────
 
         public void SetAllowedTypes(StationState station, string moduleUid, List<string> allowedTypes)
