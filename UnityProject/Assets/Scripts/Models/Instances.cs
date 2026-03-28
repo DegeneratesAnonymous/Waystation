@@ -131,6 +131,22 @@ namespace Waystation.Models
 
 
     // -------------------------------------------------------------------------
+    // Mood Axis — the two independent mood dimensions tracked per NPC
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The two independent mood axes.  Each axis has its own modifier list,
+    /// deduplication, and drift-toward-50 behaviour.
+    /// </summary>
+    public enum MoodAxis
+    {
+        /// <summary>Happy/Sad axis (0–100).  Drives crisis detection and station morale.</summary>
+        HappySad,
+        /// <summary>Calm/Stressed axis (0–100).  Independent of crisis; feeds into SanitySystem.</summary>
+        CalmStressed
+    }
+
+    // -------------------------------------------------------------------------
     // Mood Modifier — a named, time-limited delta applied to an NPC's MoodScore
     // -------------------------------------------------------------------------
 
@@ -684,17 +700,22 @@ namespace Waystation.Models
         // ID of the current NPCTask in progress (null = idle)
         public string currentTaskId = null;
         // ── Mood & Relationships (MoodSystem) ─────────────────────────────────
-        // MoodScore: 0–100. 50 is baseline. Drifts toward 50 over waking hours.
+        // MoodScore (happy/sad axis): 0–100. 50 is baseline. Drifts toward 50 over waking hours.
         // Separate from the needs-based `mood` float which drives the existing label.
         public float moodScore             = 50f;
+        // StressScore (calm/stressed axis): 0–100. 50 is baseline. 100 = very calm, 0 = very stressed.
+        // Independent of moodScore; does not trigger crisis state. Feeds into SanitySystem.
+        public float stressScore           = 50f;
         // Multiplier applied to job duration (higher mood = faster work).
         // 1.05 = Thriving, 1.0 = Content, 0.95 = Struggling. Set by MoodSystem.
         public float workModifier          = 1.0f;
         // True when MoodScore has dropped below the crisis threshold (< 20).
         // While in crisis the NPC abandons work and takes recreational tasks.
         public bool  inCrisis              = false;
-        // Active timed mood modifiers (named deltas with expiry ticks)
+        // Active timed mood modifiers for the happy/sad axis (named deltas with expiry ticks)
         public List<MoodModifierRecord> moodModifiers = new List<MoodModifierRecord>();
+        // Active timed mood modifiers for the calm/stressed axis
+        public List<MoodModifierRecord> stressModifiers = new List<MoodModifierRecord>();
         // Game tick of the last conversation this NPC completed (60-tick cooldown)
         public int   lastConversationTick  = -99;
 

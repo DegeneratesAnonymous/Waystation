@@ -80,11 +80,18 @@ namespace Waystation.Systems
 
         // ── Called by MoodSystem every tick ──────────────────────────────────
 
-        public static void AccumulateMood(NPCInstance npc, float moodScore)
+        /// <summary>
+        /// Accumulates the combined average of both mood axes into the daily sanity
+        /// accumulator.  Called by MoodSystem every tick.
+        /// </summary>
+        public static void AccumulateMood(NPCInstance npc, float moodScore, float stressScore)
         {
             var san = npc.sanity;
             if (san == null) return;
-            san.dailyMoodAccumulator += moodScore;
+            // Average both axes so that persistently stressed (low stressScore) or
+            // unhappy (low moodScore) NPCs both contribute to the daily mood calculation.
+            float combined = (moodScore + stressScore) * 0.5f;
+            san.dailyMoodAccumulator += combined;
             san.dailyMoodSampleCount++;
         }
 

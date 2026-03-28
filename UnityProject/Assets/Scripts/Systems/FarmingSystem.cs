@@ -40,11 +40,22 @@ namespace Waystation.Systems
 
         private readonly ContentRegistry _registry;
         private SkillSystem              _skillSystem;
+        private MoodSystem               _mood;
 
         public FarmingSystem(ContentRegistry registry) => _registry = registry;
 
         /// <summary>Wire up SkillSystem after construction (called from GameManager).</summary>
         public void SetSkillSystem(SkillSystem skillSystem) => _skillSystem = skillSystem;
+
+        /// <summary>Wire up MoodSystem after construction (called from GameManager).</summary>
+        public void SetMoodSystem(MoodSystem mood) => _mood = mood;
+
+        // ── Meal quality mood constants ───────────────────────────────────────
+        // Harvesting under ideal conditions → fresh, high-quality produce → happy/sad boost.
+        // Harvesting under degraded conditions → lower quality → neutral or minor boost.
+        private const float MealQualityIdealDelta      = 6f;
+        private const float MealQualityAcceptableDelta = 3f;
+        private const int   MealQualityDurationTicks   = 120;  // ⅓ in-game day (120 of 360 ticks/day)
 
         // ── Condition tier (used for inspect display and growth logic) ────────
         public enum ConditionTier { Ideal, Acceptable, Critical }
@@ -311,6 +322,21 @@ namespace Waystation.Systems
                                              $"{hvCrop.harvestItemId} at planter ({planter.tileCol},{planter.tileRow}).");
                             station.LogEvent($"Warning: storage full — {qty}× {hvCrop.harvestItemId} dropped.");
                         }
+
+                        // Push meal quality mood modifier on the happy/sad axis.
+                        // Quality is derived from grow conditions at the time of harvest.
+                        float growthMod = EvaluateGrowthModifier(planter, hvCrop);
+                        if (_mood != null)
+                        {
+                            float moodDelta = growthMod >= ModifierIdeal
+                                ? MealQualityIdealDelta
+                                : (growthMod >= ModifierAcceptable ? MealQualityAcceptableDelta : 0f);
+                            if (moodDelta > 0f)
+                                _mood.PushModifier(npc, "meal_quality_harvest", moodDelta,
+                                                   MealQualityDurationTicks, station.tick,
+                                                   MoodAxis.HappySad, "farming_system");
+                        }
+
                         planter.growthStage    = 0;
                         planter.growthProgress = 0f;
                         planter.cropDamage     = 0f;

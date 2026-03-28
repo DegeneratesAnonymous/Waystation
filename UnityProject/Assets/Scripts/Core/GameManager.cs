@@ -213,6 +213,7 @@ namespace Waystation.Core
             Research.SetSkillSystem(Skills);
             Research.SetSecondsPerTick(secondsPerTick);
             Farming.SetSkillSystem(Skills);
+            Farming.SetMoodSystem(Mood);
             Conversations.SetSkillSystem(Skills);
 
             // Trait, Tension, Faction Government, Region systems
