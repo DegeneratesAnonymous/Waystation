@@ -1,0 +1,642 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   WaystationComponents.uss
+   Shared component stylesheet — base styles for all reusable UI Toolkit
+   components. Import only this file in every panel USS file — it pulls
+   WaystationVariables.uss in automatically.
+
+   Import order (one line is enough):
+     @import url('WaystationComponents.uss');
+
+   Requirements: Unity 2023.1+ (var() support).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   GLOBAL RESET                                                             */
+
+* {
+    border-radius: var(--ws-radius);
+    -unity-paragraph-spacing: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SCENE BACKGROUND                                                         */
+
+.ws-scene-bg {
+    background-color: var(--ws-bg-void);
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RIVET PANEL  (.ws-rivet-panel)
+   Used by the RivetPanel C# custom control — apply to the panel root.
+   The four rivet child elements are injected by RivetPanel.cs.            */
+
+.ws-rivet-panel {
+    background-color: var(--ws-bg-panel);
+    border-color: var(--ws-border-mid);
+    border-width: 1px;
+    overflow: hidden;
+    position: relative;
+    flex-direction: column;
+}
+
+/* Individual rivet squares */
+.ws-rivet {
+    position: absolute;
+    width: var(--ws-rivet-size);
+    height: var(--ws-rivet-size);
+    background-color: var(--ws-bevel-hi);
+}
+.ws-rivet-tl { top: var(--ws-rivet-offset);    left: var(--ws-rivet-offset);   }
+.ws-rivet-tr { top: var(--ws-rivet-offset);    right: var(--ws-rivet-offset);  }
+.ws-rivet-bl { bottom: var(--ws-rivet-offset); left: var(--ws-rivet-offset);   }
+.ws-rivet-br { bottom: var(--ws-rivet-offset); right: var(--ws-rivet-offset);  }
+
+/* Bevel highlights */
+.ws-bevel-hi {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background-color: var(--ws-bevel-hi);
+}
+.ws-bevel-lo {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background-color: var(--ws-bevel-lo);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SCANLINE OVERLAY  (.ws-scanline-overlay)
+   Full-bleed overlay applied over panel backgrounds.
+   Set a repeating scanline texture on the C# element for full effect.     */
+
+.ws-scanline-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.06);
+    -unity-background-scale-mode: stretch-to-fill;
+    /* Pointer events pass through so underlying elements remain interactive */
+    picking-mode: ignore;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CATEGORY STRIPE  (.ws-category-stripe)
+   3px coloured left-edge stripe on crew and department list items.        */
+
+.ws-category-stripe {
+    width: 3px;
+    align-self: stretch;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition-property: opacity;
+    transition-duration: var(--ws-anim-normal);
+    transition-timing-function: ease;
+}
+.ws-category-stripe--active { opacity: 1; }
+
+/* Department/category colour variants — set via C# or inline style */
+.ws-category-stripe--structure  { background-color: var(--ws-cat-structure);  }
+.ws-category-stripe--electrical { background-color: var(--ws-cat-electrical); }
+.ws-category-stripe--objects    { background-color: var(--ws-cat-objects);    }
+.ws-category-stripe--production { background-color: var(--ws-cat-production); }
+.ws-category-stripe--plumbing   { background-color: var(--ws-cat-plumbing);   }
+.ws-category-stripe--security   { background-color: var(--ws-cat-security);   }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   STATUS PIP  (.ws-status-pip)
+   Single LED indicator square with colour variants.                       */
+
+.ws-status-pip {
+    width: var(--ws-pip-size);
+    height: var(--ws-pip-size);
+    border-radius: var(--ws-radius);
+    flex-shrink: 0;
+}
+
+.ws-status-pip--on      { background-color: var(--ws-green); }
+.ws-status-pip--warning { background-color: var(--ws-amber); opacity: 0.7; }
+.ws-status-pip--off     { background-color: var(--ws-text-dim); }
+.ws-status-pip--fault   { background-color: var(--ws-red); }
+.ws-status-pip--acc     { background-color: var(--ws-acc); }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESOURCE METER  (.ws-resource-meter)
+   Horizontal fill bar with label and value text.                          */
+
+.ws-resource-meter {
+    flex-direction: column;
+    gap: var(--ws-space-xs);
+}
+
+.ws-resource-meter__header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ws-resource-meter__label {
+    font-size: var(--ws-fs-meta);
+    color: var(--ws-text-mid);
+    letter-spacing: var(--ws-ls-meta);
+}
+
+.ws-resource-meter__value {
+    font-size: var(--ws-fs-meta);
+    color: var(--ws-text-base);
+    letter-spacing: var(--ws-ls-meta);
+}
+
+.ws-resource-meter__track {
+    height: var(--ws-meter-height);
+    background-color: var(--ws-bg-deep);
+    border-color: var(--ws-border-dark);
+    border-width: 1px;
+    overflow: hidden;
+}
+
+.ws-resource-meter__fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    /* Width is set in C# via style.width as a percentage */
+    background-color: var(--ws-acc);
+    transition-property: width;
+    transition-duration: var(--ws-anim-slow);
+    transition-timing-function: ease;
+}
+
+/* Colour variants — applied to the meter root, fills inherit */
+.ws-resource-meter--food    .ws-resource-meter__fill { background-color: var(--ws-resource-food);    }
+.ws-resource-meter--power   .ws-resource-meter__fill { background-color: var(--ws-resource-power);   }
+.ws-resource-meter--oxygen  .ws-resource-meter__fill { background-color: var(--ws-resource-oxygen);  }
+.ws-resource-meter--parts   .ws-resource-meter__fill { background-color: var(--ws-resource-parts);   }
+.ws-resource-meter--credits .ws-resource-meter__fill { background-color: var(--ws-resource-credits); }
+
+.ws-resource-meter--food    .ws-resource-meter__label { color: var(--ws-resource-food);    }
+.ws-resource-meter--power   .ws-resource-meter__label { color: var(--ws-resource-power);   }
+.ws-resource-meter--oxygen  .ws-resource-meter__label { color: var(--ws-resource-oxygen);  }
+.ws-resource-meter--parts   .ws-resource-meter__label { color: var(--ws-resource-parts);   }
+.ws-resource-meter--credits .ws-resource-meter__label { color: var(--ws-resource-credits); }
+
+/* Compact track variant */
+.ws-resource-meter--compact .ws-resource-meter__track {
+    height: var(--ws-meter-height-compact);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB STRIP  (.ws-tab-strip)
+   Horizontal or vertical tab row with active state indicator.             */
+
+.ws-tab-strip {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+}
+
+.ws-tab-strip--vertical {
+    flex-direction: column;
+    border-bottom-width: 0;
+    border-right-width: 1px;
+    border-right-color: var(--ws-border-dark);
+}
+
+.ws-tab-strip__tab {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    border-radius: var(--ws-radius);
+    padding: var(--ws-space-sm) var(--ws-space-md);
+    color: var(--ws-text-mid);
+    font-size: var(--ws-fs-btn);
+    letter-spacing: var(--ws-ls-btn);
+    -unity-text-align: middle-center;
+    cursor: link;
+    flex-shrink: 0;
+    transition-property: color, background-color;
+    transition-duration: var(--ws-anim-normal);
+    transition-timing-function: ease;
+}
+
+.ws-tab-strip__tab:hover {
+    background-color: var(--ws-bg-raised);
+    color: var(--ws-text-bright);
+}
+
+.ws-tab-strip__tab--active {
+    color: var(--ws-text-head);
+    background-color: var(--ws-bg-hover);
+    border-bottom-width: 2px;
+    border-bottom-color: var(--ws-acc);
+}
+
+.ws-tab-strip--vertical .ws-tab-strip__tab--active {
+    border-bottom-width: 0;
+    border-right-width: 2px;
+    border-right-color: var(--ws-acc);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DRAWER PANEL  (.ws-drawer-panel)
+   Sliding panel with open/close animation driven by USS transitions.
+   C# sets .ws-drawer-panel--open to trigger the transition.               */
+
+.ws-drawer-panel {
+    display: flex;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    /* Input blocked while closed via picking-mode and zero size */
+    transition-property: max-height, opacity;
+    transition-duration: var(--ws-drawer-duration), var(--ws-anim-fast);
+    transition-timing-function: ease, ease;
+}
+
+.ws-drawer-panel--open {
+    max-height: 600px;      /* Override in panel USS if taller content needed */
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Horizontal slide variant */
+.ws-drawer-panel--horizontal {
+    max-height: none;
+    max-width: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition-property: max-width, opacity;
+    transition-duration: var(--ws-drawer-duration), var(--ws-anim-fast);
+}
+
+.ws-drawer-panel--horizontal.ws-drawer-panel--open {
+    max-width: 400px;       /* Override in panel USS for wider drawers */
+    max-height: none;
+    opacity: 1;
+    visibility: visible;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MODAL OVERLAY  (.ws-modal-overlay)
+   Darkened backdrop blocking input to underlying UI.                      */
+
+.ws-modal-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--ws-modal-overlay-bg);
+    align-items: center;
+    justify-content: center;
+    display: none;
+}
+
+.ws-modal-overlay--visible {
+    display: flex;
+}
+
+.ws-modal-overlay__panel {
+    background-color: var(--ws-bg-panel);
+    border-color: var(--ws-border-mid);
+    border-width: 1px;
+    min-width: 280px;
+    max-width: 480px;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+.ws-modal-overlay__header {
+    padding: var(--ws-space-lg) 14px var(--ws-space-md) 14px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+    background-color: var(--ws-bg-raised);
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.ws-modal-overlay__title {
+    font-size: var(--ws-fs-title);
+    color: var(--ws-text-head);
+    -unity-font-style: bold;
+    letter-spacing: var(--ws-ls-title);
+}
+
+.ws-modal-overlay__body {
+    padding: var(--ws-space-lg) 14px;
+    flex-direction: column;
+    flex: 1;
+}
+
+.ws-modal-overlay__footer {
+    padding: var(--ws-space-md) 14px var(--ws-space-lg) 14px;
+    border-top-width: 1px;
+    border-top-color: var(--ws-border-dark);
+    flex-direction: row;
+    gap: var(--ws-space-sm);
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   EXPERTISE SLOT PROMPT  (.ws-expertise-slot-prompt)
+   Specialised modal for the expertise slot unlock choice UI (WO-NPC-004). */
+
+.ws-expertise-slot-prompt__slot-list {
+    flex-direction: column;
+    gap: var(--ws-space-sm);
+    margin-bottom: var(--ws-space-lg);
+}
+
+.ws-expertise-slot-prompt__slot {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--ws-space-sm) var(--ws-space-md);
+    background-color: var(--ws-bg-base);
+    border-color: var(--ws-border-dark);
+    border-width: 1px;
+    gap: var(--ws-space-md);
+    cursor: link;
+    transition-property: background-color, border-color;
+    transition-duration: var(--ws-anim-normal);
+}
+
+.ws-expertise-slot-prompt__slot:hover {
+    background-color: var(--ws-bg-raised);
+    border-color: var(--ws-border-mid);
+}
+
+.ws-expertise-slot-prompt__slot--selected {
+    background-color: var(--ws-bg-hover);
+    border-color: var(--ws-acc);
+}
+
+.ws-expertise-slot-prompt__slot-icon {
+    width: 24px;
+    height: 24px;
+    background-color: var(--ws-bg-deep);
+    border-color: var(--ws-border-mid);
+    border-width: 1px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ws-expertise-slot-prompt__slot-name {
+    font-size: var(--ws-fs-cat-name);
+    color: var(--ws-text-base);
+    -unity-font-style: bold;
+    letter-spacing: var(--ws-ls-cat-name);
+    flex: 1;
+}
+
+.ws-expertise-slot-prompt__slot-desc {
+    font-size: var(--ws-fs-meta);
+    color: var(--ws-text-dim);
+    letter-spacing: var(--ws-ls-meta);
+    flex: 2;
+}
+
+.ws-expertise-slot-prompt__cost {
+    font-size: var(--ws-fs-meta);
+    color: var(--ws-amber);
+    letter-spacing: var(--ws-ls-meta);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DATACHIP INDICATOR  (.ws-datachip-indicator)
+   Visual representation of a Datachip slot.                               */
+
+.ws-datachip-indicator {
+    width: 18px;
+    height: 24px;
+    background-color: var(--ws-bg-deep);
+    border-color: var(--ws-border-mid);
+    border-width: 1px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition-property: background-color, border-color;
+    transition-duration: var(--ws-anim-normal);
+}
+
+.ws-datachip-indicator--filled {
+    background-color: var(--ws-bg-hover);
+    border-color: var(--ws-acc);
+}
+
+.ws-datachip-indicator--locked {
+    background-color: rgba(0, 0, 0, 0);
+    border-color: var(--ws-border-dark);
+    opacity: 0.35;
+}
+
+.ws-datachip-indicator__pip {
+    width: 6px;
+    height: 6px;
+    background-color: var(--ws-text-dim);
+}
+
+.ws-datachip-indicator--filled .ws-datachip-indicator__pip {
+    background-color: var(--ws-acc-bright);
+}
+
+.ws-datachip-indicator--locked .ws-datachip-indicator__pip {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SHARED BUTTON  (.ws-btn)                                                */
+
+.ws-btn {
+    background-color: var(--ws-bg-base);
+    border-color: var(--ws-border-mid);
+    border-width: 1px;
+    border-radius: var(--ws-radius);
+    color: var(--ws-text-base);
+    font-size: var(--ws-fs-btn);
+    letter-spacing: var(--ws-ls-btn);
+    padding: var(--ws-space-sm) var(--ws-space-md);
+    -unity-text-align: middle-center;
+    cursor: link;
+    transition-property: background-color, border-color, color;
+    transition-duration: var(--ws-anim-normal);
+    transition-timing-function: ease;
+}
+.ws-btn:hover {
+    background-color: var(--ws-bg-hover);
+    border-color: var(--ws-border-lit);
+    color: var(--ws-text-bright);
+}
+.ws-btn--active,
+.ws-btn:checked {
+    background-color: var(--ws-bg-hover);
+    border-color: var(--ws-acc);
+    color: var(--ws-acc-bright);
+}
+.ws-btn:disabled {
+    opacity: 0.35;
+    cursor: arrow;
+}
+
+/* Accent / confirm button */
+.ws-btn--accent {
+    background-color: var(--ws-acc);
+    border-color: var(--ws-acc-bright);
+    color: var(--ws-bg-deep);
+}
+.ws-btn--accent:hover {
+    background-color: var(--ws-acc-bright);
+    color: var(--ws-bg-void);
+}
+
+/* Danger button */
+.ws-btn--danger {
+    color: var(--ws-text-base);
+}
+.ws-btn--danger:hover {
+    background-color: var(--ws-red);
+    border-color: var(--ws-red);
+    color: var(--ws-text-head);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PANEL HEADER  (.ws-panel-header)                                        */
+
+.ws-panel-header {
+    padding: var(--ws-space-lg) 14px var(--ws-space-md) 14px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+    background-color: var(--ws-bg-raised);
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.ws-panel-header__top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--ws-space-md);
+}
+
+.ws-panel-header__title {
+    font-size: var(--ws-fs-title);
+    color: var(--ws-text-head);
+    -unity-font-style: bold;
+    letter-spacing: var(--ws-ls-title);
+}
+
+.ws-panel-header__subtitle {
+    font-size: var(--ws-fs-subtitle);
+    color: var(--ws-text-dim);
+    letter-spacing: 1.6px;
+    margin-top: 1px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   STATUS BAR  (.ws-status-bar)                                            */
+
+.ws-status-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    border-top-width: 1px;
+    border-top-color: var(--ws-border-dark);
+    background-color: var(--ws-bg-base);
+    flex-shrink: 0;
+}
+
+.ws-status-bar__hint {
+    font-size: var(--ws-fs-subtitle);
+    color: var(--ws-text-dim);
+    letter-spacing: 1.6px;
+}
+
+.ws-status-bar__lights {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SECTION DIVIDER  (.ws-section-label)                                    */
+
+.ws-section-label {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--ws-space-md) 14px 5px 14px;
+    gap: var(--ws-space-md);
+}
+.ws-section-label > Label {
+    font-size: var(--ws-fs-section);
+    color: var(--ws-text-dim);
+    letter-spacing: var(--ws-ls-section);
+}
+.ws-section-label__line {
+    flex: 1;
+    height: 1px;
+    background-color: var(--ws-border-dark);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BADGE  (.ws-badge)                                                      */
+
+.ws-badge {
+    background-color: var(--ws-amber);
+    color: rgb(0, 0, 0);
+    font-size: var(--ws-fs-badge);
+    -unity-font-style: bold;
+    padding: 1px 4px;
+    -unity-text-align: middle-center;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITY: Background depth classes                                       */
+
+.ws-bg-void   { background-color: var(--ws-bg-void);   }
+.ws-bg-deep   { background-color: var(--ws-bg-deep);   }
+.ws-bg-base   { background-color: var(--ws-bg-base);   }
+.ws-bg-panel  { background-color: var(--ws-bg-panel);  }
+.ws-bg-raised { background-color: var(--ws-bg-raised); }
+.ws-bg-hover  { background-color: var(--ws-bg-hover);  }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITY: Text colour classes                                            */
+
+.ws-text-dim    { color: var(--ws-text-dim);    }
+.ws-text-mid    { color: var(--ws-text-mid);    }
+.ws-text-base   { color: var(--ws-text-base);   }
+.ws-text-bright { color: var(--ws-text-bright); }
+.ws-text-head   { color: var(--ws-text-head);   }
+.ws-text-acc    { color: var(--ws-acc);         }
+.ws-text-amber  { color: var(--ws-amber);       }
+.ws-text-red    { color: var(--ws-red);         }
+.ws-text-green  { color: var(--ws-green);       }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITY: Hidden / visible                                               */
+
+.ws-hidden  { display: none; }
+.ws-visible { display: flex; }
