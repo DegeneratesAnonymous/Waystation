@@ -85,7 +85,8 @@ namespace Waystation.UI
         /// <summary>
         /// Registers a VisualElement as belonging to the given department scope.
         /// If colours are already cached for this department, they are applied
-        /// immediately.
+        /// immediately. The element is automatically unregistered when it
+        /// detaches from its panel (via DetachFromPanelEvent).
         /// </summary>
         public static void RegisterDepartmentElement(string deptId, VisualElement element)
         {
@@ -98,7 +99,14 @@ namespace Waystation.UI
             }
 
             if (!list.Contains(element))
+            {
                 list.Add(element);
+
+                // Auto-unregister when the element leaves its panel so we
+                // don't hold stale references after UI teardown.
+                element.RegisterCallback<DetachFromPanelEvent>(_ =>
+                    UnregisterDepartmentElement(deptId, element));
+            }
 
             // Apply cached colours immediately if available
             if (_colours.TryGetValue(deptId, out var cached))

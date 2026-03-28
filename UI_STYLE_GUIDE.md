@@ -221,8 +221,9 @@ interaction.
 ```
 
 For department-coloured stripes, omit the `category` attribute and register with
-`WaystationTheme.RegisterDepartmentElement()` — the stripe will receive
-`borderLeftColor` injections on colour change.
+`WaystationTheme.RegisterDepartmentElement()` — the stripe will be tinted via its
+background colour on department colour change (see `IDepartmentColoured` /
+`ApplyDepartmentColours`).
 
 ### StatusPip
 
@@ -362,13 +363,19 @@ receive their `borderLeftColor` updated to the department primary colour.
 
 ## USS Import Order
 
-Every panel-level USS file must import in this order:
+Every panel-level USS file only needs to import `WaystationComponents.uss` — it
+pulls `WaystationVariables.uss` in automatically.
 
 ```uss
-@import url('../../UI/Styles/WaystationVariables.uss');
 @import url('../../UI/Styles/WaystationComponents.uss');
 
 /* Panel-specific overrides below — use var() only */
+```
+
+If you only need variables (no component classes), you can import just `WaystationVariables.uss`:
+
+```uss
+@import url('../../UI/Styles/WaystationVariables.uss');
 ```
 
 ---

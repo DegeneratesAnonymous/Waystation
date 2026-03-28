@@ -58,6 +58,7 @@ namespace Waystation.UI
 
         // ── Fields ────────────────────────────────────────────────────────
         private readonly List<TabEntry> _tabs = new List<TabEntry>();
+        private readonly HashSet<string> _tabIds = new HashSet<string>(StringComparer.Ordinal);
         private string _activeId;
         private Orientation _orientation = Orientation.Horizontal;
 
@@ -90,9 +91,17 @@ namespace Waystation.UI
 
         /// <summary>
         /// Adds a tab with the given label and id. The first tab added becomes active.
+        /// Throws <see cref="ArgumentException"/> if <paramref name="id"/> is null,
+        /// empty, or already registered.
         /// </summary>
         public Button AddTab(string label, string id)
         {
+            if (string.IsNullOrEmpty(id))
+                throw new ArgumentException("Tab id must not be null or empty.", nameof(id));
+
+            if (_tabIds.Contains(id))
+                throw new ArgumentException($"A tab with id '{id}' already exists.", nameof(id));
+
             var btn = new Button();
             btn.AddToClassList("ws-tab-strip__tab");
             btn.text = label;
@@ -100,6 +109,7 @@ namespace Waystation.UI
             Add(btn);
 
             _tabs.Add(new TabEntry(id, btn));
+            _tabIds.Add(id);
 
             if (_tabs.Count == 1)
                 SelectTab(id);
@@ -109,15 +119,20 @@ namespace Waystation.UI
 
         /// <summary>
         /// Programmatically activates the tab with the given id.
+        /// Returns true if the tab was found and activated; false if no tab with
+        /// that id exists (state is not modified in that case).
         /// </summary>
-        public void SelectTab(string id)
+        public bool SelectTab(string id)
         {
+            if (!_tabIds.Contains(id)) return false;
+
             _activeId = id;
             foreach (var entry in _tabs)
             {
                 entry.Button.EnableInClassList("ws-tab-strip__tab--active", entry.Id == id);
             }
             OnTabSelected?.Invoke(id);
+            return true;
         }
 
         /// <summary>
@@ -126,6 +141,7 @@ namespace Waystation.UI
         public void ClearTabs()
         {
             _tabs.Clear();
+            _tabIds.Clear();
             _activeId = null;
             Clear();
         }

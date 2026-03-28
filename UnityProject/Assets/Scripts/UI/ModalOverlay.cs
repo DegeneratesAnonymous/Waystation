@@ -62,6 +62,12 @@ namespace Waystation.UI
         public VisualElement BodyContent => _body;
 
         /// <summary>
+        /// Ensures that UXML-declared children are added to the modal body
+        /// instead of to the overlay root element.
+        /// </summary>
+        public override VisualElement contentContainer => _body ?? base.contentContainer;
+
+        /// <summary>
         /// When true (default), clicking outside the content panel closes the modal.
         /// </summary>
         public bool BackdropCloseEnabled { get; set; } = true;

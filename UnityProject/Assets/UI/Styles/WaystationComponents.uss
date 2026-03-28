@@ -1,16 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    WaystationComponents.uss
    Shared component stylesheet — base styles for all reusable UI Toolkit
-   components. Import after WaystationVariables.uss in every panel USS file.
+   components. Import only this file in every panel USS file — it pulls
+   WaystationVariables.uss in automatically.
 
-   Import order:
-     @import url('WaystationVariables.uss');
+   Import order (one line is enough):
      @import url('WaystationComponents.uss');
 
    Requirements: Unity 2023.1+ (var() support).
    ═══════════════════════════════════════════════════════════════════════════ */
-
-@import url('WaystationVariables.uss');
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -254,20 +252,21 @@
    C# sets .ws-drawer-panel--open to trigger the transition.               */
 
 .ws-drawer-panel {
+    display: flex;
     overflow: hidden;
     max-height: 0;
     opacity: 0;
+    visibility: hidden;
+    /* Input blocked while closed via picking-mode and zero size */
     transition-property: max-height, opacity;
     transition-duration: var(--ws-drawer-duration), var(--ws-anim-fast);
     transition-timing-function: ease, ease;
-    /* Input blocked while closed */
-    display: none;
 }
 
 .ws-drawer-panel--open {
     max-height: 600px;      /* Override in panel USS if taller content needed */
     opacity: 1;
-    display: flex;
+    visibility: visible;
 }
 
 /* Horizontal slide variant */
@@ -275,6 +274,7 @@
     max-height: none;
     max-width: 0;
     opacity: 0;
+    visibility: hidden;
     transition-property: max-width, opacity;
     transition-duration: var(--ws-drawer-duration), var(--ws-anim-fast);
 }
@@ -283,6 +283,7 @@
     max-width: 400px;       /* Override in panel USS for wider drawers */
     max-height: none;
     opacity: 1;
+    visibility: visible;
 }
 
 

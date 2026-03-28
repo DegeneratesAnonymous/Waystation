@@ -85,6 +85,8 @@ namespace Waystation.UI
         {
             AddToClassList("ws-drawer-panel");
             SlideDirection = direction;
+            // Start with input blocked
+            pickingMode = PickingMode.Ignore;
         }
 
         // ── Public API ────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ namespace Waystation.UI
         {
             if (_isOpen) return;
             _isOpen = true;
+            pickingMode = PickingMode.Position;
             AddToClassList(ClassOpen);
             OnOpenChanged?.Invoke(true);
         }
@@ -108,6 +111,7 @@ namespace Waystation.UI
             if (!_isOpen) return;
             _isOpen = false;
             RemoveFromClassList(ClassOpen);
+            pickingMode = PickingMode.Ignore;
             OnOpenChanged?.Invoke(false);
         }
 
