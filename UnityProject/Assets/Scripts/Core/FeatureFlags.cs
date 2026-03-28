@@ -7,6 +7,14 @@ namespace Waystation.Core
     public static class FeatureFlags
     {
         /// <summary>
+        /// Enables the full blueprint-to-built construction pipeline:
+        /// material haul phase, time-based construction, mid-build material halts,
+        /// damage states with performance scalars, and the repair task pipeline.
+        /// Set to false to revert to instant placement (legacy DevMode behaviour).
+        /// </summary>
+        public static bool ConstructionPipeline = true;
+
+        /// <summary>
         /// Enables NPC trait acquisition, decay, conflict resolution,
         /// and trait display in the Crew Menu.
         /// </summary>

@@ -2196,8 +2196,18 @@ namespace Waystation.UI
             {
                 foreach (var m in defn.requiredMaterials)
                 {
+                    // Count how many of this item are currently in station cargo holds
+                    int available = 0;
+                    foreach (var mod in s.modules.Values)
+                        if (mod.inventory != null && mod.inventory.ContainsKey(m.Key))
+                            available += mod.inventory[m.Key];
+
+                    bool hasEnough = available >= m.Value;
+                    GUI.color = hasEnough ? prevCol : ColBarCrit;
                     GUI.Label(new Rect(tx + 14f, iy, tw - 20f, LineH),
-                              $"\u2022 {ItemDisplayName(m.Key)}  \u00d7{m.Value}", _sSub);
+                              $"\u2022 {ItemDisplayName(m.Key)}  \u00d7{m.Value}  ({available} in stock)",
+                              _sSub);
+                    GUI.color = prevCol;
                     iy += 18f;
                 }
             }

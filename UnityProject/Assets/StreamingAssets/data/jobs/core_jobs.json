@@ -412,5 +412,43 @@
     },
     "station_effects": {},
     "schema_version": "1"
+  },
+  {
+    "id": "job.build",
+    "display_name": "Construction",
+    "phase": "day",
+    "allowed_classes": [
+      "class.engineering"
+    ],
+    "preferred_module_category": "utility",
+    "fallback_module_category": "production",
+    "duration_ticks": 5,
+    "skill_used": "technical",
+    "resource_effects": {},
+    "need_effects": {
+      "rest": -0.04,
+      "hunger": -0.03
+    },
+    "station_effects": {},
+    "schema_version": "1"
+  },
+  {
+    "id": "job.repair",
+    "display_name": "Repair",
+    "phase": "day",
+    "allowed_classes": [
+      "class.engineering"
+    ],
+    "preferred_module_category": "utility",
+    "fallback_module_category": "production",
+    "duration_ticks": 5,
+    "skill_used": "technical",
+    "resource_effects": {},
+    "need_effects": {
+      "rest": -0.03,
+      "hunger": -0.02
+    },
+    "station_effects": {},
+    "schema_version": "1"
   }
 ]
