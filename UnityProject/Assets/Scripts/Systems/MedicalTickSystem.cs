@@ -73,6 +73,11 @@ namespace Waystation.Systems
         private Dictionary<WoundType, WoundTypeDefinition> _woundTypes;
         private DiseaseDefinition _woundInfectionDef;
 
+        // ── Species tree registry ──────────────────────────────────────────────
+
+        private readonly Dictionary<string, BodyPartTreeDefinition> _speciesTreeRegistry =
+            new Dictionary<string, BodyPartTreeDefinition>();
+
         // ── Dependencies ──────────────────────────────────────────────────────
 
         private MoodSystem   _mood;
@@ -90,6 +95,17 @@ namespace Waystation.Systems
             _humanPartIndex  = HumanBodyTree.Get().BuildIndex();
             _woundTypes      = HumanBodyTree.GetWoundTypes();
             _woundInfectionDef = DiseaseDefinition.WoundInfection();
+            _speciesTreeRegistry["human"] = HumanBodyTree.Get();
+        }
+
+        /// <summary>
+        /// Registers a body part tree for a species so that GetTreeForSpecies()
+        /// can dispatch to it. Call this during system setup to support non-human species.
+        /// </summary>
+        public void RegisterSpeciesTree(string speciesId, BodyPartTreeDefinition tree)
+        {
+            if (string.IsNullOrEmpty(speciesId) || tree == null) return;
+            _speciesTreeRegistry[speciesId] = tree;
         }
 
         /// <summary>
@@ -105,8 +121,13 @@ namespace Waystation.Systems
 
         private BodyPartTreeDefinition GetTreeForSpecies(string species)
         {
-            // TODO: expand for non-human species
-            return HumanBodyTree.Get();
+            if (!string.IsNullOrEmpty(species))
+            {
+                if (_speciesTreeRegistry.TryGetValue(species, out var tree))
+                    return tree;
+                Debug.LogWarning($"[MedicalTickSystem] No body tree registered for species '{species}'; falling back to human tree.");
+            }
+            return _speciesTreeRegistry["human"];
         }
 
         // ── Main tick ─────────────────────────────────────────────────────────
@@ -247,7 +268,10 @@ namespace Waystation.Systems
                 if (profile.analgesicDurationTicks > 0 && profile.analgesicStrength > 0f)
                     rawPain *= (1f - profile.analgesicStrength);
 
-                // Fortitude trait: TODO — check for "trait.fortitude" and reduce by 0.10
+                // Fortitude trait: reduces derived pain by 10%
+                if (HasTrait(npc, "trait.fortitude"))
+                    rawPain *= 0.9f;
+
                 profile.pain = Mathf.Clamp(rawPain, 0f, 100f);
             }
 
@@ -257,6 +281,14 @@ namespace Waystation.Systems
                     d.currentStage < woundInfectionDef.stages.Count)
                     return woundInfectionDef.stages[d.currentStage].painPerTick;
                 return 0f;
+            }
+
+            private static bool HasTrait(NPCInstance npc, string traitId)
+            {
+                if (npc.traitProfile == null) return false;
+                foreach (var t in npc.traitProfile.traits)
+                    if (t.traitId == traitId) return true;
+                return false;
             }
         }
 
