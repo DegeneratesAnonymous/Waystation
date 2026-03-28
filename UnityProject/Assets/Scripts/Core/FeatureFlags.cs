@@ -51,11 +51,11 @@ namespace Waystation.Core
         public static bool NpcDeathHandling = true;
 
         /// <summary>
-        /// Enables the Hygiene need: per-tick depletion, seek behaviour (routes NPC
-        /// to nearest shower or sink), and crisis state (mood + social penalties).
-        /// Set to false to disable all hygiene tick processing without removing code.
-        /// Species and trait depletion rate modifiers for all six needs are always
-        /// active regardless of this flag.
+        /// Enables the Hygiene need: per-tick depletion, hygiene restoration when an
+        /// NPC uses a shower or sink (prefers showers over sinks), and crisis state
+        /// (mood + social penalties). Set to false to disable all hygiene tick
+        /// processing without removing code. Species and trait depletion rate
+        /// modifiers for all six needs are always active regardless of this flag.
         /// </summary>
         public static bool HygieneNeed = true;
     }

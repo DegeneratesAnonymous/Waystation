@@ -521,7 +521,7 @@ namespace Waystation.Models
     {
         public float value      = 100f;  // 0-100
         public bool  isSeeking  = false;
-        // True when Hygiene has been at crisis level long enough to apply social penalty
+        // True when Hygiene is currently at or below the crisis threshold used for mood and social penalties
         public bool  inCrisis   = false;
     }
 

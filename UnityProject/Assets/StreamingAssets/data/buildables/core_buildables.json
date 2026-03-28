@@ -1027,7 +1027,7 @@
     "id": "buildable.shower",
     "display_name": "Crew Shower",
     "category": "object",
-    "description": "A basic shower unit for crew hygiene. NPCs with a low Hygiene need will seek this facility to restore their hygiene fully. Requires a connected water supply.",
+    "description": "A basic shower unit for crew hygiene. NPCs with a low Hygiene need will seek this facility to significantly restore their hygiene. Requires a connected water supply.",
     "build_time_ticks": 30,
     "layer": 2,
     "required_materials": {

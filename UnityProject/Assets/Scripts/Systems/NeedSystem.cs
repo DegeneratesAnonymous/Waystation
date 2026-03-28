@@ -359,19 +359,28 @@ namespace Waystation.Systems
 
         private static void TryUseHygieneFacility(NPCInstance npc, StationState station)
         {
+            // Prefer showers over sinks: collect the best candidate and use it.
+            // Showers give a larger restore (ShowerRestorationAmount); sinks give a smaller one.
+            FoundationInstance best = null;
             foreach (var f in station.foundations.Values)
             {
                 if (f.status != "complete") continue;
                 if (f.buildableId != "buildable.shower" && f.buildableId != "buildable.sink") continue;
 
-                // Use facility: restore hygiene
-                // Shower restores fully; sink gives a partial wash
-                float restoration = f.buildableId == "buildable.shower" ? ShowerRestorationAmount : SinkRestorationAmount;
-                npc.hygieneNeed.value     = Mathf.Min(100f, npc.hygieneNeed.value + restoration);
-                npc.hygieneNeed.isSeeking = npc.hygieneNeed.value <= HygieneSeekThreshold;
-                npc.hygieneNeed.inCrisis  = npc.hygieneNeed.value <= HygieneCrisisThreshold;
-                return;
+                // Always prefer a shower over a sink
+                if (best == null) { best = f; continue; }
+                if (f.buildableId == "buildable.shower" && best.buildableId != "buildable.shower")
+                    best = f;
             }
+
+            if (best == null) return;
+
+            // Use facility: restore hygiene
+            // Shower gives a large hygiene restore; sink gives a smaller partial wash
+            float restoration = best.buildableId == "buildable.shower" ? ShowerRestorationAmount : SinkRestorationAmount;
+            npc.hygieneNeed.value     = Mathf.Min(100f, npc.hygieneNeed.value + restoration);
+            npc.hygieneNeed.isSeeking = npc.hygieneNeed.value <= HygieneSeekThreshold;
+            npc.hygieneNeed.inCrisis  = npc.hygieneNeed.value <= HygieneCrisisThreshold;
         }
 
         // ── Daily boundary checks ─────────────────────────────────────────────
@@ -417,7 +426,7 @@ namespace Waystation.Systems
             if (_sanity != null)
             {
                 bool anyDepleted = h.value <= 0f || t.value <= 0f || s.value <= 0f ||
-                                   (FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.inCrisis);
+                                   (FeatureFlags.HygieneNeed && npc.hygieneNeed != null && npc.hygieneNeed.value <= 0f);
                 if (anyDepleted)
                     _sanity.RegisterNeedDepleted(npc, station);
 
