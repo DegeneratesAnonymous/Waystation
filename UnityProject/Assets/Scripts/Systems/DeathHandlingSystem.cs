@@ -28,9 +28,10 @@ namespace Waystation.Systems
         /// <summary>
         /// One-time mood penalty pushed to NPCs in the same module at the moment
         /// a body spawns ("witnessed a death").  Duration is in ticks.
+        /// 72 = TimeSystem.TicksPerDay / 5  (~⅕ in-game day)
         /// </summary>
         public const float WitnessedDeathPenalty         = -10f;
-        public const int   WitnessedDeathDurationTicks   =  72;  // ~¾ of an in-game day
+        public const int   WitnessedDeathDurationTicks   =  72;
 
         /// <summary>
         /// Per-tick proximity penalty pushed while a body is in the same module.
@@ -39,24 +40,30 @@ namespace Waystation.Systems
         public const float BodyPresentPenalty            = -5f;
         public const int   BodyPresentDurationTicks      =  3;
 
-        /// <summary>Grief modifier for close-relationship NPCs on the death tick.</summary>
+        /// <summary>
+        /// Grief modifier for close-relationship NPCs on the death tick.
+        /// 240 = TimeSystem.TicksPerDay * 2 / 3  (~⅔ in-game day)
+        /// </summary>
         public const float FriendDeathPenalty            = -15f;
         public const float LoverDeathPenalty             = -20f;
         public const float SpouseDeathPenalty            = -25f;
         public const float FamilyDeathPenalty            = -20f;
-        public const int   GriefDurationTicks            = 240;  // ~2.5 in-game days
+        public const int   GriefDurationTicks            = 240;
 
         /// <summary>
         /// Ticks after body spawns before an escalating penalty begins.
         /// Configurable at runtime (e.g. via debug/difficulty settings).
-        /// Default 48 ticks (≈ ½ an in-game day).
+        /// Default 48 = TimeSystem.TicksPerDay / 8  (~⅛ in-game day)
         /// </summary>
         public static int UnhandledEscalationThresholdTicks = 48;
 
         /// <summary>Additional mood delta added per escalation step.</summary>
         public const float EscalatingPenaltyPerStep  = -5f;
 
-        /// <summary>Ticks between each escalation step.</summary>
+        /// <summary>
+        /// Ticks between each escalation step.
+        /// 24 = TimeSystem.TicksPerDay / 15  (~1/15 in-game day)
+        /// </summary>
         public const int   EscalationStepIntervalTicks = 24;
 
         /// <summary>
@@ -91,12 +98,13 @@ namespace Waystation.Systems
             // 1. Spawn body at death tile.
             var body = BodyInstance.Create(npc, station.tick);
             station.bodies[body.uid] = body;
+            station.LogEvent($"A body has been left where {npc.name} died.");
 
             // 2. Witnessed-death mood penalty to all nearby NPCs.
             ApplyWitnessedDeathMood(body, station);
 
             // 3. Close-relationship grief modifier.
-            FireRelationshipDeathEvents(npc, body.uid, station);
+            FireRelationshipDeathEvents(npc, station);
 
             // 4. Generate haul task.
             GenerateHaulTask(body, station);
@@ -166,8 +174,7 @@ namespace Waystation.Systems
             }
         }
 
-        private void FireRelationshipDeathEvents(NPCInstance deceased, string bodyUid,
-                                                  StationState station)
+        private void FireRelationshipDeathEvents(NPCInstance deceased, StationState station)
         {
             foreach (var other in station.npcs.Values)
             {
@@ -300,8 +307,18 @@ namespace Waystation.Systems
                 hauler.statusTags.Contains("dead"))
             {
                 // Hauler lost — reset for next assignment.
-                body.haulerNpcUid     = null;
-                body.haulJobTimer     = 0;
+                body.haulerNpcUid      = null;
+                body.haulJobTimer      = 0;
+                body.haulTaskGenerated = false;
+                return;
+            }
+
+            // Abort if JobSystem interrupted the hauler (e.g. hunger, rest, crisis).
+            // The NPC will resume when next assigned; haulTaskGenerated reset triggers retry.
+            if (hauler.currentJobId != "job.haul_body")
+            {
+                body.haulerNpcUid      = null;
+                body.haulJobTimer      = 0;
                 body.haulTaskGenerated = false;
                 return;
             }
@@ -348,11 +365,11 @@ namespace Waystation.Systems
                 (age - UnhandledEscalationThresholdTicks) / EscalationStepIntervalTicks + 1,
                 MaxEscalationSteps);
 
-            if (newStep == body.escalationStep) return;  // no change this tick
+            bool stepChanged = newStep != body.escalationStep;
+            if (stepChanged)
+                body.escalationStep = newStep;
 
-            // Escalation step increased — update all nearby NPCs.
-            float newDelta = EscalatingPenaltyPerStep * newStep;
-            body.escalationStep = newStep;
+            float delta = EscalatingPenaltyPerStep * body.escalationStep;
 
             if (_mood == null) return;
             foreach (var npc in station.npcs.Values)
@@ -362,8 +379,15 @@ namespace Waystation.Systems
                 if (npc.location != body.location) continue;
 
                 string eventId = UnhandledBodyEventId(body.uid);
-                _mood.RemoveModifier(npc, eventId, "death_handling");
-                _mood.PushModifier(npc, eventId, newDelta,
+                // When step increases, remove the old modifier first so that the new magnitude
+                // takes effect.  PushModifier only refreshes duration for an existing
+                // (eventId, source) pair — it does not update the delta.
+                if (stepChanged)
+                    _mood.RemoveModifier(npc, eventId, "death_handling");
+                // Re-push every tick (even when step is unchanged) so the modifier does not
+                // expire while the body remains, and so NPCs entering the module are
+                // immediately affected on the next tick.
+                _mood.PushModifier(npc, eventId, delta,
                                    EscalationStepIntervalTicks,
                                    station.tick, "death_handling");
             }

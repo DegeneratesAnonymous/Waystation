@@ -1310,18 +1310,21 @@ namespace Waystation.Models
         // Escalation step — tracks the current penalty tier to avoid redundant remove+push
         public int escalationStep = 0;
 
-        public static BodyInstance Create(NPCInstance npc, int tick)
+        public static BodyInstance Create(NPCInstance npc, int tick,
+                                          int? deathTileCol = null, int? deathTileRow = null)
         {
+            // Prefer explicitly provided death-tile coordinates from the calling system.
+            // Falls back to pathTargetCol/Row (the NPC's last movement destination), then (0,0).
+            int resolvedCol = deathTileCol ?? (npc.pathTargetCol >= 0 ? npc.pathTargetCol : 0);
+            int resolvedRow = deathTileRow ?? (npc.pathTargetRow >= 0 ? npc.pathTargetRow : 0);
+
             return new BodyInstance
             {
                 uid           = Guid.NewGuid().ToString("N").Substring(0, 8),
                 npcUid        = npc.uid,
                 npcName       = npc.name,
-                // Use pathTargetCol/Row as the best available tile position from the data model.
-                // NPCInstance does not track a separate "current" tile — the target tile is
-                // the closest approximation.  Defaults to (0,0) if no path target is set.
-                tileCol       = npc.pathTargetCol >= 0 ? npc.pathTargetCol : 0,
-                tileRow       = npc.pathTargetRow >= 0 ? npc.pathTargetRow : 0,
+                tileCol       = resolvedCol,
+                tileRow       = resolvedRow,
                 location      = npc.location,
                 spawnedAtTick = tick,
             };
@@ -1678,8 +1681,10 @@ namespace Waystation.Models
         public Dictionary<string, BodyInstance> bodies = new Dictionary<string, BodyInstance>();
 
         // Designated disposal tile for body hauling.
-        // When disposalTileDesignated is false, haul tasks are generated but marked as blocked.
-        public bool disposalTileDesignated = false;
+        // Defaults to (0,0) so haul tasks can proceed before the player explicitly
+        // designates a site.  Set via the player designation action when a specific
+        // tile is chosen.
+        public bool disposalTileDesignated = true;
         public int  disposalTileCol        = 0;
         public int  disposalTileRow        = 0;
 
