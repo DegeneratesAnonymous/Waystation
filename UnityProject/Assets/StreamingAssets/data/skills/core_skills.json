@@ -2,6 +2,7 @@
   {
     "id": "skill.farming",
     "display_name": "Farming",
+    "skill_type": "Simple",
     "description": "Proficiency in growing and harvesting crops in hydroponics bays.",
     "governing_ability": "WIS",
     "associated_task_types": ["sow", "harvest", "tend"],
@@ -11,8 +12,12 @@
   {
     "id": "skill.engineering",
     "display_name": "Engineering",
-    "description": "Skill in construction, block placement, and utility repair.",
+    "skill_type": "Advanced",
+    "description": "Skill in construction, block placement, and utility repair. Combines intellect with physical strength.",
     "governing_ability": "INT",
+    "composite_terms": [
+      { "type": "ability", "ability": "STR", "weight": 0.5 }
+    ],
     "associated_task_types": ["job.build", "job.module_maintenance", "job.power_management"],
     "xp_per_task_completion": 12.0,
     "xp_per_active_second": 0.0
@@ -20,6 +25,7 @@
   {
     "id": "skill.science",
     "display_name": "Science",
+    "skill_type": "Simple",
     "description": "Research aptitude gained from time at Science Terminals.",
     "governing_ability": "INT",
     "associated_task_types": ["job.research_science"],
@@ -29,8 +35,12 @@
   {
     "id": "skill.economics",
     "display_name": "Economics",
-    "description": "Business acumen built through Economic Terminal work and trade.",
+    "skill_type": "Advanced",
+    "description": "Business acumen built through Economic Terminal work and trade. Combines intellect with social persuasion.",
     "governing_ability": "INT",
+    "composite_terms": [
+      { "type": "ability", "ability": "CHA", "weight": 0.5 }
+    ],
     "associated_task_types": ["job.research_economic"],
     "xp_per_task_completion": 0.0,
     "xp_per_active_second": 0.5
@@ -38,6 +48,7 @@
   {
     "id": "skill.combat",
     "display_name": "Combat",
+    "skill_type": "Simple",
     "description": "Military readiness developed at Military Terminals.",
     "governing_ability": "STR",
     "associated_task_types": ["job.research_military"],
@@ -47,8 +58,12 @@
   {
     "id": "skill.social",
     "display_name": "Social",
-    "description": "Interpersonal skill improved through conversations and hail attempts.",
+    "skill_type": "Advanced",
+    "description": "Interpersonal skill improved through conversations and hail attempts. Combines charisma with social wisdom.",
     "governing_ability": "CHA",
+    "composite_terms": [
+      { "type": "ability", "ability": "WIS", "weight": 0.5 }
+    ],
     "associated_task_types": ["conversation_positive", "hail_success"],
     "xp_per_task_completion": 10.0,
     "xp_per_active_second": 0.0
@@ -56,16 +71,20 @@
   {
     "id": "skill.piloting",
     "display_name": "Piloting",
-    "description": "Shuttle operation expertise from away missions and departures.",
+    "skill_type": "Advanced",
+    "description": "Shuttle operation expertise from away missions and departures. Combines dexterity with navigational intellect.",
     "governing_ability": "DEX",
+    "composite_terms": [
+      { "type": "ability", "ability": "INT", "weight": 0.5 }
+    ],
     "associated_task_types": ["shuttle_depart", "shuttle_return"],
     "xp_per_task_completion": 20.0,
     "xp_per_active_second": 0.0
   },
-
   {
     "id": "skill.athletics",
     "display_name": "Athletics",
+    "skill_type": "Simple",
     "description": "Physical exertion — climbing, running, and carrying heavy loads.",
     "governing_ability": "STR",
     "associated_task_types": [],
@@ -75,6 +94,7 @@
   {
     "id": "skill.melee",
     "display_name": "Melee",
+    "skill_type": "Simple",
     "description": "Unarmed and close-quarters combat proficiency.",
     "governing_ability": "STR",
     "associated_task_types": [],
@@ -84,6 +104,7 @@
   {
     "id": "skill.agility",
     "display_name": "Agility",
+    "skill_type": "Simple",
     "description": "Quick movement, tumbling, and evasion in tight spaces.",
     "governing_ability": "DEX",
     "associated_task_types": [],
@@ -93,6 +114,7 @@
   {
     "id": "skill.stealth",
     "display_name": "Stealth",
+    "skill_type": "Simple",
     "description": "Moving quietly and avoiding detection.",
     "governing_ability": "DEX",
     "associated_task_types": [],
@@ -102,6 +124,7 @@
   {
     "id": "skill.ranged",
     "display_name": "Ranged",
+    "skill_type": "Simple",
     "description": "Accuracy with firearms, energy weapons, and thrown projectiles.",
     "governing_ability": "DEX",
     "associated_task_types": [],
@@ -111,44 +134,52 @@
   {
     "id": "skill.crafting",
     "display_name": "Crafting",
-    "description": "Dexterous fabrication, tool use, and fine assembly work.",
+    "skill_type": "Advanced",
+    "description": "Dexterous fabrication, tool use, and fine assembly work. Combines manual dexterity with technical intellect.",
     "governing_ability": "DEX",
+    "composite_terms": [
+      { "type": "ability", "ability": "INT", "weight": 0.5 }
+    ],
     "associated_task_types": [],
     "xp_per_task_completion": 10.0,
     "xp_per_active_second": 0.0
   },
   {
-    "id": "skill.medicine",
-    "display_name": "Medicine",
-    "description": "Medical treatment, surgery, and triage under pressure.",
+    "id": "skill.medical",
+    "display_name": "Medical",
+    "skill_type": "Advanced",
+    "description": "General medical treatment, triage, and patient care. Combines clinical knowledge with perceptive wisdom.",
     "governing_ability": "INT",
+    "composite_terms": [
+      { "type": "ability", "ability": "WIS", "weight": 0.5 }
+    ],
     "associated_task_types": [],
     "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0
+  },
+  {
+    "id": "skill.surgery",
+    "display_name": "Surgery",
+    "skill_type": "Advanced",
+    "description": "Precision surgical procedures under pressure. Combines surgical knowledge with DEX and medical backing.",
+    "governing_ability": "INT",
+    "composite_terms": [
+      { "type": "ability", "ability": "DEX", "weight": 1.0 },
+      { "type": "skill",   "skill_id": "skill.medical", "weight": 0.5 }
+    ],
+    "associated_task_types": [],
+    "xp_per_task_completion": 15.0,
     "xp_per_active_second": 0.0
   },
   {
     "id": "skill.electronics",
     "display_name": "Electronics",
-    "description": "Circuit work, computing, and electronic system configuration.",
+    "skill_type": "Advanced",
+    "description": "Circuit work, computing, and electronic system configuration. Combines intellect with manual dexterity.",
     "governing_ability": "INT",
-    "associated_task_types": [],
-    "xp_per_task_completion": 12.0,
-    "xp_per_active_second": 0.0
-  },
-  {
-    "id": "skill.navigation",
-    "display_name": "Navigation",
-    "description": "Plotting stellar courses and reading astro-positional data.",
-    "governing_ability": "INT",
-    "associated_task_types": [],
-    "xp_per_task_completion": 12.0,
-    "xp_per_active_second": 0.0
-  },
-  {
-    "id": "skill.investigation",
-    "display_name": "Investigation",
-    "description": "Evidence gathering, document analysis, and scene reconstruction.",
-    "governing_ability": "INT",
+    "composite_terms": [
+      { "type": "ability", "ability": "DEX", "weight": 0.5 }
+    ],
     "associated_task_types": [],
     "xp_per_task_completion": 12.0,
     "xp_per_active_second": 0.0
@@ -156,6 +187,7 @@
   {
     "id": "skill.perception",
     "display_name": "Perception",
+    "skill_type": "Simple",
     "description": "Noticing hidden objects, listening for danger, ambient awareness.",
     "governing_ability": "WIS",
     "associated_task_types": [],
@@ -165,16 +197,8 @@
   {
     "id": "skill.survival",
     "display_name": "Survival",
+    "skill_type": "Simple",
     "description": "Rationing supplies, foraging, and adapting to hostile environments.",
-    "governing_ability": "WIS",
-    "associated_task_types": [],
-    "xp_per_task_completion": 10.0,
-    "xp_per_active_second": 0.0
-  },
-  {
-    "id": "skill.animal_handling",
-    "display_name": "Animal Handling",
-    "description": "Calming, training, and caring for live creatures aboard the station.",
     "governing_ability": "WIS",
     "associated_task_types": [],
     "xp_per_task_completion": 10.0,
@@ -183,6 +207,7 @@
   {
     "id": "skill.insight",
     "display_name": "Insight",
+    "skill_type": "Simple",
     "description": "Reading people — detecting lies, sensing intent, social cue interpretation.",
     "governing_ability": "WIS",
     "associated_task_types": [],
@@ -192,6 +217,7 @@
   {
     "id": "skill.persuasion",
     "display_name": "Persuasion",
+    "skill_type": "Simple",
     "description": "Diplomacy, negotiation, and earning cooperation through reason or charm.",
     "governing_ability": "CHA",
     "associated_task_types": [],
@@ -201,16 +227,8 @@
   {
     "id": "skill.deception",
     "display_name": "Deception",
+    "skill_type": "Simple",
     "description": "Misdirection, bluffing, and maintaining a believable false front.",
-    "governing_ability": "CHA",
-    "associated_task_types": [],
-    "xp_per_task_completion": 10.0,
-    "xp_per_active_second": 0.0
-  },
-  {
-    "id": "skill.intimidation",
-    "display_name": "Intimidation",
-    "description": "Coercion through displays of force, threats, or fearsome presence.",
     "governing_ability": "CHA",
     "associated_task_types": [],
     "xp_per_task_completion": 10.0,
@@ -219,6 +237,7 @@
   {
     "id": "skill.performance",
     "display_name": "Performance",
+    "skill_type": "Simple",
     "description": "Entertainment, storytelling, and raising crew morale through expression.",
     "governing_ability": "CHA",
     "associated_task_types": [],
@@ -228,16 +247,8 @@
   {
     "id": "skill.endurance",
     "display_name": "Endurance",
+    "skill_type": "Simple",
     "description": "Sustained physical labor, fatigue resistance, and prolonged exertion.",
-    "governing_ability": "END",
-    "associated_task_types": [],
-    "xp_per_task_completion": 10.0,
-    "xp_per_active_second": 0.0
-  },
-  {
-    "id": "skill.resilience",
-    "display_name": "Resilience",
-    "description": "Recovery from trauma, illness, and psychological stress.",
     "governing_ability": "END",
     "associated_task_types": [],
     "xp_per_task_completion": 10.0,

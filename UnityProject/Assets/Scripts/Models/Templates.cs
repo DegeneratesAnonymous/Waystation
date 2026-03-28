@@ -714,6 +714,44 @@ namespace Waystation.Models
     // -------------------------------------------------------------------------
 
     /// <summary>
+    /// Whether a skill uses a single governing ability (Simple) or a composite
+    /// multi-term formula (Advanced) for skill checks.
+    /// </summary>
+    public enum SkillType
+    {
+        /// <summary>Check = skill_level + governing_ability_mod + need_mod.</summary>
+        Simple,
+        /// <summary>Check = skill_level + governing_ability_mod + composite_terms_sum + need_mod.</summary>
+        Advanced,
+    }
+
+    /// <summary>
+    /// One additional term in an Advanced skill's composite check formula.
+    /// Each term contributes weight × source_value to the final roll.
+    /// </summary>
+    [Serializable]
+    public class SkillCompositeTermDefinition
+    {
+        /// <summary>"ability" or "skill".</summary>
+        public string termType  = "ability";
+        /// <summary>Ability name (STR/DEX/INT/WIS/CHA/END) when termType == "ability".</summary>
+        public string ability   = "";
+        /// <summary>Skill ID (e.g. "skill.medical") when termType == "skill".</summary>
+        public string skillId   = "";
+        /// <summary>Multiplier applied to the modifier/level before adding to the roll.</summary>
+        public float  weight    = 1.0f;
+
+        public static SkillCompositeTermDefinition FromDict(Dictionary<string, object> raw)
+            => new SkillCompositeTermDefinition
+            {
+                termType = raw.GetString("type", "ability"),
+                ability  = raw.GetString("ability", ""),
+                skillId  = raw.GetString("skill_id", ""),
+                weight   = raw.GetFloat("weight", 1.0f),
+            };
+    }
+
+    /// <summary>
     /// Bonus type used by ExpertiseBonusDefinition.
     /// </summary>
     public enum ExpertiseBonusType
@@ -761,12 +799,20 @@ namespace Waystation.Models
         public string       skillId;
         public string       displayName;
         public string       description       = "";
+        /// <summary>Simple = single governing ability; Advanced = composite multi-term formula.</summary>
+        public SkillType    skillType         = SkillType.Simple;
         /// <summary>
         /// Which ability score governs this skill's check modifier.
         /// Valid values: STR / DEX / INT / WIS / CHA / END.
         /// Empty = no modifier.
         /// </summary>
         public string       governingAbility  = "";
+        /// <summary>
+        /// Additional formula terms for Advanced skills.
+        /// Each term adds weight × (ability modifier or skill level) to the check roll.
+        /// Empty for Simple skills.
+        /// </summary>
+        public List<SkillCompositeTermDefinition> compositeTerms = new List<SkillCompositeTermDefinition>();
         /// <summary>Task type strings (from FarmingTaskInstance.taskType / job id) that award XP.</summary>
         public List<string> associatedTaskTypes = new List<string>();
         /// <summary>XP awarded per task completion.</summary>
@@ -785,8 +831,12 @@ namespace Waystation.Models
                 xpPerTaskCompletion = raw.GetFloat("xp_per_task_completion", 10f),
                 xpPerActiveSecond   = raw.GetFloat("xp_per_active_second",   0f),
             };
+            s.skillType = Enum.TryParse<SkillType>(raw.GetString("skill_type", "Simple"),
+                          true, out var st) ? st : SkillType.Simple;
             foreach (var t in raw.GetStringList("associated_task_types"))
                 s.associatedTaskTypes.Add(t);
+            foreach (var item in raw.GetList("composite_terms"))
+                s.compositeTerms.Add(SkillCompositeTermDefinition.FromDict(item.AsStringDict()));
             return s;
         }
     }
@@ -808,10 +858,14 @@ namespace Waystation.Models
         /// <summary>Passive bonuses applied while this expertise is active.</summary>
         public List<ExpertiseBonusDefinition> passiveBonuses = new List<ExpertiseBonusDefinition>();
         /// <summary>
-        /// Task types (string IDs) that are locked behind this expertise.
-        /// An NPC without the expertise cannot be assigned these task types.
+        /// Hard-locked task types: NPC without this expertise cannot be assigned these tasks.
         /// </summary>
         public List<string> capabilityUnlocks = new List<string>();
+        /// <summary>
+        /// Soft-locked task types: NPC without this expertise can attempt these tasks but
+        /// receives a performance penalty scalar applied to job duration / output.
+        /// </summary>
+        public List<string> softCapabilityUnlocks = new List<string>();
 
         public static ExpertiseDefinition FromDict(Dictionary<string, object> raw)
         {
@@ -828,6 +882,8 @@ namespace Waystation.Models
                 e.passiveBonuses.Add(ExpertiseBonusDefinition.FromDict(item.AsStringDict()));
             foreach (var cap in raw.GetStringList("capability_unlocks"))
                 e.capabilityUnlocks.Add(cap);
+            foreach (var cap in raw.GetStringList("soft_capability_unlocks"))
+                e.softCapabilityUnlocks.Add(cap);
             return e;
         }
     }

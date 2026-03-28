@@ -4,10 +4,20 @@
 //             level 1 = 100 XP, level 5 = 2500 XP, level 10 = 10000 XP, level 20 = 40000 XP
 //
 // Character level (derived): floor(totalXP / 1000)
-// Expertise slots: one per 5 character levels.
+// Expertise slots: one slot per 4 levels in any individual skill.
+//   e.g. Farming Lv 4 → +1 slot; Farming Lv 8 → +1 more; Engineering Lv 4 → +1 more.
+//   Total slots = sum over all skills of floor(skillLevel / SlotEverySkillLevels).
 //
 // Daily soft cap: first 500 XP/day/skill at 100% rate; excess at 70%.
 // Resets at in-game midnight (beginning of each new day).
+//
+// Skill check resolution:
+//   Simple:   level + governing_ability_mod + need_mod
+//   Advanced: level + governing_ability_mod + composite_terms_sum + need_mod
+//
+// Raw ability check: raw stat value (no skill modifier), used for direct stat rolls.
+//
+// Hauling search radius: BaseHaulRadius + INT_modifier × HaulRadiusPerIntMod (min 3).
 //
 // Feature flag: SkillSystem.Enabled = false pauses all XP and level calculation.
 using System;
@@ -28,8 +38,15 @@ namespace Waystation.Systems
         public const float ReducedXPRate     = 0.70f;
         /// <summary>Divisor for character level: floor(totalXP / CharLevelDivisor).</summary>
         public const int   CharLevelDivisor  = 1000;
-        /// <summary>Character level increment at which a new expertise slot is earned.</summary>
-        public const int   SlotEveryNLevels  = 5;
+        /// <summary>
+        /// Individual skill level increment at which one expertise slot is earned per skill.
+        /// e.g. Farming Lv 4 earns a slot; Farming Lv 8 earns another; Engineering Lv 4 earns another.
+        /// </summary>
+        public const int   SlotEverySkillLevels = 4;
+        /// <summary>Base hauling search radius in tiles (before INT modifier).</summary>
+        public const int   BaseHaulRadius       = 10;
+        /// <summary>Extra tiles of haul radius per INT modifier point.</summary>
+        public const int   HaulRadiusPerIntMod  = 3;
 
         // Mood event constants
         private const float LevelUpMoodDelta      = 5f;
@@ -56,10 +73,10 @@ namespace Waystation.Systems
         // ── Notification events ───────────────────────────────────────────────
 
         /// <summary>
-        /// Fired when an NPC reaches a character level that earns a new expertise slot.
-        /// Payload: (npc, newCharacterLevel).
+        /// Fired when an NPC's individual skill level crosses a multiple of SlotEverySkillLevels (4).
+        /// Payload: (npc, skillId, newSkillLevel).
         /// </summary>
-        public event Action<NPCInstance, int> OnSlotEarned;
+        public event Action<NPCInstance, string, int> OnSlotEarned;
 
         /// <summary>
         /// Fired on every character level increase (including non-slot levels).
@@ -103,9 +120,11 @@ namespace Waystation.Systems
                 if (!skill.associatedTaskTypes.Contains(taskType)) continue;
                 var inst = GetOrCreateSkillInstance(npc, skill.skillId);
                 float xp = ApplyXPGainModifier(npc, skill.skillId, skill.xpPerTaskCompletion);
-                int priorCharLevel = GetCharacterLevel(npc);
+                int priorCharLevel  = GetCharacterLevel(npc);
+                int priorSkillLevel = inst.Level;
                 AddXPWithDiminishing(npc, inst, xp, station);
                 CheckLevelUp(npc, priorCharLevel, station);
+                CheckSkillLevelUp(npc, skill.skillId, inst, priorSkillLevel, station);
             }
         }
 
@@ -123,9 +142,11 @@ namespace Waystation.Systems
             var inst = GetOrCreateSkillInstance(npc, skillId);
             float rawXP = xpPerSecond * deltaTime;
             float xp    = ApplyXPGainModifier(npc, skillId, rawXP);
-            int priorCharLevel = GetCharacterLevel(npc);
+            int priorCharLevel  = GetCharacterLevel(npc);
+            int priorSkillLevel = inst.Level;
             AddXPWithDiminishing(npc, inst, xp, station);
             CheckLevelUp(npc, priorCharLevel, station);
+            CheckSkillLevelUp(npc, skillId, inst, priorSkillLevel, station);
         }
 
         /// <summary>
@@ -140,9 +161,11 @@ namespace Waystation.Systems
             EnsureSkillInstances(npc);
             var inst = GetOrCreateSkillInstance(npc, skillId);
             float xp = ApplyXPGainModifier(npc, skillId, amount);
-            int priorCharLevel = GetCharacterLevel(npc);
+            int priorCharLevel  = GetCharacterLevel(npc);
+            int priorSkillLevel = inst.Level;
             AddXPWithDiminishing(npc, inst, xp, station);
             CheckLevelUp(npc, priorCharLevel, station);
+            CheckSkillLevelUp(npc, skillId, inst, priorSkillLevel, station);
         }
 
         // ── Character level / slots ───────────────────────────────────────────
@@ -154,11 +177,17 @@ namespace Waystation.Systems
             return Mathf.FloorToInt(total / CharLevelDivisor);
         }
 
-        /// <summary>Total number of expertise slots earned at the current character level.</summary>
+        /// <summary>
+        /// Total number of expertise slots earned. One slot per SlotEverySkillLevels (4) levels
+        /// in each individual skill — summed across all skills.
+        /// </summary>
         public static int GetExpertiseSlotCount(NPCInstance npc)
         {
-            int charLevel = GetCharacterLevel(npc);
-            return charLevel / SlotEveryNLevels;
+            if (npc.skillInstances == null) return 0;
+            int total = 0;
+            foreach (var inst in npc.skillInstances)
+                total += inst.Level / SlotEverySkillLevels;
+            return total;
         }
 
         /// <summary>Unspent expertise slots (banked indefinitely).</summary>
@@ -186,6 +215,8 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Attempt to choose an expertise for an NPC. Spends one unspent slot.
+        /// If the NPC has a pending expertise skill in the queue matching this expertise's
+        /// required skill, that entry is removed from the pending queue.
         /// Returns (true, "") on success, or (false, reason) on failure.
         /// </summary>
         public (bool ok, string msg) ChooseExpertise(NPCInstance npc, string expertiseId,
@@ -212,9 +243,15 @@ namespace Waystation.Systems
             npc.chosenExpertise.Add(expertiseId);
             RebuildExpertiseModifier(npc);
 
-            // Register any capability unlocks
+            // Register hard-locked and soft-locked capability unlocks
             foreach (var cap in def.capabilityUnlocks)
                 TaskEligibilityResolver.RegisterCapability(cap, expertiseId);
+            foreach (var cap in def.softCapabilityUnlocks)
+                TaskEligibilityResolver.RegisterSoftCapability(cap, expertiseId);
+
+            // Dequeue one pending entry for the triggering skill (if any)
+            if (!string.IsNullOrEmpty(def.requiredSkillId) && npc.pendingExpertiseSkillIds != null)
+                npc.pendingExpertiseSkillIds.Remove(def.requiredSkillId);
 
             // Push mood modifier
             _mood?.PushModifier(npc, "expertise_unlocked", ExpertiseMoodDelta,
@@ -286,28 +323,61 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Returns the effective skill check result: skill level + governing ability modifier
-        /// + need-state modifier.  Range is roughly -4 to level+5.
+        /// Returns the effective skill check result.
+        /// Simple skills:   level + governing_ability_mod + need_mod
+        /// Advanced skills: level + governing_ability_mod + composite_terms_sum + need_mod
         /// </summary>
         public int GetSkillCheckResult(NPCInstance npc, string skillId)
         {
-            int level     = GetSkillLevel(npc, skillId);
+            int level      = GetSkillLevel(npc, skillId);
             int abilityMod = 0;
-            if (_registry.Skills.TryGetValue(skillId, out var def) &&
-                !string.IsNullOrEmpty(def.governingAbility))
+            float compositeMod = 0f;
+
+            if (_registry.Skills.TryGetValue(skillId, out var def))
             {
-                abilityMod = def.governingAbility switch
+                if (!string.IsNullOrEmpty(def.governingAbility))
+                    abilityMod = ResolveAbilityMod(npc, def.governingAbility);
+
+                if (def.skillType == SkillType.Advanced)
                 {
-                    "STR" => AbilityScores.GetModifier(npc.abilityScores.STR),
-                    "DEX" => AbilityScores.GetModifier(npc.abilityScores.DEX),
-                    "INT" => AbilityScores.GetModifier(npc.abilityScores.INT),
-                    "WIS" => AbilityScores.GetModifier(npc.abilityScores.WIS),
-                    "CHA" => AbilityScores.GetModifier(npc.abilityScores.CHA),
-                    "END" => AbilityScores.GetModifier(npc.abilityScores.END),
-                    _     => 0,
-                };
+                    foreach (var term in def.compositeTerms)
+                    {
+                        if (term.termType == "ability")
+                            compositeMod += ResolveAbilityMod(npc, term.ability) * term.weight;
+                        else if (term.termType == "skill")
+                            compositeMod += GetSkillLevel(npc, term.skillId) * term.weight;
+                    }
+                }
             }
-            return level + abilityMod + NeedSystem.GetSkillCheckModifier(npc);
+            return level + abilityMod + Mathf.RoundToInt(compositeMod) + NeedSystem.GetSkillCheckModifier(npc);
+        }
+
+        /// <summary>
+        /// Performs a raw ability check using the raw stat value — no modifier applied.
+        /// Useful for pure stat-based rolls (e.g. carrying capacity, environmental resist).
+        /// Returns the raw score (e.g. INT 18 → 18), not the derived modifier.
+        /// </summary>
+        public static int GetRawAbilityCheck(NPCInstance npc, string ability)
+            => ability switch
+            {
+                "STR" => npc.abilityScores.STR,
+                "DEX" => npc.abilityScores.DEX,
+                "INT" => npc.abilityScores.INT,
+                "WIS" => npc.abilityScores.WIS,
+                "CHA" => npc.abilityScores.CHA,
+                "END" => npc.abilityScores.END,
+                _     => 0,
+            };
+
+        /// <summary>
+        /// Returns the hauling destination search radius in tiles for an NPC.
+        /// Scales with INT modifier: BaseHaulRadius + INTmod × HaulRadiusPerIntMod, minimum 3.
+        /// INT=5 (mod -1) → 7;  INT=10 (mod 0) → 10;  INT=18 (mod 3) → 19.
+        /// </summary>
+        public static int GetHaulSearchRadius(NPCInstance npc)
+        {
+            int intMod = AbilityScores.GetModifier(npc.abilityScores.INT);
+            return Mathf.Max(3, BaseHaulRadius + intMod * HaulRadiusPerIntMod);
         }
 
         // ── Expertise modifier ────────────────────────────────────────────────
@@ -472,15 +542,32 @@ namespace Waystation.Systems
                 // Push mood bonus
                 _mood?.PushModifier(npc, "level_up", LevelUpMoodDelta,
                                    LevelUpMoodDurationTicks, station.tick, "skill_system");
+            }
+        }
 
-                // Check slot threshold
-                int priorSlots = priorCharLevel / SlotEveryNLevels;
-                int newSlots   = newCharLevel   / SlotEveryNLevels;
-                if (newSlots > priorSlots)
-                {
-                    // OnSlotEarned is also wired to station log in GameManager
-                    OnSlotEarned?.Invoke(npc, newCharLevel);
-                }
+        /// <summary>
+        /// Checks whether an individual skill level crossed a multiple of SlotEverySkillLevels.
+        /// If so, fires OnSlotEarned and enqueues the skillId on the NPC's pending list.
+        /// </summary>
+        private void CheckSkillLevelUp(NPCInstance npc, string skillId,
+                                        SkillInstance inst, int priorSkillLevel,
+                                        StationState station)
+        {
+            int newSkillLevel = inst.Level;
+            if (newSkillLevel <= priorSkillLevel) return;
+
+            // Check every slot threshold crossed (handles large XP jumps)
+            int priorSlots = priorSkillLevel / SlotEverySkillLevels;
+            int newSlots   = newSkillLevel   / SlotEverySkillLevels;
+            if (newSlots > priorSlots)
+            {
+                // Enqueue pending prompt for each newly earned slot from this skill
+                if (npc.pendingExpertiseSkillIds == null)
+                    npc.pendingExpertiseSkillIds = new List<string>();
+                for (int i = 0; i < (newSlots - priorSlots); i++)
+                    npc.pendingExpertiseSkillIds.Add(skillId);
+
+                OnSlotEarned?.Invoke(npc, skillId, newSkillLevel);
             }
         }
 
@@ -494,20 +581,26 @@ namespace Waystation.Systems
                 if (!_registry.Expertises.TryGetValue(id, out var def)) continue;
                 foreach (var cap in def.capabilityUnlocks)
                     TaskEligibilityResolver.RegisterCapability(cap, id);
+                foreach (var cap in def.softCapabilityUnlocks)
+                    TaskEligibilityResolver.RegisterSoftCapability(cap, id);
             }
         }
 
         // ── Bootstrap ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Register all capabilities from loaded ExpertiseDefinitions.
+        /// Register all hard-locked and soft-locked capabilities from loaded ExpertiseDefinitions.
         /// Called once at startup after ContentRegistry finishes loading.
         /// </summary>
         public void RegisterAllCapabilities()
         {
             foreach (var def in _registry.Expertises.Values)
+            {
                 foreach (var cap in def.capabilityUnlocks)
                     TaskEligibilityResolver.RegisterCapability(cap, def.expertiseId);
+                foreach (var cap in def.softCapabilityUnlocks)
+                    TaskEligibilityResolver.RegisterSoftCapability(cap, def.expertiseId);
+            }
         }
 
         /// <summary>
@@ -548,8 +641,27 @@ namespace Waystation.Systems
                 npc.socialSkill = 1;  // reset after migration
             }
 
+            // Ensure pending expertise list is initialised
+            if (npc.pendingExpertiseSkillIds == null)
+                npc.pendingExpertiseSkillIds = new List<string>();
+
             // Rebuild expertise modifier in case it was serialised as 1.0 default
             RebuildExpertiseModifier(npc);
         }
+
+        // ── Internal helpers ──────────────────────────────────────────────────
+
+        /// <summary>Returns the ability modifier for the named ability (STR/DEX/INT/WIS/CHA/END).</summary>
+        private static int ResolveAbilityMod(NPCInstance npc, string ability)
+            => ability switch
+            {
+                "STR" => AbilityScores.GetModifier(npc.abilityScores.STR),
+                "DEX" => AbilityScores.GetModifier(npc.abilityScores.DEX),
+                "INT" => AbilityScores.GetModifier(npc.abilityScores.INT),
+                "WIS" => AbilityScores.GetModifier(npc.abilityScores.WIS),
+                "CHA" => AbilityScores.GetModifier(npc.abilityScores.CHA),
+                "END" => AbilityScores.GetModifier(npc.abilityScores.END),
+                _     => 0,
+            };
     }
 }

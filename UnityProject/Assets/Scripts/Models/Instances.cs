@@ -613,6 +613,11 @@ namespace Waystation.Models
         // Evaluated by SkillSystem.RebuildExpertiseModifier(); default 1.0.
         public float expertiseModifier = 1.0f;
 
+        // Skills whose level-up just crossed a multiple of 4, pending an expertise slot choice.
+        // Each entry represents one unresolved expertise prompt for that skill.
+        // Cleared as the player selects expertise from the prompted panel.
+        public List<string> pendingExpertiseSkillIds = new List<string>();
+
         // Pathfinding state — managed by AntennaSystem/ShipVisitStateMachine
         // Tile position target when actively walking
         public int  pathTargetCol   = -1;

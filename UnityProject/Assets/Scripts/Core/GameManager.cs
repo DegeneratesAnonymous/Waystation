@@ -254,10 +254,12 @@ namespace Waystation.Core
             // Log skill level-up and slot-earned notifications
             Skills.OnCharacterLevelUp += (npc, level) => Station?.LogEvent(
                 $"{npc.name} reached character level {level}.");
-            Skills.OnSlotEarned += (npc, level) =>
+            Skills.OnSlotEarned += (npc, skillId, skillLevel) =>
             {
+                string skillName = Registry.Skills.TryGetValue(skillId, out var sdef)
+                    ? sdef.displayName : skillId;
                 Station?.LogEvent(
-                    $"{npc.name} has grown as a person. A new expertise slot is available.");
+                    $"{npc.name}'s {skillName} reached level {skillLevel}. A new expertise slot is available.");
             };
 
             // Register external effect handlers on the event system
