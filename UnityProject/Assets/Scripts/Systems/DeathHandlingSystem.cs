@@ -48,7 +48,8 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Ticks after body spawns before an escalating penalty begins.
-        /// Configurable: default 48 ticks (≈ ½ an in-game day).
+        /// Configurable at runtime (e.g. via debug/difficulty settings).
+        /// Default 48 ticks (≈ ½ an in-game day).
         /// </summary>
         public static int UnhandledEscalationThresholdTicks = 48;
 
@@ -245,11 +246,8 @@ namespace Waystation.Systems
             var hauler = FindHauler(station, body);
             if (hauler == null)
             {
-                // No eligible NPC right now; haulTaskGenerated stays true but
-                // haulBlocked stays false so Tick() won't retry this path, but
-                // the check at the top of Tick() resets haulTaskGenerated when the
-                // disposal tile becomes available. We need a separate flag to retry.
-                // Reset so next tick re-attempts assignment.
+                // No eligible NPC available right now.  Reset haulTaskGenerated so
+                // the next Tick() call retries assignment until a hauler is found.
                 body.haulTaskGenerated = false;
                 return;
             }
@@ -273,7 +271,8 @@ namespace Waystation.Systems
                 if (npc.missionUid != null) continue;
                 if (npc.currentJobId == "job.haul_body") continue;  // already hauling
 
-                // STR + END + INT composite (reflects hauling aptitude).
+                // STR + END + INT composite (reflects hauling aptitude per NPC-001 spec:
+                // STR for physical load, END for sustained effort, INT for route planning).
                 int score = npc.abilityScores.STR + npc.abilityScores.END + npc.abilityScores.INT;
                 if (score > bestScore) { bestScore = score; best = npc; }
             }

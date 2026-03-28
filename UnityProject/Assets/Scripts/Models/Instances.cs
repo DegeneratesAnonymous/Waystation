@@ -1317,6 +1317,9 @@ namespace Waystation.Models
                 uid           = Guid.NewGuid().ToString("N").Substring(0, 8),
                 npcUid        = npc.uid,
                 npcName       = npc.name,
+                // Use pathTargetCol/Row as the best available tile position from the data model.
+                // NPCInstance does not track a separate "current" tile — the target tile is
+                // the closest approximation.  Defaults to (0,0) if no path target is set.
                 tileCol       = npc.pathTargetCol >= 0 ? npc.pathTargetCol : 0,
                 tileRow       = npc.pathTargetRow >= 0 ? npc.pathTargetRow : 0,
                 location      = npc.location,
