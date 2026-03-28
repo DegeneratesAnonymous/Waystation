@@ -33,6 +33,9 @@ namespace Waystation.Systems
         public const float WitnessedDeathPenalty         = -10f;
         public const int   WitnessedDeathDurationTicks   =  72;
 
+        /// <summary>Calm/stressed penalty applied alongside happy/sad when witnessing a death.</summary>
+        public const float WitnessedDeathStressPenalty   = -8f;
+
         /// <summary>
         /// Per-tick proximity penalty pushed while a body is in the same module.
         /// Duration is short (3 ticks) so it expires quickly when the NPC moves away.
@@ -49,6 +52,12 @@ namespace Waystation.Systems
         public const float SpouseDeathPenalty            = -25f;
         public const float FamilyDeathPenalty            = -20f;
         public const int   GriefDurationTicks            = 240;
+
+        /// <summary>Calm/stressed penalties for grief modifiers (proportional to mood penalties).</summary>
+        public const float FriendDeathStressPenalty      = -12f;
+        public const float LoverDeathStressPenalty       = -16f;
+        public const float SpouseDeathStressPenalty      = -20f;
+        public const float FamilyDeathStressPenalty      = -16f;
 
         /// <summary>
         /// Ticks after body spawns before an escalating penalty begins.
@@ -167,10 +176,17 @@ namespace Waystation.Systems
                 if (!npc.IsCrew()) continue;
                 if (npc.location != body.location) continue;
 
+                // Happy/sad axis — witnessing a death makes the NPC unhappier
                 _mood.PushModifier(npc, WitnessedDeathEventId(body.uid),
                                    WitnessedDeathPenalty,
                                    WitnessedDeathDurationTicks,
-                                   station.tick, "death_handling");
+                                   station.tick, MoodAxis.HappySad, "death_handling");
+
+                // Calm/stressed axis — witnessing a death also raises stress
+                _mood.PushModifier(npc, WitnessedDeathEventId(body.uid) + "_stress",
+                                   WitnessedDeathStressPenalty,
+                                   WitnessedDeathDurationTicks,
+                                   station.tick, MoodAxis.CalmStressed, "death_handling");
             }
         }
 
@@ -182,8 +198,9 @@ namespace Waystation.Systems
                 if (other.statusTags.Contains("dead")) continue;
                 if (!other.IsCrew()) continue;
 
-                float moodDelta = 0f;
-                string eventId  = null;
+                float moodDelta   = 0f;
+                float stressDelta = 0f;
+                string eventId    = null;
 
                 // Check relationship record for Friend, Lover, Spouse.
                 var rec = RelationshipRegistry.Get(station, deceased.uid, other.uid);
@@ -192,16 +209,19 @@ namespace Waystation.Systems
                     switch (rec.relationshipType)
                     {
                         case RelationshipType.Friend:
-                            moodDelta = FriendDeathPenalty;
-                            eventId   = $"death_of_friend_{deceased.uid}";
+                            moodDelta   = FriendDeathPenalty;
+                            stressDelta = FriendDeathStressPenalty;
+                            eventId     = $"death_of_friend_{deceased.uid}";
                             break;
                         case RelationshipType.Lover:
-                            moodDelta = LoverDeathPenalty;
-                            eventId   = $"death_of_lover_{deceased.uid}";
+                            moodDelta   = LoverDeathPenalty;
+                            stressDelta = LoverDeathStressPenalty;
+                            eventId     = $"death_of_lover_{deceased.uid}";
                             break;
                         case RelationshipType.Spouse:
-                            moodDelta = SpouseDeathPenalty;
-                            eventId   = $"death_of_spouse_{deceased.uid}";
+                            moodDelta   = SpouseDeathPenalty;
+                            stressDelta = SpouseDeathStressPenalty;
+                            eventId     = $"death_of_spouse_{deceased.uid}";
                             break;
                     }
                 }
@@ -209,14 +229,19 @@ namespace Waystation.Systems
                 // Check biological family (mother, father, sibling) if not already covered.
                 if (eventId == null && IsFamily(deceased, other))
                 {
-                    moodDelta = FamilyDeathPenalty;
-                    eventId   = $"death_of_family_{deceased.uid}";
+                    moodDelta   = FamilyDeathPenalty;
+                    stressDelta = FamilyDeathStressPenalty;
+                    eventId     = $"death_of_family_{deceased.uid}";
                 }
 
                 if (eventId != null && _mood != null)
                 {
+                    // Happy/sad axis — grief makes the NPC unhappier
                     _mood.PushModifier(other, eventId, moodDelta,
-                                       GriefDurationTicks, station.tick, "death_handling");
+                                       GriefDurationTicks, station.tick, MoodAxis.HappySad, "death_handling");
+                    // Calm/stressed axis — grief also raises stress
+                    _mood.PushModifier(other, eventId + "_stress", stressDelta,
+                                       GriefDurationTicks, station.tick, MoodAxis.CalmStressed, "death_handling");
                     station.LogEvent($"{other.name} is grieving the death of {deceased.name}.");
                 }
             }
@@ -399,9 +424,10 @@ namespace Waystation.Systems
             foreach (var npc in station.npcs.Values)
             {
                 if (npc.statusTags.Contains("dead")) continue;
-                _mood.RemoveModifier(npc, WitnessedDeathEventId(body.uid), "death_handling");
-                _mood.RemoveModifier(npc, BodyPresentEventId(body.uid),    "death_handling");
-                _mood.RemoveModifier(npc, UnhandledBodyEventId(body.uid),  "death_handling");
+                _mood.RemoveModifier(npc, WitnessedDeathEventId(body.uid),             MoodAxis.HappySad,    "death_handling");
+                _mood.RemoveModifier(npc, WitnessedDeathEventId(body.uid) + "_stress", MoodAxis.CalmStressed, "death_handling");
+                _mood.RemoveModifier(npc, BodyPresentEventId(body.uid),                MoodAxis.HappySad,    "death_handling");
+                _mood.RemoveModifier(npc, UnhandledBodyEventId(body.uid),              MoodAxis.HappySad,    "death_handling");
             }
         }
 
