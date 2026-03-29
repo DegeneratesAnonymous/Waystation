@@ -67,5 +67,15 @@ namespace Waystation.Core
         /// DepartureRisk (the pre-NPC-007 default).
         /// </summary>
         public static bool NpcDeparture = true;
+
+        /// <summary>
+        /// Enables the counselling system (WO-NPC-003): Counsellor-role NPCs are
+        /// automatically assigned counselling tasks when a breakdown NPC is present.
+        /// Successful sessions call RegisterIntervention() on the patient (halting
+        /// passive breakdown drain) and TriggerEventRemoval() for therapy-removable traits.
+        /// Set to false to disable all counselling task assignment and outcome rolls
+        /// without removing any SanitySystem or TraitSystem logic.
+        /// </summary>
+        public static bool NpcCounselling = true;
     }
 }

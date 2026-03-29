@@ -102,6 +102,9 @@ namespace Waystation.Core
 
         // ── Death handling system ──────────────────────────────────────────────────────────────
         public DeathHandlingSystem      DeathHandling { get; private set; }
+
+        // ── Counselling system ─────────────────────────────────────────────────────────────────
+        public CounsellingSystem        Counselling   { get; private set; }
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -315,6 +318,19 @@ namespace Waystation.Core
             {
                 DeathHandling = new DeathHandlingSystem();
                 DeathHandling.SetMoodSystem(Mood);
+            }
+
+            // Counselling system (NPC-003)
+            if (FeatureFlags.NpcCounselling)
+            {
+                Counselling = new CounsellingSystem();
+                Counselling.SetTraitSystem(Traits);
+                Counselling.SetSkillSystem(Skills);
+
+                Counselling.OnSessionComplete += (counsellor, patient, outcome, roll) =>
+                {
+                    // Outcome is already logged by ApplyOutcome; event fired for UI subscriptions.
+                };
             }
         }
 
@@ -603,6 +619,10 @@ namespace Waystation.Core
 
             Mood.Tick(Station);
             Sanity.Tick(Station);
+
+            // Counselling system: detect breakdown NPCs, assign counsellors, resolve sessions.
+            if (FeatureFlags.NpcCounselling)
+                Counselling?.Tick(Station);
             Proximity.Tick(Station, Mood, Relationships);
             Conversations.Tick(Station, Mood, Relationships);
             Relationships.Tick(Station, Mood);

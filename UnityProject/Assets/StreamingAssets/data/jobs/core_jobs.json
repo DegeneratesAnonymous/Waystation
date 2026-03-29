@@ -472,5 +472,24 @@
       "social": -0.02
     },
     "station_effects": {}
+  },
+  {
+    "id": "job.counselling",
+    "display_name": "Counselling Session",
+    "schema_version": "1",
+    "phase": "day",
+    "allowed_classes": [
+      "class.counsellor"
+    ],
+    "preferred_module_category": "hab",
+    "fallback_module_category": "utility",
+    "duration_ticks": 12,
+    "skill_used": "skill.persuasion",
+    "resource_effects": {},
+    "need_effects": {
+      "rest": -0.02,
+      "social": 0.03
+    },
+    "station_effects": {}
   }
 ]
