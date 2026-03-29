@@ -67,5 +67,15 @@ namespace Waystation.Core
         /// DepartureRisk (the pre-NPC-007 default).
         /// </summary>
         public static bool NpcDeparture = true;
+
+        /// <summary>
+        /// Enables the full department management layer: department creation, renaming,
+        /// and deletion (with NPC cascade); Department Head appointment and automated
+        /// functions (away mission dispatch delegation, shift scheduling, escalation
+        /// alerts); and department colour change wiring to NPC clothing shader
+        /// re-resolution.
+        /// Set to false to revert all NPCs and jobs to the unassigned state.
+        /// </summary>
+        public static bool DepartmentManagement = true;
     }
 }
