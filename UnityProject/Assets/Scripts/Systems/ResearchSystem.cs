@@ -17,9 +17,11 @@ namespace Waystation.Systems
         private readonly ContentRegistry _registry;
         private SkillSystem              _skillSystem;
         private float                    _secondsPerTick = 0.5f;
+        private float                    _pointsPerNpcPerTickBase = 0.04f;
 
         private const string DatachipItemId      = "item.datachip";
         private const string DataStorageBuildable = "buildable.data_storage_server";
+        private const string RelayNodeBuildable   = "buildable.relay_node";
 
         // Terminal buildable-id → branch mapping
         private static readonly Dictionary<string, ResearchBranch> TerminalBranch =
@@ -59,6 +61,8 @@ namespace Waystation.Systems
 
         /// <summary>Set the real-time seconds per game tick so XP rates stay consistent when game speed changes.</summary>
         public void SetSecondsPerTick(float secondsPerTick) => _secondsPerTick = secondsPerTick;
+        /// <summary>Set base research points generated per actively assigned NPC per tick.</summary>
+        public void SetPointsPerNpcPerTick(float pointsPerNpcPerTick) => _pointsPerNpcPerTickBase = Mathf.Max(0f, pointsPerNpcPerTick);
 
         // ── Tick ──────────────────────────────────────────────────────────────
 
@@ -75,13 +79,14 @@ namespace Waystation.Systems
                 if (!npc.IsCrew()) continue;
                 if (npc.currentJobId == null) continue;
                 if (!JobBranch.TryGetValue(npc.currentJobId, out var branch)) continue;
+                if (!TryGetTerminalMultiplier(branch, station, out float terminalMult)) continue;
 
                 int researchSkill = npc.skills.ContainsKey("science") ? npc.skills["science"]
                                   : npc.skills.ContainsKey("research") ? npc.skills["research"] : 5;
-                float pts = 0.04f * (0.5f + researchSkill / 10f) * npc.workModifier;
+                float pts = _pointsPerNpcPerTickBase * (0.5f + researchSkill / 10f) * npc.workModifier;
 
                 // Apply room bonus from any complete terminal of matching branch.
-                pts *= GetTerminalMultiplier(branch, station);
+                pts *= terminalMult;
 
                 // Apply expertise ResearchOutput bonus (e.g. Research Prodigy +20%)
                 if (_skillSystem != null && JobSkill.TryGetValue(npc.currentJobId, out var skillId))
@@ -116,9 +121,9 @@ namespace Waystation.Systems
 
                 // Unlock.
                 bState.unlockedNodeIds.Add(node.id);
+                if (!bState.unlockedNodeOrder.Contains(node.id))
+                    bState.unlockedNodeOrder.Add(node.id);
                 bState.points -= node.pointCost;   // consume the spent points
-                foreach (var tag in node.unlockTags)
-                    station.SetTag(tag);
 
                 // Produce a datachip for the completed research.
                 StoreDatachip(station);
@@ -130,6 +135,9 @@ namespace Waystation.Systems
             // Attempt to place any pending chips whenever new storage appears.
             if (station.research.pendingDatachips > 0)
                 FlushPendingDatachips(station);
+
+            // Re-evaluate active research unlock tags based on physically stored chips.
+            RefreshActiveUnlockTags(station);
         }
 
         // ── Datachip storage helpers ──────────────────────────────────────────
@@ -141,10 +149,12 @@ namespace Waystation.Systems
         /// Non-functional terminals (Functionality == 0, i.e. destroyed) are skipped.
         /// The maximum across all qualifying terminals is returned so that a damaged
         /// terminal never reduces output when a healthier one is present.
-        /// Returns 1.0 when no qualifying terminal exists.
+        /// Returns true and outputs the multiplier when a qualifying terminal exists;
+        /// otherwise returns false and research generation is gated off for that branch.
         /// </summary>
-        private static float GetTerminalMultiplier(ResearchBranch branch, StationState station)
+        private static bool TryGetTerminalMultiplier(ResearchBranch branch, StationState station, out float multiplier)
         {
+            multiplier = 1.0f;
             float best = 1.0f;
             bool  found = false;
             foreach (var f in station.foundations.Values)
@@ -160,13 +170,14 @@ namespace Waystation.Systems
                     found = true;
                 }
             }
-            return best;
+            if (!found) return false;
+            multiplier = best;
+            return true;
         }
 
         /// <summary>
         /// Try to add one datachip to a complete Data Storage Server foundation.
-        /// Falls back to any complete foundation cargo hold if no server is available.
-        /// If no space exists anywhere, the chip is recorded as pending.
+        /// If no Data Storage Server capacity exists, the chip is recorded as pending.
         /// </summary>
         private void StoreDatachip(StationState station)
         {
@@ -188,8 +199,7 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Try to store one datachip.  Prefers Data Storage Server foundations;
-        /// falls back to any foundation cargo hold with space.
+        /// Try to store one datachip in a complete Data Storage Server foundation.
         /// Returns true if the chip was stored.
         /// </summary>
         private bool TryAddDatachipToStorage(StationState station)
@@ -207,25 +217,156 @@ namespace Waystation.Systems
                 }
             }
 
-            // Pass 2 — any available foundation cargo hold.
-            foreach (var f in station.foundations.Values)
-            {
-                if (f.buildableId == DataStorageBuildable) continue; // already checked
-                if (f.status != "complete") continue;
-                if (f.cargoCapacity <= 0) continue;
-                if (f.CargoItemCount() < f.cargoCapacity)
-                {
-                    IncrementCargo(f.cargo, DatachipItemId);
-                    return true;
-                }
-            }
-
             return false;
         }
 
         private static void IncrementCargo(Dictionary<string, int> cargo, string itemId)
         {
             cargo[itemId] = (cargo.TryGetValue(itemId, out var existing) ? existing : 0) + 1;
+        }
+
+        private List<ResearchNodeDefinition> GetChipBackedUnlockedNodes(StationState station)
+        {
+            var ordered = new List<ResearchNodeDefinition>();
+            foreach (ResearchBranch branch in Enum.GetValues(typeof(ResearchBranch)))
+            {
+                if (!station.research.branches.TryGetValue(branch, out var bState)) continue;
+                var processedNodeIds = new HashSet<string>();
+                var inOrder = new HashSet<string>(bState.unlockedNodeOrder);
+
+                // Preserve historical unlock order when available.
+                foreach (var nodeId in bState.unlockedNodeOrder)
+                {
+                    if (!bState.unlockedNodeIds.Contains(nodeId)) continue;
+                    if (!processedNodeIds.Add(nodeId)) continue;
+                    if (!_registry.ResearchNodes.TryGetValue(nodeId, out var n)) continue;
+                    if (n.branch != branch) continue;
+                    ordered.Add(n);
+                }
+
+                // Backfill old saves where order was not tracked, deterministically.
+                var missingNodeIds = new List<string>();
+                foreach (var nodeId in bState.unlockedNodeIds)
+                {
+                    if (inOrder.Contains(nodeId)) continue;
+                    missingNodeIds.Add(nodeId);
+                }
+                missingNodeIds.Sort(StringComparer.Ordinal);
+                foreach (var nodeId in missingNodeIds)
+                {
+                    if (!processedNodeIds.Add(nodeId)) continue;
+                    bState.unlockedNodeOrder.Add(nodeId);
+                    inOrder.Add(nodeId);
+                    if (!_registry.ResearchNodes.TryGetValue(nodeId, out var n)) continue;
+                    if (n.branch != branch) continue;
+                    ordered.Add(n);
+                }
+            }
+
+            int activeChipCount = Mathf.Min(GetStoredDatachipCount(station), ordered.Count);
+            return ordered.GetRange(0, activeChipCount);
+        }
+
+        private void RefreshActiveUnlockTags(StationState station)
+        {
+            if (station?.research == null) return;
+
+            var desired = new HashSet<string>();
+            var allResearchTags = new HashSet<string>();
+            foreach (var n in _registry.ResearchNodes.Values)
+                foreach (var t in n.unlockTags)
+                    allResearchTags.Add(t);
+
+            foreach (var node in GetChipBackedUnlockedNodes(station))
+                foreach (var tag in node.unlockTags)
+                    desired.Add(tag);
+
+            var clearCandidates = new HashSet<string>(allResearchTags);
+            foreach (var t in station.research.appliedUnlockTags)
+                clearCandidates.Add(t);
+
+            foreach (var tag in clearCandidates)
+                if (!desired.Contains(tag))
+                    station.ClearTag(tag);
+
+            foreach (var tag in desired)
+            {
+                station.SetTag(tag);
+                station.research.appliedUnlockTags.Add(tag);
+            }
+
+            station.research.appliedUnlockTags.RemoveWhere(t => !desired.Contains(t));
+        }
+
+        /// <summary>Set per-branch relay filter for a relay node foundation.
+        /// Empty filter means share all branches.</summary>
+        public void SetRelayBranchFilter(FoundationInstance relayNode, IEnumerable<ResearchBranch> branches)
+        {
+            if (relayNode == null || relayNode.buildableId != RelayNodeBuildable) return;
+            relayNode.relayBranchFilter.Clear();
+            if (branches == null) return;
+            foreach (var b in branches)
+                relayNode.relayBranchFilter.Add(b.ToString());
+        }
+
+        /// <summary>
+        /// Copies chip-backed unlocks from source to destination via configured relay nodes.
+        /// Copy semantics: source chips are retained; destination receives copies.
+        /// Returns number of datachip copies successfully stored at destination.
+        /// </summary>
+        public int CopyDatachipsViaRelayNodes(StationState source, StationState destination)
+        {
+            if (source == null || destination == null) return 0;
+
+            var sourceRelayFilters = new List<HashSet<ResearchBranch>>();
+            foreach (var f in source.foundations.Values)
+            {
+                if (f.status != "complete") continue;
+                if (f.buildableId != RelayNodeBuildable) continue;
+
+                var filter = new HashSet<ResearchBranch>();
+                foreach (var raw in f.relayBranchFilter)
+                    if (Enum.TryParse(raw, out ResearchBranch b))
+                        filter.Add(b);
+                sourceRelayFilters.Add(filter);
+            }
+            if (sourceRelayFilters.Count == 0) return 0;
+
+            var sourceNodes = GetChipBackedUnlockedNodes(source);
+            int copied = 0;
+
+            foreach (var node in sourceNodes)
+            {
+                bool allowed = false;
+                foreach (var f in sourceRelayFilters)
+                {
+                    if (f.Count == 0 || f.Contains(node.branch)) { allowed = true; break; }
+                }
+                if (!allowed) continue;
+                if (!_registry.ResearchNodes.ContainsKey(node.id)) continue;
+
+                var dstBranch = destination.research.branches[node.branch];
+                if (dstBranch.unlockedNodeIds.Contains(node.id)) continue;
+
+                bool prereqsMet = true;
+                foreach (var p in node.prerequisites)
+                {
+                    if (!destination.research.IsUnlocked(p)) { prereqsMet = false; break; }
+                }
+                if (!prereqsMet) continue;
+
+                dstBranch.unlockedNodeIds.Add(node.id);
+                if (!dstBranch.unlockedNodeOrder.Contains(node.id))
+                    dstBranch.unlockedNodeOrder.Add(node.id);
+
+                if (TryAddDatachipToStorage(destination))
+                    copied++;
+                else
+                    destination.research.pendingDatachips++;
+            }
+
+            RefreshActiveUnlockTags(destination);
+            return copied;
         }
 
         // ── Queries ───────────────────────────────────────────────────────────

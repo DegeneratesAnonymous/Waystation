@@ -1323,6 +1323,9 @@ namespace Waystation.Models
         public int                       cargoCapacity = 0;
         public CargoHoldSettings         cargoSettings;
         public Dictionary<string, int>   cargo         = new Dictionary<string, int>();
+        // Relay Node branch filter (stringified ResearchBranch values).
+        // Empty means no filter (share all branches).
+        public List<string>              relayBranchFilter = new List<string>();
 
         // Commitment Cooldown — runtime-only haul lock applied when items are placed.
         // itemId → game tick at which the cooldown expires (NPC haul tasks skip items
@@ -1662,6 +1665,7 @@ namespace Waystation.Models
     {
         public float          points          = 0f;
         public HashSet<string> unlockedNodeIds = new HashSet<string>();
+        public List<string>   unlockedNodeOrder = new List<string>();
 
         public static ResearchBranchState Create() => new ResearchBranchState();
     }
@@ -1676,6 +1680,8 @@ namespace Waystation.Models
         // Data Storage Server (no capacity available at the time of unlock).
         // Each represents one homeless chip awaiting storage.
         public int pendingDatachips = 0;
+        // Tags currently applied from chip-backed unlock evaluation.
+        public HashSet<string> appliedUnlockTags = new HashSet<string>();
 
         public float TotalPoints(ResearchBranch branch)
             => branches.TryGetValue(branch, out var s) ? s.points : 0f;

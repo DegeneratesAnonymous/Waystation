@@ -280,6 +280,16 @@
     "unlock_tags": ["tech.deep_space_sensors", "tech.map_galaxy"]
   },
   {
+    "id": "research.exploration.datachip_backup",
+    "display_name": "Datachip Backup Protocols",
+    "description": "Implements redundant archival and relay replication procedures for Exploration Datachips to preserve discovered map data.",
+    "branch": "Exploration",
+    "subbranch": "Astrometrics",
+    "point_cost": 500,
+    "prerequisites": ["research.exploration.interstellar_sensors"],
+    "unlock_tags": ["tech.exploration_datachip_backup"]
+  },
+  {
     "id": "research.science.composite_materials",
     "display_name": "Composite Materials",
     "description": "Advanced composite layering reduces module construction cost.",
