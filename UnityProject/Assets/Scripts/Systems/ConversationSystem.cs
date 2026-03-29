@@ -270,10 +270,10 @@ namespace Waystation.Systems
             int chaMod = AbilityScores.GetModifier(initiator.abilityScores.CHA);
             int total  = d20 + chaMod;
 
-            if (total <= 2)               return ConversationQuality.CriticalFail;   // ≤ 2
-            if (total < ChaMidThreshold)  return ConversationQuality.Low;            // 3–7
-            if (total < ChaHighThreshold) return ConversationQuality.Mid;            // 8–14
-            return ConversationQuality.High;                                          // ≥ 15
+            if (total <  ChaLowThreshold)  return ConversationQuality.CriticalFail;   // < 3 (≤ 2)
+            if (total <  ChaMidThreshold)  return ConversationQuality.Low;            // 3–7
+            if (total <  ChaHighThreshold) return ConversationQuality.Mid;            // 8–14
+            return ConversationQuality.High;                                           // ≥ 15
         }
 
         // ── Follow-up skill selection ─────────────────────────────────────────

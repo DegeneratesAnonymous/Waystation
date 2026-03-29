@@ -96,7 +96,8 @@ namespace Waystation.Tests
         [Test]
         public void LowChaNpc_CanProduceCriticalFail()
         {
-            // CHA 3 → modifier = -4.  A d20 roll of 1-6 gives total ≤ 2 (CriticalFail).
+            // CHA 3 → modifier = -2 (score ≤ 4 → mod = -2).
+            // d20 rolls 1–4 produce total ≤ 2 → CriticalFail (4/20 = 20% per roll).
             var npc = ConversationTestHelpers.MakeCrewNpc(cha: 3);
             bool foundCritical = false;
             for (int i = 0; i < 200 && !foundCritical; i++)
@@ -109,8 +110,8 @@ namespace Waystation.Tests
         [Test]
         public void HighChaNpc_CanProduceHighQuality()
         {
-            // CHA 20 → modifier = +5.  Minimum total = 1+5 = 6 (Low tier).
-            // Maximum total = 25 → always High.  Most rolls should be High.
+            // CHA 20 → modifier = +3 (score > 17 → mod = +3).
+            // d20 rolls 12–20 give total 15–23 → High (9/20 = 45% per roll).
             var npc = ConversationTestHelpers.MakeCrewNpc(cha: 20);
             bool foundHigh = false;
             for (int i = 0; i < 50 && !foundHigh; i++)
@@ -138,8 +139,9 @@ namespace Waystation.Tests
             // Use a CHA that keeps modifier = 0 (CHA 10) and verify tier assignments
             // by constructing NPCs with extreme CHA values to force specific totals.
 
-            // CHA 1 → modifier = -5.  Even d20=20 gives total 15 = High boundary.
-            // d20=7 → total 2 → CriticalFail; d20=8 → total 3 → Low.
+            // CHA 1 → modifier = -2 (score ≤ 4 → mod = -2).
+            // d20 rolls 1–4 give total ≤ 2 → CriticalFail; rolls 5–9 give 3–7 → Low.
+            // d20=20 gives total 18 → High (not a fixed 15 as in exactly-15-CHA scenario).
             // We can't directly set the d20, so we verify via large samples.
             var lowCha  = ConversationTestHelpers.MakeCrewNpc(cha: 1);
             var highCha = ConversationTestHelpers.MakeCrewNpc(cha: 20);
