@@ -489,6 +489,32 @@ namespace Waystation.Tests
             Assert.IsTrue(mentorHasBonus,  "Mentor must receive proximity_friend mood modifier.");
             Assert.IsTrue(studentHasBonus, "Student must receive proximity_friend mood modifier.");
         }
+
+        [Test]
+        public void MentorStudent_InSameRoom_StudentReceivesWorkSpeedBonus()
+        {
+            var station = MentoringTestHelpers.MakeStation(tick: 0);
+            var mood    = new MoodSystem();
+            var rels    = new RelationshipRegistry();
+            var prox    = new ProximitySystem();
+
+            var mentor  = MentoringTestHelpers.MakeCrewNpc("M", location: "room1");
+            var student = MentoringTestHelpers.MakeCrewNpc("S", location: "room1");
+            station.npcs[mentor.uid]  = mentor;
+            station.npcs[student.uid] = student;
+
+            var rec = RelationshipRegistry.GetOrCreate(station, mentor.uid, student.uid);
+            rec.affinityScore    = 25f;
+            rec.relationshipType = RelationshipType.Mentor;
+            rec.mentorUid        = mentor.uid;
+
+            prox.Tick(station, mood, rels);
+
+            Assert.Greater(student.proximityWorkModifier, 1.0f,
+                "Student must receive a work speed bonus when the mentor is in the same room.");
+            Assert.AreEqual(1.0f, mentor.proximityWorkModifier, 0.001f,
+                "Mentor must not receive the work speed bonus.");
+        }
     }
 
     // ── Bond decay tests ──────────────────────────────────────────────────────

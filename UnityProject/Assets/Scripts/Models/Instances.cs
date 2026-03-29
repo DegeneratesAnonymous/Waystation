@@ -869,6 +869,13 @@ namespace Waystation.Models
         // Stacks multiplicatively with traitWorkModifier and workModifier.
         public float tensionWorkModifier = 1.0f;
 
+        // Multiplicative work speed modifier applied by ProximitySystem when a Mentor NPC is present
+        // in the same module (student only). Default 1.0. Expires at proximityWorkModifierExpiresAtTick.
+        // Stacks multiplicatively with workModifier, expertiseModifier, traitWorkModifier, and tensionWorkModifier.
+        public float proximityWorkModifier = 1.0f;
+        // Game tick at which proximityWorkModifier expires and resets to 1.0. -1 = not active.
+        public int   proximityWorkModifierExpiresAtTick = -1;
+
         // ── Personal Inventory ────────────────────────────────────────────────
         /// <summary>Items worn / held in named equipment slots (slot name → itemId).
         /// Example slots: "weapon", "armour", "tool", "accessory".</summary>
