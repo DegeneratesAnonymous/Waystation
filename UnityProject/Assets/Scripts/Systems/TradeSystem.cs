@@ -4,10 +4,12 @@
 // When a ship with trade or smuggle intent docks, the TradeSystem generates
 // a TradeOffer recording what the ship sells/buys and at what prices.
 //
-// Price formula (per trade line):
-//   finalPrice = basePrice × supplyDemandModifier × reputationModifier
+// Price formula (per trade line, as generated in GenerateOffer):
+//   sellLinePrice = basePrice × randomMarkup × pressureMod × supplyDemandMod × reputationMod
+//   buyLinePrice  = basePrice × randomDiscount × supplyDemandMod × reputationMod
+//   (pressureMod: +5% per additional trader already docked)
 //
-// supplyDemandModifier:
+// supplyDemandModifier (gated by FeatureFlags.EconomySystem):
 //   Shortage (station stock < ShortageThreshold): × ShortagePremiumFactor (>1) on sell lines
 //   Surplus  (station stock > SurplusThreshold):  × SurplusDiscountFactor (<1) on buy lines
 //   Neutral: × 1.0
@@ -163,8 +165,8 @@ namespace Waystation.Systems
         {
             if (string.IsNullOrEmpty(factionId)) return 1f;
 
-            float rep = station.GetFactionRep(factionId);        // −100 … +100
-            float factor = (rep / 100f) * RepMaxModifier;        // −0.15 … +0.15
+            float rep = Mathf.Clamp(station.GetFactionRep(factionId), -100f, 100f); // enforce −100 … +100
+            float factor = (rep / 100f) * RepMaxModifier;                           // −0.15 … +0.15
             // Sell line: player pays; high rep → lower price → subtract factor.
             // Buy line:  player receives; high rep → better payout → add factor.
             return isSellLine ? (1f - factor) : (1f + factor);

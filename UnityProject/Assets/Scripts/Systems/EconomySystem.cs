@@ -68,7 +68,11 @@ namespace Waystation.Systems
         {
             foreach (var contract in station.factionContracts.Values)
             {
-                if (station.tick - contract.lastPaymentTick < contract.paymentIntervalTicks)
+                int effectiveInterval = contract.paymentIntervalTicks > 0
+                    ? contract.paymentIntervalTicks
+                    : 1;
+
+                if (station.tick - contract.lastPaymentTick < effectiveInterval)
                     continue;
 
                 contract.lastPaymentTick = station.tick;
