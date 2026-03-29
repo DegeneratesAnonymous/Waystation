@@ -182,7 +182,8 @@ namespace Waystation.Core
             Trade     = new TradeSystem(Registry);
             Events    = new EventSystem(Registry, difficulty);
             Inventory = new InventorySystem(Registry);
-            Visitors  = new VisitorSystem(Registry, Npcs, Events, Trade);
+            TaskQueue  = new NPCTaskQueueManager();
+            Visitors  = new VisitorSystem(Registry, Npcs, Events, Trade, TaskQueue, Inventory);
             Building  = new BuildingSystem(Registry);
             Comms     = new CommsSystem();
             Networks  = new NetworkSystem(Registry);
@@ -196,7 +197,6 @@ namespace Waystation.Core
             // Visitor pipeline systems
             Antenna    = new AntennaSystem(Registry);
             ShipVisits = new ShipVisitStateMachine(Registry, Npcs, secondsPerTick);
-            TaskQueue  = new NPCTaskQueueManager();
             CommSystem = new CommunicationsSystem(Registry, TaskQueue, ShipVisits);
 
             // Farming / climate systems
