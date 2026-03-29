@@ -195,7 +195,7 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void UnlockWithNoServerCapacity_GoesPending_NotNonServerCargo()
+        public void UnlockWithNoServerCapacity_ChipGoesPending_WithoutServerStorage()
         {
             var station = MakeStation();
             AddCompleteFoundation(station, "buildable.storage_cabinet", cargoCapacity: 8);

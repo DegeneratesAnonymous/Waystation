@@ -231,13 +231,14 @@ namespace Waystation.Systems
             foreach (ResearchBranch branch in Enum.GetValues(typeof(ResearchBranch)))
             {
                 if (!station.research.branches.TryGetValue(branch, out var bState)) continue;
-                var seen = new HashSet<string>();
+                var processedNodeIds = new HashSet<string>();
+                var inOrder = new HashSet<string>(bState.unlockedNodeOrder);
 
                 // Preserve historical unlock order when available.
                 foreach (var nodeId in bState.unlockedNodeOrder)
                 {
                     if (!bState.unlockedNodeIds.Contains(nodeId)) continue;
-                    if (!seen.Add(nodeId)) continue;
+                    if (!processedNodeIds.Add(nodeId)) continue;
                     if (!_registry.ResearchNodes.TryGetValue(nodeId, out var n)) continue;
                     if (n.branch != branch) continue;
                     ordered.Add(n);
@@ -247,14 +248,15 @@ namespace Waystation.Systems
                 var missingNodeIds = new List<string>();
                 foreach (var nodeId in bState.unlockedNodeIds)
                 {
-                    if (bState.unlockedNodeOrder.Contains(nodeId)) continue;
+                    if (inOrder.Contains(nodeId)) continue;
                     missingNodeIds.Add(nodeId);
                 }
                 missingNodeIds.Sort(StringComparer.Ordinal);
                 foreach (var nodeId in missingNodeIds)
                 {
-                    if (!seen.Add(nodeId)) continue;
+                    if (!processedNodeIds.Add(nodeId)) continue;
                     bState.unlockedNodeOrder.Add(nodeId);
+                    inOrder.Add(nodeId);
                     if (!_registry.ResearchNodes.TryGetValue(nodeId, out var n)) continue;
                     if (n.branch != branch) continue;
                     ordered.Add(n);
