@@ -366,7 +366,7 @@ namespace Waystation.Systems
         // ── Reactive triggers ─────────────────────────────────────────────────
 
         /// <summary>
-        /// Fires a reactive trigger, immediately selecting and queuing the best-weighted
+        /// Fires a reactive trigger, immediately selecting and queuing a weighted-random
         /// eligible event whose <see cref="EventDefinition.reactiveTriggers"/> list contains
         /// <paramref name="triggerName"/>.  Respects cooldowns and eligibility conditions.
         /// The event is enqueued as a follow-up and will surface on the next Tick call.

@@ -3,6 +3,7 @@
 // Cascade failure: depletion degrades dependent modules independently.
 // Morale scaling: station-wide mood score modulates production output.
 // Credits: depletion restricts player actions only; no module cascade fires.
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;

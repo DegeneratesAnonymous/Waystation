@@ -53,6 +53,17 @@ namespace Waystation.Systems
             RelationshipType.Spouse,
         };
 
+        private static int MilestoneRank(RelationshipType type)
+        {
+            return type switch
+            {
+                RelationshipType.Friend => 1,
+                RelationshipType.Lover  => 2,
+                RelationshipType.Spouse => 3,
+                _                       => 0
+            };
+        }
+
         // ── Tick ──────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -107,7 +118,11 @@ namespace Waystation.Systems
             rec.UpdateTypeFromAffinity();
             var newType = rec.relationshipType;
 
-            if (newType != oldType && _milestones.Contains(newType))
+            bool progressedToMilestone = _milestones.Contains(newType) &&
+                                         (!_milestones.Contains(oldType) ||
+                                          MilestoneRank(newType) > MilestoneRank(oldType));
+
+            if (newType != oldType && progressedToMilestone)
                 OnRelationshipMilestoneReached?.Invoke(uid1, uid2, newType);
 
             return rec;

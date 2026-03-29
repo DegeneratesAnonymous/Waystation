@@ -35,12 +35,12 @@ namespace Waystation.Systems
         /// <summary>
         /// Fired when a faction's reputation crosses a significant threshold boundary.
         /// Arguments: factionId, oldRep, newRep.
-        /// Threshold boundaries: ±10, ±20, ±40, ±60, ±75 (matching RepLabel band edges).
+        /// Threshold boundaries: -50, -20, 10, 40, 75 (matching RepLabel band edges).
         /// </summary>
         public event Action<string, float, float> OnFactionRepThresholdCrossed;
 
         // Threshold values that define boundary crossings (sorted ascending).
-        private static readonly float[] RepThresholds = { -75f, -60f, -50f, -20f, -10f, 10f, 40f, 75f };
+        private static readonly float[] RepThresholds = { -50f, -20f, 10f, 40f, 75f };
 
         public FactionSystem(ContentRegistry registry) => _registry = registry;
 
@@ -103,7 +103,8 @@ namespace Waystation.Systems
         private void TickFaction(string factionId, FactionDefinition def, StationState station)
         {
             float oldRep = station.GetFactionRep(factionId);
-            _prevRep.TryGetValue(factionId, out float snapRep);
+            bool hasSnapshot = _prevRep.TryGetValue(factionId, out float snapRep);
+            if (!hasSnapshot) snapRep = oldRep;
 
             if (def.behaviorTags.Contains("aggressive") && oldRep > -20f)
                 station.ModifyFactionRep(factionId, -0.5f);

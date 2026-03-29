@@ -165,9 +165,30 @@ namespace Waystation.Tests
             _station.tick = 15;
             var fired = _events.Tick(_station);
 
-            Assert.IsTrue(fired.Count > 0 || _events.GetPending().Count > 0 || true,
-                "When flag is set the event should be eligible.");
-            // Verify that the event would be eligible via direct selection test below.
+            var foundEvChain = false;
+            foreach (var instance in fired)
+            {
+                if (instance.definition.id == "ev_chain")
+                {
+                    foundEvChain = true;
+                    break;
+                }
+            }
+
+            if (!foundEvChain)
+            {
+                foreach (var pending in _events.GetPending())
+                {
+                    if (pending.definition.id == "ev_chain")
+                    {
+                        foundEvChain = true;
+                        break;
+                    }
+                }
+            }
+
+            Assert.IsTrue(foundEvChain,
+                "When flag is set the 'ev_chain' event should be eligible (fired or pending).");
         }
 
         [Test]
@@ -205,7 +226,7 @@ namespace Waystation.Tests
                 });
             _registry.AddEvent(ev);
 
-            // With no flag, the negated condition should pass → event may fire
+            // With no flag, the negated condition should pass → event should eventually become pending/fired.
             bool seen = false;
             for (int i = 0; i < 50 && !seen; i++)
             {
@@ -213,9 +234,66 @@ namespace Waystation.Tests
                 var newEvts = _events.Tick(_station);
                 foreach (var p in newEvts)
                     if (p.definition.id == "ev_no_flag") seen = true;
+
+                if (!seen)
+                {
+                    foreach (var p in _events.GetPending())
+                    {
+                        if (p.definition.id == "ev_no_flag")
+                        {
+                            seen = true;
+                            break;
+                        }
+                    }
+                }
             }
-            // We merely verify no exception is thrown; random scheduling may not fire in 50 ticks.
-            Assert.Pass("Negated chain_flag_set condition evaluated without error.");
+
+            Assert.IsTrue(seen,
+                "When the blocking flag is absent, a negated chain_flag_set condition should allow the event to become pending or fire.");
+        }
+
+        [Test]
+        public void ChainFlagCondition_Negated_EventIneligible_WhenFlagPresent()
+        {
+            _station.SetChainFlag("blocking_flag");
+
+            var ev = EventTestHelpers.MakeEvent("ev_no_flag",
+                triggerConditions: new List<ConditionBlock>
+                {
+                    new ConditionBlock { type = "chain_flag_set", target = "blocking_flag", negate = true }
+                });
+            _registry.AddEvent(ev);
+
+            bool seen = false;
+            for (int i = 0; i < 50 && !seen; i++)
+            {
+                _station.tick = i + 1;
+                var newEvts = _events.Tick(_station);
+
+                foreach (var p in newEvts)
+                {
+                    if (p.definition.id == "ev_no_flag")
+                    {
+                        seen = true;
+                        break;
+                    }
+                }
+
+                if (!seen)
+                {
+                    foreach (var p in _events.GetPending())
+                    {
+                        if (p.definition.id == "ev_no_flag")
+                        {
+                            seen = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            Assert.IsFalse(seen,
+                "When the blocking flag is present, a negated chain_flag_set condition must prevent the event from becoming pending or firing.");
         }
     }
 
