@@ -18,8 +18,9 @@ namespace Waystation.Tests
     /// </summary>
     internal class StubRegistry : IRegistryAccess
     {
-        public Dictionary<string, ModuleDefinition> Modules   { get; } = new();
+        public Dictionary<string, ModuleDefinition>  Modules   { get; } = new();
         public Dictionary<string, ResourceDefinition> Resources { get; } = new();
+        public Dictionary<string, EventDefinition>   Events    { get; } = new();
 
         public StubRegistry()
         {

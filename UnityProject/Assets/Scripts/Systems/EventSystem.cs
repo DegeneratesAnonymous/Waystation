@@ -76,6 +76,8 @@ namespace Waystation.Systems
             });
             Register("set_tag",     (e, s, _) => s.SetTag(e.target));
             Register("clear_tag",   (e, s, _) => s.ClearTag(e.target));
+            Register("set_chain_flag",   (e, s, _) => s.SetChainFlag(e.target));
+            Register("clear_chain_flag", (e, s, _) => s.ClearChainFlag(e.target));
             Register("modify_rep",  (e, s, _) =>
             {
                 float delta  = Convert.ToSingle(e.value ?? 0);
@@ -123,6 +125,7 @@ namespace Waystation.Systems
                 case "docked_ships_above":   return station.GetDockedShips().Count > Convert.ToInt32(c.value ?? 0);
                 case "tick_above":           return station.tick > Convert.ToInt32(c.value ?? 0);
                 case "policy_is":            return station.policy.TryGetValue(c.target, out var v) && v == (c.value?.ToString() ?? "");
+                case "chain_flag_set":       return station.HasChainFlag(c.target);
                 case "always":               return true;
                 default:
                     Debug.LogWarning($"[ConditionEvaluator] Unknown condition type '{c.type}'");
@@ -144,7 +147,7 @@ namespace Waystation.Systems
             { "intense", new DifficultyConfig { minGap =  2, maxGap =  4, hostileMultiplier = 2.0f } }
         };
 
-        private readonly ContentRegistry   _registry;
+        private readonly IRegistryAccess   _registry;
         private readonly EffectResolver    _resolver;
         private readonly ConditionEvaluator _evaluator;
         private string                     _difficulty;
@@ -157,7 +160,7 @@ namespace Waystation.Systems
 
         private int _nextEventTick;
 
-        public EventSystem(ContentRegistry registry, string difficulty = "normal")
+        public EventSystem(IRegistryAccess registry, string difficulty = "normal")
         {
             _registry   = registry;
             _resolver   = new EffectResolver();
@@ -359,5 +362,50 @@ namespace Waystation.Systems
 
         public void QueueEvent(string eventId, Dictionary<string, object> context = null)
             => _followupQueue.Enqueue((eventId, context ?? new Dictionary<string, object>()));
+
+        // ── Reactive triggers ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fires a reactive trigger, immediately selecting and queuing the best-weighted
+        /// eligible event whose <see cref="EventDefinition.reactiveTriggers"/> list contains
+        /// <paramref name="triggerName"/>.  Respects cooldowns and eligibility conditions.
+        /// The event is enqueued as a follow-up and will surface on the next Tick call.
+        /// </summary>
+        /// <param name="triggerName">Trigger identifier (e.g. "mood_crisis_entry").</param>
+        /// <param name="station">Current station state.</param>
+        /// <param name="context">Optional context dictionary forwarded to the event.</param>
+        public void FireReactiveTrigger(string triggerName, StationState station,
+                                        Dictionary<string, object> context = null)
+        {
+            var cfg      = DifficultySettings[_difficulty];
+            var eligible = new List<EventDefinition>();
+            var weights  = new List<float>();
+
+            foreach (var ev in _registry.Events.Values)
+            {
+                if (ev.weight <= 0f) continue;
+                if (!ev.reactiveTriggers.Contains(triggerName)) continue;
+                if (!IsEligible(ev, station)) continue;
+                float w = ev.weight * (ev.hostile ? cfg.hostileMultiplier : 1f);
+                eligible.Add(ev);
+                weights.Add(w);
+            }
+
+            if (eligible.Count == 0) return;
+
+            // Weighted random selection
+            float total = 0f;
+            foreach (var w in weights) total += w;
+            float roll = UnityEngine.Random.Range(0f, total);
+            float acc  = 0f;
+            EventDefinition selected = eligible[eligible.Count - 1];
+            for (int i = 0; i < eligible.Count; i++)
+            {
+                acc += weights[i];
+                if (roll <= acc) { selected = eligible[i]; break; }
+            }
+
+            _followupQueue.Enqueue((selected.id, context ?? new Dictionary<string, object>()));
+        }
     }
 }

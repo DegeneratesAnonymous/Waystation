@@ -37,6 +37,22 @@ namespace Waystation.Systems
 
         public bool DecayEnabled = true;
 
+        /// <summary>
+        /// Fired when a relationship between two NPCs advances to a notable milestone
+        /// (Friend, Lover, or Spouse) for the first time in that direction.
+        /// Arguments: uid1, uid2, new RelationshipType.
+        /// Only fires when the type transitions upward to one of the milestone tiers.
+        /// </summary>
+        public static event Action<string, string, RelationshipType> OnRelationshipMilestoneReached;
+
+        // Milestone tiers that trigger the event.
+        private static readonly HashSet<RelationshipType> _milestones = new HashSet<RelationshipType>
+        {
+            RelationshipType.Friend,
+            RelationshipType.Lover,
+            RelationshipType.Spouse,
+        };
+
         // ── Tick ──────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -77,15 +93,23 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Modifies the affinity between two NPCs by delta and updates the type.
+        /// Fires <see cref="OnRelationshipMilestoneReached"/> when the relationship
+        /// type transitions to Friend, Lover, or Spouse.
         /// </summary>
         public static RelationshipRecord ModifyAffinity(StationState station,
                                                          string uid1, string uid2,
                                                          float delta, int currentTick)
         {
             var rec = GetOrCreate(station, uid1, uid2);
+            var oldType = rec.relationshipType;
             rec.affinityScore          = Mathf.Clamp(rec.affinityScore + delta, -100f, 100f);
             rec.lastInteractionTick    = currentTick;
             rec.UpdateTypeFromAffinity();
+            var newType = rec.relationshipType;
+
+            if (newType != oldType && _milestones.Contains(newType))
+                OnRelationshipMilestoneReached?.Invoke(uid1, uid2, newType);
+
             return rec;
         }
 

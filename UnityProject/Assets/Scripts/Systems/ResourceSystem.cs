@@ -27,6 +27,12 @@ namespace Waystation.Systems
         private readonly HashSet<string> _prevBelowThreshold = new HashSet<string>();
         private readonly HashSet<string> _prevDepleted       = new HashSet<string>();
 
+        /// <summary>
+        /// Fired once when a resource first hits zero (transitions from above 0 to depleted).
+        /// Payload is the resource ID.  Not fired on subsequent ticks while already depleted.
+        /// </summary>
+        public event Action<string> OnResourceDepleted;
+
         // ── Fallback balance data used when ContentRegistry has not yet loaded resources ──
         // These mirror core_resources.json and keep the system functional during initialisation.
         // Cached as a static readonly to avoid per-tick allocation before registry data loads.
@@ -141,6 +147,10 @@ namespace Waystation.Systems
 
                 if (depleted)
                 {
+                    // Fire depletion event on first crossing (transition: not depleted → depleted).
+                    if (!_prevDepleted.Contains(resDef.id))
+                        OnResourceDepleted?.Invoke(resDef.id);
+
                     // Step 1: NPC need deprivation (enforces sequence: NPCs suffer first).
                     if (resDef.causesNpcDeprivation)
                         ApplyNpcDeprivation(station, resDef.id);

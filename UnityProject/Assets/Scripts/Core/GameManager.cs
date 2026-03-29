@@ -292,6 +292,56 @@ namespace Waystation.Core
             Mood.OnNpcRecoveredFromCrisis += npc => Station?.LogEvent(
                 $"{npc.name} has recovered from crisis and returned to work.");
 
+            // ── Reactive trigger wiring ───────────────────────────────────────
+            // Each source system fires a named trigger on the EventSystem so data-authored
+            // events can respond to these conditions without polling every tick.
+
+            // Mood crisis entry/exit
+            Mood.OnNpcEnteredCrisis       += npc =>
+            {
+                if (Station != null)
+                    Events.FireReactiveTrigger("mood_crisis_entry", Station,
+                        new Dictionary<string, object> { { "npc_uid", npc.uid } });
+            };
+            Mood.OnNpcRecoveredFromCrisis += npc =>
+            {
+                if (Station != null)
+                    Events.FireReactiveTrigger("mood_crisis_exit", Station,
+                        new Dictionary<string, object> { { "npc_uid", npc.uid } });
+            };
+
+            // Tension stage escalation (only fire on escalation, not on recovery to Normal)
+            Tension.OnTensionStageChanged += (npc, stage) =>
+            {
+                if (stage != TensionStage.Normal && Station != null)
+                    Events.FireReactiveTrigger("tension_stage_escalated", Station,
+                        new Dictionary<string, object> { { "npc_uid", npc.uid }, { "tension_stage", stage.ToString() } });
+            };
+
+            // Faction reputation threshold crossings
+            Factions.OnFactionRepThresholdCrossed += (factionId, oldRep, newRep) =>
+            {
+                if (Station != null)
+                    Events.FireReactiveTrigger("faction_rep_threshold_crossed", Station,
+                        new Dictionary<string, object> { { "faction_id", factionId }, { "old_rep", oldRep }, { "new_rep", newRep } });
+            };
+
+            // Government change (static event on FactionGovernmentSystem)
+            FactionGovernmentSystem.OnGovernmentShifted += (factionId, oldGov, newGov) =>
+            {
+                if (Station != null)
+                    Events.FireReactiveTrigger("government_changed", Station,
+                        new Dictionary<string, object> { { "faction_id", factionId }, { "old_government", oldGov.ToString() }, { "new_government", newGov.ToString() } });
+            };
+
+            // Relationship milestone (static event on RelationshipRegistry)
+            RelationshipRegistry.OnRelationshipMilestoneReached += (uid1, uid2, relType) =>
+            {
+                if (Station != null)
+                    Events.FireReactiveTrigger("relationship_milestone_reached", Station,
+                        new Dictionary<string, object> { { "npc_uid1", uid1 }, { "npc_uid2", uid2 }, { "relationship_type", relType.ToString() } });
+            };
+
             // Log skill level-up and slot-earned notifications
             Skills.OnCharacterLevelUp += (npc, level) => Station?.LogEvent(
                 $"{npc.name} reached character level {level}.");
@@ -326,7 +376,18 @@ namespace Waystation.Core
             {
                 DeathHandling = new DeathHandlingSystem();
                 DeathHandling.SetMoodSystem(Mood);
+                DeathHandling.OnNpcDied += (npc, state) =>
+                    Events.FireReactiveTrigger("npc_died", state,
+                        new Dictionary<string, object> { { "npc_uid", npc.uid } });
             }
+
+            // Wire ResourceSystem depletion reactive trigger
+            Resources.OnResourceDepleted += resourceId =>
+            {
+                if (Station != null)
+                    Events.FireReactiveTrigger("resource_depleted", Station,
+                        new Dictionary<string, object> { { "resource_id", resourceId } });
+            };
 
             // Counselling system (NPC-003)
             if (FeatureFlags.NpcCounselling)

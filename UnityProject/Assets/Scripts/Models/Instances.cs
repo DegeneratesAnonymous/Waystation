@@ -1803,6 +1803,10 @@ namespace Waystation.Models
         // Cooldown tracker: eventId -> tick it can next fire
         public Dictionary<string, int>    eventCooldowns = new Dictionary<string, int>();
 
+        // Chain flags: named booleans set by event outcomes and checked as eligibility conditions.
+        // Part of narrative save state — must survive save/load cycles.
+        public Dictionary<string, bool> chainFlags = new Dictionary<string, bool>();
+
         // Active trade offers keyed by ship uid
         public Dictionary<string, object> tradeOffers    = new Dictionary<string, object>();
 
@@ -2011,6 +2015,12 @@ namespace Waystation.Models
         public void   SetTag(string tag)     => activeTags.Add(tag);
         public void   ClearTag(string tag)   => activeTags.Remove(tag);
         public bool   HasTag(string tag)     => activeTags.Contains(tag);
+
+        // -- Chain flag helpers ----------------------------------------------
+
+        public void SetChainFlag(string flag)   => chainFlags[flag] = true;
+        public void ClearChainFlag(string flag) => chainFlags.Remove(flag);
+        public bool HasChainFlag(string flag)   => chainFlags.TryGetValue(flag, out var v) && v;
 
         public void   RestrictAction(string action)   => playerActionRestrictions.Add(action);
         public void   UnrestrictAction(string action) => playerActionRestrictions.Remove(action);

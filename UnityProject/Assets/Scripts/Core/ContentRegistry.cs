@@ -19,6 +19,7 @@ namespace Waystation.Core
     {
         Dictionary<string, ModuleDefinition>   Modules   { get; }
         Dictionary<string, ResourceDefinition> Resources { get; }
+        Dictionary<string, EventDefinition>    Events    { get; }
     }
 
     public class ContentRegistry : MonoBehaviour, IRegistryAccess
