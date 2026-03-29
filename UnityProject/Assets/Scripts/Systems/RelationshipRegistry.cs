@@ -97,6 +97,27 @@ namespace Waystation.Systems
 
             foreach (var rec in station.relationships.Values)
             {
+                // ── Mentor bond 7-day co-working inactivity check ─────────────
+                // If a Mentor/Student bond exists and the pair has not co-worked for
+                // >= DecayIntervalTicks, clear the Mentor designation and re-derive
+                // the type from affinity (drops back to Friend or lower).
+                if (rec.relationshipType == RelationshipType.Mentor &&
+                    rec.lastCoWorkingTick >= 0)
+                {
+                    int ticksSinceCoWork = station.tick - rec.lastCoWorkingTick;
+                    if (ticksSinceCoWork >= DecayIntervalTicks)
+                    {
+                        rec.ClearMentorBond();
+
+                        if (station.npcs.TryGetValue(rec.npcUid1, out var n1) &&
+                            station.npcs.TryGetValue(rec.npcUid2, out var n2))
+                        {
+                            station.LogEvent(
+                                $"{n1.name} and {n2.name}'s mentor/student bond has lapsed.");
+                        }
+                    }
+                }
+
                 if (rec.affinityScore == 0f) continue;
 
                 int ticksSinceInteraction = station.tick - rec.lastInteractionTick;

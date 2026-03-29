@@ -73,6 +73,7 @@ namespace Waystation.Systems
             switch (type)
             {
                 case RelationshipType.Friend:
+                case RelationshipType.Mentor:
                 case RelationshipType.Lover:
                 case RelationshipType.Spouse:
                     mood?.PushModifier(a, "proximity_friend", FriendBonus,

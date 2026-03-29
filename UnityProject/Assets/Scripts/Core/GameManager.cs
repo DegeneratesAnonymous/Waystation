@@ -82,6 +82,7 @@ namespace Waystation.Core
 
         // ── Skill & Expertise system ────────────────────────────────────────────────────────────
         public SkillSystem              Skills        { get; private set; }
+        public MentoringSystem          Mentoring     { get; private set; }
 
         // ── Trait, Tension, Faction Government, Region systems ───────────────────────────────────
         public TraitSystem              Traits        { get; private set; }
@@ -215,6 +216,10 @@ namespace Waystation.Core
             Farming.SetSkillSystem(Skills);
             Farming.SetMoodSystem(Mood);
             Conversations.SetSkillSystem(Skills);
+
+            // Mentoring system — tracks co-working, forms Mentor/Student bonds, applies XP multiplier.
+            Mentoring = new MentoringSystem();
+            Skills.SetMentoringSystem(Mentoring);
 
             // Trait, Tension, Faction Government, Region systems
             Traits = new TraitSystem();
@@ -587,6 +592,7 @@ namespace Waystation.Core
 
             // Skill system
             Skills.Tick(Station);
+            Mentoring.Tick(Station);
 
             // Trait, Tension, Faction Government, Region systems (after mood so moodScore is current)
             if (FeatureFlags.NpcTraits)
