@@ -281,11 +281,9 @@ namespace Waystation.Systems
 
             if (dominant == null) return GovernmentType.Democracy;
 
-            float social       = aggregate.categoryScores.TryGetValue(TraitCategory.Social.ToString(),       out var sv) ? sv : 0f;
-            float ideological  = aggregate.categoryScores.TryGetValue(TraitCategory.Ideological.ToString(),  out var iv) ? iv : 0f;
-            float psychological = aggregate.categoryScores.TryGetValue(TraitCategory.Psychological.ToString(), out var pv) ? pv : 0f;
-            float economic     = aggregate.categoryScores.TryGetValue(TraitCategory.Economic.ToString(),     out var ev) ? ev : 0f;
-            float physical     = aggregate.categoryScores.TryGetValue(TraitCategory.Physical.ToString(),     out var phv) ? phv : 0f;
+            float social       = aggregate.categoryScores.TryGetValue(TraitCategory.Social.ToString(),    out var sv)  ? sv  : 0f;
+            float ideological  = aggregate.categoryScores.TryGetValue(TraitCategory.Ideological.ToString(), out var iv) ? iv  : 0f;
+            float physical     = aggregate.categoryScores.TryGetValue(TraitCategory.Physical.ToString(),    out var phv) ? phv : 0f;
 
             // Psychological dominant: Authoritarian (high Ideological secondary) or Monarchy.
             if (dominant == TraitCategory.Psychological.ToString())

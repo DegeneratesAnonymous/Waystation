@@ -468,8 +468,8 @@ namespace Waystation.Systems
             {
                 var faction = kv.Value;
 
-                // Increment government tenure (guarded to once per day by the early return above).
-                faction.governmentTenureTicks++;
+                // Increment government tenure in ticks (guarded to once per day by the early return above).
+                faction.governmentTenureTicks += TimeSystem.TicksPerDay;
 
                 // Recalculate aggregate if absent or stale.
                 if (!station.factionAggregates.TryGetValue(kv.Key, out var cached) ||
@@ -578,6 +578,7 @@ namespace Waystation.Systems
         {
             if (!allFactions.TryGetValue(factionId, out var faction)) return 0f;
             if (string.IsNullOrEmpty(faction.vassalParentFactionId)) return 0f;
+            if (!allFactions.ContainsKey(faction.vassalParentFactionId)) return 0f;
             return station.GetFactionRep(faction.vassalParentFactionId);
         }
 
