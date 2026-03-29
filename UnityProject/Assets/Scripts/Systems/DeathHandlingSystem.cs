@@ -14,6 +14,7 @@
 //      mood modifiers from every NPC.
 //
 // Feature gate: FeatureFlags.NpcDeathHandling
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -93,6 +94,12 @@ namespace Waystation.Systems
 
         public void SetMoodSystem(MoodSystem m) => _mood = m;
 
+        /// <summary>
+        /// Fired after all death consequences (body spawn, mood penalties, grief) have been
+        /// applied for the deceased NPC.  Payload: deceased NPC, current station state.
+        /// </summary>
+        public event Action<NPCInstance, StationState> OnNpcDied;
+
         // ── On NPC Death ──────────────────────────────────────────────────────
 
         /// <summary>
@@ -117,6 +124,10 @@ namespace Waystation.Systems
 
             // 4. Generate haul task.
             GenerateHaulTask(body, station);
+
+            // 5. Fire the NpcDied event so external systems (e.g. EventSystem reactive triggers)
+            //    can respond after all immediate consequences have been applied.
+            OnNpcDied?.Invoke(npc, station);
         }
 
         // ── Per-Tick ──────────────────────────────────────────────────────────

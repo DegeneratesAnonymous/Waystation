@@ -29,6 +29,19 @@ namespace Waystation.Systems
         private readonly Dictionary<string, Dictionary<string, float>> _relationships =
             new Dictionary<string, Dictionary<string, float>>();
 
+        // Previous rep snapshots used to detect threshold crossings between ticks.
+        private readonly Dictionary<string, float> _prevRep = new Dictionary<string, float>();
+
+        /// <summary>
+        /// Fired when a faction's reputation crosses a significant threshold boundary.
+        /// Arguments: factionId, oldRep, newRep.
+        /// Threshold boundaries: -50, -20, 10, 40, 75 (matching RepLabel band edges).
+        /// </summary>
+        public event Action<string, float, float> OnFactionRepThresholdCrossed;
+
+        // Threshold values that define boundary crossings (sorted ascending).
+        private static readonly float[] RepThresholds = { -50f, -20f, 10f, 40f, 75f };
+
         public FactionSystem(ContentRegistry registry) => _registry = registry;
 
         /// <summary>Injects system dependencies required for procedural generation.</summary>
@@ -89,17 +102,37 @@ namespace Waystation.Systems
 
         private void TickFaction(string factionId, FactionDefinition def, StationState station)
         {
-            float rep = station.GetFactionRep(factionId);
+            float oldRep = station.GetFactionRep(factionId);
+            bool hasSnapshot = _prevRep.TryGetValue(factionId, out float snapRep);
+            if (!hasSnapshot) snapRep = oldRep;
 
-            if (def.behaviorTags.Contains("aggressive") && rep > -20f)
+            if (def.behaviorTags.Contains("aggressive") && oldRep > -20f)
                 station.ModifyFactionRep(factionId, -0.5f);
 
             if (def.behaviorTags.Contains("trades_always") && station.HasTag("active_trading"))
                 station.ModifyFactionRep(factionId, 0.3f);
 
-            if (rep < -60f && def.behaviorTags.Contains("raids_weak_stations") &&
+            if (oldRep < -60f && def.behaviorTags.Contains("raids_weak_stations") &&
                 UnityEngine.Random.value < 0.1f)
                 station.LogEvent($"Intelligence: {def.displayName} raiding parties reported near sector.");
+
+            float newRep = station.GetFactionRep(factionId);
+            if (CrossedThreshold(snapRep, newRep))
+                OnFactionRepThresholdCrossed?.Invoke(factionId, snapRep, newRep);
+            _prevRep[factionId] = newRep;
+        }
+
+        /// <summary>Returns true if the rep moved from one threshold band to another.</summary>
+        private static bool CrossedThreshold(float oldRep, float newRep)
+        {
+            if (Mathf.Approximately(oldRep, newRep)) return false;
+            foreach (float t in RepThresholds)
+            {
+                bool oldBelow = oldRep < t;
+                bool newBelow = newRep < t;
+                if (oldBelow != newBelow) return true;
+            }
+            return false;
         }
 
         // ── Sector unlock hook ─────────────────────────────────────────────────

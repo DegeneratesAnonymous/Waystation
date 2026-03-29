@@ -109,8 +109,16 @@ namespace Waystation.Models
         public string description;
         public float  weight      = 1f;
         public int    cooldown    = 0;
-        public List<string> requiredTags  = new List<string>();
-        public List<string> excludedTags  = new List<string>();
+        public List<string> requiredTags      = new List<string>();
+        public List<string> excludedTags      = new List<string>();
+        /// <summary>
+        /// Reactive trigger names this event responds to.  When the EventSystem fires a
+        /// reactive trigger (e.g. "mood_crisis_entry"), all events whose reactiveTriggers
+        /// list contains that name are evaluated for eligibility and the best match fires.
+        /// Events with reactive triggers can still fire on the normal schedule if their
+        /// trigger conditions are met independently.
+        /// </summary>
+        public List<string>         reactiveTriggers   = new List<string>();
         public List<ConditionBlock> triggerConditions = new List<ConditionBlock>();
         public List<EventChoice>    choices            = new List<EventChoice>();
         public List<OutcomeEffect>  autoOutcomes       = new List<OutcomeEffect>();
@@ -133,9 +141,10 @@ namespace Waystation.Models
                 expiresIn     = raw.GetInt("expires_in"),
                 schemaVersion = raw.GetString("schema_version", "1")
             };
-            foreach (var t in raw.GetStringList("required_tags")) e.requiredTags.Add(t);
-            foreach (var t in raw.GetStringList("excluded_tags")) e.excludedTags.Add(t);
-            foreach (var t in raw.GetStringList("followup_events")) e.followupEvents.Add(t);
+            foreach (var t in raw.GetStringList("required_tags"))      e.requiredTags.Add(t);
+            foreach (var t in raw.GetStringList("excluded_tags"))      e.excludedTags.Add(t);
+            foreach (var t in raw.GetStringList("followup_events"))    e.followupEvents.Add(t);
+            foreach (var t in raw.GetStringList("reactive_triggers"))  e.reactiveTriggers.Add(t);
             foreach (var item in raw.GetList("trigger_conditions"))
                 e.triggerConditions.Add(ConditionBlock.FromDict(item.AsStringDict()));
             foreach (var item in raw.GetList("choices"))
