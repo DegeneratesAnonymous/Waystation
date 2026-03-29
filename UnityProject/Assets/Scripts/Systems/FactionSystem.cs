@@ -161,8 +161,18 @@ namespace Waystation.Systems
         /// with generated definitions taking precedence on ID collision (should not occur).
         /// </summary>
         public Dictionary<string, FactionDefinition> GetAllFactions(StationState station)
+            => MergeAllFactions(_registry.Factions, station);
+
+        /// <summary>
+        /// Merges <paramref name="registryFactions"/> with <paramref name="station"/>.generatedFactions.
+        /// Generated factions take precedence on ID collision.
+        /// Exposed as a static helper so tests can exercise the merge logic without
+        /// constructing a <see cref="ContentRegistry"/> MonoBehaviour.
+        /// </summary>
+        public static Dictionary<string, FactionDefinition> MergeAllFactions(
+            Dictionary<string, FactionDefinition> registryFactions, StationState station)
         {
-            var all = new Dictionary<string, FactionDefinition>(_registry.Factions);
+            var all = new Dictionary<string, FactionDefinition>(registryFactions);
             foreach (var kv in station.generatedFactions)
                 all[kv.Key] = kv.Value;
             return all;

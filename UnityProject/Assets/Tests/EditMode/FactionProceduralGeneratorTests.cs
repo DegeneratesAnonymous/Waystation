@@ -28,14 +28,17 @@ namespace Waystation.Tests
             return s;
         }
 
-        /// <summary>Creates a SectorData at the given coordinates with no phenomenon codes.</summary>
+        /// <summary>Creates a SectorData at the given coordinates with the specified settings.</summary>
         public static SectorData MakeSector(string uid, float x, float y,
                                              List<PhenomenonCode> codes = null,
                                              SystemDensity density = SystemDensity.Standard,
                                              SectorModifier modifier = SectorModifier.None)
         {
-            var codes_ = codes ?? new List<PhenomenonCode> { PhenomenonCode.MS };
-            return SectorData.Create(uid, new Vector2(x, y), SurveyPrefix.GSC, codes_, "Test");
+            var codes_ = codes ?? new List<PhenomenonCode>();
+            var sector = SectorData.Create(uid, new Vector2(x, y), SurveyPrefix.GSC, codes_, "Test");
+            sector.systemDensity = density;
+            sector.modifier      = modifier;
+            return sector;
         }
 
         public static FactionTraitAggregate MakeAggregate(
@@ -457,17 +460,15 @@ namespace Waystation.Tests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // FactionSystem.GetAllFactions
+    // FactionSystem.MergeAllFactions / GetAllFactions
     // ─────────────────────────────────────────────────────────────────────────
 
     [TestFixture]
     internal class FactionSystemMergeTests
     {
         [Test]
-        public void GetAllFactions_MergesRegistryAndGenerated()
+        public void MergeAllFactions_IncludesRegistryAndGeneratedFactions()
         {
-            // Build a minimal FactionSystem (null ContentRegistry — we will check only generated)
-            // Use a real-enough setup: mimic what FactionSystem.GetAllFactions returns
             var station = FactionTestHelpers.MakeStation();
 
             var registryFactions = new Dictionary<string, FactionDefinition>
@@ -483,13 +484,50 @@ namespace Waystation.Tests
             station.generatedFactions[genFaction.id] = genFaction;
             station.factionReputation[genFaction.id] = 0f;
 
-            // Manually replicate the merge logic (mirrors FactionSystem.GetAllFactions)
-            var all = new Dictionary<string, FactionDefinition>(registryFactions);
-            foreach (var kv in station.generatedFactions) all[kv.Key] = kv.Value;
+            // Call the real static production method, not a manual re-implementation
+            var all = FactionSystem.MergeAllFactions(registryFactions, station);
 
             Assert.IsTrue(all.ContainsKey("faction.alpha"),   "Registry faction must be present.");
             Assert.IsTrue(all.ContainsKey("faction.gen.001"), "Generated faction must be present.");
             Assert.AreEqual(2, all.Count);
+        }
+
+        [Test]
+        public void MergeAllFactions_GeneratedFactionTakesPrecedenceOnCollision()
+        {
+            var station = FactionTestHelpers.MakeStation();
+
+            var registryFactions = new Dictionary<string, FactionDefinition>
+            {
+                { "faction.collision", new FactionDefinition { id = "faction.collision", displayName = "Registry" } }
+            };
+            var genFaction = new FactionDefinition
+            {
+                id          = "faction.collision",
+                displayName = "Generated",
+                isGenerated = true,
+            };
+            station.generatedFactions[genFaction.id] = genFaction;
+
+            var all = FactionSystem.MergeAllFactions(registryFactions, station);
+
+            Assert.AreEqual("Generated", all["faction.collision"].displayName,
+                "Generated faction should take precedence on ID collision.");
+        }
+
+        [Test]
+        public void MergeAllFactions_EmptyGeneratedFactions_ReturnsOnlyRegistry()
+        {
+            var station = FactionTestHelpers.MakeStation();
+            var registryFactions = new Dictionary<string, FactionDefinition>
+            {
+                { "faction.alpha", new FactionDefinition { id = "faction.alpha" } }
+            };
+
+            var all = FactionSystem.MergeAllFactions(registryFactions, station);
+
+            Assert.AreEqual(1, all.Count);
+            Assert.IsTrue(all.ContainsKey("faction.alpha"));
         }
     }
 }

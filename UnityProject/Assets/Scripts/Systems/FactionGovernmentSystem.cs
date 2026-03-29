@@ -431,7 +431,7 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Returns true if the dominant category's score has changed by more than
+        /// Returns true if any category's score has changed by more than
         /// <see cref="FactionProceduralGenerator.GovernmentShiftThreshold"/> between
         /// the two aggregates.
         /// </summary>

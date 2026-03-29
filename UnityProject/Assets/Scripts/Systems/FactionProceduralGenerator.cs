@@ -297,10 +297,12 @@ namespace Waystation.Systems
         /// <summary>
         /// Returns the list of preferred trait categories for NPCs generated under the given
         /// government type (used by NPCSystem.SpawnWithGovernmentBias for trait gravity).
+        /// Returns a defensive copy — callers may not mutate the internal affinity map.
         /// </summary>
         public static List<TraitCategory> GetGovTraitAffinity(GovernmentType govType)
         {
-            if (GovTraitAffinity.TryGetValue(govType, out var cats)) return cats;
+            if (GovTraitAffinity.TryGetValue(govType, out var cats))
+                return new List<TraitCategory>(cats);
             return new List<TraitCategory>();
         }
 
@@ -357,7 +359,12 @@ namespace Waystation.Systems
             // ── Spawn initial NPC pool for trait aggregation ──────────────────
             // NPCs are generated with a neutral (pre-government) bias so the first
             // government type emerges from the raw regional population.
-            // Skip if npcSystem is unavailable (e.g. in unit tests).
+            // They are kept in a temporary lookup and are NOT added to station.npcs —
+            // station.npcs is the on-station population used by NeedSystem, JobSystem,
+            // and other live-simulation systems.  Adding faction-population NPCs there
+            // would skew population counts, job assignment, and social need calculations.
+            // Skip entirely if npcSystem is unavailable (e.g. in unit tests).
+            var factionNpcs = new Dictionary<string, NPCInstance>();
             if (npcSystem != null)
             {
                 var npcTemplateKeys = new List<string>(npcSystem.AvailableTemplateIds);
@@ -369,11 +376,9 @@ namespace Waystation.Systems
                     var    npc        = npcSystem.SpawnWithGovernmentBias(templateId, null);
                     if (npc == null) continue;
 
-                    // Register NPC as a faction member; temporarily added to station.npcs
-                    // so the aggregator can resolve them by UID.
                     npc.factionId = factionId;
                     faction.memberNpcIds.Add(npc.uid);
-                    station.npcs[npc.uid] = npc;
+                    factionNpcs[npc.uid] = npc;
                 }
             }
 
@@ -383,8 +388,15 @@ namespace Waystation.Systems
                 var tempAllFactions = MergeWithGenerated(allFactions, station);
                 tempAllFactions[faction.id] = faction;
 
-                var aggregate = FactionAggregator.Calculate(faction, station.npcs, traitSystem,
-                                                             tempAllFactions, station.tick);
+                // Aggregate against the temporary faction NPC pool merged with any
+                // existing on-station NPCs (so the aggregator can find members by UID).
+                var npcsForAggregation = new Dictionary<string, NPCInstance>(station.npcs);
+                foreach (var kv in factionNpcs)
+                    npcsForAggregation[kv.Key] = kv.Value;
+
+                var aggregate = FactionAggregator.Calculate(faction, npcsForAggregation,
+                                                             traitSystem, tempAllFactions,
+                                                             station.tick);
                 faction.governmentType = DeriveGovernmentTypeFromAggregate(aggregate);
                 if (aggregate != null)
                     station.factionAggregates[factionId] = aggregate;

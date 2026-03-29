@@ -68,34 +68,8 @@ namespace Waystation.Systems
                 Debug.LogError($"[NPCSystem] Unknown NPC template '{templateId}'");
                 return null;
             }
-
-            var npc = NPCInstance.Create(
-                templateId: templateId,
-                name:       GenerateName(template),
-                classId:    template.baseClass,
-                subclassId: PickSubclass(template)
-            );
-
-            npc.skills     = RollSkills(template);
-            npc.traits     = PickTraits(template);
-            npc.factionId  = PickFaction(template);
-            npc.statusTags = statusTags != null ? new List<string>(statusTags) : new List<string>();
-
-            if (overrides != null)
-            {
-                if (overrides.ContainsKey("faction_id"))  npc.factionId = overrides["faction_id"]?.ToString();
-                if (overrides.ContainsKey("name"))         npc.name      = overrides["name"]?.ToString();
-            }
-
-            // Assign standard array ability scores by archetype
-            AssignAbilityScores(npc, templateId);
-
-            // Copy species-level need depletion rate multipliers from template
-            if (template.needDepletionRates != null && template.needDepletionRates.Count > 0)
-                npc.needDepletionRates = new System.Collections.Generic.Dictionary<string, float>(template.needDepletionRates);
-
-            npc.RecalculateMood();
-            return npc;
+            return BuildNpcFromTemplate(template, templateId,
+                PickTraits(template), statusTags, overrides);
         }
 
         /// <summary>
@@ -114,7 +88,27 @@ namespace Waystation.Systems
                 Debug.LogError($"[NPCSystem] Unknown NPC template '{templateId}'");
                 return null;
             }
+            return BuildNpcFromTemplate(template, templateId,
+                PickTraitsWithGovernmentBias(template, governmentType), statusTags, overrides);
+        }
 
+        /// <summary>
+        /// Shared NPC construction core.  Callers are responsible for supplying the
+        /// trait list (e.g., plain <see cref="PickTraits"/> or biased selection).
+        /// All other construction steps — ability scores, skill rolls, faction assignment,
+        /// need depletion rates, and mood initialisation — live here so the two public
+        /// factory methods can never drift apart.
+        /// </summary>
+        /// <param name="template">The resolved NPC template.</param>
+        /// <param name="templateId">The template ID string (used for ability-score archetype lookup).</param>
+        /// <param name="traits">Pre-selected trait IDs to assign.</param>
+        /// <param name="statusTags">Optional initial status tags (e.g. "crew", "visitor").</param>
+        /// <param name="overrides">Optional dictionary overriding "faction_id" or "name".</param>
+        private NPCInstance BuildNpcFromTemplate(NPCTemplate template, string templateId,
+                                                  List<string> traits,
+                                                  List<string> statusTags,
+                                                  Dictionary<string, object> overrides)
+        {
             var npc = NPCInstance.Create(
                 templateId: templateId,
                 name:       GenerateName(template),
@@ -123,7 +117,7 @@ namespace Waystation.Systems
             );
 
             npc.skills     = RollSkills(template);
-            npc.traits     = PickTraitsWithGovernmentBias(template, governmentType);
+            npc.traits     = traits;
             npc.factionId  = PickFaction(template);
             npc.statusTags = statusTags != null ? new List<string>(statusTags) : new List<string>();
 
