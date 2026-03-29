@@ -103,6 +103,8 @@ namespace Waystation.UI
         public float Value => _value;
 
         // ── Constructor ───────────────────────────────────────────────────
+        public ResourceMeter() : this(ResourceType.Generic, "") { }
+
         public ResourceMeter(ResourceType resource = ResourceType.Generic, string label = "")
         {
             AddToClassList("ws-resource-meter");

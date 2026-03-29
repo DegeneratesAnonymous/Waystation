@@ -14,6 +14,7 @@ using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
+using Random = System.Random;
 
 namespace Waystation.Tests
 {

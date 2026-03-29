@@ -83,6 +83,8 @@ namespace Waystation.UI
         }
 
         // ── Constructor ───────────────────────────────────────────────────
+        public CategoryStripe() : this(Category.None) { }
+
         public CategoryStripe(Category category = Category.None)
         {
             AddToClassList("ws-category-stripe");

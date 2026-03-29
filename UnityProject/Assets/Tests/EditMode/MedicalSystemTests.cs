@@ -75,7 +75,7 @@ namespace Waystation.Tests
         /// <summary>Creates a minimal StationState at tick=1 (avoids infection roll at tick%12==0).</summary>
         public static StationState MakeStation()
         {
-            return new StationState { stationName = "TestStation", tick = 1 };
+            return new StationState("TestStation") { tick = 1 };
         }
     }
 
