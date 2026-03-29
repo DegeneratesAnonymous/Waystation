@@ -28,8 +28,7 @@ namespace Waystation.Systems
             { "class.security",    new List<string> { "job.guard_post", "job.patrol", "job.contraband_inspection", "job.research_security" } },
             { "class.engineering", new List<string> { "job.build", "job.module_maintenance", "job.power_management", "job.life_support", "job.haul", "job.refine", "job.craft", "job.research_industry", "job.research_science" } },
             { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul", "job.research_exploration", "job.research_diplomacy", "job.research_security", "job.research_science" } },
-            { "class.farming",     new List<string> { "job.farming" } },
-            { "class.counsellor",  new List<string> { "job.counselling" } }
+            { "class.farming",     new List<string> { "job.farming" } }
         };
 
         // Category priority for wander fallback: lower index = preferred

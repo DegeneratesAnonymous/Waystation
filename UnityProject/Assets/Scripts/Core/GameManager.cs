@@ -326,11 +326,6 @@ namespace Waystation.Core
                 Counselling = new CounsellingSystem();
                 Counselling.SetTraitSystem(Traits);
                 Counselling.SetSkillSystem(Skills);
-
-                Counselling.OnSessionComplete += (counsellor, patient, outcome, roll) =>
-                {
-                    // Outcome is already logged by ApplyOutcome; event fired for UI subscriptions.
-                };
             }
         }
 
@@ -544,6 +539,11 @@ namespace Waystation.Core
             // Tick all systems in deterministic order
             Resources.Tick(Station);
             Npcs.Tick(Station);
+            // Counselling system: assign sessions before Jobs.Tick so the idle-counsellor
+            // filter (currentJobId == null) works correctly — counsellors get a session
+            // before JobSystem assigns them a fallback wander task.
+            if (FeatureFlags.NpcCounselling)
+                Counselling?.Tick(Station);
             Jobs.Tick(Station);
             Factions.Tick(Station);
             Inventory.Tick(Station);
@@ -620,9 +620,6 @@ namespace Waystation.Core
             Mood.Tick(Station);
             Sanity.Tick(Station);
 
-            // Counselling system: detect breakdown NPCs, assign counsellors, resolve sessions.
-            if (FeatureFlags.NpcCounselling)
-                Counselling?.Tick(Station);
             Proximity.Tick(Station, Mood, Relationships);
             Conversations.Tick(Station, Mood, Relationships);
             Relationships.Tick(Station, Mood);

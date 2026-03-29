@@ -20,7 +20,7 @@
 //   3. CounsellingSystem owns a per-session tick counter; it refreshes the counsellor's
 //      job timer every tick so JobSystem does not re-assign them mid-session.
 //   4. If the counsellor's job changes (needs crisis, hunger, etc.) the session is
-//      abandoned and re-queued after a short retry gap.
+//      abandoned and the patient becomes immediately eligible for a new counselling session.
 //   5. On session expiry, PerformCounsellingRoll() fires and outcome is applied.
 //
 // Feature gate: FeatureFlags.NpcCounselling
@@ -64,8 +64,8 @@ namespace Waystation.Systems
         /// <summary>Roll total at or above this (but below PartialSuccess) → Failure.</summary>
         public const int FailureThreshold        =  3;
 
-        /// <summary>Session length in game ticks. Default = 3 in-game days.</summary>
-        public int SessionDurationTicks = 3 * TimeSystem.TicksPerDay;
+        /// <summary>Session length in game ticks. Matches <c>job.counselling</c> duration_ticks = 12.</summary>
+        public int SessionDurationTicks = JobTimerRefresh;
 
         /// <summary>Ticks the counsellor's job timer is refreshed to each tick during a session.</summary>
         public const int JobTimerRefresh = 12;
@@ -208,12 +208,14 @@ namespace Waystation.Systems
 
         private void AssignNewSessions(StationState station)
         {
+            PruneExpiredPatientCooldowns(station.tick);
+
             // Build set of patients already being counselled.
             var assignedPatients = new HashSet<string>();
             foreach (var s in _activeSessions.Values)
                 assignedPatients.Add(s.patientUid);
 
-            // Collect idle counsellors (not in a session, not in crisis).
+            // Collect truly-idle counsellors (no active session, no running job).
             var idleCounsellors = new List<NPCInstance>();
             foreach (var npc in station.npcs.Values)
             {
@@ -223,6 +225,7 @@ namespace Waystation.Systems
                 if (npc.statusTags.Contains("dead")) continue;
                 if (npc.missionUid != null) continue;
                 if (_activeSessions.ContainsKey(npc.uid)) continue;
+                if (npc.currentJobId != null || npc.jobTimer > 0) continue;
                 idleCounsellors.Add(npc);
             }
 
@@ -376,6 +379,37 @@ namespace Waystation.Systems
 
             station.LogEvent(
                 $"[Counselling] {counsellor.name} → {patient.name} | roll={roll} | outcome={outcome}");
+        }
+
+        // ── Cooldown housekeeping ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Removes entries from <c>_patientCooldowns</c> whose expiry tick is in the past.
+        /// Called at the start of each <see cref="AssignNewSessions"/> to keep the
+        /// dictionary bounded over long saves.
+        /// </summary>
+        private void PruneExpiredPatientCooldowns(int currentTick)
+        {
+            if (_patientCooldowns.Count == 0) return;
+
+            var expired = new List<string>();
+            foreach (var kv in _patientCooldowns)
+            {
+                if (kv.Value <= currentTick)
+                    expired.Add(kv.Key);
+            }
+            foreach (var uid in expired)
+                _patientCooldowns.Remove(uid);
+        }
+
+        // ── Test seam ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Injects a patient cooldown entry directly. For unit tests only.
+        /// </summary>
+        internal void InjectPatientCooldownForTest(string patientUid, int expiryTick)
+        {
+            _patientCooldowns[patientUid] = expiryTick;
         }
     }
 }

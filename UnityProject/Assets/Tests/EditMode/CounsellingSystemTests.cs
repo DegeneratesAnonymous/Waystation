@@ -3,7 +3,6 @@
 // Validates:
 //   • MapRollToOutcome() returns the correct tier for all five threshold boundaries
 //   • GetAffinityModifier() returns clamped modifier at zero, positive, negative, and extreme affinity
-//   • PerformCounsellingRoll() uses all four modifiers (WIS, CHA/2, Persuasion, Social, affinity)
 //   • RegisterIntervention() sets requiresIntervention = true, halting the breakdown drain
 //   • RegisterIntervention() on null sanity profile does not throw
 //   • SanitySystem breakdown drain stops when requiresIntervention == true
@@ -14,6 +13,7 @@
 //   • CounsellingSystem.Tick() respects per-patient failure cooldown
 //   • CounsellingSystem feature flag = false prevents all task assignment
 //   • OnSessionComplete event fires with correct arguments on full session resolution
+//   • TraitSystem.OnCounsellingComplete() removes therapy-removable traits after counselling
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
@@ -307,9 +307,8 @@ namespace Waystation.Tests
             _station.tick = 96;
             _sanity.Tick(_station);
 
-            // Score may go up on a positive day, or stay the same on a neutral day,
-            // but it must NOT go below the pre-tick value (drain is halted).
-            Assert.GreaterOrEqual(san.score, scoreBefore - 1,
+            // Score must NOT decrease below the pre-tick value (drain is halted by intervention).
+            Assert.GreaterOrEqual(san.score, scoreBefore,
                 "After intervention, breakdown drain should be halted (requiresIntervention=true).");
             // More precisely: ensure the drain path (isInBreakdown && !requiresIntervention) is blocked.
             Assert.IsTrue(san.requiresIntervention,
@@ -373,27 +372,33 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void Tick_PatientOnCooldown_SessionNotStarted()
+        public void Tick_SessionInterrupted_PatientReeligibleImmediately()
         {
-            // Simulate a prior failed session that set a cooldown far in the future.
-            _patient.GetOrCreateSanity().isInBreakdown = true;
-
-            // Run first tick to start a session and immediately abandon it,
-            // triggering a manual cooldown scenario via direct field manipulation.
-            // We test by forcing the cooldown dictionary via a dummy failure approach:
-            // tick once to assign, then run one more tick to resolve (duration=1).
+            // Tick 1: assign session.
             _counselling.Tick(_station);
             Assert.AreEqual(CounsellingSystem.CounsellingJobId, _counsellor.currentJobId,
                 "First tick should assign the counsellor.");
 
-            // Now pretend the counsellor abandoned the job (like a crisis interrupt).
+            // Simulate counsellor abandoning the job (e.g., crisis or hunger override).
             _counsellor.currentJobId = null;
 
-            // The session is now abandoned (no roll), patient gets no cooldown.
-            // Test that re-assignment can occur on the next tick (no cooldown was set).
+            // No roll is made on interruption — patient gets no cooldown.
+            // Tick 2: patient should be immediately eligible for a new session.
             _counselling.Tick(_station);
             Assert.AreEqual(CounsellingSystem.CounsellingJobId, _counsellor.currentJobId,
-                "After session abandonment (no roll), counsellor should be re-assignable.");
+                "After session interruption (no roll), patient should be immediately re-assignable.");
+        }
+
+        [Test]
+        public void Tick_PatientOnCooldown_BlocksReassignment()
+        {
+            // Inject a cooldown that expires in the far future.
+            _counselling.InjectPatientCooldownForTest(_patient.uid, _station.tick + 100);
+
+            _counselling.Tick(_station);
+
+            Assert.AreNotEqual(CounsellingSystem.CounsellingJobId, _counsellor.currentJobId,
+                "Counselling session must not start while the patient has an active failure cooldown.");
         }
 
         [Test]
@@ -524,10 +529,7 @@ namespace Waystation.Tests
                 acquisitionTick = 0,
             });
 
-            var counsellingSystem = new CounsellingSystem();
-            counsellingSystem.SetTraitSystem(traitSystem);
-
-            // Directly call OnCounsellingComplete as TraitSystem does — simulates Success outcome.
+            // Directly invoke TraitSystem's counselling completion handler to model a successful session.
             traitSystem.OnCounsellingComplete(patient, station);
 
             Assert.AreEqual(0, profile.traits.Count,
