@@ -478,6 +478,10 @@ namespace Waystation.Tests
             // After assignment, job should be set.
             Assert.AreEqual(CounsellingSystem.CounsellingJobId, _counsellor.currentJobId);
 
+            // Clear breakdown flag so AssignNewSessions does not immediately re-assign
+            // the counsellor on the same tick the session resolves.
+            _patient.sanity.isInBreakdown = false;
+
             _counselling.Tick(_station);
             // After resolution, job should be cleared so JobSystem can reassign.
             Assert.AreNotEqual(CounsellingSystem.CounsellingJobId, _counsellor.currentJobId,
@@ -516,8 +520,8 @@ namespace Waystation.Tests
             var profile = patient.GetOrCreateTraitProfile();
             profile.traits.Add(new ActiveTrait
             {
-                traitId       = "trait.test_therapy_trait",
-                acquiredAtTick = 0,
+                traitId        = "trait.test_therapy_trait",
+                acquisitionTick = 0,
             });
 
             var counsellingSystem = new CounsellingSystem();
