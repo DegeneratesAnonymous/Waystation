@@ -703,6 +703,105 @@
     "schema_version": "1"
   },
   {
+    "id": "buildable.sector_antenna",
+    "display_name": "Sector Antenna",
+    "category": "object",
+    "description": "A powered directional antenna array that enables the Sector map view and baseline regional resource profiling.",
+    "build_time_ticks": 35,
+    "required_materials": {
+      "item.steel_plate": 6,
+      "item.wiring": 6,
+      "item.parts": 2
+    },
+    "required_skills": {
+      "engineering": 2,
+      "electrical": 2
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 110,
+    "schema_version": "1",
+    "demand_watts": 2.0,
+    "network_type": "electric",
+    "node_role": "consumer"
+  },
+  {
+    "id": "buildable.interstellar_antenna",
+    "display_name": "Interstellar Antenna",
+    "category": "object",
+    "description": "Long-range interstellar antenna that continuously generates Exploration Points while powered.",
+    "build_time_ticks": 50,
+    "required_materials": {
+      "item.steel_plate": 10,
+      "item.wiring": 10,
+      "item.parts": 4
+    },
+    "required_skills": {
+      "engineering": 3,
+      "electrical": 3
+    },
+    "required_tags": [],
+    "size": 2,
+    "max_health": 140,
+    "schema_version": "1",
+    "demand_watts": 4.0,
+    "network_type": "electric",
+    "node_role": "consumer"
+  },
+  {
+    "id": "buildable.cartography_station",
+    "display_name": "Cartography Station",
+    "category": "object",
+    "description": "A specialized scout-analysis workbench used to process mission telemetry into Exploration Datachips.",
+    "build_time_ticks": 35,
+    "required_materials": {
+      "item.steel_plate": 6,
+      "item.wiring": 8,
+      "item.parts": 3
+    },
+    "required_skills": {
+      "engineering": 2
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 120,
+    "beauty_score": 2,
+    "is_workbench": true,
+    "workbench_room_type": "research_lab",
+    "workbench_skill_bonuses": {
+      "science": 1.2
+    },
+    "schema_version": "1",
+    "demand_watts": 2.0,
+    "network_type": "electric",
+    "node_role": "consumer"
+  },
+  {
+    "id": "buildable.cartography_server",
+    "display_name": "Cartography Server",
+    "category": "object",
+    "description": "High-throughput map server that hosts installed Exploration Datachips and enables full system map detail.",
+    "build_time_ticks": 30,
+    "required_materials": {
+      "item.steel_plate": 4,
+      "item.wiring": 6,
+      "item.parts": 2
+    },
+    "required_skills": {
+      "engineering": 2
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 110,
+    "cargo_capacity": 16,
+    "beauty_score": 1,
+    "furniture_tag": "storage",
+    "schema_version": "1",
+    "demand_watts": 2.0,
+    "network_type": "electric",
+    "node_role": "consumer"
+  },
+  {
     "id": "buildable.data_storage_server",
     "display_name": "Data Storage Server",
     "category": "object",

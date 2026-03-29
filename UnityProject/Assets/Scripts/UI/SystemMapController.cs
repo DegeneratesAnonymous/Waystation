@@ -83,12 +83,10 @@ namespace Waystation.UI
         private RectTransform   _exploreWorld;    // panned/scaled child
         private RectTransform   _mapAreaRt;       // stored mapArea reference
         private float           _exploreZoom   = 1f;
-        private Vector2         _exploreOffset = Vector2.zero; // in LY from home
+        private Vector2         _exploreOffset = Vector2.zero;
         private bool            _isPanning;
         private Vector2         _panStartMouse;
         private Vector2         _panStartOffset;
-        // pixels per light-year at zoom=1 for the Galaxy layer
-        private const float GalaxyPxPerLY  = 1.0f;
 
         // ── Sector grid constants ─────────────────────────────────────────────
         // Each discovered sector is rendered as a fixed square box.
@@ -100,15 +98,10 @@ namespace Waystation.UI
         private const float GalUnitPerCell  = 3.0f;
         // Minimum separation between system dots (normalised 0–1 within the interior).
         private const float SysDotMinDist   = 0.09f;
-        private const float GalaxyZoomMin  = 0.15f;
-        private const float GalaxyZoomMax  = 8f;
 
         // Explore dots (neighbor system markers)
         private readonly List<(RectTransform dot, NeighborSystem sys)> _exploreDots
             = new List<(RectTransform, NeighborSystem)>();
-        // Galaxy chunk cache: chunk coords → list of systems in that chunk
-        private readonly Dictionary<(int, int), List<NeighborSystem>> _galaxyChunks
-            = new Dictionary<(int, int), List<NeighborSystem>>();
 
         // Sector designation dot/label tracking
         private readonly List<GameObject> _sectorObjects = new List<GameObject>();
@@ -127,8 +120,8 @@ namespace Waystation.UI
 
         // ── Header / Layer UI ────────────────────────────────────────
 
-        private Button   _tabSystemBtn, _tabSectorBtn, _tabGalaxyBtn;
-        private TMP_Text _tabSystemLbl, _tabSectorLbl, _tabGalaxyLbl;
+        private Button   _tabSystemBtn, _tabSectorBtn;
+        private TMP_Text _tabSystemLbl, _tabSectorLbl;
         private TMP_Text _contextLabel;
         private GameObject _lockedPanel;
         private TMP_Text   _lockedMessage;
@@ -205,7 +198,7 @@ namespace Waystation.UI
                 return;
             }
 
-            if (_layer != MapLayer.Sector && _layer != MapLayer.Galaxy) return;
+            if (_layer != MapLayer.Sector) return;
             if (_exploreWorld == null) return;
 
             HandleExploreZoom();
@@ -218,8 +211,8 @@ namespace Waystation.UI
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) < 0.001f) return;
 
-            float minZ = _layer == MapLayer.Galaxy ? GalaxyZoomMin : 0.5f;
-            float maxZ = _layer == MapLayer.Galaxy ? GalaxyZoomMax : 8f;
+            float minZ = 0.5f;
+            float maxZ = 8f;
 
             float newZoom = Mathf.Clamp(_exploreZoom * (1f + scroll * 0.12f), minZ, maxZ);
             if (Mathf.Approximately(newZoom, _exploreZoom)) return;
@@ -236,8 +229,6 @@ namespace Waystation.UI
             _exploreZoom = newZoom;
             _exploreWorld.localScale = new Vector3(newZoom, newZoom, 1f);
 
-            if (_layer == MapLayer.Galaxy)
-                RefreshGalaxyChunks();
         }
 
         private void HandleExplorePan()
@@ -258,8 +249,6 @@ namespace Waystation.UI
             Vector2 delta = mouse - _panStartMouse;
             _exploreWorld.anchoredPosition = _panStartOffset + delta;
 
-            if (_layer == MapLayer.Galaxy)
-                RefreshGalaxyChunks();
         }
 
         // ── System map pan / zoom ─────────────────────────────────────────────
@@ -527,18 +516,15 @@ namespace Waystation.UI
             _viewedSystem = _sys;
 
             // System layer (home solar system) is always available.
-            // Sector requires Local Sensors research + built antenna.
-            // Galaxy requires Interstellar Sensors research.
+            // Sector requires map-sector unlock + powered Sector Antenna.
             bool hasSector = TelescopeMode ||
-                             ((_gm.Station?.HasTag("tech.local_sensors") == true) && HasBuiltAntenna());
-            bool hasGalaxy = TelescopeMode ||
-                             (_gm.Station?.HasTag("tech.interstellar_sensors") == true);
+                             ((_gm.Station?.HasTag("tech.map_sector") == true) && HasBuiltAntenna());
 
             _lockedPanel?.SetActive(false);
             mapPanel.SetActive(true);
             IsOpen = true;
 
-            UpdateLayerTabs(hasSector, hasGalaxy);
+            UpdateLayerTabs(hasSector);
             SwitchLayer(MapLayer.System);
         }
 
@@ -735,7 +721,7 @@ namespace Waystation.UI
             ClearMap();
             ClearExplore();
 
-            bool explore = (layer == MapLayer.Sector || layer == MapLayer.Galaxy);
+            bool explore = (layer == MapLayer.Sector);
             if (mapContainer           != null) mapContainer.gameObject.SetActive(!explore);
             // Toggle the ExploreClip panel (parent of _exploreWorld)
             if (_exploreWorld != null)
@@ -745,13 +731,11 @@ namespace Waystation.UI
             // Highlight active tab
             SetTabActive(_tabSystemBtn, _tabSystemLbl, layer == MapLayer.System);
             SetTabActive(_tabSectorBtn, _tabSectorLbl, layer == MapLayer.Sector);
-            SetTabActive(_tabGalaxyBtn, _tabGalaxyLbl, layer == MapLayer.Galaxy);
 
             switch (layer)
             {
                 case MapLayer.System: RebuildMap(); break;
                 case MapLayer.Sector: RebuildSector(); break;
-                case MapLayer.Galaxy: RebuildGalaxy(); break;
             }
             UpdateContextLabel();
         }
@@ -768,14 +752,10 @@ namespace Waystation.UI
                 lbl.color = active ? Color.white : new Color(0.60f, 0.72f, 0.90f);
         }
 
-        private void UpdateLayerTabs(bool hasSector, bool hasGalaxy)
+        private void UpdateLayerTabs(bool hasSector)
         {
             if (_tabSectorBtn != null) _tabSectorBtn.interactable = hasSector;
-            if (_tabGalaxyBtn != null) _tabGalaxyBtn.interactable = hasGalaxy;
             if (_tabSectorLbl != null) _tabSectorLbl.color = hasSector
-                ? new Color(0.60f, 0.72f, 0.90f)
-                : new Color(0.35f, 0.40f, 0.50f);
-            if (_tabGalaxyLbl != null) _tabGalaxyLbl.color = hasGalaxy
                 ? new Color(0.60f, 0.72f, 0.90f)
                 : new Color(0.35f, 0.40f, 0.50f);
         }
@@ -793,9 +773,6 @@ namespace Waystation.UI
                 case MapLayer.Sector:
                     _contextLabel.text = "Sector Map  ·  scroll to zoom  ·  right-drag to pan  ·  left-drag or ctrl+click to multi-select";
                     break;
-                case MapLayer.Galaxy:
-                    _contextLabel.text = "Galaxy Map  ·  scroll to zoom  ·  right-drag to pan  ·  left-drag or ctrl+click to multi-select";
-                    break;
             }
         }
 
@@ -812,7 +789,15 @@ namespace Waystation.UI
         {
             var station = _gm?.Station;
             if (station == null) return false;
-            return _gm.Antenna.HasPoweredAntenna(station);
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId == "buildable.sector_antenna" &&
+                    f.status == "complete" &&
+                    f.Functionality() > 0f &&
+                    f.isEnergised)
+                    return true;
+            }
+            return false;
         }
 
         // ── Sector map ────────────────────────────────────────────────────────
@@ -857,31 +842,25 @@ namespace Waystation.UI
                 CreateSectorBox(_exploreWorld, screenPos, sector, isHome);
             }
 
-            // In Telescope Mode show "+" buttons at every empty grid cell adjacent
-            // to a visible sector box, so the player can expand the grid manually.
-            if (TelescopeMode && station != null)
-            {
-                var plusCells = new HashSet<(int, int)>();
-                int[] dx = { -1, 1,  0, 0 };
-                int[] dy = {  0, 0, -1, 1 };
-                foreach (var (c, r) in usedCells)
-                    for (int d = 0; d < 4; d++)
-                    {
-                        int nc = c + dx[d], nr = r + dy[d];
-                        if (!usedCells.Contains((nc, nr)))
-                            plusCells.Add((nc, nr));
-                    }
-                foreach (var (nc, nr) in plusCells)
+            var plusCells = new HashSet<(int, int)>();
+            int[] dx = { -1, 1,  0, 0 };
+            int[] dy = {  0, 0, -1, 1 };
+            foreach (var (c, r) in usedCells)
+                for (int d = 0; d < 4; d++)
                 {
-                    var btnPos = new Vector2(nc * SectorBoxStride, nr * SectorBoxStride);
-                    CreateAddSectorButton(_exploreWorld, btnPos, nc, nr);
+                    int nc = c + dx[d], nr = r + dy[d];
+                    if (!usedCells.Contains((nc, nr)))
+                        plusCells.Add((nc, nr));
                 }
+            foreach (var (nc, nr) in plusCells)
+            {
+                var btnPos = new Vector2(nc * SectorBoxStride, nr * SectorBoxStride);
+                CreateAddSectorButton(_exploreWorld, btnPos, nc, nr);
             }
         }
 
         /// <summary>
-        /// Creates a "+" button at a grid position (Telescope Dev Mode only).
-        /// Clicking it generates a new Visited sector at that grid cell.
+        /// Creates an unlock "+" button at a grid position adjacent to known sectors.
         /// </summary>
         private void CreateAddSectorButton(RectTransform parent, Vector2 pos, int col, int row)
         {
@@ -929,36 +908,57 @@ namespace Waystation.UI
             colors.pressedColor     = new Color(0.6f, 1.0f, 0.70f, 1.00f);
             btn.colors = colors;
             int capturedCol = col, capturedRow = row;
-            btn.onClick.AddListener(() => DevAddSector(capturedCol, capturedRow));
+            btn.onClick.AddListener(() => TryUnlockSector(capturedCol, capturedRow));
         }
 
         /// <summary>
-        /// Dev-only: creates a new Visited sector at the given grid cell and rebuilds
-        /// the sector map. Only available in Telescope Mode.
+        /// Attempts to unlock and generate a sector at the given grid cell.
+        /// In TelescopeMode this bypasses exploration-point cost.
         /// </summary>
-        private void DevAddSector(int col, int row)
+        private void TryUnlockSector(int col, int row)
         {
-            if (!TelescopeMode) return;
             var station = _gm?.Station;
             if (station == null) return;
 
-            string uid = $"sector_dev_{col}_{row}";
-            if (station.sectors.ContainsKey(uid)) return;
+            bool unlocked;
+            if (TelescopeMode)
+            {
+                float tgx = GalaxyGenerator.HomeX + col * GalUnitPerCell;
+                float tgy = GalaxyGenerator.HomeY + row * GalUnitPerCell;
+                bool exists = false;
+                foreach (var sec in station.sectors.Values)
+                {
+                    if (Mathf.Approximately(sec.coordinates.x, tgx) &&
+                        Mathf.Approximately(sec.coordinates.y, tgy))
+                    { exists = true; break; }
+                }
+
+                unlocked = false;
+                if (!exists)
+                {
+                    var generated = GalaxyGenerator.GenerateSectorAtCoordinates(
+                        station.galaxySeed, new Vector2(tgx, tgy), station);
+                    generated.discoveryState = SectorDiscoveryState.Detected;
+                    station.sectors[generated.uid] = generated;
+                    unlocked = true;
+                }
+            }
+            else
+            {
+                unlocked = _gm.Map?.TryUnlockSector(station, col, row) == true;
+            }
+            if (!unlocked) return;
 
             float gx = GalaxyGenerator.HomeX + col * GalUnitPerCell;
             float gy = GalaxyGenerator.HomeY + row * GalUnitPerCell;
-
-            var newSector = SectorData.Create(
-                uid:         uid,
-                coordinates: new Vector2(gx, gy),
-                prefix:      SurveyPrefix.IND,
-                codes:       new System.Collections.Generic.List<PhenomenonCode> { PhenomenonCode.MS },
-                properName:  $"Dev {col:+#;-#;0},{row:+#;-#;0}");
-            newSector.discoveryState = SectorDiscoveryState.Visited;
-            station.sectors[uid] = newSector;
-
-            // Fire the faction generation roll for the newly-unlocked sector.
-            _gm?.Factions?.OnSectorUnlocked(newSector, station);
+            foreach (var sec in station.sectors.Values)
+            {
+                if (!Mathf.Approximately(sec.coordinates.x, gx) ||
+                    !Mathf.Approximately(sec.coordinates.y, gy))
+                    continue;
+                _gm?.Factions?.OnSectorUnlocked(sec, station);
+                break;
+            }
 
             ClearExplore();
             RebuildSector();
@@ -1428,72 +1428,6 @@ namespace Waystation.UI
             }
         }
 
-        // ── Galaxy map ────────────────────────────────────────────────────────
-
-        private void RebuildGalaxy()
-        {
-            _exploreZoom = 1f;
-            _exploreWorld.anchoredPosition = Vector2.zero;
-            _exploreWorld.localScale = Vector3.one;
-            RefreshGalaxyChunks();
-        }
-
-        private void RefreshGalaxyChunks()
-        {
-            if (_sys == null || _exploreWorld == null) return;
-
-            // Determine which LY rect is visible based on current offset + zoom
-            float pxPerLY   = GalaxyPxPerLY * _exploreZoom;
-            float viewW = (_mapAreaRt != null && _mapAreaRt.rect.width  > 0f) ? _mapAreaRt.rect.width  : 680f;
-            float viewH = (_mapAreaRt != null && _mapAreaRt.rect.height > 0f) ? _mapAreaRt.rect.height : 680f;
-            float halfW = viewW / 2f / Mathf.Max(pxPerLY, 0.01f);
-            float halfH = viewH / 2f / Mathf.Max(pxPerLY, 0.01f);
-            // Centre of view in LY coords
-            Vector2 centreLY = -_exploreWorld.anchoredPosition / Mathf.Max(pxPerLY, 0.01f);
-            float   genRadius = Mathf.Max(halfW, halfH) + 80f;  // add one chunk margin
-
-            var newSystems = SolarSystemGenerator.GenerateNeighbors(
-                _sys.seed, genRadius, centreLY);
-
-            // Remove dots that are far out of view
-            for (int i = _exploreDots.Count - 1; i >= 0; i--)
-            {
-                var (dot, sys) = _exploreDots[i];
-                if (sys == null) continue;  // home dot
-                Vector2 sysLY = sys.positionLY;
-                float dx = sysLY.x - centreLY.x;
-                float dy = sysLY.y - centreLY.y;
-                if (dx * dx + dy * dy > (genRadius + 80f) * (genRadius + 80f))
-                {
-                    if (dot != null) Destroy(dot.gameObject);
-                    _exploreDots.RemoveAt(i);
-                }
-            }
-
-            // Collect existing seeds to avoid duplicates
-            var existingSeeds = new HashSet<int>();
-            foreach (var (_, sys) in _exploreDots)
-                if (sys != null) existingSeeds.Add(sys.seed);
-
-            foreach (var n in newSystems)
-            {
-                if (existingSeeds.Contains(n.seed)) continue;
-                existingSeeds.Add(n.seed);
-                var pos = n.positionLY * GalaxyPxPerLY;
-                CreateExploreDot(_exploreWorld, pos, Mathf.Clamp(n.starSize * 7f, 3f, 11f),
-                    ParseColor(n.starColorHex), neighbor: n);
-            }
-
-            // Home system at origin
-            if (_exploreDots.Count(t => t.sys == null) == 0)
-                CreateExploreDot(_exploreWorld, Vector2.zero, 12f,
-                    new Color(1f, 0.95f, 0.50f), _sys, isHome: true);
-
-            // Overlay sector designation dots/labels on the galaxy map (created once; no per-pan churn).
-            if (_sectorObjects.Count == 0)
-                RenderSectorDots(GalaxyPxPerLY, _exploreZoom < 0.8f);
-        }
-
         // ── Sector designation rendering ──────────────────────────────────────
 
         /// <summary>
@@ -1630,19 +1564,43 @@ namespace Waystation.UI
                 }
                 else
                 {
-                    var phenomParts = new System.Collections.Generic.List<string>();
-                    foreach (var code in sector.phenomenonCodes)
-                        phenomParts.Add(PhenomenonCodeLabel(code));
-                    string densityStr = sector.systemDensity switch
+                    bool isHomeSector =
+                        Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                        Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+                    bool vagueOnly = !isHomeSector;
+                    if (vagueOnly && _gm?.Map != null)
                     {
-                        SystemDensity.Sparse   => "3–6 systems (Sparse)",
-                        SystemDensity.Low      => "7–10 systems (Low)",
-                        SystemDensity.Standard => "11–15 systems (Standard)",
-                        SystemDensity.High     => "16–20 systems (High)",
-                        _                      => "",
-                    };
-                    detailTagsLabel.text = string.Join(" · ", phenomParts)
-                        + (densityStr.Length > 0 ? $"\n{densityStr}" : "");
+                        var systems = SolarSystemGenerator.GenerateSectorSystems(sector, false, _sys);
+                        foreach (var sys in systems)
+                        {
+                            if (_gm.Map.IsSystemCharted(_gm.Station, sys.seed))
+                            {
+                                vagueOnly = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (vagueOnly)
+                    {
+                        var profile = GetVagueResourceProfile(sector);
+                        detailTagsLabel.text = $"Resource profile: {string.Join(" · ", profile)}";
+                    }
+                    else
+                    {
+                        var phenomParts = new System.Collections.Generic.List<string>();
+                        foreach (var code in sector.phenomenonCodes)
+                            phenomParts.Add(PhenomenonCodeLabel(code));
+                        string densityStr = sector.systemDensity switch
+                        {
+                            SystemDensity.Sparse   => "3–6 systems (Sparse)",
+                            SystemDensity.Low      => "7–10 systems (Low)",
+                            SystemDensity.Standard => "11–15 systems (Standard)",
+                            SystemDensity.High     => "16–20 systems (High)",
+                            _                      => "",
+                        };
+                        detailTagsLabel.text = string.Join(" · ", phenomParts)
+                            + (densityStr.Length > 0 ? $"\n{densityStr}" : "");
+                    }
                 }
             }
 
@@ -1710,7 +1668,6 @@ namespace Waystation.UI
             ShowSectorDetail(_selectedSector);
             // Refresh sector label in world (clear and re-render).
             if (_layer == MapLayer.Sector) RebuildSector();
-            else if (_layer == MapLayer.Galaxy) RefreshGalaxyChunks();
         }
 
         // ── Sector systems list ───────────────────────────────────────────────
@@ -1728,11 +1685,14 @@ namespace Waystation.UI
                 Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
 
             var systems = SolarSystemGenerator.GenerateSectorSystems(sector, isHomeSector, _sys);
+            bool anyCharted = isHomeSector;
 
             for (int idx = 0; idx < systems.Count; idx++)
             {
                 var sys         = systems[idx];
                 bool isThisHome = isHomeSector && idx == 0;
+                bool isCharted = isThisHome || (_gm?.Map?.IsSystemCharted(_gm.Station, sys.seed) == true);
+                if (isCharted) anyCharted = true;
 
                 // Row background
                 var rowGo = new GameObject($"SysRow_{idx}", typeof(RectTransform), typeof(Image));
@@ -1764,7 +1724,9 @@ namespace Waystation.UI
                 lblRt.offsetMin = new Vector2(26f, 0f);
                 lblRt.offsetMax = new Vector2(-62f, 0f);
                 var lbl = lblGo.GetComponent<TMP_Text>();
-                lbl.text         = sys.systemName + (isThisHome ? "  \u2605" : "");
+                lbl.text         = isCharted
+                    ? sys.systemName + (isThisHome ? "  \u2605" : "")
+                    : $"Uncharted System {idx + 1}";
                 lbl.fontSize     = 11f;
                 lbl.alignment    = TextAlignmentOptions.Left;
                 lbl.color        = new Color(0.82f, 0.90f, 1.00f);
@@ -1790,21 +1752,69 @@ namespace Waystation.UI
                 btnLblRt.offsetMin = Vector2.zero;
                 btnLblRt.offsetMax = Vector2.zero;
                 var btnLbl = btnLblGo.GetComponent<TMP_Text>();
-                btnLbl.text      = "View \u2192";
+                btnLbl.text      = isCharted ? "View \u2192" : "Install Chip";
                 btnLbl.fontSize  = 9f;
                 btnLbl.alignment = TextAlignmentOptions.Center;
                 btnLbl.color     = new Color(0.85f, 0.92f, 1f);
                 btnLbl.raycastTarget = false;
 
                 var btn       = btnGo.AddComponent<Button>();
-                var capSys    = sys;
-                var capIsHome = isThisHome;
-                btn.onClick.AddListener(() => OpenSystemFromSector(capSys, capIsHome));
+                btn.interactable = isCharted;
+                if (isCharted)
+                {
+                    var capSys    = sys;
+                    var capIsHome = isThisHome;
+                    btn.onClick.AddListener(() => OpenSystemFromSector(capSys, capIsHome));
+                }
             }
+
+            if (anyCharted)
+                detailTypeLabel.text = sector.CodeOnlyDesignation();
 
             // Reset scroll to top
             if (_sectorSystemsScrollRect != null)
                 _sectorSystemsScrollRect.verticalNormalizedPosition = 1f;
+        }
+
+        private static List<string> GetVagueResourceProfile(SectorData sector)
+        {
+            var scores = new Dictionary<string, float>
+            {
+                { "Ore", 0f },
+                { "Ice", 0f },
+                { "Gas", 0f },
+                { "Salvage", 0f },
+                { "Anomaly", 0f },
+            };
+
+            foreach (var code in sector.phenomenonCodes)
+            {
+                switch (code)
+                {
+                    case PhenomenonCode.OR: scores["Ore"] += 3f; break;
+                    case PhenomenonCode.IC: scores["Ice"] += 3f; break;
+                    case PhenomenonCode.GS: scores["Gas"] += 3f; break;
+                    case PhenomenonCode.VD: scores["Salvage"] += 2f; break;
+                    case PhenomenonCode.NB:
+                    case PhenomenonCode.BH:
+                    case PhenomenonCode.PL: scores["Anomaly"] += 2f; break;
+                }
+            }
+
+            switch (sector.modifier)
+            {
+                case SectorModifier.RichOreDeposit: scores["Ore"] += 3f; break;
+                case SectorModifier.IceField: scores["Ice"] += 3f; break;
+                case SectorModifier.GasPocket: scores["Gas"] += 3f; break;
+                case SectorModifier.SalvageGraveyard:
+                case SectorModifier.DerelictStation: scores["Salvage"] += 3f; break;
+                case SectorModifier.AncientRuins:
+                case SectorModifier.DarkMatterFilament: scores["Anomaly"] += 3f; break;
+            }
+
+            var ranked = new List<KeyValuePair<string, float>>(scores);
+            ranked.Sort((a, b) => b.Value.CompareTo(a.Value));
+            return new List<string> { ranked[0].Key, ranked[1].Key, ranked[2].Key };
         }
 
         private void OpenSystemFromSector(NeighborSystem sys, bool isHome)
@@ -2262,7 +2272,7 @@ namespace Waystation.UI
             mapContainer.sizeDelta        = new Vector2(680f, 680f);
             mapContainer.anchoredPosition = Vector2.zero;
 
-            //   Explore container (fills mapArea, used for Sector & Galaxy)
+            //   Explore container (fills mapArea, used for Sector)
             {
                 //   Clip panel — RectMask2D clips by bounds (no stencil/sprite needed,
                 //   avoids the alpha=0 Image bug that breaks Mask stencil writes)
@@ -2275,7 +2285,7 @@ namespace Waystation.UI
                 _exploreWorld.anchorMin = _exploreWorld.anchorMax = new Vector2(0.5f, 0.5f);
                 _exploreWorld.sizeDelta        = new Vector2(10000f, 10000f);
                 _exploreWorld.anchoredPosition = Vector2.zero;
-                clipRt.gameObject.SetActive(false);  // hidden until Sector/Galaxy layer
+                clipRt.gameObject.SetActive(false);  // hidden until Sector layer
                 // Store reference via exploring container being the parent
                 // (we toggle clipRt, not _exploreWorld directly)
                 // Re-wire: keep reference to clip root via _exploreWorld.parent
@@ -2522,4 +2532,3 @@ namespace Waystation.UI
         }
     }
 }
-

@@ -4900,6 +4900,12 @@ namespace Waystation.UI
             }
             var s    = _gm.Station;
             var defs = _gm.Missions.AvailableDefinitions();
+            if (_gm.Registry != null && _gm.Registry.Missions.TryGetValue("mission.scout", out var scoutDef))
+            {
+                bool exists = false;
+                foreach (var d in defs) { if (d.id == "mission.scout") { exists = true; break; } }
+                if (!exists) defs.Add(scoutDef);
+            }
             var crew = s.GetCrew();
 
             float y = area.y;
@@ -4967,7 +4973,28 @@ namespace Waystation.UI
             if (GUI.Button(new Rect(area.x, y, w, 26f), $"\u2708 Dispatch \"{selDef.displayName}\"", _sBtnSmall))
             {
                 var crewList = new List<string>(_selectedMissionCrew);
-                var (ok, reason, _) = _gm.Missions.DispatchMission(_selectedMissionDef, crewList, s);
+                var (ok, reason, mission) = _gm.Missions.DispatchMission(_selectedMissionDef, crewList, s);
+                if (ok && mission != null && string.Equals(mission.missionType, "scout", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sector = SystemMapController.SelectedSector;
+                    if (sector != null)
+                    {
+                        var systems = SolarSystemGenerator.GenerateSectorSystems(
+                            sector,
+                            Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                            Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY),
+                            _gm.Station.solarSystem);
+                        foreach (var sys in systems)
+                        {
+                            if (!_gm.Map.IsSystemCharted(s, sys.seed))
+                            {
+                                mission.targetSystemSeed = sys.seed;
+                                mission.targetSystemName = sys.systemName;
+                                break;
+                            }
+                        }
+                    }
+                }
                 _missionMsg = ok ? $"Dispatched!" : $"!{reason}";
                 if (ok) { _selectedMissionCrew.Clear(); _selectedMissionDef = ""; }
             }
@@ -6132,15 +6159,13 @@ namespace Waystation.UI
             {
                 MapViewLevel.System   => "System View",
                 MapViewLevel.Sector   => "Sector View",
-                MapViewLevel.Quadrant => "Quadrant View",
-                MapViewLevel.Galaxy   => "Galaxy View",
                 _                    => "System View",
             };
             GUI.Label(new Rect(area.x, y, w, 20f), $"Map: {lvlLabel}", _sLabel);
             y += 22f;
             float range = _gm.Map.GetDetectionRange(s);
             GUI.Label(new Rect(area.x, y, w, 16f),
-                      $"Detection range: {range:F0} u  |  {pois.Count} POIs discovered", _sSub);
+                      $"Detection range: {range:F0} u  |  {pois.Count} POIs discovered  |  EP: {s.explorationPoints}", _sSub);
             y += 20f;
             DrawSolid(new Rect(area.x, y, w, 1f), ColDivider);
             y += 8f;
