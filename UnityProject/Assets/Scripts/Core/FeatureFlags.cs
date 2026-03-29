@@ -89,5 +89,15 @@ namespace Waystation.Core
         /// department management in higher-level flows.
         /// </summary>
         public static bool DepartmentManagement = true;
+
+        /// <summary>
+        /// Enables procedural faction generation on sector grid unlock.
+        /// When true, a faction generation roll fires for each newly-unlocked sector
+        /// based on its regional resource profile and adjacent faction density.
+        /// The starting scenario always seeds two factions (one friendly, one unfriendly)
+        /// in adjacent sectors regardless of this flag — set to false to prevent
+        /// further faction generation on subsequent sector unlocks.
+        /// </summary>
+        public static bool FactionProceduralGeneration = true;
     }
 }

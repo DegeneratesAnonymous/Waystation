@@ -52,6 +52,11 @@ namespace Waystation.Systems
         public event System.Action<NPCInstance> OnNPCSleeps;
         public event System.Action<NPCInstance> OnNPCWakes;
 
+        // ── Registry query ────────────────────────────────────────────────────
+
+        /// <summary>All NPC template IDs currently registered in the content registry.</summary>
+        public IEnumerable<string> AvailableTemplateIds => _registry.Npcs.Keys;
+
         // ── Factory methods ────────────────────────────────────────────────────
 
         public NPCInstance SpawnFromTemplate(string templateId,
@@ -88,6 +93,51 @@ namespace Waystation.Systems
             // Copy species-level need depletion rate multipliers from template
             if (template.needDepletionRates != null && template.needDepletionRates.Count > 0)
                 npc.needDepletionRates = new System.Collections.Generic.Dictionary<string, float>(template.needDepletionRates);
+
+            npc.RecalculateMood();
+            return npc;
+        }
+
+        /// <summary>
+        /// Spawns an NPC from a template with trait selection biased toward the trait
+        /// categories that align with the given government type (trait gravity mechanic).
+        /// When <paramref name="governmentType"/> is null the behaviour is identical to
+        /// <see cref="SpawnFromTemplate"/>.
+        /// </summary>
+        public NPCInstance SpawnWithGovernmentBias(string templateId,
+                                                    GovernmentType? governmentType,
+                                                    List<string> statusTags = null,
+                                                    Dictionary<string, object> overrides = null)
+        {
+            if (!_registry.Npcs.TryGetValue(templateId, out var template))
+            {
+                Debug.LogError($"[NPCSystem] Unknown NPC template '{templateId}'");
+                return null;
+            }
+
+            var npc = NPCInstance.Create(
+                templateId: templateId,
+                name:       GenerateName(template),
+                classId:    template.baseClass,
+                subclassId: PickSubclass(template)
+            );
+
+            npc.skills     = RollSkills(template);
+            npc.traits     = PickTraitsWithGovernmentBias(template, governmentType);
+            npc.factionId  = PickFaction(template);
+            npc.statusTags = statusTags != null ? new List<string>(statusTags) : new List<string>();
+
+            if (overrides != null)
+            {
+                if (overrides.ContainsKey("faction_id")) npc.factionId = overrides["faction_id"]?.ToString();
+                if (overrides.ContainsKey("name"))        npc.name      = overrides["name"]?.ToString();
+            }
+
+            AssignAbilityScores(npc, templateId);
+
+            if (template.needDepletionRates != null && template.needDepletionRates.Count > 0)
+                npc.needDepletionRates = new System.Collections.Generic.Dictionary<string, float>(
+                    template.needDepletionRates);
 
             npc.RecalculateMood();
             return npc;
@@ -411,6 +461,58 @@ namespace Waystation.Systems
                 int idx = UnityEngine.Random.Range(0, pool.Count);
                 result.Add(pool[idx]);
                 pool.RemoveAt(idx);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Picks traits from the template's trait pool, giving double weight to traits
+        /// whose category aligns with the preferred categories for <paramref name="governmentType"/>.
+        /// Falls back to the unbiased selection when no trait category information is
+        /// available in the registry or when <paramref name="governmentType"/> is null.
+        /// </summary>
+        private List<string> PickTraitsWithGovernmentBias(NPCTemplate template,
+                                                           GovernmentType? governmentType,
+                                                           int count = 2)
+        {
+            if (governmentType == null || template.traitPool.Count == 0)
+                return PickTraits(template, count);
+
+            var preferredCategories = FactionProceduralGenerator.GetGovTraitAffinity(governmentType.Value);
+            if (preferredCategories.Count == 0)
+                return PickTraits(template, count);
+
+            // Build a weighted list: biased traits have weight 2.0, others weight 1.0
+            var weighted = new List<(string traitId, float weight)>();
+            float totalWeight = 0f;
+            foreach (var traitId in template.traitPool)
+            {
+                // Try to get the trait definition from the registry to check its category.
+                // If the trait isn't in the registry (e.g. id mismatch) give it base weight.
+                float weight = 1.0f;
+                if (_registry.Traits.TryGetValue(traitId, out var def) &&
+                    preferredCategories.Contains(def.category))
+                    weight = 2.0f;
+
+                weighted.Add((traitId, weight));
+                totalWeight += weight;
+            }
+
+            var result = new List<string>();
+            int n = Mathf.Min(count, weighted.Count);
+            for (int i = 0; i < n; i++)
+            {
+                float roll = UnityEngine.Random.Range(0f, totalWeight);
+                float acc  = 0f;
+                int   pick = weighted.Count - 1;
+                for (int j = 0; j < weighted.Count; j++)
+                {
+                    acc += weighted[j].weight;
+                    if (roll <= acc) { pick = j; break; }
+                }
+                result.Add(weighted[pick].traitId);
+                totalWeight -= weighted[pick].weight;
+                weighted.RemoveAt(pick);
             }
             return result;
         }

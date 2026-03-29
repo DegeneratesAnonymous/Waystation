@@ -352,7 +352,12 @@ namespace Waystation.Systems
                     var aggregate = FactionAggregator.Calculate(
                         faction, station.npcs, _traits, allFactions, station.tick);
                     if (aggregate != null)
+                    {
                         station.factionAggregates[kv.Key] = aggregate;
+                        // Check whether the trait distribution shift is large enough to
+                        // warrant a government type recalculation.
+                        CheckGovernmentShift(faction, aggregate, cached);
+                    }
                     else
                         station.factionAggregates.Remove(kv.Key);
                 }
@@ -371,18 +376,75 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Forces an immediate recalculation for a faction (e.g. after membership change).
+        /// Also checks for a government type shift.
         /// </summary>
         public void InvalidateAggregate(StationState station,
                                          FactionDefinition faction,
                                          Dictionary<string, FactionDefinition> allFactions)
         {
             if (!FeatureFlags.FactionGovernment) return;
+            station.factionAggregates.TryGetValue(faction.id, out var previous);
             var aggregate = FactionAggregator.Calculate(
                 faction, station.npcs, _traits, allFactions, station.tick);
             if (aggregate != null)
+            {
                 station.factionAggregates[faction.id] = aggregate;
+                CheckGovernmentShift(faction, aggregate, previous);
+            }
             else
                 station.factionAggregates.Remove(faction.id);
+        }
+
+        // ── Private helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Compares the new aggregate against the previous one.  If the dominant trait
+        /// category has shifted by more than <see cref="FactionProceduralGenerator.GovernmentShiftThreshold"/>
+        /// (or the government type derived from the new aggregate differs), updates
+        /// <see cref="FactionDefinition.governmentType"/> accordingly.
+        /// </summary>
+        private static void CheckGovernmentShift(
+            FactionDefinition faction,
+            FactionTraitAggregate newAggregate,
+            FactionTraitAggregate previousAggregate)
+        {
+            var derivedType = FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(newAggregate);
+
+            // Always recalculate for generated factions so their government type evolves
+            // naturally.  For static (data-loaded) factions only change if the shift crosses
+            // the threshold and the derived type actually differs.
+            if (!faction.isGenerated)
+            {
+                if (derivedType == faction.governmentType) return;
+
+                // Check whether the dominant category score has shifted enough
+                if (previousAggregate != null && !HasSignificantShift(newAggregate, previousAggregate))
+                    return;
+            }
+
+            if (derivedType != faction.governmentType)
+            {
+                Debug.Log($"[FactionGovernmentSystem] Faction '{faction.id}' government " +
+                          $"shifted: {faction.governmentType} → {derivedType}");
+                faction.governmentType = derivedType;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the dominant category's score has changed by more than
+        /// <see cref="FactionProceduralGenerator.GovernmentShiftThreshold"/> between
+        /// the two aggregates.
+        /// </summary>
+        private static bool HasSignificantShift(FactionTraitAggregate current,
+                                                 FactionTraitAggregate previous)
+        {
+            foreach (var kv in current.categoryScores)
+            {
+                float prev = previous.categoryScores.TryGetValue(kv.Key, out var p) ? p : 0f;
+                if (Mathf.Abs(kv.Value - prev) >= FactionProceduralGenerator.GovernmentShiftThreshold)
+                    return true;
+            }
+            return false;
         }
     }
 }
