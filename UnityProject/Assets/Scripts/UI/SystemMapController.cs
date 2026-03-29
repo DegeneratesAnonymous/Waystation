@@ -789,15 +789,7 @@ namespace Waystation.UI
         {
             var station = _gm?.Station;
             if (station == null) return false;
-            foreach (var f in station.foundations.Values)
-            {
-                if (f.buildableId == "buildable.sector_antenna" &&
-                    f.status == "complete" &&
-                    f.Functionality() > 0f &&
-                    f.isEnergised)
-                    return true;
-            }
-            return false;
+            return _gm?.Map?.HasPoweredCompleteBuildable(station, "buildable.sector_antenna") == true;
         }
 
         // ── Sector map ────────────────────────────────────────────────────────

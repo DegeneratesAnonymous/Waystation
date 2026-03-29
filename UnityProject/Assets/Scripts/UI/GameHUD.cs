@@ -4902,8 +4902,7 @@ namespace Waystation.UI
             var defs = _gm.Missions.AvailableDefinitions();
             if (_gm.Registry != null && _gm.Registry.Missions.TryGetValue("mission.scout", out var scoutDef))
             {
-                bool exists = false;
-                foreach (var d in defs) { if (d.id == "mission.scout") { exists = true; break; } }
+                bool exists = defs.Any(d => d.id == "mission.scout");
                 if (!exists) defs.Add(scoutDef);
             }
             var crew = s.GetCrew();

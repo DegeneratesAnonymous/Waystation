@@ -63,10 +63,7 @@ namespace Waystation.Systems
             int count = 0;
             foreach (var f in station.foundations.Values)
             {
-                if (f.buildableId == "buildable.interstellar_antenna" &&
-                    f.status == "complete" &&
-                    f.Functionality() > 0f &&
-                    f.isEnergised)
+                if (IsPoweredCompleteFoundation(f, "buildable.interstellar_antenna"))
                     count++;
             }
             return count * ExplorationPointsPerInterstellarAntenna;
@@ -217,6 +214,12 @@ namespace Waystation.Systems
             }
         }
 
+        /// <summary>
+        /// Reconciles physical exploration-datachip inventory with map chart state.
+        /// Pass 1 keeps chips still present in their holder inventory, pass 2 rebinds
+        /// moved chips to any remaining holder slot, and only truly lost chips are removed.
+        /// Final chart state is then rebuilt from chips installed in powered cartography servers.
+        /// </summary>
         private static void PruneInvalidChartedSystems(StationState station)
         {
             var stillInstalled = new HashSet<int>();
@@ -285,6 +288,15 @@ namespace Waystation.Systems
             station.chartedSystemSeeds = stillInstalled;
         }
 
+        private static bool IsPoweredCompleteFoundation(FoundationInstance f, string buildableId)
+        {
+            if (f == null) return false;
+            return f.buildableId == buildableId &&
+                   f.status == "complete" &&
+                   f.Functionality() > 0f &&
+                   f.isEnergised;
+        }
+
         /// <summary>All currently discovered POIs.</summary>
         public List<PointOfInterest> GetDiscoveredPois(StationState station)
         {
@@ -337,3 +349,11 @@ namespace Waystation.Systems
         }
     }
 }
+        public bool HasPoweredCompleteBuildable(StationState station, string buildableId)
+        {
+            if (station == null || string.IsNullOrEmpty(buildableId)) return false;
+            foreach (var f in station.foundations.Values)
+                if (IsPoweredCompleteFoundation(f, buildableId))
+                    return true;
+            return false;
+        }

@@ -178,6 +178,8 @@ namespace Waystation.Systems
                     cartographyStation = f;
                 if (chipHolder == null && f.cargoCapacity > 0)
                     chipHolder = f;
+                if (cartographyStation != null && chipHolder != null)
+                    break;
             }
 
             if (cartographyStation == null || !cartographyStation.isEnergised || chipHolder == null) return;
