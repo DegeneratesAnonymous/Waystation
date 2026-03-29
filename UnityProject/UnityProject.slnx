@@ -1,4 +1,6 @@
 ﻿<Solution>
   <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="Waystation.Runtime.csproj" />
+  <Project Path="Waystation.Tests.EditMode.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
 </Solution>

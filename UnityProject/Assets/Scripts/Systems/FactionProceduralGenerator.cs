@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
+using Random = System.Random;
 
 namespace Waystation.Systems
 {

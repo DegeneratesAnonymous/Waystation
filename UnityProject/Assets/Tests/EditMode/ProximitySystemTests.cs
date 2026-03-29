@@ -23,7 +23,7 @@ namespace Waystation.Tests
     {
         public static StationState MakeStation(int tick = 0)
         {
-            return new StationState { stationName = "ProxTestStation", tick = tick };
+            return new StationState("ProxTestStation") { tick = tick };
         }
 
         public static NPCInstance MakeCrewNpc(string uid = null, string location = "room1",

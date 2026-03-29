@@ -23,7 +23,7 @@ namespace Waystation.Tests
     {
         public static StationState MakeStation(int tick = 0)
         {
-            var s = new StationState { stationName = "MentoringTestStation", tick = tick };
+            var s = new StationState("MentoringTestStation") { tick = tick };
             return s;
         }
 

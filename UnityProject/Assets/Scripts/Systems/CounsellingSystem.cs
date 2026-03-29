@@ -407,7 +407,7 @@ namespace Waystation.Systems
         /// <summary>
         /// Injects a patient cooldown entry directly. For unit tests only.
         /// </summary>
-        internal void InjectPatientCooldownForTest(string patientUid, int expiryTick)
+        public void InjectPatientCooldownForTest(string patientUid, int expiryTick)
         {
             _patientCooldowns[patientUid] = expiryTick;
         }

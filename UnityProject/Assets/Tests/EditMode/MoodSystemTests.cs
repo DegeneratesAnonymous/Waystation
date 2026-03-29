@@ -22,7 +22,7 @@ namespace Waystation.Tests
     {
         public static StationState MakeStation()
         {
-            return new StationState { stationName = "MoodTestStation", tick = 0 };
+            return new StationState("MoodTestStation") { tick = 0 };
         }
 
         public static NPCInstance MakeCrewNpc(string uid = null, float moodScore = 50f, float stressScore = 50f)

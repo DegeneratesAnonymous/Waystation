@@ -81,6 +81,8 @@ namespace Waystation.UI
         }
 
         // ── Constructor ───────────────────────────────────────────────────
+        public DrawerPanel() : this(Direction.Vertical) { }
+
         public DrawerPanel(Direction direction = Direction.Vertical)
         {
             AddToClassList("ws-drawer-panel");

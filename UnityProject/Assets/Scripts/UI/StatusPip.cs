@@ -85,6 +85,8 @@ namespace Waystation.UI
         }
 
         // ── Constructor ───────────────────────────────────────────────────
+        public StatusPip() : this(State.Off) { }
+
         public StatusPip(State state = State.Off)
         {
             AddToClassList("ws-status-pip");

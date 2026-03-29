@@ -81,6 +81,8 @@ namespace Waystation.UI
         public string ActiveTabId => _activeId;
 
         // ── Constructor ───────────────────────────────────────────────────
+        public TabStrip() : this(Orientation.Horizontal) { }
+
         public TabStrip(Orientation orientation = Orientation.Horizontal)
         {
             AddToClassList("ws-tab-strip");

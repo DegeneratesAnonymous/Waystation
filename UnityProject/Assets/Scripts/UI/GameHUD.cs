@@ -277,6 +277,7 @@ namespace Waystation.UI
         private static void OnAnySceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (scene.name != "GameScene") return;
+            if (FeatureFlags.UseUIToolkitHUD) return;   // WaystationHUDController takes over
             if (FindAnyObjectByType<GameHUD>() != null) return;
             new GameObject("GameHUD").AddComponent<GameHUD>();
         }
@@ -285,11 +286,13 @@ namespace Waystation.UI
         private void Start()
         {
             _instance = this;
+            BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
             StartCoroutine(WaitForGame());
         }
 
         private void OnDestroy()
         {
+            BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
             DemoBootstrap.HideOverlay = false;
             foreach (var go in _ghostPool) if (go) Destroy(go);
         }
@@ -1037,12 +1040,16 @@ namespace Waystation.UI
         // Undo stack: each entry is the list of UIDs placed in one placement action.
         private readonly Stack<List<string>> _undoStack = new Stack<List<string>>();
 
-        // True when cursor is over the HUD — used by CameraController to block map scroll/pan
-        public static bool IsMouseOverDrawer { get; private set; }
+        // True when cursor is over the HUD — used by CameraController to block map scroll/pan.
+        // WaystationHUDController writes to this property when UseUIToolkitHUD is true so that
+        // CameraController and StationRoomView continue to read from a single location regardless
+        // of which HUD path is active.
+        public static bool IsMouseOverDrawer { get; internal set; }
 
         // True when ghost-placement or deconstruct mode is active — used by StationRoomView
         // to suppress NPC selection while the player is building.
-        public static bool InBuildMode { get; private set; }
+        // WaystationHUDController writes to this property when UseUIToolkitHUD is true.
+        public static bool InBuildMode { get; internal set; }
 
         // Singleton reference for cross-view calls (e.g. StationRoomView dot clicks).
         private static GameHUD _instance;
@@ -1050,10 +1057,38 @@ namespace Waystation.UI
         /// <summary>Called by StationRoomView when a crew dot is single-clicked.</summary>
         public static void SelectCrewMember(string npcUid)
         {
-            if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
+            if (string.IsNullOrEmpty(npcUid)) return;
+            if (FeatureFlags.UseUIToolkitHUD)
+            {
+                WaystationHUDController.SelectCrewMemberInternal(npcUid);
+                return;
+            }
+            if (_instance == null) return;
             if (_instance._active != Tab.Station)
                 _instance._active = Tab.Station;
             _instance.OpenSub(SubPanel.CrewDetail, npcUid);
+        }
+
+        /// <summary>
+        /// Handles a build item selection from BuildMenuController.
+        /// Begins ghost placement for the specified buildable when the legacy HUD is active.
+        /// </summary>
+        private void OnBuildMenuItemSelected(string categoryId, string buildableId)
+        {
+            if (FeatureFlags.UseUIToolkitHUD) return;
+            if (!_ready || string.IsNullOrEmpty(buildableId)) return;
+            if (_gm?.Registry?.Buildables == null) return;
+            if (!_gm.Registry.Buildables.ContainsKey(buildableId))
+            {
+                Debug.LogWarning($"[GameHUD] Build item '{buildableId}' not found in registry.");
+                return;
+            }
+            _ghostBuildableId    = buildableId;
+            _ghostRotation       = 0;
+            _prePlacementTab     = _active;
+            _prePlacementSub     = _subActive;
+            _active              = Tab.None;
+            CloseSub();
         }
 
         private void DrawBuild(Rect area, float w, float h)

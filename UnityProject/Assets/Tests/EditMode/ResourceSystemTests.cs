@@ -100,7 +100,7 @@ namespace Waystation.Tests
         /// <summary>Creates a StationState with all seven core resources pre-populated.</summary>
         public static StationState MakeStation()
         {
-            var s = new StationState { stationName = "TestStation", tick = 0 };
+            var s = new StationState("TestStation") { tick = 0 };
             // Ensure all 7 core resources are present
             s.resources["power"]   = 100f;
             s.resources["food"]    = 100f;

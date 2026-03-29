@@ -71,6 +71,8 @@ namespace Waystation.UI
         }
 
         // ── Constructor ───────────────────────────────────────────────────
+        public DataChipIndicator() : this(ChipState.Empty) { }
+
         public DataChipIndicator(ChipState state = ChipState.Empty)
         {
             AddToClassList("ws-datachip-indicator");
