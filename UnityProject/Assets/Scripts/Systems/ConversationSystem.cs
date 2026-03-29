@@ -25,10 +25,9 @@
 //   Friend  — 70 % positive
 //   Lover / Spouse — 85–90 % positive
 //
-// Conversation cooldown: 60 ticks per NPC pair.
+// Conversation cooldown: 60 ticks per NPC (blocks conversations with any partner).
 // ConversationSystem.Enabled: set false to disable without removing other mood systems.
 using System.Collections.Generic;
-using UnityEngine;
 using Waystation.Models;
 
 namespace Waystation.Systems
@@ -127,12 +126,12 @@ namespace Waystation.Systems
         public bool IsConversing(string uid) => _activeConversations.ContainsKey(uid);
 
         /// <summary>
-        /// Returns a snapshot of all active conversations as a dictionary of
-        /// initiator-uid → partner-uid pairs (both directions are present).
+        /// Returns a snapshot of all active conversations as a read-only dictionary of
+        /// participant-uid → partner-uid pairs (both directions are present).
         /// Used by tile-map rendering to position speech bubble indicators.
         /// </summary>
         public IReadOnlyDictionary<string, string> GetActiveConversations()
-            => _activeConversations;
+            => new Dictionary<string, string>(_activeConversations);
 
         // ── Tick ──────────────────────────────────────────────────────────────
 

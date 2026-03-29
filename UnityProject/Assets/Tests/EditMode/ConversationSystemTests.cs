@@ -80,12 +80,12 @@ namespace Waystation.Tests
         public void SetUp() => _sys = ConversationTestHelpers.MakeSystem();
 
         /// <summary>
-        /// Verifies that a very low CHA NPC (CHA 3, modifier -4) cannot exceed
-        /// the CriticalFail ceiling with any roll.
-        /// d20 max (20) + mod (-4) = 16 → still produces High on extreme.
-        /// Instead we verify that at CHA 3 the worst possible roll (d20=1, total=-3)
-        /// produces CriticalFail and the best (d20=20, total=16) produces High.
-        /// We achieve that by using a seeded system and reflecting on RollChaQuality directly.
+        /// Verifies that a very low CHA NPC (CHA 3, modifier -2) can produce
+        /// a CriticalFail result on some d20 rolls.
+        /// With CHA 3 the total is d20 - 2, spanning -1 to 18, which keeps the
+        /// NPC in the lower tiers frequently enough that CriticalFail should occur.
+        /// The test exercises this by repeatedly calling RollChaQuality for a CHA 3
+        /// NPC and asserting that CriticalFail is observed at least once.
         /// </summary>
 
         // Direct tier verification by manipulating the NPC's CHA score and
@@ -267,24 +267,41 @@ namespace Waystation.Tests
         [Test]
         public void CriticalFail_DecreasesAffinityByExpectedAmount()
         {
-            float before = RelationshipRegistry.Get(_station, _a.uid, _b.uid)?.affinityScore ?? 0f;
             var sys = new ConversationSystem(seed: 0);
-            // Force a CriticalFail by using very low CHA
-            _a.abilityScores.CHA = 1;
+            _a.abilityScores.CHA = 1;   // mod -2; ~20% chance of CriticalFail per roll
 
-            // We can't guarantee a CriticalFail from Tick() in one pass; test the
-            // ApplyOutcome path by invoking the pipeline many times and checking for
-            // a significant negative swing.  Instead, verify constant is applied via
-            // a full Tick where we arrange a conversation and look at affinity.
+            // Drive many full conversation cycles looking for a tick where the
+            // affinity delta exactly equals AffinityCriticalFail (-8).
+            float lastAffinity = RelationshipRegistry.Get(_station, _a.uid, _b.uid)?.affinityScore ?? 0f;
+            bool criticalDeltaObserved = false;
 
-            // Simpler direct approach: run many ticks until at least one CriticalFail occurs.
-            bool critFound = false;
-            for (int i = 0; i < 500 && !critFound; i++)
+            for (int pass = 0; pass < 200 && !criticalDeltaObserved; pass++)
             {
-                if (sys.RollChaQuality(_a) == ConversationQuality.CriticalFail)
-                    critFound = true;
+                _station.tick = 200 + pass * ConversationSystem.ConversationCooldownTicks * 2;
+                _a.lastConversationTick = -999;
+                _b.lastConversationTick = -999;
+
+                // Advance through enough ticks to start and resolve one conversation
+                sys.Tick(_station, null, null);
+                _station.tick++;
+                sys.Tick(_station, null, null);
+                _station.tick++;
+                sys.Tick(_station, null, null);
+
+                float currentAffinity = RelationshipRegistry.Get(_station, _a.uid, _b.uid)?.affinityScore ?? lastAffinity;
+                float delta = currentAffinity - lastAffinity;
+
+                // A CriticalFail applies exactly AffinityCriticalFail (no other modifier can land
+                // on this exact value from the same pipeline step)
+                if (System.Math.Abs(delta - ConversationSystem.AffinityCriticalFail) < 0.001f)
+                    criticalDeltaObserved = true;
+
+                lastAffinity = currentAffinity;
             }
-            Assert.IsTrue(critFound, "With CHA 1, CriticalFail should occur within 500 rolls.");
+
+            Assert.IsTrue(criticalDeltaObserved,
+                "Expected at least one CriticalFail producing an affinity delta equal to " +
+                $"ConversationSystem.AffinityCriticalFail ({ConversationSystem.AffinityCriticalFail}).");
         }
 
         [Test]
@@ -322,7 +339,7 @@ namespace Waystation.Tests
         public void CriticalFail_AppliesNegativeAffinity_OverMultiplePipelines()
         {
             var sys = new ConversationSystem(seed: 99);
-            // Force CHA so low that CriticalFail is common (CHA 1 → mod -5)
+            // Force CHA so low that CriticalFail is common
             _a.abilityScores.CHA = 1;
 
             float initialAffinity = RelationshipRegistry.Get(_station, _a.uid, _b.uid)?.affinityScore ?? 0f;
@@ -485,7 +502,6 @@ namespace Waystation.Tests
         public void SkillFollowUp_ProducesEventLogEntry()
         {
             // CHA 20 NPC with sociable trait to guarantee Persuasion follow-up on High rolls
-            _a.abilityScores.CHA = 20;
             _a.abilityScores.CHA = 20;
             _a.GetOrCreateTraitProfile().traits.Add(new ActiveTrait { traitId = "trait.sociable" });
             // High persuasion skill to guarantee success
