@@ -99,5 +99,30 @@ namespace Waystation.Core
         /// further faction generation on subsequent sector unlocks.
         /// </summary>
         public static bool FactionProceduralGeneration = true;
+
+        /// <summary>
+        /// Enables the Persuasion skill price modifier in trade transactions.
+        /// When true, the best negotiator's skill.persuasion level reduces buy prices
+        /// and increases sell prices up to a maximum of 15%.
+        /// Set to false to revert to manual-only trading at reputation-modified prices.
+        /// </summary>
+        public static bool TradePersuasionModifier = true;
+
+        /// <summary>
+        /// Enables standing order automation in TradeSystem.
+        /// When true, configured buy/sell rules execute automatically on matching
+        /// ship arrival when credits/inventory are sufficient.
+        /// Manual and standing orders remain active simultaneously without conflict.
+        /// Set to false to disable automatic execution without removing standing order data.
+        /// </summary>
+        public static bool TradeStandingOrders = true;
+
+        /// <summary>
+        /// Enables the full EconomySystem income/expenditure cycle:
+        /// docking fees, faction contract payments, and supply/demand market dynamics.
+        /// When false, credits revert to a flat ResourceSystem resource with no market
+        /// dynamics. Supply/demand modifiers in TradeSystem are also gated by this flag.
+        /// </summary>
+        public static bool EconomySystem = true;
     }
 }

@@ -239,6 +239,9 @@ namespace Waystation.Systems
                 {
                     station.tradeOffers[shipUid] = offer;
                     station.LogEvent($"Trade offer from {ship.name}: {offer.GetSellLines().Count} sell, {offer.GetBuyLines().Count} buy lines.");
+
+                    if (FeatureFlags.TradeStandingOrders)
+                        _tradeSystem.ExecuteStandingOrders(ship, offer, station);
                 }
             }
 
