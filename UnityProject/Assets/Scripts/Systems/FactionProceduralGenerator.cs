@@ -74,12 +74,15 @@ namespace Waystation.Systems
         private static readonly Dictionary<GovernmentType, List<TraitCategory>> GovTraitAffinity =
             new Dictionary<GovernmentType, List<TraitCategory>>
         {
-            { GovernmentType.Democracy,       new List<TraitCategory> { TraitCategory.Social,       TraitCategory.Ideological  } },
-            { GovernmentType.Republic,        new List<TraitCategory> { TraitCategory.Ideological,  TraitCategory.Social       } },
-            { GovernmentType.Monarchy,        new List<TraitCategory> { TraitCategory.Psychological, TraitCategory.Ideological } },
-            { GovernmentType.Authoritarian,   new List<TraitCategory> { TraitCategory.Psychological, TraitCategory.Physical    } },
-            { GovernmentType.CorporateVassal, new List<TraitCategory> { TraitCategory.Economic,     TraitCategory.Social       } },
-            { GovernmentType.Pirate,          new List<TraitCategory> { TraitCategory.Physical,     TraitCategory.Psychological} },
+            { GovernmentType.Democracy,       new List<TraitCategory> { TraitCategory.Social,        TraitCategory.Ideological  } },
+            { GovernmentType.Republic,        new List<TraitCategory> { TraitCategory.Ideological,   TraitCategory.Social       } },
+            { GovernmentType.Monarchy,        new List<TraitCategory> { TraitCategory.Psychological, TraitCategory.Ideological  } },
+            { GovernmentType.Authoritarian,   new List<TraitCategory> { TraitCategory.Psychological, TraitCategory.Physical     } },
+            { GovernmentType.CorporateVassal, new List<TraitCategory> { TraitCategory.Economic,      TraitCategory.Social       } },
+            { GovernmentType.Pirate,          new List<TraitCategory> { TraitCategory.Physical,      TraitCategory.Psychological} },
+            { GovernmentType.Theocracy,       new List<TraitCategory> { TraitCategory.Ideological,   TraitCategory.Physical     } },
+            { GovernmentType.Technocracy,     new List<TraitCategory> { TraitCategory.Economic,      TraitCategory.Social       } },
+            { GovernmentType.FederalCouncil,  new List<TraitCategory> { TraitCategory.Social,        TraitCategory.Physical     } },
         };
 
         // ── Faction name word pools ───────────────────────────────────────────
@@ -278,18 +281,35 @@ namespace Waystation.Systems
 
             if (dominant == null) return GovernmentType.Democracy;
 
-            // Secondary-category tiebreaker for Psychological dominant
-            if (dominant == TraitCategory.Psychological.ToString())
-            {
-                float ideological = aggregate.categoryScores.TryGetValue(
-                    TraitCategory.Ideological.ToString(), out var v) ? v : 0f;
-                return ideological > 0.3f ? GovernmentType.Authoritarian : GovernmentType.Monarchy;
-            }
+            float social       = aggregate.categoryScores.TryGetValue(TraitCategory.Social.ToString(),    out var sv)  ? sv  : 0f;
+            float ideological  = aggregate.categoryScores.TryGetValue(TraitCategory.Ideological.ToString(), out var iv) ? iv  : 0f;
+            float physical     = aggregate.categoryScores.TryGetValue(TraitCategory.Physical.ToString(),    out var phv) ? phv : 0f;
 
-            if (dominant == TraitCategory.Social.ToString())      return GovernmentType.Democracy;
-            if (dominant == TraitCategory.Ideological.ToString()) return GovernmentType.Republic;
-            if (dominant == TraitCategory.Economic.ToString())    return GovernmentType.CorporateVassal;
-            if (dominant == TraitCategory.Physical.ToString())    return GovernmentType.Pirate;
+            // Psychological dominant: Authoritarian (high Ideological secondary) or Monarchy.
+            if (dominant == TraitCategory.Psychological.ToString())
+                return ideological > 0.3f ? GovernmentType.Authoritarian : GovernmentType.Monarchy;
+
+            // Social dominant: Democracy (distributed, high legitimacy).
+            if (dominant == TraitCategory.Social.ToString())
+                return GovernmentType.Democracy;
+
+            // Ideological dominant:
+            //   High Physical secondary → Theocracy (centralised, divine mandate).
+            //   Otherwise              → Republic   (balanced, earned legitimacy).
+            if (dominant == TraitCategory.Ideological.ToString())
+                return physical > 0.3f ? GovernmentType.Theocracy : GovernmentType.Republic;
+
+            // Economic dominant:
+            //   High Social secondary → Technocracy  (merit-based, broad).
+            //   Otherwise             → CorporateVassal (economic control, narrow).
+            if (dominant == TraitCategory.Economic.ToString())
+                return social > 0.3f ? GovernmentType.Technocracy : GovernmentType.CorporateVassal;
+
+            // Physical dominant:
+            //   High Social secondary → FederalCouncil (cooperative, multi-group order).
+            //   Otherwise             → Pirate          (anarchic, coercive).
+            if (dominant == TraitCategory.Physical.ToString())
+                return social > 0.3f ? GovernmentType.FederalCouncil : GovernmentType.Pirate;
 
             return GovernmentType.Democracy;
         }
@@ -401,6 +421,10 @@ namespace Waystation.Systems
                 if (aggregate != null)
                     station.factionAggregates[factionId] = aggregate;
             }
+
+            // ── Initialise stability fields ───────────────────────────────────
+            faction.stabilityScore        = 50f; // mid-range default
+            faction.governmentTenureTicks = 0;
 
             return faction;
         }

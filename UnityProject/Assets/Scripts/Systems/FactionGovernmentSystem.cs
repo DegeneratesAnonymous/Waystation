@@ -8,7 +8,9 @@
 //   Democracy / Republic  : all members averaged; leaders weighted 1.5×
 //   Monarchy / Authoritarian : leaders only; falls back if vacant
 //   CorporateVassal       : parent-faction leaders > installed management > workers
-//   Pirate                : no aggregation — null returned; individual NPC level only
+//   Pirate / FederalCouncil : all members averaged with equal weight (flat/collective)
+//   Theocracy             : leaders only (like Monarchy/Authoritarian)
+//   Technocracy           : all members; highest-skilled weighted 1.5×
 //
 // Gated by FeatureFlags.FactionGovernment.
 using System;
@@ -39,7 +41,7 @@ namespace Waystation.Systems
         /// <summary>
         /// Calculates the trait aggregate for a faction using the appropriate
         /// aggregation function for its government type.
-        /// Returns null for Pirate factions or when no valid NPC data is available.
+        /// Returns null only when no valid NPC data is available.
         /// </summary>
         public static FactionTraitAggregate Calculate(
             FactionDefinition faction,
@@ -69,8 +71,17 @@ namespace Waystation.Systems
                                                      allFactions, currentTick);
 
                 case GovernmentType.Pirate:
-                    // TODO: Pirate Region mechanics — stub only. Individual NPC resolution.
-                    return null;
+                case GovernmentType.FederalCouncil:
+                    // Flat collective — all members have equal weight; no leadership tier.
+                    return AggregateCollective(faction, allNpcs, traitSystem, currentTick);
+
+                case GovernmentType.Theocracy:
+                    // Religious authority: leaders only (like monarchy/authoritarian).
+                    return AggregateLeaderOnly(faction, allNpcs, traitSystem, currentTick);
+
+                case GovernmentType.Technocracy:
+                    // Merit-based: all members, but highest total skill weighted 1.5×.
+                    return AggregateTechnocratic(faction, allNpcs, traitSystem, currentTick);
 
                 default:
                     return AggregateDemocratic(faction, allNpcs, traitSystem, currentTick);
@@ -186,6 +197,56 @@ namespace Waystation.Systems
             return BuildAggregate(pool, traitSystem, faction.governmentType, currentTick);
         }
 
+        // ── Pirate / FederalCouncil — flat collective ─────────────────────────
+
+        private static FactionTraitAggregate AggregateCollective(
+            FactionDefinition faction,
+            Dictionary<string, NPCInstance> allNpcs,
+            TraitSystem traitSystem,
+            int currentTick)
+        {
+            var pool = new List<(NPCInstance npc, float weight)>();
+
+            // All members have equal weight — no leadership tier.
+            foreach (var npcId in faction.memberNpcIds)
+            {
+                if (allNpcs.TryGetValue(npcId, out var npc))
+                    pool.Add((npc, 1.0f));
+            }
+
+            return BuildAggregate(pool, traitSystem, faction.governmentType, currentTick);
+        }
+
+        // ── Technocracy — merit-weighted ──────────────────────────────────────
+
+        private static FactionTraitAggregate AggregateTechnocratic(
+            FactionDefinition faction,
+            Dictionary<string, NPCInstance> allNpcs,
+            TraitSystem traitSystem,
+            int currentTick)
+        {
+            var pool = new List<(NPCInstance npc, float weight)>();
+
+            foreach (var npcId in faction.memberNpcIds)
+            {
+                if (!allNpcs.TryGetValue(npcId, out var npc)) continue;
+
+                // Calculate total skill level as a merit proxy.
+                int totalSkill = 0;
+                foreach (var si in npc.skillInstances)
+                    totalSkill += si.Level;
+
+                // Leaders or high-skill NPCs receive a 1.5× weight boost.
+                bool isHighSkill = totalSkill >= 10;
+                float weight = (faction.leaderNpcIds.Contains(npcId) || isHighSkill)
+                    ? LeaderWeightMultiplier
+                    : 1.0f;
+                pool.Add((npc, weight));
+            }
+
+            return BuildAggregate(pool, traitSystem, faction.governmentType, currentTick);
+        }
+
         // ── Aggregate builder ─────────────────────────────────────────────────
 
         private static FactionTraitAggregate BuildAggregate(
@@ -286,11 +347,32 @@ namespace Waystation.Systems
             else if (candidates > 1)
             {
                 faction.successionState = SuccessionState.Contested;
+                // Select the best candidate: highest rank, then highest moodScore as tiebreaker.
+                string bestId    = null;
+                int    bestRank  = -1;
+                float  bestMood  = -1f;
+                foreach (var npcId in faction.memberNpcIds)
+                {
+                    if (faction.leaderNpcIds.Contains(npcId)) continue;
+                    if (!allNpcs.TryGetValue(npcId, out var candidate)) continue;
+                    if (candidate.rank > bestRank ||
+                        (candidate.rank == bestRank && candidate.moodScore > bestMood))
+                    {
+                        bestRank = candidate.rank;
+                        bestMood = candidate.moodScore;
+                        bestId   = npcId;
+                    }
+                }
+                if (bestId != null)
+                {
+                    faction.leaderNpcIds.Add(bestId);
+                    faction.successionState = SuccessionState.Stable;
+                    OnSuccessionResolved?.Invoke(faction.id);
+                }
             }
             else if (candidates == 1)
             {
-                // TODO: Auto-select the single candidate as the new leader.
-                // Deferred to follow-on work order (succession condition logic).
+                // Single candidate — auto-select.
                 faction.successionState = SuccessionState.Stable;
                 string newLeaderId = null;
                 foreach (var npcId in faction.memberNpcIds)
@@ -332,7 +414,48 @@ namespace Waystation.Systems
     {
         private readonly TraitSystem _traits;
 
+        // ── Stability constants ───────────────────────────────────────────────
+
+        /// <summary>Stability score below which faction enters critical instability (rebellion risk).</summary>
+        public const float StabilityThresholdCritical = 20f;
+
+        /// <summary>Stability score below which faction is in low-stability (civil unrest).</summary>
+        public const float StabilityThresholdLow = 40f;
+
+        /// <summary>Stability score below which faction is in moderate tension.</summary>
+        public const float StabilityThresholdMedium = 60f;
+
+        /// <summary>Ticks of uninterrupted government required for full tenure bonus (≈1 year).</summary>
+        public const int TenureFullStabilityTicks = TimeSystem.TicksPerDay * 360;
+
+        // ── Reputation carry-over weights per government disposition ──────────
+
+        /// <summary>Fraction of previous reputation retained when successor government is friendly.</summary>
+        public const float RepCarryOverFriendly = 0.75f;
+
+        /// <summary>Fraction of previous reputation retained when successor government is neutral.</summary>
+        public const float RepCarryOverNeutral = 0.60f;
+
+        /// <summary>Fraction of previous reputation retained when successor government is hostile.</summary>
+        public const float RepCarryOverHostile = 0.50f;
+
+        // ── Events ────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fired when a faction's government type changes via any route.
+        /// Payload: factionId, previous type, new type.
+        /// </summary>
+        public static event Action<string, GovernmentType, GovernmentType> OnGovernmentShifted;
+
+        /// <summary>
+        /// Fired when a faction's stability crosses a response threshold.
+        /// Payload: factionId, response label.
+        /// </summary>
+        public static event Action<string, string> OnStabilityResponse;
+
         public FactionGovernmentSystem(TraitSystem traits) => _traits = traits;
+
+        // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>Called once per game tick from GameManager.AdvanceTick.</summary>
         public void Tick(StationState station,
@@ -344,7 +467,11 @@ namespace Waystation.Systems
             foreach (var kv in allFactions)
             {
                 var faction = kv.Value;
-                // Recalculate if aggregate is absent or stale
+
+                // Increment government tenure in ticks (guarded to once per day by the early return above).
+                faction.governmentTenureTicks += TimeSystem.TicksPerDay;
+
+                // Recalculate aggregate if absent or stale.
                 if (!station.factionAggregates.TryGetValue(kv.Key, out var cached) ||
                     cached == null ||
                     station.tick - cached.calculatedAtTick >= FactionAggregator.AggregateStalenessWindowTicks)
@@ -354,13 +481,18 @@ namespace Waystation.Systems
                     if (aggregate != null)
                     {
                         station.factionAggregates[kv.Key] = aggregate;
-                        // Check whether the trait distribution shift is large enough to
-                        // warrant a government type recalculation.
-                        CheckGovernmentShift(faction, aggregate, cached);
+                        // Check whether the trait distribution shift warrants a government type recalculation.
+                        CheckGovernmentShift(faction, aggregate, cached, station);
                     }
                     else
                         station.factionAggregates.Remove(kv.Key);
                 }
+
+                // Update stability and fire threshold response events.
+                station.factionAggregates.TryGetValue(kv.Key, out var currentAggregate);
+                float previousStability = faction.stabilityScore;
+                faction.stabilityScore = ComputeStability(faction, currentAggregate, station);
+                CheckStabilityResponse(faction, faction.stabilityScore, previousStability, station);
             }
         }
 
@@ -389,24 +521,179 @@ namespace Waystation.Systems
             if (aggregate != null)
             {
                 station.factionAggregates[faction.id] = aggregate;
-                CheckGovernmentShift(faction, aggregate, previous);
+                CheckGovernmentShift(faction, aggregate, previous, station);
             }
             else
                 station.factionAggregates.Remove(faction.id);
         }
 
-        // ── Private helpers ───────────────────────────────────────────────────
+        /// <summary>
+        /// Triggers a rapid government shift caused by an internal crisis event.
+        /// The new government type is derived from the current trait aggregate.
+        /// Reputation carry-over is applied based on successor disposition.
+        /// </summary>
+        public void TriggerInternalCrisisShift(
+            FactionDefinition faction,
+            StationState station,
+            Dictionary<string, FactionDefinition> allFactions)
+        {
+            if (!FeatureFlags.FactionGovernment) return;
+            station.factionAggregates.TryGetValue(faction.id, out var aggregate);
+            var derivedType = FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(aggregate);
+            if (derivedType != faction.governmentType)
+            {
+                ApplyGovernmentShift(faction, derivedType, station,
+                    $"Internal crisis in '{faction.displayName}' forces government collapse.");
+            }
+        }
+
+        /// <summary>
+        /// Triggers a government shift caused by external pressure (player action or faction war).
+        /// <paramref name="newType"/> is the government type the external pressure imposes.
+        /// Reputation carry-over is applied based on successor disposition.
+        /// </summary>
+        public void TriggerExternalPressureShift(
+            FactionDefinition faction,
+            GovernmentType newType,
+            StationState station,
+            Dictionary<string, FactionDefinition> allFactions)
+        {
+            if (!FeatureFlags.FactionGovernment) return;
+            if (newType != faction.governmentType)
+            {
+                ApplyGovernmentShift(faction, newType, station,
+                    $"External pressure forces '{faction.displayName}' into a government change.");
+            }
+        }
+
+        /// <summary>
+        /// Returns the patron faction's reputation with the player for a vassalised faction.
+        /// Only relevant for military and trade interaction contexts.
+        /// Returns 0 if the faction is not vassalised or the patron is not found.
+        /// </summary>
+        public static float GetPatronReputation(
+            string factionId,
+            StationState station,
+            Dictionary<string, FactionDefinition> allFactions)
+        {
+            if (!allFactions.TryGetValue(factionId, out var faction)) return 0f;
+            if (string.IsNullOrEmpty(faction.vassalParentFactionId)) return 0f;
+            if (!allFactions.ContainsKey(faction.vassalParentFactionId)) return 0f;
+            return station.GetFactionRep(faction.vassalParentFactionId);
+        }
+
+        // ── Stability helpers ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Computes the stability score (0–100) for a faction from four inputs, each
+        /// contributing 25 points:
+        ///   • Economic prosperity — mapped from player reputation with the faction.
+        ///   • Military strength   — Physical trait category score from the aggregate.
+        ///   • Population mood     — average moodScore of member NPCs (0–100).
+        ///   • Government tenure   — normalised ticks since last government shift.
+        /// </summary>
+        public static float ComputeStability(
+            FactionDefinition faction,
+            FactionTraitAggregate aggregate,
+            StationState station)
+        {
+            // 1. Economic prosperity: normalise reputation (-100..100) to 0..1.
+            float rep = station.GetFactionRep(faction.id);
+            float economic = Mathf.Clamp01((rep + 100f) / 200f);
+
+            // 2. Military strength: Physical category score, clamped 0..1.
+            float military = 0.5f; // default mid-range when no aggregate is available
+            if (aggregate != null)
+            {
+                military = Mathf.Clamp01(
+                    aggregate.categoryScores.TryGetValue(
+                        TraitCategory.Physical.ToString(), out var physScore)
+                    ? physScore : 0.5f);
+            }
+
+            // 3. Population mood/cohesion: average moodScore of known members.
+            float moodSum   = 0f;
+            int   moodCount = 0;
+            foreach (var npcId in faction.memberNpcIds)
+            {
+                if (station.npcs.TryGetValue(npcId, out var npc))
+                {
+                    moodSum += npc.moodScore;
+                    moodCount++;
+                }
+            }
+            float populationMood = moodCount > 0 ? Mathf.Clamp01(moodSum / (moodCount * 100f)) : 0.5f;
+
+            // 4. Government tenure: full bonus at TenureFullStabilityTicks.
+            float tenure = Mathf.Clamp01((float)faction.governmentTenureTicks / TenureFullStabilityTicks);
+
+            return (economic + military + populationMood + tenure) * 25f;
+        }
+
+        /// <summary>
+        /// Fires a population response event when stability crosses a threshold.
+        /// Four response types:
+        ///   Critical (below 20) : Revolution — government collapse imminent.
+        ///   Low      (20–40)    : Civil Unrest — protests and strikes.
+        ///   Moderate (40–60)    : Tension — quiet discontent and defection risk.
+        ///   Stable   (above 60) : No special response.
+        /// </summary>
+        private void CheckStabilityResponse(
+            FactionDefinition faction,
+            float newStability,
+            float previousStability,
+            StationState station)
+        {
+            // Only fire when a threshold is newly crossed (transition, not persistent state).
+            if (newStability < StabilityThresholdCritical &&
+                previousStability >= StabilityThresholdCritical)
+            {
+                string label = "Revolution";
+                string msg   = $"⚠ CRITICAL: '{faction.displayName}' is on the verge of revolution " +
+                               $"(stability {newStability:F0}).";
+                station.LogEvent(msg);
+                OnStabilityResponse?.Invoke(faction.id, label);
+
+                // Critical instability can trigger a rapid government shift.
+                station.factionAggregates.TryGetValue(faction.id, out var agg);
+                var derivedType = FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg);
+                if (derivedType != faction.governmentType)
+                    ApplyGovernmentShift(faction, derivedType, station,
+                        $"Revolution topples the government of '{faction.displayName}'.");
+            }
+            else if (newStability < StabilityThresholdLow &&
+                     previousStability >= StabilityThresholdLow)
+            {
+                string label = "CivilUnrest";
+                string msg   = $"⚠ '{faction.displayName}' is experiencing civil unrest " +
+                               $"(stability {newStability:F0}).";
+                station.LogEvent(msg);
+                OnStabilityResponse?.Invoke(faction.id, label);
+            }
+            else if (newStability < StabilityThresholdMedium &&
+                     previousStability >= StabilityThresholdMedium)
+            {
+                string label = "Tension";
+                string msg   = $"'{faction.displayName}' shows signs of internal tension " +
+                               $"(stability {newStability:F0}).";
+                station.LogEvent(msg);
+                OnStabilityResponse?.Invoke(faction.id, label);
+            }
+        }
+
+        // ── Government shift helpers ──────────────────────────────────────────
 
         /// <summary>
         /// Compares the new aggregate against the previous one.  If the dominant trait
         /// category has shifted by more than <see cref="FactionProceduralGenerator.GovernmentShiftThreshold"/>
         /// (or the government type derived from the new aggregate differs), updates
-        /// <see cref="FactionDefinition.governmentType"/> accordingly.
+        /// <see cref="FactionDefinition.governmentType"/> accordingly (population drift path).
         /// </summary>
-        private static void CheckGovernmentShift(
+        private void CheckGovernmentShift(
             FactionDefinition faction,
             FactionTraitAggregate newAggregate,
-            FactionTraitAggregate previousAggregate)
+            FactionTraitAggregate previousAggregate,
+            StationState station)
         {
             var derivedType = FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(newAggregate);
 
@@ -423,10 +710,65 @@ namespace Waystation.Systems
             }
 
             if (derivedType != faction.governmentType)
+                ApplyGovernmentShift(faction, derivedType, station,
+                    $"Population drift shifts '{faction.displayName}' government.");
+        }
+
+        /// <summary>
+        /// Applies a government type change, updates reputation carry-over, resets tenure,
+        /// logs the event, and fires <see cref="OnGovernmentShifted"/>.
+        /// </summary>
+        private static void ApplyGovernmentShift(
+            FactionDefinition faction,
+            GovernmentType newType,
+            StationState station,
+            string logMessage)
+        {
+            var oldType = faction.governmentType;
+
+            // Reputation carry-over based on successor disposition.
+            float carryOver = GetRepCarryOverMultiplier(newType);
+            float currentRep = station.GetFactionRep(faction.id);
+            float newRep     = Mathf.Clamp(currentRep * carryOver, -100f, 100f);
+            station.factionReputation[faction.id] = newRep;
+
+            faction.governmentType    = newType;
+            faction.governmentTenureTicks = 0;
+
+            string fullMsg = $"{logMessage} {oldType} → {newType} " +
+                             $"(rep: {currentRep:+0.0;-0.0} → {newRep:+0.0;-0.0})";
+            Debug.Log($"[FactionGovernmentSystem] {fullMsg}");
+            station.LogEvent(fullMsg);
+
+            OnGovernmentShifted?.Invoke(faction.id, oldType, newType);
+        }
+
+        /// <summary>
+        /// Returns the reputation carry-over multiplier for the given successor government type.
+        /// Friendly government types retain more of a positive reputation;
+        /// hostile types discount it.
+        /// </summary>
+        private static float GetRepCarryOverMultiplier(GovernmentType newType)
+        {
+            switch (newType)
             {
-                Debug.Log($"[FactionGovernmentSystem] Faction '{faction.id}' government " +
-                          $"shifted: {faction.governmentType} → {derivedType}");
-                faction.governmentType = derivedType;
+                case GovernmentType.Democracy:
+                case GovernmentType.Republic:
+                case GovernmentType.Technocracy:
+                case GovernmentType.FederalCouncil:
+                    return RepCarryOverFriendly;
+
+                case GovernmentType.Monarchy:
+                case GovernmentType.CorporateVassal:
+                    return RepCarryOverNeutral;
+
+                case GovernmentType.Authoritarian:
+                case GovernmentType.Pirate:
+                case GovernmentType.Theocracy:
+                    return RepCarryOverHostile;
+
+                default:
+                    return RepCarryOverNeutral;
             }
         }
 
