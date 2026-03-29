@@ -29,10 +29,11 @@ namespace Waystation.Tests
         public static NPCInstance MakeCrewNpc(string uid = null, string location = "room1",
                                                float moodScore = 50f, float stressScore = 50f)
         {
+            string finalUid = uid ?? System.Guid.NewGuid().ToString("N").Substring(0, 8);
             var npc = new NPCInstance
             {
-                uid         = uid ?? System.Guid.NewGuid().ToString("N").Substring(0, 8),
-                name        = "NPC_" + (uid ?? "x"),
+                uid         = finalUid,
+                name        = "NPC_" + finalUid,
                 moodScore   = moodScore,
                 stressScore = stressScore,
                 location    = location,
@@ -415,13 +416,60 @@ namespace Waystation.Tests
         }
     }
 
-    // ── Cache invalidation tests ──────────────────────────────────────────────
+    // ── Relationship type change tests ────────────────────────────────────────
+    // (formerly "cache invalidation" — ProximitySystem reads directly from the
+    //  RelationshipRegistry each tick, so changes take effect immediately)
 
     [TestFixture]
-    public class ProximityCacheInvalidationTests
+    public class ProximityRelationshipChangeTests
     {
         [Test]
         public void AfterFriendToEnemyChange_NextTick_AppliesEnemyPenalty()
+        {
+            var mood    = new MoodSystem();
+            var prox    = new ProximitySystem();
+            var station = ProximityTestHelpers.MakeStation(tick: 0);
+
+            // Keep the same NPC instances across both ticks
+            var a = ProximityTestHelpers.MakeCrewNpc("A", "room1", moodScore: 50f);
+            var b = ProximityTestHelpers.MakeCrewNpc("B", "room1", moodScore: 50f);
+            ProximityTestHelpers.AddToStation(station, a);
+            ProximityTestHelpers.AddToStation(station, b);
+
+            var rec = ProximityTestHelpers.MakeRelationship(station, a, b, RelationshipType.Friend);
+
+            // Tick 0: Friend — proximity_friend modifier applied, expiry = 0 + 20 = 20
+            prox.Tick(station, mood, null);
+            Assert.IsTrue(a.moodModifiers.Exists(m => m.eventId == "proximity_friend"),
+                "After first tick as Friends, NPC A must have proximity_friend modifier.");
+            int friendExpiryAfterTick0 = a.moodModifiers.Find(m => m.eventId == "proximity_friend")
+                                          .expiresAtTick;
+
+            // Change relationship to Enemy without replacing the NPC instances
+            rec.relationshipType = RelationshipType.Enemy;
+            rec.affinityScore    = -10f;
+
+            // Tick 1: Enemy — proximity_enemy must now be applied;
+            //         proximity_friend must NOT have its expiry refreshed.
+            station.tick = 1;
+            prox.Tick(station, mood, null);
+
+            Assert.IsTrue(a.moodModifiers.Exists(m => m.eventId == "proximity_enemy"),
+                "After Friend→Enemy change, NPC A must have proximity_enemy modifier on next tick.");
+            Assert.IsTrue(b.moodModifiers.Exists(m => m.eventId == "proximity_enemy"),
+                "After Friend→Enemy change, NPC B must have proximity_enemy modifier on next tick.");
+
+            // The proximity_friend modifier remains on the list (not yet expired by MoodSystem),
+            // but its expiry was NOT refreshed — still at the tick-0 value (20, not 21).
+            var friendMod = a.moodModifiers.Find(m => m.eventId == "proximity_friend");
+            Assert.IsNotNull(friendMod,
+                "proximity_friend modifier should still be on the list (not yet expired by MoodSystem).");
+            Assert.AreEqual(friendExpiryAfterTick0, friendMod.expiresAtTick,
+                "proximity_friend expiry must NOT be refreshed after the relationship changed to Enemy.");
+        }
+
+        [Test]
+        public void AfterEnemyToFriendChange_NextTick_AppliesFriendBoost()
         {
             var mood    = new MoodSystem();
             var prox    = new ProximitySystem();
@@ -432,31 +480,23 @@ namespace Waystation.Tests
             ProximityTestHelpers.AddToStation(station, a);
             ProximityTestHelpers.AddToStation(station, b);
 
-            var rec = ProximityTestHelpers.MakeRelationship(station, a, b, RelationshipType.Friend);
+            var rec = ProximityTestHelpers.MakeRelationship(station, a, b, RelationshipType.Enemy);
 
-            // First tick: Friend — both should have a mood boost modifier
+            // Tick 0: Enemy
             prox.Tick(station, mood, null);
-            Assert.IsTrue(a.moodModifiers.Exists(m => m.eventId == "proximity_friend"),
-                "After first tick as Friends, NPC A must have proximity_friend modifier.");
+            Assert.IsTrue(a.moodModifiers.Exists(m => m.eventId == "proximity_enemy"),
+                "Tick 0: NPC A must have proximity_enemy modifier.");
 
-            // Change relationship to Enemy (simulates RelationshipRegistry type change)
-            rec.relationshipType = RelationshipType.Enemy;
-            rec.affinityScore    = -10f;
+            // Change to Friend
+            rec.relationshipType = RelationshipType.Friend;
+            rec.affinityScore    = 25f;
 
-            // Reset NPC state for clean assertion
-            a = ProximityTestHelpers.MakeCrewNpc("A", "room1", moodScore: 50f);
-            b = ProximityTestHelpers.MakeCrewNpc("B", "room1", moodScore: 50f);
-            station.npcs["A"] = a;
-            station.npcs["B"] = b;
-
-            // Second tick: cache should invalidate and apply enemy penalty
+            // Tick 1: Friend modifier must now be applied
             station.tick = 1;
             prox.Tick(station, mood, null);
 
-            Assert.IsTrue(a.moodModifiers.Exists(m => m.eventId == "proximity_enemy"),
-                "After Friend→Enemy change, NPC A must have proximity_enemy modifier on next tick.");
-            Assert.IsFalse(a.moodModifiers.Exists(m => m.eventId == "proximity_friend"),
-                "After Friend→Enemy change, NPC A must NOT have proximity_friend modifier.");
+            Assert.IsTrue(a.moodModifiers.Exists(m => m.eventId == "proximity_friend"),
+                "After Enemy→Friend change, NPC A must have proximity_friend modifier on next tick.");
         }
     }
 

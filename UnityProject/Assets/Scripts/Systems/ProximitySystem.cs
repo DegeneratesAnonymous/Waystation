@@ -8,10 +8,9 @@
 // Modifiers are time-limited and refresh every tick while in range; when NPCs separate
 // they expire after ProximityModifierDurationTicks.
 //
-// Per-tick evaluation groups NPCs by module first so only same-module pairs are processed,
-// avoiding a registry lookup for pairs in different modules.  A per-pair relationship type
-// cache (_typeCache) stores the last-seen RelationshipType and is updated whenever the
-// registry type differs, ensuring cache invalidation is automatic and allocation-free.
+// Per-tick evaluation groups NPCs by module first (O(n) pass) so only same-module pairs
+// reach the RelationshipRegistry lookup.  Because Get() is a single dictionary lookup and
+// relationship types are read directly each tick, changes take effect on the very next tick.
 //
 // Strangers (RelationshipType.None) receive no proximity modifier.
 using System.Collections.Generic;
@@ -40,14 +39,6 @@ namespace Waystation.Systems
 
         // Feature flag
         public bool Enabled = true;
-
-        // ── Per-pair relationship type cache ──────────────────────────────────
-
-        // Caches the RelationshipType per pair key to avoid re-reading the full
-        // RelationshipRecord every tick.  Updated (cache-invalidated) automatically
-        // when the registry type differs from the cached value.
-        private readonly Dictionary<string, RelationshipType> _typeCache =
-            new Dictionary<string, RelationshipType>();
 
         // ── Tick ──────────────────────────────────────────────────────────────
 
@@ -97,17 +88,6 @@ namespace Waystation.Systems
                         var rec = RelationshipRegistry.Get(station, a.uid, b.uid);
                         if (rec == null) continue;
 
-                        // ── Update relationship type cache ────────────────────
-                        // If the cached type differs from the current registry type, the
-                        // cache is stale (relationship changed) — overwrite it now so this
-                        // tick applies the correct effect.
-                        string cacheKey = RelationshipRecord.MakeKey(a.uid, b.uid);
-                        if (!_typeCache.TryGetValue(cacheKey, out var cachedType) ||
-                            cachedType != rec.relationshipType)
-                        {
-                            _typeCache[cacheKey] = rec.relationshipType;
-                        }
-
                         ApplyProximityEffect(a, b, rec, station.tick, mood);
                     }
                 }
@@ -140,11 +120,20 @@ namespace Waystation.Systems
 
                     // The student (not the mentor) also receives a work speed bonus.
                     // mentorUid identifies which NPC is the mentor; the other is the student.
+                    // Only apply the bonus when mentorUid explicitly matches one of the pair.
                     if (rec.mentorUid != null)
                     {
-                        var student = (a.uid == rec.mentorUid) ? b : a;
-                        student.proximityWorkModifier            = 1.0f + MentorWorkBonus;
-                        student.proximityWorkModifierExpiresAtTick = tick + ProximityModifierDurationTicks;
+                        NPCInstance student = null;
+                        if (a.uid == rec.mentorUid)
+                            student = b;   // a is the mentor; b is the student
+                        else if (b.uid == rec.mentorUid)
+                            student = a;   // b is the mentor; a is the student
+
+                        if (student != null)
+                        {
+                            student.proximityWorkModifier            = 1.0f + MentorWorkBonus;
+                            student.proximityWorkModifierExpiresAtTick = tick + ProximityModifierDurationTicks;
+                        }
                     }
                     break;
 
