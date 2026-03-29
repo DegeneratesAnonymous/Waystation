@@ -110,6 +110,9 @@ namespace Waystation.Core
         public DepartmentRegistry       DeptRegistry  { get; private set; }
         public DepartmentSystem         Departments   { get; private set; }
 
+        // ── Economy system ─────────────────────────────────────────────────────────────────────
+        public EconomySystem            Economy       { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -406,6 +409,9 @@ namespace Waystation.Core
             // DeptColour shader bindings within the same tick as the colour change.
             DeptRegistry.OnDeptColourChanged += deptUid =>
                 Departments.NotifyColourChanged(deptUid, Station);
+
+            // Economy system
+            Economy = new EconomySystem();
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -666,6 +672,10 @@ namespace Waystation.Core
             Antenna.Tick(Station);
             ShipVisits.Tick(Station);
             CommSystem.Tick(Station);
+
+            // Economy system: docking fees and faction contract payments.
+            // Runs after Visitors.Tick so newly-docked ships are already in the docked list.
+            Economy.Tick(Station);
 
             // Farming / climate (temperature before farming so planter temps are fresh)
             Temperature.Tick(Station);

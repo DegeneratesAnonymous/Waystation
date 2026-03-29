@@ -3,6 +3,22 @@
 //
 // When a ship with trade or smuggle intent docks, the TradeSystem generates
 // a TradeOffer recording what the ship sells/buys and at what prices.
+//
+// Price formula (per trade line):
+//   finalPrice = basePrice × supplyDemandModifier × reputationModifier
+//
+// supplyDemandModifier:
+//   Shortage (station stock < ShortageThreshold): × ShortagePremiumFactor (>1) on sell lines
+//   Surplus  (station stock > SurplusThreshold):  × SurplusDiscountFactor (<1) on buy lines
+//   Neutral: × 1.0
+//
+// reputationModifier:
+//   Sell lines (player buys):  1.0 − (rep/100) × RepMaxModifier  (lower price at high rep)
+//   Buy lines  (player sells): 1.0 + (rep/100) × RepMaxModifier  (higher payout at high rep)
+//
+// Persuasion modifier (applied during PlayerBuy / PlayerSell transactions):
+//   Gated by FeatureFlags.TradePersuasionModifier.
+//   Uses the best crew member's skill.persuasion level; max ±15% per transaction.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -69,6 +85,26 @@ namespace Waystation.Systems
         private const float MinBuyDiscount = 0.55f;
         private const float MaxBuyDiscount = 0.85f;
 
+        // ── Supply/demand constants ───────────────────────────────────────────
+
+        /// <summary>Station stock below this level triggers shortage pricing.</summary>
+        public const float ShortageThreshold   = 50f;
+        /// <summary>Station stock above this level triggers surplus pricing.</summary>
+        public const float SurplusThreshold    = 200f;
+        /// <summary>Price multiplier applied to sell lines when station stock is short.</summary>
+        public const float ShortagePremiumFactor = 1.25f;
+        /// <summary>Price multiplier applied to buy lines when station stock is surplus.</summary>
+        public const float SurplusDiscountFactor = 0.85f;
+
+        // ── Reputation modifier constant ──────────────────────────────────────
+
+        /// <summary>Maximum fraction of base price added/removed by faction reputation.</summary>
+        public const float RepMaxModifier = 0.15f;
+
+        // ── Persuasion modifier constant ──────────────────────────────────────
+
+        public const string PersuasionSkillId = "skill.persuasion";
+
         private static readonly Dictionary<string, List<string>> RoleSells =
             new Dictionary<string, List<string>>
         {
@@ -82,6 +118,57 @@ namespace Waystation.Systems
         };
 
         public TradeSystem(ContentRegistry registry) => _registry = registry;
+
+        // ── Supply/demand modifier ────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the supply/demand price modifier for <paramref name="resource"/>.
+        /// <para>
+        /// For sell lines (ship selling to player): if station has a shortage of this
+        /// resource the ship charges a premium (returned multiplier &gt; 1).
+        /// For buy lines (ship buying from player): if station has a surplus the ship
+        /// pays a discount (returned multiplier &lt; 1).
+        /// </para>
+        /// Returns 1.0 when <see cref="FeatureFlags.EconomySystem"/> is false.
+        /// </summary>
+        /// <param name="resource">Resource key.</param>
+        /// <param name="isSellLine">True when the ship is selling (player buys).</param>
+        /// <param name="station">Current station state.</param>
+        public static float SupplyDemandModifier(string resource, bool isSellLine, StationState station)
+        {
+            if (!FeatureFlags.EconomySystem) return 1f;
+
+            float stock = station.GetResource(resource);
+            if (isSellLine && stock < ShortageThreshold)
+                return ShortagePremiumFactor;
+            if (!isSellLine && stock > SurplusThreshold)
+                return SurplusDiscountFactor;
+            return 1f;
+        }
+
+        // ── Reputation modifier ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the reputation-based price modifier for a trade line.
+        /// <para>
+        /// Higher reputation with the ship's faction improves trade terms:
+        /// sell lines get cheaper (multiplier &lt; 1) and buy lines pay more
+        /// (multiplier &gt; 1).
+        /// </para>
+        /// </summary>
+        /// <param name="factionId">Faction the ship belongs to.</param>
+        /// <param name="isSellLine">True when the ship is selling (player buys).</param>
+        /// <param name="station">Current station state.</param>
+        public static float ReputationModifier(string factionId, bool isSellLine, StationState station)
+        {
+            if (string.IsNullOrEmpty(factionId)) return 1f;
+
+            float rep = station.GetFactionRep(factionId);        // −100 … +100
+            float factor = (rep / 100f) * RepMaxModifier;        // −0.15 … +0.15
+            // Sell line: player pays; high rep → lower price → subtract factor.
+            // Buy line:  player receives; high rep → better payout → add factor.
+            return isSellLine ? (1f - factor) : (1f + factor);
+        }
 
         // ── Offer generation ──────────────────────────────────────────────────
 
@@ -102,6 +189,9 @@ namespace Waystation.Systems
                     nTraders++;
             float pressureMod = 1f + nTraders * 0.05f;
 
+            float repSellMod = ReputationModifier(ship.factionId, isSellLine: true,  station);
+            float repBuyMod  = ReputationModifier(ship.factionId, isSellLine: false, station);
+
             var lines = new List<TradeLine>();
 
             // Selling lines
@@ -109,7 +199,8 @@ namespace Waystation.Systems
             {
                 float basePrice = BasePrices.ContainsKey(resource) ? BasePrices[resource] : 5f;
                 float markup    = UnityEngine.Random.Range(MinSellMarkup, MaxSellMarkup) * pressureMod;
-                float price     = (float)Math.Round(basePrice * markup, 1);
+                float sdMod     = SupplyDemandModifier(resource, isSellLine: true, station);
+                float price     = (float)Math.Round(basePrice * markup * sdMod * repSellMod, 1);
                 int   capacity  = template.cargoCapacity > 0 ? template.cargoCapacity : 20;
                 int   amount    = UnityEngine.Random.Range(Mathf.Max(5, capacity / 4), capacity + 1);
                 lines.Add(new TradeLine { resource = resource, pricePerUnit = price, available = amount });
@@ -131,7 +222,8 @@ namespace Waystation.Systems
                 string resource = buyPool[i];
                 float  basePrice = BasePrices.ContainsKey(resource) ? BasePrices[resource] : 5f;
                 float  discount  = UnityEngine.Random.Range(MinBuyDiscount, MaxBuyDiscount);
-                float  price     = (float)Math.Round(basePrice * discount, 1);
+                float  sdMod     = SupplyDemandModifier(resource, isSellLine: false, station);
+                float  price     = (float)Math.Round(basePrice * discount * sdMod * repBuyMod, 1);
                 int    want      = UnityEngine.Random.Range(10, 41);
                 lines.Add(new TradeLine { resource = resource, pricePerUnit = price, available = -want });
             }
@@ -150,7 +242,9 @@ namespace Waystation.Systems
             if (line == null || !line.IsSelling) return (false, $"{resource} is not available from this ship.");
             if (amount > line.available)         return (false, $"Only {line.available:F0} units available.");
 
-            float discount      = Mathf.Min(0.15f, Mathf.Max(0f, (negotiationSkill - 3) * 0.02f));
+            float discount      = FeatureFlags.TradePersuasionModifier
+                ? Mathf.Min(0.15f, Mathf.Max(0f, (negotiationSkill - 3) * 0.02f))
+                : 0f;
             float effectivePrice= line.pricePerUnit * (1f - discount);
             float totalCost     = effectivePrice * amount;
 
@@ -180,7 +274,9 @@ namespace Waystation.Systems
             if (station.GetResource(resource) < amount)
                 return (false, $"Insufficient {resource} on station.");
 
-            float bonus         = Mathf.Min(0.15f, Mathf.Max(0f, (negotiationSkill - 3) * 0.02f));
+            float bonus         = FeatureFlags.TradePersuasionModifier
+                ? Mathf.Min(0.15f, Mathf.Max(0f, (negotiationSkill - 3) * 0.02f))
+                : 0f;
             float effectivePrice= line.pricePerUnit * (1f + bonus);
             float totalIncome   = effectivePrice * amount;
 
@@ -195,14 +291,92 @@ namespace Waystation.Systems
             return (true, msg);
         }
 
+        // ── Standing order execution ──────────────────────────────────────────
+
+        /// <summary>
+        /// Evaluates all standing buy and sell orders against <paramref name="offer"/>
+        /// and executes any that match.  Called automatically from
+        /// <see cref="VisitorSystem.AdmitShip"/> when
+        /// <see cref="FeatureFlags.TradeStandingOrders"/> is enabled.
+        /// Both manual transactions and standing orders may fire on the same offer
+        /// without conflict — standing orders only consume the portion they need.
+        /// </summary>
+        /// <returns>Informational log messages for each executed order.</returns>
+        public List<string> ExecuteStandingOrders(ShipInstance ship, TradeOffer offer,
+                                                   StationState station)
+        {
+            var messages = new List<string>();
+            if (!FeatureFlags.TradeStandingOrders) return messages;
+
+            // Standing buy orders: station buys items FROM the ship
+            foreach (var order in station.standingBuyOrders)
+            {
+                var line = offer.GetLine(order.resource);
+                if (line == null || !line.IsSelling)         continue;
+                if (line.pricePerUnit > order.limitPrice)    continue;
+
+                float available  = line.available;
+                float toBuy      = Mathf.Min(order.amount, available);
+                if (toBuy <= 0f)                             continue;
+
+                float totalCost  = line.pricePerUnit * toBuy;
+                if (station.GetResource("credits") < totalCost) continue;
+
+                station.ModifyResource("credits",    -totalCost);
+                station.ModifyResource(order.resource, toBuy);
+                line.available -= toBuy;
+                offer.traded[order.resource] =
+                    (offer.traded.ContainsKey(order.resource) ? offer.traded[order.resource] : 0f) + toBuy;
+
+                string msg = $"Auto-bought {toBuy:F0} {order.resource} @ {line.pricePerUnit:F1}/unit " +
+                             $"from {ship.name} for {totalCost:F0} credits.";
+                station.LogEvent($"Standing order: {msg}");
+                messages.Add(msg);
+            }
+
+            // Standing sell orders: station sells items TO the ship
+            foreach (var order in station.standingSellOrders)
+            {
+                var line = offer.GetLine(order.resource);
+                if (line == null || !line.IsBuying)          continue;
+                if (line.pricePerUnit < order.limitPrice)    continue;
+
+                float want       = Mathf.Abs(line.available);
+                float toSell     = Mathf.Min(order.amount, want);
+                toSell           = Mathf.Min(toSell, station.GetResource(order.resource));
+                if (toSell <= 0f)                            continue;
+
+                float totalIncome = line.pricePerUnit * toSell;
+                station.ModifyResource(order.resource, -toSell);
+                station.ModifyResource("credits",       totalIncome);
+                line.available += toSell;
+                offer.traded[order.resource] =
+                    (offer.traded.ContainsKey(order.resource) ? offer.traded[order.resource] : 0f) + toSell;
+
+                string msg = $"Auto-sold {toSell:F0} {order.resource} @ {line.pricePerUnit:F1}/unit " +
+                             $"to {ship.name} for {totalIncome:F0} credits.";
+                station.LogEvent($"Standing order: {msg}");
+                messages.Add(msg);
+            }
+
+            return messages;
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Returns the highest <c>skill.persuasion</c> level among all current crew members.
+        /// Falls back to the legacy <c>negotiation</c> key in <see cref="NPCInstance.skills"/>
+        /// for backward compatibility with saves that pre-date the SkillSystem migration.
+        /// </summary>
         public int BestNegotiatorSkill(StationState station)
         {
             int best = 0;
             foreach (var n in station.GetCrew())
             {
-                int skill = n.skills.ContainsKey("negotiation") ? n.skills["negotiation"] : 0;
+                int skill = SkillSystem.GetSkillLevel(n, PersuasionSkillId);
+                if (skill == 0 && n.skills.ContainsKey("negotiation"))
+                    skill = n.skills["negotiation"];
                 if (skill > best) best = skill;
             }
             return best;

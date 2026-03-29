@@ -8,6 +8,64 @@ using UnityEngine;
 namespace Waystation.Models
 {
     // -------------------------------------------------------------------------
+    // Standing Order — a persistent rule for automatic trade execution
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Defines an automated buy or sell rule that executes when a matching ship
+    /// docks and the trade offer contains the specified resource.
+    /// For buy orders, <see cref="limitPrice"/> is the maximum price the station
+    /// will pay per unit.  For sell orders it is the minimum acceptable price.
+    /// </summary>
+    [Serializable]
+    public class StandingOrder
+    {
+        /// <summary>Resource ID this order applies to (e.g. "food", "parts").</summary>
+        public string resource;
+
+        /// <summary>
+        /// For buy orders: maximum price per unit to accept.
+        /// For sell orders: minimum price per unit to accept.
+        /// </summary>
+        public float  limitPrice;
+
+        /// <summary>Units to buy or sell per activation.</summary>
+        public float  amount;
+    }
+
+    // -------------------------------------------------------------------------
+    // Faction Contract — a periodic credit income agreement with a faction
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// An active agreement that pays the station a fixed credit sum on a
+    /// recurring schedule in exchange for services (supply deliveries, protection,
+    /// research sharing, etc.).  Contract terms are set at creation time and
+    /// processed each tick by EconomySystem.
+    /// </summary>
+    [Serializable]
+    public class FactionContract
+    {
+        /// <summary>Unique contract identifier.</summary>
+        public string contractId;
+
+        /// <summary>Faction that issued the contract.</summary>
+        public string factionId;
+
+        /// <summary>Credits added to station balance each payment cycle.</summary>
+        public float  creditPerPayment;
+
+        /// <summary>How many ticks between payment cycles.</summary>
+        public int    paymentIntervalTicks;
+
+        /// <summary>Station tick at which the last payment was applied.</summary>
+        public int    lastPaymentTick;
+
+        /// <summary>Human-readable description of the contract terms.</summary>
+        public string description;
+    }
+
+    // -------------------------------------------------------------------------
     // Comm Message — a radio transmission received from a passing or docked ship
     // -------------------------------------------------------------------------
 
@@ -1960,6 +2018,18 @@ namespace Waystation.Models
         // their full state is preserved for potential future reinjection via VisitorSystem.
         public Dictionary<string, DepartedNpcRecord> departedNpcs =
             new Dictionary<string, DepartedNpcRecord>();
+
+        // ── Trade standing orders ─────────────────────────────────────────────
+        // Persistent buy/sell rules executed automatically by TradeSystem when a
+        // matching ship docks.  Managed via the trade manifest UI.
+        public List<StandingOrder> standingBuyOrders  = new List<StandingOrder>();
+        public List<StandingOrder> standingSellOrders = new List<StandingOrder>();
+
+        // ── Faction contracts ─────────────────────────────────────────────────
+        // Active agreements that pay periodic credit income.  Keyed by contractId.
+        // Processed each tick by EconomySystem.
+        public Dictionary<string, FactionContract> factionContracts =
+            new Dictionary<string, FactionContract>();
 
         public StationState(string name)
         {
