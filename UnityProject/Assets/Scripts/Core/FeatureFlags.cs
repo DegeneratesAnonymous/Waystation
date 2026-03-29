@@ -67,5 +67,17 @@ namespace Waystation.Core
         /// DepartureRisk (the pre-NPC-007 default).
         /// </summary>
         public static bool NpcDeparture = true;
+
+        /// <summary>
+        /// Enables the DepartmentSystem per-tick processing loop (DepartmentSystem.Tick),
+        /// including automated behaviours such as escalation alerts and any
+        /// time-based department logic.
+        /// When set to false, tick processing is skipped but existing departments,
+        /// NPC assignments, and jobs are left unchanged, and department CRUD/
+        /// assignment APIs remain callable. Callers are responsible for honouring
+        /// this flag before invoking those APIs if they wish to fully disable
+        /// department management in higher-level flows.
+        /// </summary>
+        public static bool DepartmentManagement = true;
     }
 }

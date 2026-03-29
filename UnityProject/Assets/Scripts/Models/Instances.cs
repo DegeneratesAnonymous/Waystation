@@ -94,6 +94,10 @@ namespace Waystation.Models
         // Optional accent (secondary) colour — nullable, same rules as colourHex.
         public string secondaryColourHex = null;
 
+        // UID of the NPC appointed as Department Head; null when no Head is assigned.
+        // Must satisfy the minimum rank requirement (DepartmentSystem.MinHeadRank).
+        public string headNpcUid = null;
+
         public static Department Create(string uid, string name, List<string> allowedJobs = null)
         {
             return new Department
