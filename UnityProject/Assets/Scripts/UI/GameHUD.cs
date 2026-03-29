@@ -1040,12 +1040,16 @@ namespace Waystation.UI
         // Undo stack: each entry is the list of UIDs placed in one placement action.
         private readonly Stack<List<string>> _undoStack = new Stack<List<string>>();
 
-        // True when cursor is over the HUD — used by CameraController to block map scroll/pan
-        public static bool IsMouseOverDrawer { get; private set; }
+        // True when cursor is over the HUD — used by CameraController to block map scroll/pan.
+        // WaystationHUDController writes to this property when UseUIToolkitHUD is true so that
+        // CameraController and StationRoomView continue to read from a single location regardless
+        // of which HUD path is active.
+        public static bool IsMouseOverDrawer { get; internal set; }
 
         // True when ghost-placement or deconstruct mode is active — used by StationRoomView
         // to suppress NPC selection while the player is building.
-        public static bool InBuildMode { get; private set; }
+        // WaystationHUDController writes to this property when UseUIToolkitHUD is true.
+        public static bool InBuildMode { get; internal set; }
 
         // Singleton reference for cross-view calls (e.g. StationRoomView dot clicks).
         private static GameHUD _instance;
@@ -1053,7 +1057,13 @@ namespace Waystation.UI
         /// <summary>Called by StationRoomView when a crew dot is single-clicked.</summary>
         public static void SelectCrewMember(string npcUid)
         {
-            if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
+            if (string.IsNullOrEmpty(npcUid)) return;
+            if (FeatureFlags.UseUIToolkitHUD)
+            {
+                WaystationHUDController.SelectCrewMemberInternal(npcUid);
+                return;
+            }
+            if (_instance == null) return;
             if (_instance._active != Tab.Station)
                 _instance._active = Tab.Station;
             _instance.OpenSub(SubPanel.CrewDetail, npcUid);

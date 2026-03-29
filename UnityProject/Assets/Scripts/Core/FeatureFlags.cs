@@ -133,10 +133,14 @@ namespace Waystation.Core
         /// When true:
         ///   • WaystationHUDController auto-installs in GameScene and registers as
         ///     listener for GameManager.OnTick / OnNewEvent / OnGameLoaded.
-        ///   • GameHUD.OnGUI content is suppressed; OnGUI is retained only for the
-        ///     ghost placement overlay, rotation indicator, drag-select rectangle,
-        ///     and deconstruct hover outline.
+        ///   • GameHUD is not instantiated; all IMGUI/uGUI rendering (including the
+        ///     ghost placement overlay, rotation indicator, drag-select rectangle, and
+        ///     deconstruct hover outline) is inactive. These overlays are reimplemented
+        ///     as UI Toolkit or dedicated overlay components as each panel is migrated.
         ///   • GameViewController uGUI components are bypassed.
+        ///   • All callers continue to read HUD state from GameHUD.IsMouseOverDrawer,
+        ///     GameHUD.InBuildMode, and GameHUD.SelectCrewMember(); WaystationHUDController
+        ///     writes to those statics directly.
         ///
         /// When false (default during migration):
         ///   • Legacy IMGUI/uGUI HUD renders unchanged — no regressions.

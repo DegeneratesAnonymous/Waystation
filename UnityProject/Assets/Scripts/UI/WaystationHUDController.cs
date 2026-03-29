@@ -3,10 +3,10 @@
 // Activated when FeatureFlags.UseUIToolkitHUD is true.
 // Self-installs in GameScene via RuntimeInitializeOnLoadMethod (same pattern as GameHUD).
 //
-// Public API contract (mirrors GameHUD statics so all callers are unchanged):
-//   IsMouseOverDrawer  — read by CameraController to block map scroll/pan
-//   InBuildMode        — read by StationRoomView to suppress NPC click-selection
-//   SelectCrewMember() — called by StationRoomView on crew-dot single-click
+// Callers read HUD state exclusively from GameHUD statics (IsMouseOverDrawer, InBuildMode,
+// SelectCrewMember) regardless of which HUD path is active — this controller writes to
+// those statics when UseUIToolkitHUD is true so CameraController and StationRoomView
+// require no changes.
 //
 // Migration status: infrastructure scaffold only.
 // Full panel implementations are added panel-by-panel behind this controller
@@ -23,20 +23,6 @@ namespace Waystation.UI
 {
     public class WaystationHUDController : MonoBehaviour
     {
-        // ── Public API (mirrors GameHUD statics) ──────────────────────────────
-
-        /// <summary>
-        /// True when the mouse cursor is over any UI Toolkit HUD panel.
-        /// Read by CameraController to prevent accidental camera pan/zoom.
-        /// </summary>
-        public static bool IsMouseOverDrawer { get; private set; }
-
-        /// <summary>
-        /// True when ghost-placement or deconstruct mode is active.
-        /// Read by StationRoomView to suppress NPC click-selection while building.
-        /// </summary>
-        public static bool InBuildMode { get; private set; }
-
         // ── Private state ─────────────────────────────────────────────────────
         private static WaystationHUDController _instance;
 
@@ -62,10 +48,11 @@ namespace Waystation.UI
         {
             if (scene.name != "GameScene") return;
             if (!FeatureFlags.UseUIToolkitHUD) return;   // GameHUD handles this scene
-            // Reset pointer state on each scene load to prevent stale counts
+            // Reset shared GameHUD statics on each scene load to prevent stale state
             // carried over from a previous session.
-            _panelsUnderPointer = 0;
-            IsMouseOverDrawer   = false;
+            _panelsUnderPointer          = 0;
+            GameHUD.IsMouseOverDrawer    = false;
+            GameHUD.InBuildMode          = false;
             if (FindAnyObjectByType<WaystationHUDController>() != null) return;
             new GameObject("WaystationHUDController").AddComponent<WaystationHUDController>();
         }
@@ -109,17 +96,12 @@ namespace Waystation.UI
             OnGameLoaded();
         }
 
-        // ── Update — mouse-over detection ─────────────────────────────────────
+        // ── Update — sync placement state ─────────────────────────────────────
         private void Update()
         {
-            // UI Toolkit panels handle pointer events natively; IsMouseOverDrawer is
-            // updated here via panel pointer-enter/leave callbacks registered during
-            // panel initialisation (implemented per-panel as panels are migrated).
-            // Until panels are wired, IsMouseOverDrawer defaults to false so camera
-            // controls are not inadvertently blocked.
-
-            // InBuildMode tracks active ghost placement.
-            InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
+            // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
+            // GameHUD.IsMouseOverDrawer is maintained via NotifyPointerEnterPanel/Leave below.
+            GameHUD.InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
         }
 
         // ── GameManager event handlers ────────────────────────────────────────
@@ -143,10 +125,10 @@ namespace Waystation.UI
         // ── Cross-view public API ─────────────────────────────────────────────
 
         /// <summary>
-        /// Called by StationRoomView when a crew sprite is single-clicked.
+        /// Called by GameHUD.SelectCrewMember when UseUIToolkitHUD is true.
         /// Opens the Crew Detail panel for the specified NPC.
         /// </summary>
-        public static void SelectCrewMember(string npcUid)
+        internal static void SelectCrewMemberInternal(string npcUid)
         {
             if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
             // Crew Detail panel open — implemented when Crew sub-tab is migrated.
@@ -167,7 +149,7 @@ namespace Waystation.UI
         public static void NotifyPointerEnterPanel()
         {
             _panelsUnderPointer++;
-            IsMouseOverDrawer = _panelsUnderPointer > 0;
+            GameHUD.IsMouseOverDrawer = _panelsUnderPointer > 0;
         }
 
         /// <summary>
@@ -177,7 +159,7 @@ namespace Waystation.UI
         public static void NotifyPointerLeavePanel()
         {
             _panelsUnderPointer = Mathf.Max(0, _panelsUnderPointer - 1);
-            IsMouseOverDrawer = _panelsUnderPointer > 0;
+            GameHUD.IsMouseOverDrawer = _panelsUnderPointer > 0;
         }
 
         // ── Build placement ───────────────────────────────────────────────────
@@ -192,18 +174,18 @@ namespace Waystation.UI
                 Debug.LogWarning($"[WaystationHUDController] Build item '{buildableId}' not found in registry.");
                 return;
             }
-            _ghostBuildableId = buildableId;
-            _ghostRotation    = 0;
-            InBuildMode       = true;
+            _ghostBuildableId     = buildableId;
+            _ghostRotation        = 0;
+            GameHUD.InBuildMode   = true;
             Debug.Log($"[WaystationHUDController] Beginning ghost placement: {buildableId}");
         }
 
         /// <summary>Cancels the current ghost placement session.</summary>
         public void CancelPlacement()
         {
-            _ghostBuildableId = null;
-            _ghostRotation    = 0;
-            InBuildMode       = false;
+            _ghostBuildableId   = null;
+            _ghostRotation      = 0;
+            GameHUD.InBuildMode = false;
         }
     }
 }

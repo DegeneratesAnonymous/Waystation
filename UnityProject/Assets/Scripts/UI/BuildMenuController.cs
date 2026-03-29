@@ -48,37 +48,37 @@ public class BuildMenuController : MonoBehaviour
     public List<BuildCategory> categories = new()
     {
         new BuildCategory { id="structure",  displayName="STRUCTURE",  items=new(){
-            new(){name="Wall",    cost="40 Fe"},
-            new(){name="Floor",   cost="20 Fe"},
-            new(){name="Door",    cost="80 Fe"},
+            new(){name="Wall",    cost="40 Fe",  buildableId="buildable.wall"},
+            new(){name="Floor",   cost="20 Fe",  buildableId="buildable.floor"},
+            new(){name="Door",    cost="80 Fe",  buildableId="buildable.door"},
             new(){name="Window",  cost="60 Fe"},
             new(){name="Column",  cost="30 Fe"},
         }},
         new BuildCategory { id="electrical", displayName="ELECTRICAL", items=new(){
-            new(){name="Wire",      cost="10 Fe"},
-            new(){name="Generator", cost="200 Fe"},
-            new(){name="Battery",   cost="120 Fe"},
-            new(){name="Switch",    cost="40 Fe"},
-            new(){name="Light",     cost="30 Fe"},
+            new(){name="Wire",      cost="10 Fe",  buildableId="buildable.wire"},
+            new(){name="Generator", cost="200 Fe", buildableId="buildable.generator"},
+            new(){name="Battery",   cost="120 Fe", buildableId="buildable.battery"},
+            new(){name="Switch",    cost="40 Fe",  buildableId="buildable.switch"},
+            new(){name="Light",     cost="30 Fe",  buildableId="buildable.overhead_light"},
         }},
         new BuildCategory { id="objects",    displayName="OBJECTS",    items=new(){
-            new(){name="Bed",     cost="80 Fe"},
-            new(){name="Locker",  cost="60 Fe"},
-            new(){name="Console", cost="150 Fe"},
-            new(){name="Table",   cost="40 Fe"},
-            new(){name="Chair",   cost="20 Fe"},
+            new(){name="Bed",     cost="80 Fe",  buildableId="buildable.bed"},
+            new(){name="Locker",  cost="60 Fe",  buildableId="buildable.storage_cabinet"},
+            new(){name="Console", cost="150 Fe", buildableId="buildable.access_terminal"},
+            new(){name="Table",   cost="40 Fe",  buildableId="buildable.table"},
+            new(){name="Chair",   cost="20 Fe",  buildableId="buildable.chair"},
         }},
         new BuildCategory { id="production", displayName="PRODUCTION", items=new(){
-            new(){name="Refinery",   cost="400 Fe"},
-            new(){name="Fabricator", cost="300 Fe"},
+            new(){name="Refinery",   cost="400 Fe", buildableId="buildable.refinery_bench"},
+            new(){name="Fabricator", cost="300 Fe", buildableId="buildable.workbench"},
             new(){name="Assembler",  cost="250 Fe"},
-            new(){name="Smelter",    cost="350 Fe"},
+            new(){name="Smelter",    cost="350 Fe", buildableId="buildable.industrial_furnace"},
         }},
         new BuildCategory { id="plumbing",   displayName="PLUMBING",   items=new(){
-            new(){name="Pipe",   cost="15 Fe"},
+            new(){name="Pipe",   cost="15 Fe",  buildableId="buildable.pipe"},
             new(){name="Pump",   cost="80 Fe"},
-            new(){name="Tank",   cost="100 Fe"},
-            new(){name="Valve",  cost="40 Fe"},
+            new(){name="Tank",   cost="100 Fe", buildableId="buildable.water_tank"},
+            new(){name="Valve",  cost="40 Fe",  buildableId="buildable.valve"},
             new(){name="Filter", cost="60 Fe"},
         }},
         new BuildCategory { id="security",   displayName="SECURITY",   items=new(){
@@ -220,7 +220,7 @@ public class BuildMenuController : MonoBehaviour
             // (lowercase, spaces replaced by underscores, prefixed "buildable.").
             // Set item.buildableId explicitly when the default items are replaced
             // with registry-driven data to avoid relying on this transformation.
-            : "buildable." + item.name.ToLower().Replace(" ", "_");
+            : "buildable." + item.name.ToLowerInvariant().Replace(" ", "_");
 
         Debug.Log($"[BuildMenu] Selected: {categoryId} / {item.name} ({item.cost}) → {resolvedId}");
         OnBuildItemSelected?.Invoke(categoryId, resolvedId);
