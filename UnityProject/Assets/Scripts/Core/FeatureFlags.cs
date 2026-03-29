@@ -124,5 +124,27 @@ namespace Waystation.Core
         /// dynamics. Supply/demand modifiers in TradeSystem are also gated by this flag.
         /// </summary>
         public static bool EconomySystem = true;
+
+        /// <summary>
+        /// Switches the in-game HUD from the legacy IMGUI/uGUI system (GameHUD.cs /
+        /// GameViewController.cs) to the UI Toolkit panel stack
+        /// (WaystationHUDController.cs).
+        ///
+        /// When true:
+        ///   • WaystationHUDController auto-installs in GameScene and registers as
+        ///     listener for GameManager.OnTick / OnNewEvent / OnGameLoaded.
+        ///   • GameHUD.OnGUI content is suppressed; OnGUI is retained only for the
+        ///     ghost placement overlay, rotation indicator, drag-select rectangle,
+        ///     and deconstruct hover outline.
+        ///   • GameViewController uGUI components are bypassed.
+        ///
+        /// When false (default during migration):
+        ///   • Legacy IMGUI/uGUI HUD renders unchanged — no regressions.
+        ///   • UI Toolkit panels are not installed.
+        ///
+        /// Set to true to opt in to the new UI Toolkit HUD; set to false to revert
+        /// to the legacy system at any point without data loss.
+        /// </summary>
+        public static bool UseUIToolkitHUD = false;
     }
 }

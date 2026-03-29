@@ -277,6 +277,7 @@ namespace Waystation.UI
         private static void OnAnySceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (scene.name != "GameScene") return;
+            if (FeatureFlags.UseUIToolkitHUD) return;   // WaystationHUDController takes over
             if (FindAnyObjectByType<GameHUD>() != null) return;
             new GameObject("GameHUD").AddComponent<GameHUD>();
         }
@@ -285,11 +286,13 @@ namespace Waystation.UI
         private void Start()
         {
             _instance = this;
+            BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
             StartCoroutine(WaitForGame());
         }
 
         private void OnDestroy()
         {
+            BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
             DemoBootstrap.HideOverlay = false;
             foreach (var go in _ghostPool) if (go) Destroy(go);
         }
@@ -1054,6 +1057,28 @@ namespace Waystation.UI
             if (_instance._active != Tab.Station)
                 _instance._active = Tab.Station;
             _instance.OpenSub(SubPanel.CrewDetail, npcUid);
+        }
+
+        /// <summary>
+        /// Handles a build item selection from BuildMenuController.
+        /// Begins ghost placement for the specified buildable when the legacy HUD is active.
+        /// </summary>
+        private void OnBuildMenuItemSelected(string categoryId, string buildableId)
+        {
+            if (FeatureFlags.UseUIToolkitHUD) return;
+            if (!_ready || string.IsNullOrEmpty(buildableId)) return;
+            if (_gm?.Registry?.Buildables == null) return;
+            if (!_gm.Registry.Buildables.ContainsKey(buildableId))
+            {
+                Debug.LogWarning($"[GameHUD] Build item '{buildableId}' not found in registry.");
+                return;
+            }
+            _ghostBuildableId    = buildableId;
+            _ghostRotation       = 0;
+            _prePlacementTab     = _active;
+            _prePlacementSub     = _subActive;
+            _active              = Tab.None;
+            CloseSub();
         }
 
         private void DrawBuild(Rect area, float w, float h)

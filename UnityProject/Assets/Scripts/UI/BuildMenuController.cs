@@ -11,6 +11,7 @@
 // Or use with a runtime panel — call BuildMenuController.Show() / .Hide() from
 // your game manager.
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -27,6 +28,12 @@ public class BuildMenuController : MonoBehaviour
     {
         public string name;
         public string cost;
+        /// <summary>
+        /// Registry key for this item (e.g. "buildable.wall").
+        /// Matched against ContentRegistry.Buildables when starting ghost placement.
+        /// Falls back to a normalised form of <see cref="name"/> when empty.
+        /// </summary>
+        public string buildableId;
     }
 
     [System.Serializable]
@@ -81,6 +88,14 @@ public class BuildMenuController : MonoBehaviour
             new(){name="Motion Sensor", cost="50 Fe"},
         }},
     };
+
+    // ── Placement event ────────────────────────────────────────────────────
+    /// <summary>
+    /// Fired when the player selects a build item from the menu.
+    /// Arguments: categoryId (e.g. "structure"), buildableId (e.g. "buildable.wall").
+    /// Subscribe from the active HUD controller to begin ghost placement.
+    /// </summary>
+    public static event Action<string, string> OnBuildItemSelected;
 
     // ── Private state ──────────────────────────────────────────────────────
     private VisualElement _root;
@@ -199,9 +214,16 @@ public class BuildMenuController : MonoBehaviour
     // ── Item selected ──────────────────────────────────────────────────────
     void OnItemSelected(string categoryId, BuildItem item)
     {
-        Debug.Log($"[BuildMenu] Selected: {categoryId} / {item.name} ({item.cost})");
-        // TODO: hook into your placement/build system here
-        // e.g. BuildSystem.Instance.BeginPlacement(item.name);
+        string resolvedId = !string.IsNullOrEmpty(item.buildableId)
+            ? item.buildableId
+            // Fallback: derive from display name using the registry naming convention
+            // (lowercase, spaces replaced by underscores, prefixed "buildable.").
+            // Set item.buildableId explicitly when the default items are replaced
+            // with registry-driven data to avoid relying on this transformation.
+            : "buildable." + item.name.ToLower().Replace(" ", "_");
+
+        Debug.Log($"[BuildMenu] Selected: {categoryId} / {item.name} ({item.cost}) → {resolvedId}");
+        OnBuildItemSelected?.Invoke(categoryId, resolvedId);
     }
 
     // ── Content area expand / collapse ────────────────────────────────────
