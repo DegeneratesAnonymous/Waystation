@@ -1434,7 +1434,9 @@ namespace Waystation.Models
 
         /// <summary>
         /// Minimum skill-check roll required for a successful intervention attempt.
-        /// A roll of (skill level + ability modifier) must meet or exceed this DC.
+        /// A roll of (d20 + GetSkillCheckResult(...)) must meet or exceed this DC,
+        /// where GetSkillCheckResult(...) includes skill level, ability modifiers,
+        /// and any relevant need/composite modifiers.
         /// </summary>
         public int interventionSkillCheckDC = 10;
 

@@ -353,7 +353,11 @@ namespace Waystation.Systems
 
         private void ExecuteDeparture(NPCInstance npc, StationState station)
         {
-            // Move NPC to landing pad (or exit tile if no pad available)
+            // Record exit position before removing so the NPC's last known location is meaningful.
+            // Departure is instantaneous: pathTargetCol/Row are set for record-keeping only —
+            // the NPC is removed from the active roster this tick and cannot actually pathfind.
+            // (Full physical movement sequence would require a "departure in progress" state
+            //  driven by NPCSystem, which is out of scope for NPC-007.)
             MoveToExit(npc, station);
 
             // Remove from active roster
@@ -375,8 +379,9 @@ namespace Waystation.Systems
 
         private static void MoveToExit(NPCInstance npc, StationState station)
         {
-            // Prefer a docked ship's landing pad; fall back to the station's
-            // first available landing pad foundation; final fallback leaves NPC at (0,0).
+            // Priority 1: a docked ship's occupied landing pad.
+            // Priority 2: any free (unoccupied) landing pad on the station.
+            // Priority 3: station origin (0,0) as a fallback exit tile.
             ShipInstance boardingShip = null;
             foreach (var ship in station.ships.Values)
             {
@@ -389,18 +394,26 @@ namespace Waystation.Systems
 
             if (boardingShip != null && boardingShip.shuttleUid != null &&
                 station.shuttles.TryGetValue(boardingShip.shuttleUid, out var shuttle) &&
-                station.landingPads.TryGetValue(shuttle.landingPadUid, out var pad) &&
-                station.foundations.TryGetValue(pad.foundationUid, out var foundation))
+                station.landingPads.TryGetValue(shuttle.landingPadUid, out var occupiedPad) &&
+                station.foundations.TryGetValue(occupiedPad.foundationUid, out var dockedFoundation))
             {
-                npc.pathTargetCol = foundation.tileCol;
-                npc.pathTargetRow = foundation.tileRow;
+                npc.pathTargetCol = dockedFoundation.tileCol;
+                npc.pathTargetRow = dockedFoundation.tileRow;
+                return;
             }
-            else
+
+            // No docked ship — try any free landing pad
+            var freePad = station.GetFreeLandingPad();
+            if (freePad != null && station.foundations.TryGetValue(freePad.foundationUid, out var padFoundation))
             {
-                // No docked ship — move to station origin (designated exit tile)
-                npc.pathTargetCol = 0;
-                npc.pathTargetRow = 0;
+                npc.pathTargetCol = padFoundation.tileCol;
+                npc.pathTargetRow = padFoundation.tileRow;
+                return;
             }
+
+            // No landing pad available — move to station origin (designated exit tile)
+            npc.pathTargetCol = 0;
+            npc.pathTargetRow = 0;
         }
 
         // ── Queries ────────────────────────────────────────────────────────────

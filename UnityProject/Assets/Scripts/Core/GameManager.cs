@@ -658,7 +658,7 @@ namespace Waystation.Core
         /// Returns (success, message) — on success tension resets to Disgruntled and
         /// the departure announcement is cancelled.
         /// </summary>
-        public (bool ok, string msg) AttemptDepartureIntervention(string npcUid, string skillId = "leadership")
+        public (bool ok, string msg) AttemptDepartureIntervention(string npcUid, string skillId = "skill.persuasion")
         {
             if (!FeatureFlags.NpcDeparture)
                 return (false, "Departure system is disabled.");

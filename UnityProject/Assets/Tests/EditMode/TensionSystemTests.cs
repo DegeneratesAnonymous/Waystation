@@ -119,7 +119,6 @@ namespace Waystation.Tests
         [Test]
         public void DepartureAnnouncement_SetsCorrectDeadline()
         {
-            int tickBeforeAdvance = _station.tick;
             TensionTestHelpers.AdvanceOneDay(_tension, _station);
 
             int expectedDeadline = _station.tick + _tension.InterventionWindowTicks;
@@ -188,7 +187,7 @@ namespace Waystation.Tests
         [Test]
         public void Intervention_Success_ResetsTensionToDisgruntled()
         {
-            _tension.AttemptIntervention(_npc, "leadership", _station);
+            _tension.AttemptIntervention(_npc, "skill.persuasion", _station);
 
             Assert.Less(_npc.traitProfile.tensionScore, _tension.WorkSlowdownThreshold,
                 "Tension should drop below WorkSlowdown after successful intervention.");
@@ -199,7 +198,7 @@ namespace Waystation.Tests
         [Test]
         public void Intervention_Success_CancelsDeparturePending()
         {
-            _tension.AttemptIntervention(_npc, "leadership", _station);
+            _tension.AttemptIntervention(_npc, "skill.persuasion", _station);
 
             Assert.IsNull(_npc.traitProfile.departure,
                 "Departure state should be cleared after successful intervention.");
@@ -211,7 +210,7 @@ namespace Waystation.Tests
             // Force failure by setting DC higher than any possible roll
             _tension.InterventionSkillCheckDC = 999;
 
-            bool success = _tension.AttemptIntervention(_npc, "leadership", _station);
+            bool success = _tension.AttemptIntervention(_npc, "skill.persuasion", _station);
 
             Assert.IsFalse(success, "Intervention should return false on failure.");
             Assert.IsNotNull(_npc.traitProfile?.departure,
@@ -226,7 +225,7 @@ namespace Waystation.Tests
             // Clear the departure state manually
             _npc.traitProfile.departure = null;
 
-            bool success = _tension.AttemptIntervention(_npc, "leadership", _station);
+            bool success = _tension.AttemptIntervention(_npc, "skill.persuasion", _station);
 
             Assert.IsFalse(success, "Should return false when no departure announcement is pending.");
         }
@@ -236,7 +235,7 @@ namespace Waystation.Tests
         {
             FeatureFlags.NpcDeparture = false;
 
-            bool success = _tension.AttemptIntervention(_npc, "leadership", _station);
+            bool success = _tension.AttemptIntervention(_npc, "skill.persuasion", _station);
 
             Assert.IsFalse(success, "AttemptIntervention should return false when flag is disabled.");
 
