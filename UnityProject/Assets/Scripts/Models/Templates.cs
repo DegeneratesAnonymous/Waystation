@@ -1490,6 +1490,11 @@ namespace Waystation.Models
         /// and any relevant need/composite modifiers.
         /// </summary>
         public int interventionSkillCheckDC = 10;
+        /// <summary>
+        /// Base research points generated per active researcher per tick before
+        /// skill/workbench multipliers are applied.
+        /// </summary>
+        public float researchPointsPerNpcPerTick = 0.04f;
 
         public static GameBalanceConfig FromDict(Dictionary<string, object> raw)
         {
@@ -1497,6 +1502,7 @@ namespace Waystation.Models
             {
                 interventionWindowTicks  = raw.GetInt("intervention_window_ticks",  1080),
                 interventionSkillCheckDC = raw.GetInt("intervention_skill_check_dc", 10),
+                researchPointsPerNpcPerTick = raw.GetFloat("research_points_per_npc_per_tick", 0.04f),
             };
         }
     }

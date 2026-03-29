@@ -129,7 +129,7 @@
     "display_name": "Research Datachip",
     "item_type": "Valuables",
     "subtype": "Research Data",
-    "description": "A physical datachip encoding the results of a completed research project. Must be stored in a Data Storage Server to preserve the research. Loss of the chip does not revoke the unlock, but the station loses proof of that research.",
+    "description": "A physical datachip encoding the results of a completed research project. Must be stored in a Data Storage Server to keep the associated unlock active. Removing the chip deactivates that unlock until the chip is restored.",
     "weight": 0.1,
     "stack_size": 64,
     "value": 200.0,

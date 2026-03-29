@@ -254,6 +254,7 @@ namespace Waystation.Core
             {
                 Tension.InterventionWindowTicks  = Registry.Balance.interventionWindowTicks;
                 Tension.InterventionSkillCheckDC = Registry.Balance.interventionSkillCheckDC;
+                Research.SetPointsPerNpcPerTick(Registry.Balance.researchPointsPerNpcPerTick);
             }
             FactionGov = new FactionGovernmentSystem(Traits);
             Regions    = new RegionSystem();
@@ -950,9 +951,11 @@ namespace Waystation.Core
             {
                 if (rsrDict.TryGetValue("pending_datachips", out var pdv))
                     Station.research.pendingDatachips = System.Convert.ToInt32(pdv);
+                if (rsrDict.TryGetValue("applied_unlock_tags", out var aut) && aut is List<object> autList)
+                    foreach (var t in autList) Station.research.appliedUnlockTags.Add(t.ToString());
                 foreach (var kv in rsrDict)
                 {
-                    if (kv.Key == "pending_datachips") continue;
+                    if (kv.Key == "pending_datachips" || kv.Key == "applied_unlock_tags") continue;
                     if (!(kv.Value is Dictionary<string, object> branchDict)) continue;
                     if (!System.Enum.TryParse(kv.Key, out ResearchBranch branch)) continue;
                     if (!Station.research.branches.TryGetValue(branch, out var bs)) continue;
@@ -960,6 +963,8 @@ namespace Waystation.Core
                         bs.points = System.Convert.ToSingle(pts);
                     if (branchDict.TryGetValue("unlocked", out var ul) && ul is List<object> ulList)
                         foreach (var u in ulList) bs.unlockedNodeIds.Add(u.ToString());
+                    if (branchDict.TryGetValue("unlocked_order", out var uo) && uo is List<object> uoList)
+                        foreach (var u in uoList) bs.unlockedNodeOrder.Add(u.ToString());
                 }
             }
 
@@ -1018,9 +1023,11 @@ namespace Waystation.Core
                     {
                         { "points",   kv.Value.points },
                         { "unlocked", new List<string>(kv.Value.unlockedNodeIds) },
+                        { "unlocked_order", new List<string>(kv.Value.unlockedNodeOrder) },
                     };
                 }
                 researchData["pending_datachips"] = Station.research.pendingDatachips;
+                researchData["applied_unlock_tags"] = new List<string>(Station.research.appliedUnlockTags);
             }
 
             // Serialise galaxy sector mutable state: seed + per-sector (properName, isRenamed, discoveryState)
