@@ -14,6 +14,7 @@
 using System.Collections.Generic;
 using Waystation.Core;
 using Waystation.Models;
+
 namespace Waystation.Systems
 {
     public class EconomySystem
