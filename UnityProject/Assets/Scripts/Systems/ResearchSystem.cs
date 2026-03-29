@@ -265,9 +265,7 @@ namespace Waystation.Systems
             }
 
             int activeChipCount = Mathf.Min(GetStoredDatachipCount(station), ordered.Count);
-            if (activeChipCount < ordered.Count)
-                ordered.RemoveRange(activeChipCount, ordered.Count - activeChipCount);
-            return ordered;
+            return ordered.GetRange(0, activeChipCount);
         }
 
         private void RefreshActiveUnlockTags(StationState station)
@@ -285,10 +283,6 @@ namespace Waystation.Systems
                     desired.Add(tag);
 
             foreach (var tag in allResearchTags)
-                if (!desired.Contains(tag))
-                    station.ClearTag(tag);
-
-            foreach (var tag in station.research.appliedUnlockTags)
                 if (!desired.Contains(tag))
                     station.ClearTag(tag);
 
