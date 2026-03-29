@@ -46,6 +46,9 @@ namespace Waystation.Core
         public Dictionary<string, TraitPoolDefinition>  TraitPools   { get; private set; } = new Dictionary<string, TraitPoolDefinition>();
         public Dictionary<string, TraitLineageDefinition> TraitLineages { get; private set; } = new Dictionary<string, TraitLineageDefinition>();
 
+        // ── Game balance config ──────────────────────────────────────────────
+        public GameBalanceConfig Balance { get; private set; } = new GameBalanceConfig();
+
         public bool   IsLoaded  { get; private set; }
         public int    ErrorCount => _errors.Count;
 
@@ -86,6 +89,7 @@ namespace Waystation.Core
             yield return StartCoroutine(LoadFolder(dataRoot, "trait_pools",      LoadTraitPool));
             yield return StartCoroutine(LoadFolder(dataRoot, "npcs/lineages",    LoadTraitLineage));
             yield return StartCoroutine(LoadFolder(dataRoot, "resources",        LoadResource));
+            LoadBalanceConfig(dataRoot);
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
                       $"ships:{Ships.Count} classes:{Classes.Count} factions:{Factions.Count} " +
@@ -126,6 +130,25 @@ namespace Waystation.Core
                     }
                 }
                 yield return null;
+            }
+        }
+
+        // ── Single-file balance config loader ────────────────────────────────
+
+        private void LoadBalanceConfig(string dataRoot)
+        {
+            string path = Path.Combine(dataRoot, "balance", "game_balance.json");
+            if (!File.Exists(path)) return;
+
+            try
+            {
+                string json = File.ReadAllText(path);
+                if (MiniJSON.Json.Deserialize(json) is Dictionary<string, object> dict)
+                    Balance = GameBalanceConfig.FromDict(dict);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[ContentRegistry] Could not load game_balance.json: {ex.Message}");
             }
         }
 

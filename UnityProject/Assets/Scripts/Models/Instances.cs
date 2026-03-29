@@ -354,6 +354,66 @@ namespace Waystation.Models
 
         /// <summary>Per-lineage cooldown: key = lineageId, value = in-game tick when cooldown expires.</summary>
         public Dictionary<string, int> lineageCooldownEndTick = new Dictionary<string, int>();
+
+        // ── Departure state ───────────────────────────────────────────────────
+        /// <summary>
+        /// Runtime departure announcement tracking.
+        /// Null until the NPC first reaches DepartureRisk and announces intent.
+        /// </summary>
+        public DepartureAnnouncementState departure = null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Departure Announcement State
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Tracks the lifecycle of a departure announcement for a DepartureRisk NPC.
+    /// Created when the NPC first announces intent to leave; drives the intervention window.
+    /// </summary>
+    [Serializable]
+    public class DepartureAnnouncementState
+    {
+        /// <summary>True once the departure announcement event has been fired.</summary>
+        public bool announced = false;
+
+        /// <summary>Station tick at which the announcement was made.</summary>
+        public int  announcedAtTick = 0;
+
+        /// <summary>
+        /// Station tick after which — if no successful intervention occurred —
+        /// the physical departure sequence begins.
+        /// </summary>
+        public int  interventionDeadlineTick = 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Departed NPC Record
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Preserves the full state of an NPC who has departed the station.
+    /// Retained in <see cref="StationState.departedNpcs"/> so the NPC can
+    /// potentially be reinjected into the galaxy (e.g. as a visitor NPC) later.
+    /// </summary>
+    [Serializable]
+    public class DepartedNpcRecord
+    {
+        /// <summary>Station tick at which the NPC departed.</summary>
+        public int    departedAtTick;
+
+        /// <summary>Departure cause identifier (e.g. "tension").</summary>
+        public string reason;
+
+        /// <summary>
+        /// When true the NPC is eligible to reappear in the VisitorSystem
+        /// (future work order). Set true for tension-driven departures so the
+        /// NPC may reappear as a visitor with prior station history.
+        /// </summary>
+        public bool   eligibleForReinjection;
+
+        /// <summary>Full NPC instance state preserved at departure time.</summary>
+        public NPCInstance npc;
     }
 
     // -------------------------------------------------------------------------
@@ -1871,6 +1931,12 @@ namespace Waystation.Models
         // Cached aggregates per factionId; rebuilt by FactionGovernmentSystem when stale.
         public Dictionary<string, FactionTraitAggregate> factionAggregates =
             new Dictionary<string, FactionTraitAggregate>();
+
+        // ── Departed NPC pool ────────────────────────────────────────────────
+        // NPCs who have left the station are retained here (keyed by NPC uid) so
+        // their full state is preserved for potential future reinjection via VisitorSystem.
+        public Dictionary<string, DepartedNpcRecord> departedNpcs =
+            new Dictionary<string, DepartedNpcRecord>();
 
         public StationState(string name)
         {
