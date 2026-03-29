@@ -429,6 +429,9 @@ namespace Waystation.Tests
         [TestCase(GovernmentType.Authoritarian)]
         [TestCase(GovernmentType.CorporateVassal)]
         [TestCase(GovernmentType.Pirate)]
+        [TestCase(GovernmentType.Theocracy)]
+        [TestCase(GovernmentType.Technocracy)]
+        [TestCase(GovernmentType.FederalCouncil)]
         public void AllGovernmentTypes_HaveAtLeastOneBiasedCategory(GovernmentType govType)
         {
             var cats = FactionProceduralGenerator.GetGovTraitAffinity(govType);
@@ -528,6 +531,429 @@ namespace Waystation.Tests
 
             Assert.AreEqual(1, all.Count);
             Assert.IsTrue(all.ContainsKey("faction.alpha"));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAC-002: New nine-type government derivation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [TestFixture]
+    internal class NineTypeGovernmentDerivationTests
+    {
+        [Test]
+        public void DominantIdeological_HighPhysical_ReturnsTheocracy()
+        {
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Ideological.ToString(), 0.9f },
+                { TraitCategory.Physical.ToString(),    0.5f }, // > 0.3 threshold
+            });
+            Assert.AreEqual(GovernmentType.Theocracy,
+                FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg));
+        }
+
+        [Test]
+        public void DominantIdeological_LowPhysical_ReturnsRepublic()
+        {
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Ideological.ToString(), 0.9f },
+                { TraitCategory.Physical.ToString(),    0.1f }, // < 0.3 threshold
+            });
+            Assert.AreEqual(GovernmentType.Republic,
+                FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg));
+        }
+
+        [Test]
+        public void DominantEconomic_HighSocial_ReturnsTechnocracy()
+        {
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Economic.ToString(), 0.9f },
+                { TraitCategory.Social.ToString(),   0.5f }, // > 0.3 threshold
+            });
+            Assert.AreEqual(GovernmentType.Technocracy,
+                FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg));
+        }
+
+        [Test]
+        public void DominantEconomic_LowSocial_ReturnsCorporateVassal()
+        {
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Economic.ToString(), 0.9f },
+                { TraitCategory.Social.ToString(),   0.1f }, // < 0.3 threshold
+            });
+            Assert.AreEqual(GovernmentType.CorporateVassal,
+                FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg));
+        }
+
+        [Test]
+        public void DominantPhysical_HighSocial_ReturnsFederalCouncil()
+        {
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Physical.ToString(), 0.9f },
+                { TraitCategory.Social.ToString(),   0.5f }, // > 0.3 threshold
+            });
+            Assert.AreEqual(GovernmentType.FederalCouncil,
+                FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg));
+        }
+
+        [Test]
+        public void DominantPhysical_LowSocial_ReturnsPirate()
+        {
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Physical.ToString(), 0.9f },
+                { TraitCategory.Social.ToString(),   0.1f }, // < 0.3 threshold
+            });
+            Assert.AreEqual(GovernmentType.Pirate,
+                FactionProceduralGenerator.DeriveGovernmentTypeFromAggregate(agg));
+        }
+
+        [TestCase(GovernmentType.Theocracy)]
+        [TestCase(GovernmentType.Technocracy)]
+        [TestCase(GovernmentType.FederalCouncil)]
+        public void NewGovernmentTypes_HaveTraitAffinity(GovernmentType govType)
+        {
+            var cats = FactionProceduralGenerator.GetGovTraitAffinity(govType);
+            Assert.IsNotNull(cats);
+            Assert.Greater(cats.Count, 0,
+                $"GovernmentType.{govType} should have at least one preferred trait category.");
+        }
+
+        [Test]
+        public void Theocracy_PrefersIdeologicalCategory()
+        {
+            var cats = FactionProceduralGenerator.GetGovTraitAffinity(GovernmentType.Theocracy);
+            Assert.Contains(TraitCategory.Ideological, cats);
+        }
+
+        [Test]
+        public void Technocracy_PrefersEconomicCategory()
+        {
+            var cats = FactionProceduralGenerator.GetGovTraitAffinity(GovernmentType.Technocracy);
+            Assert.Contains(TraitCategory.Economic, cats);
+        }
+
+        [Test]
+        public void FederalCouncil_PrefersSocialCategory()
+        {
+            var cats = FactionProceduralGenerator.GetGovTraitAffinity(GovernmentType.FederalCouncil);
+            Assert.Contains(TraitCategory.Social, cats);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAC-002: Stability computation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [TestFixture]
+    internal class StabilityComputationTests
+    {
+        [Test]
+        public void MaxInputs_ReturnsNearHundred()
+        {
+            var station = FactionTestHelpers.MakeStation();
+            var faction = new FactionDefinition
+            {
+                id                    = "faction.test",
+                governmentTenureTicks = FactionGovernmentSystem.TenureFullStabilityTicks,
+            };
+            // High rep (+100) → economic = 1.0
+            station.factionReputation["faction.test"] = 100f;
+
+            // Aggregate with high Physical score → military = 1.0
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Physical.ToString(), 1.0f },
+            });
+
+            // No NPCs on station → populationMood defaults to 0.5 (mid-range)
+            float stability = FactionGovernmentSystem.ComputeStability(faction, agg, station);
+
+            // With economic=1, military=1, mood=0.5, tenure=1 → (1+1+0.5+1)*25 = 87.5
+            Assert.AreEqual(87.5f, stability, 0.01f);
+        }
+
+        [Test]
+        public void MinInputs_ReturnsLow()
+        {
+            var station = FactionTestHelpers.MakeStation();
+            var faction = new FactionDefinition
+            {
+                id                    = "faction.test",
+                governmentTenureTicks = 0,
+            };
+            // Low rep (-100) → economic = 0.0
+            station.factionReputation["faction.test"] = -100f;
+
+            // Aggregate with Physical = 0 → military = 0
+            var agg = FactionTestHelpers.MakeAggregate(new Dictionary<string, float>
+            {
+                { TraitCategory.Physical.ToString(), 0.0f },
+            });
+
+            float stability = FactionGovernmentSystem.ComputeStability(faction, agg, station);
+
+            // economic=0, military=0, mood=0.5 (default), tenure=0 → (0+0+0.5+0)*25 = 12.5
+            Assert.AreEqual(12.5f, stability, 0.01f);
+        }
+
+        [Test]
+        public void NullAggregate_UsesDefaultMilitary()
+        {
+            var station = FactionTestHelpers.MakeStation();
+            var faction = new FactionDefinition
+            {
+                id                    = "faction.test",
+                governmentTenureTicks = 0,
+            };
+            station.factionReputation["faction.test"] = 0f; // rep=0 → economic=0.5
+
+            float stability = FactionGovernmentSystem.ComputeStability(faction, null, station);
+
+            // economic=0.5, military=0.5 (default), mood=0.5, tenure=0 → (0.5+0.5+0.5+0)*25 = 37.5
+            Assert.AreEqual(37.5f, stability, 0.01f);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAC-002: Succession candidate selection
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [TestFixture]
+    internal class SuccessionCandidateTests
+    {
+        [Test]
+        public void MultipleContestants_SelectsHighestRankCandidate()
+        {
+            var faction = new FactionDefinition
+            {
+                id = "faction.test",
+                memberNpcIds  = new List<string> { "npc.a", "npc.b", "npc.c" },
+                leaderNpcIds  = new List<string>(),
+                successionState = SuccessionState.Contested,
+            };
+
+            var npcs = new Dictionary<string, NPCInstance>
+            {
+                { "npc.a", new NPCInstance { uid = "npc.a", rank = 1, moodScore = 50f } },
+                { "npc.b", new NPCInstance { uid = "npc.b", rank = 3, moodScore = 50f } }, // highest rank
+                { "npc.c", new NPCInstance { uid = "npc.c", rank = 2, moodScore = 80f } },
+            };
+
+            SuccessionEvaluator.EvaluateSuccession(faction, npcs, null);
+
+            Assert.AreEqual(SuccessionState.Stable, faction.successionState);
+            Assert.AreEqual(1, faction.leaderNpcIds.Count);
+            Assert.AreEqual("npc.b", faction.leaderNpcIds[0], "Should promote highest-rank candidate.");
+        }
+
+        [Test]
+        public void TiedRank_SelectsHighestMoodScoreCandidate()
+        {
+            var faction = new FactionDefinition
+            {
+                id = "faction.test",
+                memberNpcIds  = new List<string> { "npc.a", "npc.b" },
+                leaderNpcIds  = new List<string>(),
+                successionState = SuccessionState.Contested,
+            };
+
+            var npcs = new Dictionary<string, NPCInstance>
+            {
+                { "npc.a", new NPCInstance { uid = "npc.a", rank = 2, moodScore = 40f } },
+                { "npc.b", new NPCInstance { uid = "npc.b", rank = 2, moodScore = 80f } }, // same rank, better mood
+            };
+
+            SuccessionEvaluator.EvaluateSuccession(faction, npcs, null);
+
+            Assert.AreEqual("npc.b", faction.leaderNpcIds[0], "Should break rank tie by moodScore.");
+        }
+
+        [Test]
+        public void SingleCandidate_IsPromotedDirectly()
+        {
+            var faction = new FactionDefinition
+            {
+                id = "faction.test",
+                memberNpcIds  = new List<string> { "npc.a" },
+                leaderNpcIds  = new List<string>(),
+            };
+
+            var npcs = new Dictionary<string, NPCInstance>
+            {
+                { "npc.a", new NPCInstance { uid = "npc.a", rank = 1 } },
+            };
+
+            SuccessionEvaluator.EvaluateSuccession(faction, npcs, null);
+
+            Assert.AreEqual(SuccessionState.Stable, faction.successionState);
+            Assert.AreEqual("npc.a", faction.leaderNpcIds[0]);
+        }
+
+        [Test]
+        public void NoMembers_IsVacant()
+        {
+            var faction = new FactionDefinition
+            {
+                id = "faction.test",
+                memberNpcIds = new List<string>(),
+                leaderNpcIds = new List<string>(),
+            };
+
+            SuccessionEvaluator.EvaluateSuccession(faction, new Dictionary<string, NPCInstance>(), null);
+
+            Assert.AreEqual(SuccessionState.Vacant, faction.successionState);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAC-002: Reputation carry-over on government shift
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [TestFixture]
+    internal class ReputationCarryOverTests
+    {
+        private static StationState MakeStationWithRep(string factionId, float rep)
+        {
+            var station = FactionTestHelpers.MakeStation();
+            station.factionReputation[factionId] = rep;
+            return station;
+        }
+
+        [Test]
+        public void FriendlySuccessor_RetainsSeventyFivePercent()
+        {
+            const string fid = "faction.test";
+            var station = MakeStationWithRep(fid, 60f);
+            var faction = new FactionDefinition
+            {
+                id             = fid,
+                displayName    = "Test Faction",
+                governmentType = GovernmentType.Authoritarian,
+                isGenerated    = true,
+                stabilityScore = 50f,
+            };
+            var allFactions = new Dictionary<string, FactionDefinition> { { fid, faction } };
+
+            var sys = new FactionGovernmentSystem(null);
+            sys.TriggerExternalPressureShift(faction, GovernmentType.Democracy, station, allFactions);
+
+            float expected = 60f * FactionGovernmentSystem.RepCarryOverFriendly;
+            Assert.AreEqual(expected, station.GetFactionRep(fid), 0.01f);
+            Assert.AreEqual(GovernmentType.Democracy, faction.governmentType);
+            Assert.AreEqual(0, faction.governmentTenureTicks, "Tenure resets on shift.");
+        }
+
+        [Test]
+        public void HostileSuccessor_RetainsFiftyPercent()
+        {
+            const string fid = "faction.test";
+            var station = MakeStationWithRep(fid, 60f);
+            var faction = new FactionDefinition
+            {
+                id             = fid,
+                displayName    = "Test Faction",
+                governmentType = GovernmentType.Democracy,
+                isGenerated    = true,
+                stabilityScore = 50f,
+            };
+            var allFactions = new Dictionary<string, FactionDefinition> { { fid, faction } };
+
+            var sys = new FactionGovernmentSystem(null);
+            sys.TriggerExternalPressureShift(faction, GovernmentType.Authoritarian, station, allFactions);
+
+            float expected = 60f * FactionGovernmentSystem.RepCarryOverHostile;
+            Assert.AreEqual(expected, station.GetFactionRep(fid), 0.01f);
+        }
+
+        [Test]
+        public void NeutralSuccessor_RetainsSixtyPercent()
+        {
+            const string fid = "faction.test";
+            var station = MakeStationWithRep(fid, 50f);
+            var faction = new FactionDefinition
+            {
+                id             = fid,
+                displayName    = "Test Faction",
+                governmentType = GovernmentType.Democracy,
+                isGenerated    = true,
+                stabilityScore = 50f,
+            };
+            var allFactions = new Dictionary<string, FactionDefinition> { { fid, faction } };
+
+            var sys = new FactionGovernmentSystem(null);
+            sys.TriggerExternalPressureShift(faction, GovernmentType.Monarchy, station, allFactions);
+
+            float expected = 50f * FactionGovernmentSystem.RepCarryOverNeutral;
+            Assert.AreEqual(expected, station.GetFactionRep(fid), 0.01f);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAC-002: Vassal patron reputation query
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [TestFixture]
+    internal class VassalPatronReputationTests
+    {
+        [Test]
+        public void VassalisedFaction_ReturnsPatronRep()
+        {
+            var station = FactionTestHelpers.MakeStation();
+            station.factionReputation["faction.patron"] = 75f;
+
+            var vassal = new FactionDefinition
+            {
+                id                    = "faction.vassal",
+                vassalParentFactionId = "faction.patron",
+            };
+            var allFactions = new Dictionary<string, FactionDefinition>
+            {
+                { "faction.vassal",  vassal },
+                { "faction.patron",  new FactionDefinition { id = "faction.patron" } },
+            };
+
+            float patronRep = FactionGovernmentSystem.GetPatronReputation(
+                "faction.vassal", station, allFactions);
+
+            Assert.AreEqual(75f, patronRep, 0.01f);
+        }
+
+        [Test]
+        public void NonVassalisedFaction_ReturnsZero()
+        {
+            var station = FactionTestHelpers.MakeStation();
+            var faction = new FactionDefinition
+            {
+                id                    = "faction.free",
+                vassalParentFactionId = null,
+            };
+            var allFactions = new Dictionary<string, FactionDefinition>
+            {
+                { "faction.free", faction },
+            };
+
+            float patronRep = FactionGovernmentSystem.GetPatronReputation(
+                "faction.free", station, allFactions);
+
+            Assert.AreEqual(0f, patronRep, 0.01f);
+        }
+
+        [Test]
+        public void UnknownFactionId_ReturnsZero()
+        {
+            var station     = FactionTestHelpers.MakeStation();
+            var allFactions = new Dictionary<string, FactionDefinition>();
+
+            float patronRep = FactionGovernmentSystem.GetPatronReputation(
+                "faction.unknown", station, allFactions);
+
+            Assert.AreEqual(0f, patronRep, 0.01f);
         }
     }
 }

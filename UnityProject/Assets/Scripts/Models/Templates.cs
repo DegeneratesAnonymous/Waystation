@@ -499,12 +499,15 @@ namespace Waystation.Models
     /// <summary>Determines how an NPCs' trait profiles are aggregated into faction behaviour.</summary>
     public enum GovernmentType
     {
-        Democracy,
-        Republic,
-        Monarchy,
-        Authoritarian,
-        CorporateVassal,
-        Pirate,        // no aggregation — interactions resolve at individual NPC level (stub)
+        Democracy,        // Distributed power, high consensual legitimacy  (Social dominant)
+        Republic,         // Balanced power, earned legitimacy              (Ideological dominant, low Physical)
+        Monarchy,         // Centralised power, traditional legitimacy      (Psychological dominant, low Ideological)
+        Authoritarian,    // Centralised power, coercive legitimacy         (Psychological dominant, high Ideological)
+        CorporateVassal,  // Balanced power, economic legitimacy            (Economic dominant, low Social)
+        Pirate,           // Distributed (anarchic) power, no legitimacy   (Physical dominant, low Social)
+        Theocracy,        // Centralised power, ideological divine mandate  (Ideological dominant, high Physical)
+        Technocracy,      // Balanced power, merit-based legitimacy         (Economic dominant, high Social)
+        FederalCouncil,   // Distributed power, accepted multi-group order  (Physical dominant, high Social)
         // Extend as needed — append-only
     }
 
@@ -552,6 +555,21 @@ namespace Waystation.Models
         public string         vassalParentFactionId  = null;
 
         public SuccessionState successionState       = SuccessionState.Stable;
+
+        // ── Stability fields ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Current stability score (0–100). Initialised to 50 on generation; updated
+        /// each day by FactionGovernmentSystem based on four inputs:
+        /// economic prosperity, military strength, population mood/cohesion, government tenure.
+        /// </summary>
+        public float stabilityScore = 50f;
+
+        /// <summary>
+        /// Number of ticks the current government type has been in power without shifting.
+        /// Incremented each day; reset to 0 on any government shift.
+        /// </summary>
+        public int governmentTenureTicks = 0;
 
         // ── Procedural Generation fields ─────────────────────────────────────
 
