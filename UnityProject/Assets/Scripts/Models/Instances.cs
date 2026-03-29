@@ -94,6 +94,10 @@ namespace Waystation.Models
         // Optional accent (secondary) colour — nullable, same rules as colourHex.
         public string secondaryColourHex = null;
 
+        // UID of the NPC appointed as Department Head; null when no Head is assigned.
+        // Must satisfy the minimum rank requirement (DepartmentSystem.MinHeadRank).
+        public string headNpcUid = null;
+
         public static Department Create(string uid, string name, List<string> allowedJobs = null)
         {
             return new Department
@@ -868,6 +872,13 @@ namespace Waystation.Models
         // Set to WorkSlowdownModifier at WorkSlowdown/DepartureRisk; reset to 1.0 at Normal/Disgruntled.
         // Stacks multiplicatively with traitWorkModifier and workModifier.
         public float tensionWorkModifier = 1.0f;
+
+        // Multiplicative work speed modifier applied by ProximitySystem when a Mentor NPC is present
+        // in the same module (student only). Default 1.0. Expires at proximityWorkModifierExpiresAtTick.
+        // Stacks multiplicatively with workModifier, expertiseModifier, traitWorkModifier, and tensionWorkModifier.
+        public float proximityWorkModifier = 1.0f;
+        // Game tick at which proximityWorkModifier expires and resets to 1.0. -1 = not active.
+        public int   proximityWorkModifierExpiresAtTick = -1;
 
         // ── Personal Inventory ────────────────────────────────────────────────
         /// <summary>Items worn / held in named equipment slots (slot name → itemId).

@@ -232,11 +232,13 @@ namespace Waystation.Systems
             // expertiseModifier stacks multiplicatively (from SkillSystem WorkSpeed bonuses).
             // traitWorkModifier stacks multiplicatively (from TraitSystem trait effects).
             // tensionWorkModifier stacks multiplicatively (from TensionSystem stage effects).
+            // proximityWorkModifier stacks multiplicatively (from ProximitySystem mentor bonus).
             int baseDuration  = job.durationTicks;
-            float modifier    = (npc.workModifier      > 0f ? npc.workModifier      : 1.0f)
-                              * (npc.expertiseModifier  > 0f ? npc.expertiseModifier  : 1.0f)
-                              * (npc.traitWorkModifier  > 0f ? npc.traitWorkModifier  : 1.0f)
-                              * (npc.tensionWorkModifier > 0f ? npc.tensionWorkModifier : 1.0f);
+            float modifier    = (npc.workModifier          > 0f ? npc.workModifier          : 1.0f)
+                              * (npc.expertiseModifier      > 0f ? npc.expertiseModifier      : 1.0f)
+                              * (npc.traitWorkModifier      > 0f ? npc.traitWorkModifier      : 1.0f)
+                              * (npc.tensionWorkModifier    > 0f ? npc.tensionWorkModifier    : 1.0f)
+                              * (npc.proximityWorkModifier  > 0f ? npc.proximityWorkModifier  : 1.0f);
             npc.jobTimer      = Mathf.Max(1, Mathf.RoundToInt(baseDuration / modifier));
             if (module != null) npc.location = module.definitionId;
         }

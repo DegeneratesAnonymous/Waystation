@@ -105,6 +105,11 @@ namespace Waystation.Core
 
         // ── Counselling system ─────────────────────────────────────────────────────────────────
         public CounsellingSystem        Counselling   { get; private set; }
+
+        // ── Department system ──────────────────────────────────────────────────────────────────
+        public DepartmentRegistry       DeptRegistry  { get; private set; }
+        public DepartmentSystem         Departments   { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -327,6 +332,16 @@ namespace Waystation.Core
                 Counselling.SetTraitSystem(Traits);
                 Counselling.SetSkillSystem(Skills);
             }
+
+            // Department system
+            DeptRegistry = new DepartmentRegistry();
+            Departments  = new DepartmentSystem();
+
+            // Wire DepartmentRegistry colour-change events → DepartmentSystem so that
+            // the rendering layer (via Departments.OnNpcsNeedColourResolve) can re-apply
+            // DeptColour shader bindings within the same tick as the colour change.
+            DeptRegistry.OnDeptColourChanged += deptUid =>
+                Departments.NotifyColourChanged(deptUid, Station);
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -348,6 +363,9 @@ namespace Waystation.Core
 
             // Initialise skill instances for all starting crew.
             Skills.InitialiseNpcSkills(Station);
+
+            // Initialise DepartmentRegistry with the new station's department list.
+            DeptRegistry.Init(Station.departments);
 
             // Reset threshold crossing state so warnings fire correctly from tick 1.
             Resources.ResetWarningState();
@@ -574,6 +592,7 @@ namespace Waystation.Core
             Map.Tick(Station);
             AsteroidMissions.Tick(Station);
             UtilityNetworks.Tick(Station);
+            Departments.Tick(Station, AsteroidMissions);
 
             // Visitor pipeline (antenna detection → state machine → comms tasks)
             Antenna.Tick(Station);
@@ -891,6 +910,8 @@ namespace Waystation.Core
             SetupStartingCrew();
             Factions.Initialize(Station);
             Skills.InitialiseNpcSkills(Station);
+            // Re-initialise DepartmentRegistry with the loaded station's department list.
+            DeptRegistry.Init(Station.departments);
             Rooms.RebuildBonusCache(Station);
             UtilityNetworks.RebuildAll(Station);
 
