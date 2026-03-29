@@ -69,12 +69,14 @@ namespace Waystation.Core
         public static bool NpcDeparture = true;
 
         /// <summary>
-        /// Enables the full department management layer: department creation, renaming,
-        /// and deletion (with NPC cascade); Department Head appointment and automated
-        /// functions (away mission dispatch delegation, shift scheduling, escalation
-        /// alerts); and department colour change wiring to NPC clothing shader
-        /// re-resolution.
-        /// Set to false to revert all NPCs and jobs to the unassigned state.
+        /// Enables the DepartmentSystem per-tick processing loop (DepartmentSystem.Tick),
+        /// including automated behaviours such as escalation alerts and any
+        /// time-based department logic.
+        /// When set to false, tick processing is skipped but existing departments,
+        /// NPC assignments, and jobs are left unchanged, and department CRUD/
+        /// assignment APIs remain callable. Callers are responsible for honouring
+        /// this flag before invoking those APIs if they wish to fully disable
+        /// department management in higher-level flows.
         /// </summary>
         public static bool DepartmentManagement = true;
     }

@@ -47,7 +47,7 @@ namespace Waystation.Tests
         public static (DepartmentRegistry registry, DepartmentSystem system) MakeSystems()
         {
             var registry = new DepartmentRegistry();
-            var system   = new DepartmentSystem(registry);
+            var system   = new DepartmentSystem();
             return (registry, system);
         }
     }
@@ -294,6 +294,29 @@ namespace Waystation.Tests
 
             Assert.IsFalse(dept.allowedJobs.Contains("job.build"));
         }
+
+        [Test]
+        public void AssignNpcToDepartment_MovesHead_ClearsPreviousDeptHead()
+        {
+            // Arrange: NPC is the Head of deptA, then gets moved to deptB.
+            var station = DeptTestHelpers.MakeStation();
+            var (_, system) = DeptTestHelpers.MakeSystems();
+            var deptA = system.CreateDepartment("Alpha", station);
+            var deptB = system.CreateDepartment("Beta",  station);
+
+            var npc = DeptTestHelpers.MakeCrewNpc("officer1", rank: 1);
+            station.AddNpc(npc);
+            npc.departmentId = deptA.uid;
+            deptA.headNpcUid = npc.uid;
+
+            // Act: move NPC to deptB
+            var (ok, reason) = system.AssignNpcToDepartment(npc.uid, deptB.uid, station);
+
+            // Assert: Head role in deptA is cleared; NPC is now in deptB
+            Assert.IsTrue(ok, reason);
+            Assert.IsNull(deptA.headNpcUid, "Previous dept's headNpcUid should be cleared.");
+            Assert.AreEqual(deptB.uid, npc.departmentId);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -475,6 +498,36 @@ namespace Waystation.Tests
             {
                 FeatureFlags.DepartmentManagement = wasEnabled;
             }
+        }
+
+        [Test]
+        public void Tick_StaleHeadNpcNoLongerInDepartment_SkipsHeadLogic()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (_, system) = DeptTestHelpers.MakeSystems();
+            var deptA = system.CreateDepartment("Alpha", station);
+            var deptB = system.CreateDepartment("Beta",  station);
+
+            var npc = DeptTestHelpers.MakeCrewNpc("head1", rank: 1);
+            station.AddNpc(npc);
+
+            // NPC is now in deptB but headNpcUid on deptA is stale
+            npc.departmentId = deptB.uid;
+            deptA.headNpcUid = npc.uid;
+
+            // Add a crisis NPC in deptA that would trigger an alert if head logic ran
+            var crisisNpc = DeptTestHelpers.MakeCrewNpc("crisis1");
+            crisisNpc.inCrisis = true;
+            crisisNpc.departmentId = deptA.uid;
+            station.AddNpc(crisisNpc);
+
+            int initialLogCount = station.log.Count;
+
+            // Tick should skip deptA's head logic because head is not in deptA
+            system.Tick(station, null);
+
+            Assert.AreEqual(initialLogCount, station.log.Count,
+                "No alert should fire when head NPC is no longer a member of the department.");
         }
     }
 

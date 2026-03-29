@@ -324,7 +324,7 @@ namespace Waystation.Core
 
             // Department system
             DeptRegistry = new DepartmentRegistry();
-            Departments  = new DepartmentSystem(DeptRegistry);
+            Departments  = new DepartmentSystem();
 
             // Wire DepartmentRegistry colour-change events → DepartmentSystem so that
             // the rendering layer (via Departments.OnNpcsNeedColourResolve) can re-apply

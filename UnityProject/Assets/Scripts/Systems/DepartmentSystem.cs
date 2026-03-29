@@ -13,7 +13,8 @@
 //        NotifyColourChanged; rendering systems subscribe to OnNpcsNeedColourResolve
 //        to re-apply DeptColour shader bindings within the same tick)
 //
-// Gated by FeatureFlags.DepartmentManagement.
+// Feature flag: Tick() self-gates on FeatureFlags.DepartmentManagement; callers are
+// responsible for gating other DepartmentSystem API usage as appropriate.
 using System;
 using System.Collections.Generic;
 using Waystation.Core;
@@ -46,16 +47,9 @@ namespace Waystation.Systems
         /// </summary>
         public event Action<List<string>> OnNpcsNeedColourResolve;
 
-        // ── Internal state ─────────────────────────────────────────────────────
-
-        private readonly DepartmentRegistry _registry;
-
         // ── Construction ──────────────────────────────────────────────────────
 
-        public DepartmentSystem(DepartmentRegistry registry)
-        {
-            _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        }
+        public DepartmentSystem() { }
 
         // ── Department CRUD ────────────────────────────────────────────────────
 
@@ -150,6 +144,16 @@ namespace Waystation.Systems
 
             var dept = FindDept(deptUid, station);
             if (dept == null) return (false, $"Department '{deptUid}' not found.");
+
+            // If the NPC is moving from another department where they are the Head,
+            // clear the previous department's Head role to avoid leaving a stale
+            // headNpcUid pointing at an NPC who is no longer a member.
+            if (!string.IsNullOrEmpty(npc.departmentId) && npc.departmentId != deptUid)
+            {
+                var previousDept = FindDept(npc.departmentId, station);
+                if (previousDept != null && previousDept.headNpcUid == npcUid)
+                    previousDept.headNpcUid = null;
+            }
 
             npc.departmentId = deptUid;
             return (true, null);
@@ -302,6 +306,10 @@ namespace Waystation.Systems
             {
                 if (string.IsNullOrEmpty(dept.headNpcUid)) continue;
                 if (!station.npcs.TryGetValue(dept.headNpcUid, out var head)) continue;
+
+                // Guard: head must still be assigned to this department (can become stale
+                // if the NPC was moved without going through RemoveNpcFromDepartment).
+                if (head.departmentId != dept.uid) continue;
 
                 // Head must be on-station (not on mission) and not in crisis
                 if (head.missionUid != null || head.inCrisis) continue;
