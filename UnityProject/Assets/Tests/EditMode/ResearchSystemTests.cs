@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using Waystation.Core;
@@ -191,6 +192,70 @@ namespace Waystation.Tests
             Assert.AreEqual(1, copied);
             Assert.IsTrue(destination.research.IsUnlocked(industry.id));
             Assert.IsFalse(destination.research.IsUnlocked(exploration.id));
+        }
+
+        [Test]
+        public void UnlockWithNoServerCapacity_GoesPending_NotNonServerCargo()
+        {
+            var station = MakeStation();
+            AddCompleteFoundation(station, "buildable.storage_cabinet", cargoCapacity: 8);
+            var node = Node("research.industry.pending_only", ResearchBranch.Industry, 1);
+            _registry.ResearchNodes[node.id] = node;
+            station.research.branches[ResearchBranch.Industry].points = 1f;
+
+            _research.Tick(station);
+
+            Assert.AreEqual(0, _research.GetStoredDatachipCount(station), "No server means no stored research chip.");
+            Assert.AreEqual(1, station.research.pendingDatachips, "Chip should be pending when no server capacity exists.");
+        }
+
+        [Test]
+        public void ChipBackedUnlock_IgnoresStaleUnlockOrderIds()
+        {
+            var station = MakeStation();
+            var storage = AddCompleteFoundation(station, "buildable.data_storage_server", cargoCapacity: 4);
+
+            var valid = Node("research.industry.valid", ResearchBranch.Industry, 1);
+            valid.unlockTags = new List<string> { "tech.valid_only" };
+            var stale = Node("research.industry.stale", ResearchBranch.Industry, 1);
+            stale.unlockTags = new List<string> { "tech.stale_should_not_apply" };
+            _registry.ResearchNodes[valid.id] = valid;
+            _registry.ResearchNodes[stale.id] = stale;
+
+            station.research.branches[ResearchBranch.Industry].unlockedNodeIds.Add(valid.id);
+            station.research.branches[ResearchBranch.Industry].unlockedNodeOrder.Add(stale.id);
+            station.research.branches[ResearchBranch.Industry].unlockedNodeOrder.Add(valid.id);
+            storage.cargo["item.datachip"] = 1;
+
+            _research.Tick(station);
+
+            Assert.IsTrue(station.HasTag("tech.valid_only"));
+            Assert.IsFalse(station.HasTag("tech.stale_should_not_apply"));
+        }
+
+        [Test]
+        public void BackfillUnlockedOrder_IsDeterministicAndPersisted()
+        {
+            var station = MakeStation();
+            var storage = AddCompleteFoundation(station, "buildable.data_storage_server", cargoCapacity: 4);
+
+            var a = Node("research.industry.a", ResearchBranch.Industry, 1);
+            a.unlockTags = new List<string> { "tech.a" };
+            var b = Node("research.industry.b", ResearchBranch.Industry, 1);
+            b.unlockTags = new List<string> { "tech.b" };
+            _registry.ResearchNodes[a.id] = a;
+            _registry.ResearchNodes[b.id] = b;
+
+            station.research.branches[ResearchBranch.Industry].unlockedNodeIds.Add(b.id);
+            station.research.branches[ResearchBranch.Industry].unlockedNodeIds.Add(a.id);
+            storage.cargo["item.datachip"] = 2;
+
+            _research.Tick(station);
+
+            var order = station.research.branches[ResearchBranch.Industry].unlockedNodeOrder.ToArray();
+            CollectionAssert.IsSupersetOf(order, new[] { a.id, b.id });
+            Assert.AreEqual(new[] { a.id, b.id }, order.Where(id => id == a.id || id == b.id).ToArray(),
+                "Backfilled order should be deterministic (ordinal sort) and persisted.");
         }
     }
 }

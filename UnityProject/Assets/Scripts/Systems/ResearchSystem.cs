@@ -149,7 +149,8 @@ namespace Waystation.Systems
         /// Non-functional terminals (Functionality == 0, i.e. destroyed) are skipped.
         /// The maximum across all qualifying terminals is returned so that a damaged
         /// terminal never reduces output when a healthier one is present.
-        /// Returns 1.0 when no qualifying terminal exists.
+        /// Returns true and outputs the multiplier when a qualifying terminal exists;
+        /// otherwise returns false and research generation is gated off for that branch.
         /// </summary>
         private static bool TryGetTerminalMultiplier(ResearchBranch branch, StationState station, out float multiplier)
         {
@@ -176,8 +177,7 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Try to add one datachip to a complete Data Storage Server foundation.
-        /// Falls back to any complete foundation cargo hold if no server is available.
-        /// If no space exists anywhere, the chip is recorded as pending.
+        /// If no Data Storage Server capacity exists, the chip is recorded as pending.
         /// </summary>
         private void StoreDatachip(StationState station)
         {
@@ -199,8 +199,7 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Try to store one datachip.  Prefers Data Storage Server foundations;
-        /// falls back to any foundation cargo hold with space.
+        /// Try to store one datachip in a complete Data Storage Server foundation.
         /// Returns true if the chip was stored.
         /// </summary>
         private bool TryAddDatachipToStorage(StationState station)
@@ -209,19 +208,6 @@ namespace Waystation.Systems
             foreach (var f in station.foundations.Values)
             {
                 if (f.buildableId != DataStorageBuildable) continue;
-                if (f.status != "complete") continue;
-                if (f.cargoCapacity <= 0) continue;
-                if (f.CargoItemCount() < f.cargoCapacity)
-                {
-                    IncrementCargo(f.cargo, DatachipItemId);
-                    return true;
-                }
-            }
-
-            // Pass 2 — any available foundation cargo hold.
-            foreach (var f in station.foundations.Values)
-            {
-                if (f.buildableId == DataStorageBuildable) continue; // already checked
                 if (f.status != "complete") continue;
                 if (f.cargoCapacity <= 0) continue;
                 if (f.CargoItemCount() < f.cargoCapacity)
@@ -245,19 +231,30 @@ namespace Waystation.Systems
             foreach (ResearchBranch branch in Enum.GetValues(typeof(ResearchBranch)))
             {
                 if (!station.research.branches.TryGetValue(branch, out var bState)) continue;
+                var seen = new HashSet<string>();
 
                 // Preserve historical unlock order when available.
                 foreach (var nodeId in bState.unlockedNodeOrder)
                 {
+                    if (!bState.unlockedNodeIds.Contains(nodeId)) continue;
+                    if (!seen.Add(nodeId)) continue;
                     if (!_registry.ResearchNodes.TryGetValue(nodeId, out var n)) continue;
                     if (n.branch != branch) continue;
                     ordered.Add(n);
                 }
 
-                // Backfill old saves where order was not tracked.
+                // Backfill old saves where order was not tracked, deterministically.
+                var missingNodeIds = new List<string>();
                 foreach (var nodeId in bState.unlockedNodeIds)
                 {
                     if (bState.unlockedNodeOrder.Contains(nodeId)) continue;
+                    missingNodeIds.Add(nodeId);
+                }
+                missingNodeIds.Sort(StringComparer.Ordinal);
+                foreach (var nodeId in missingNodeIds)
+                {
+                    if (!seen.Add(nodeId)) continue;
+                    bState.unlockedNodeOrder.Add(nodeId);
                     if (!_registry.ResearchNodes.TryGetValue(nodeId, out var n)) continue;
                     if (n.branch != branch) continue;
                     ordered.Add(n);
@@ -282,7 +279,11 @@ namespace Waystation.Systems
                 foreach (var tag in node.unlockTags)
                     desired.Add(tag);
 
-            foreach (var tag in allResearchTags)
+            var clearCandidates = new HashSet<string>(allResearchTags);
+            foreach (var t in station.research.appliedUnlockTags)
+                clearCandidates.Add(t);
+
+            foreach (var tag in clearCandidates)
                 if (!desired.Contains(tag))
                     station.ClearTag(tag);
 
