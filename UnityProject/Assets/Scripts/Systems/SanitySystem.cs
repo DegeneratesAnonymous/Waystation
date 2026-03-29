@@ -5,10 +5,12 @@
 //   • Floor   = -10
 //   • +1 sanity per day when average mood ≥ 34 AND ≥ 3 needs above 50
 //   • -1 sanity per day when any need was fully depleted OR average mood ≤ 0
-//   • -1 sanity per day when isInBreakdown and no intervention
+//   • -1 sanity per day when isInBreakdown and requiresIntervention == false
 //
 // Breakdown threshold: sanity ≤ -5
-// Recovery: sanity rising above 0 clears breakdown flag
+// Recovery: sanity rising above 0 clears breakdown flag and requiresIntervention
+// Counselling: RegisterIntervention() sets requiresIntervention = true, halting the
+//   daily breakdown drain and allowing passive positive-day recovery to proceed.
 // MoodSystem calls AccumulateMood() every tick.
 // GameManager calls Tick() on the daily boundary (tick % 96 == 0).
 using System.Collections.Generic;
@@ -109,14 +111,20 @@ namespace Waystation.Systems
             san.needsAbove50Count = Mathf.Max(san.needsAbove50Count, countAbove50);
         }
 
-        // ── Counselling intervention (stub — wired by future EventSystem) ─────
+        // ── Counselling intervention (wired by CounsellingSystem) ────────────
 
-        /// <summary>Marks that a counselling interaction has taken place, halting passive breakdown drain.</summary>
+        /// <summary>
+        /// Marks that a counselling interaction has taken place, halting the passive
+        /// breakdown drain.  Sets requiresIntervention = true so the daily drain guard
+        /// (isInBreakdown &amp;&amp; !requiresIntervention) is suppressed, allowing positive-day
+        /// passive recovery to resume naturally.
+        /// Called by CounsellingSystem on a successful or partial-success outcome.
+        /// </summary>
         public static void RegisterIntervention(NPCInstance npc)
         {
             var san = npc.sanity;
             if (san == null) return;
-            san.requiresIntervention = false;
+            san.requiresIntervention = true;
         }
 
         // ── Medical system integration ─────────────────────────────────────────

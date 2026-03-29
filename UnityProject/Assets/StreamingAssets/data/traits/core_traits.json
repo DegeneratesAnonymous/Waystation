@@ -128,6 +128,8 @@
     "valence": "Negative",
     "decay_rate_per_day": 0.0,
     "requires_event_to_remove": true,
+    "therapy_removable": true,
+    "medical_removable": false,
     "conflicting_trait_ids": [],
     "effects": [
       { "target": "WorkSpeedModifier", "magnitude": -0.15 },
