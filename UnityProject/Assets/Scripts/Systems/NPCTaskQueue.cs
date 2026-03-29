@@ -267,17 +267,16 @@ namespace Waystation.Systems
                 return true;
             }
 
-            if (_path == null || _pathIndex >= _path.Count)
+            if (NPCTaskHelpers.TryAdvancePathStep(station,
+                    ref _path, ref _pathIndex,
+                    npcCol, npcRow, _targetCol, _targetRow,
+                    out var step))
             {
-                _path = NPCPathfinder.FindPath(station, npcCol, npcRow, _targetCol, _targetRow);
-                _pathIndex = 0;
-                if (_path == null) return false;
-            }
-
-            if (_pathIndex < _path.Count)
-            {
-                var step = _path[_pathIndex++];
                 npc.location = $"{step.Col}_{step.Row}";
+            }
+            else
+            {
+                return false;
             }
 
             return true;
@@ -334,7 +333,17 @@ namespace Waystation.Systems
 
             if (_pathIndex < _path.Count)
             {
-                var step = _path[_pathIndex++];
+                if (!NPCTaskHelpers.TryAdvancePathStep(station,
+                        ref _path, ref _pathIndex,
+                        npcCol, npcRow, _targetCol, _targetRow,
+                        out var step))
+                {
+                    _targetCol = int.MinValue;
+                    _targetRow = int.MinValue;
+                    _path = null;
+                    _pathIndex = 0;
+                    return;
+                }
                 npc.location = $"{step.Col}_{step.Row}";
             }
         }
@@ -388,21 +397,16 @@ namespace Waystation.Systems
                     return;
                 }
 
-                if (_path == null || _pathIndex >= _path.Count)
+                if (NPCTaskHelpers.TryAdvancePathStep(station,
+                        ref _path, ref _pathIndex,
+                        npcCol, npcRow, _targetCol, _targetRow,
+                        out var step))
                 {
-                    _path = NPCPathfinder.FindPath(station, npcCol, npcRow, _targetCol, _targetRow);
-                    _pathIndex = 0;
-                    if (_path == null)
-                    {
-                        Status = NPCTaskStatus.Failed;
-                        return;
-                    }
-                }
-
-                if (_pathIndex < _path.Count)
-                {
-                    var step = _path[_pathIndex++];
                     npc.location = $"{step.Col}_{step.Row}";
+                }
+                else
+                {
+                    Status = NPCTaskStatus.Failed;
                 }
                 return;
             }
@@ -456,21 +460,16 @@ namespace Waystation.Systems
                 return;
             }
 
-            if (_path == null || _pathIndex >= _path.Count)
+            if (NPCTaskHelpers.TryAdvancePathStep(station,
+                    ref _path, ref _pathIndex,
+                    npcCol, npcRow, _targetCol, _targetRow,
+                    out var step))
             {
-                _path = NPCPathfinder.FindPath(station, npcCol, npcRow, _targetCol, _targetRow);
-                _pathIndex = 0;
-                if (_path == null)
-                {
-                    Status = NPCTaskStatus.Failed;
-                    return;
-                }
-            }
-
-            if (_pathIndex < _path.Count)
-            {
-                var step = _path[_pathIndex++];
                 npc.location = $"{step.Col}_{step.Row}";
+            }
+            else
+            {
+                Status = NPCTaskStatus.Failed;
             }
         }
     }
@@ -518,11 +517,11 @@ namespace Waystation.Systems
             var containers = GatherCargoContainers(station);
             bool anyDetection = false;
 
+            int concealmentDc = ComputeConcealmentDifficulty(npc, station);
             foreach (var container in containers)
             {
                 if (!ContainsContraband(container)) continue;
 
-                int concealmentDc = ComputeConcealmentDifficulty(npc, station);
                 int wisMod = AbilityScores.GetModifier(npc.abilityScores.WIS);
                 int investigation = npc.skills.TryGetValue("investigation", out var inv) ? inv : 0;
                 int roll = UnityEngine.Random.Range(1, 21) + wisMod + investigation;
@@ -624,9 +623,18 @@ namespace Waystation.Systems
     /// </summary>
     public class MarkVisitCompleteTask : NPCTask
     {
+        private bool _marked = false;
+
         public override void Tick(NPCInstance npc, StationState station)
         {
-            npc.memory["visitor_visit_complete"] = true;
+            if (!_marked)
+            {
+                npc.memory["visitor_visit_complete"] = true;
+                _marked = true;
+                Status = NPCTaskStatus.InProgress;
+                return;
+            }
+
             Status = NPCTaskStatus.Succeeded;
         }
     }
@@ -729,6 +737,53 @@ namespace Waystation.Systems
             return assignedType == roomTypeId;
         }
 
+        public static bool TryAdvancePathStep(
+            StationState station,
+            ref List<PathStep> path,
+            ref int pathIndex,
+            int fromCol,
+            int fromRow,
+            int targetCol,
+            int targetRow,
+            out PathStep step)
+        {
+            step = default;
+
+            if (path == null || pathIndex >= path.Count)
+            {
+                path = NPCPathfinder.FindPath(station, fromCol, fromRow, targetCol, targetRow);
+                pathIndex = 0;
+                if (path == null || path.Count == 0) return false;
+            }
+
+            var candidate = path[pathIndex];
+            if (IsBlocked(station, candidate.Col, candidate.Row))
+            {
+                path = NPCPathfinder.FindPath(station, fromCol, fromRow, targetCol, targetRow);
+                pathIndex = 0;
+                if (path == null || path.Count == 0) return false;
+                candidate = path[pathIndex];
+                if (IsBlocked(station, candidate.Col, candidate.Row)) return false;
+            }
+
+            pathIndex++;
+            step = candidate;
+            return true;
+        }
+
+        public static bool IsBlocked(StationState station, int col, int row)
+        {
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete" || f.tileLayer < 2) continue;
+                if (f.buildableId.Contains("door")) continue;
+                for (int dc = 0; dc < f.tileWidth; dc++)
+                for (int dr = 0; dr < f.tileHeight; dr++)
+                    if (f.tileCol + dc == col && f.tileRow + dr == row) return true;
+            }
+            return false;
+        }
+
         private static IEnumerable<(int col, int row)> EnumerateTilesForRoomType(
             StationState station, string roomTypeId)
         {
@@ -811,11 +866,15 @@ namespace Waystation.Systems
 
         private void TickNpc(NPCInstance npc, StationState station)
         {
-            // If there's an active task, continue it
-            if (_activeTasks.TryGetValue(npc.uid, out var current) &&
-                current.Status == NPCTaskStatus.InProgress)
+            // If there's an active task, continue it or clean up if it already finished.
+            if (_activeTasks.TryGetValue(npc.uid, out var current))
             {
-                current.Tick(npc, station);
+                if (current.Status == NPCTaskStatus.Pending ||
+                    current.Status == NPCTaskStatus.InProgress)
+                {
+                    current.Tick(npc, station);
+                }
+
                 if (current.Status == NPCTaskStatus.Succeeded ||
                     current.Status == NPCTaskStatus.Failed)
                 {

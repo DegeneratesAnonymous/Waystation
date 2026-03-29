@@ -77,7 +77,52 @@ namespace Waystation.Systems
         public void Tick(StationState station)
         {
             ProcessIncoming(station);
+            TickInspectionPolicy(station);
             TickDocked(station);
+        }
+
+        private void TickInspectionPolicy(StationState station)
+        {
+            if (!station.HasTag("inspection_in_progress")) return;
+
+            bool inspectorDocked = false;
+            foreach (var ship in station.GetDockedShips())
+            {
+                if (ship.role == "inspector")
+                {
+                    inspectorDocked = true;
+                    break;
+                }
+            }
+            if (inspectorDocked) return;
+
+            foreach (var ship in station.GetIncomingShips())
+            {
+                if (ship.role == "inspector") return;
+            }
+
+            if (_registry.Ships.Count == 0) return;
+
+            ShipTemplate inspectorTemplate = null;
+            foreach (var t in _registry.Ships.Values)
+            {
+                if (t.role == "inspector")
+                {
+                    inspectorTemplate = t;
+                    break;
+                }
+            }
+            if (inspectorTemplate == null) return;
+
+            string factionId = PickFactionForShip(inspectorTemplate);
+            string name = ShipPrefixes[UnityEngine.Random.Range(0, ShipPrefixes.Length)]
+                        + " " + ShipNames[UnityEngine.Random.Range(0, ShipNames.Length)];
+            var shipInstance = ShipInstance.Create(
+                inspectorTemplate.id, name, inspectorTemplate.role, "inspect", factionId, inspectorTemplate.threatLevel);
+            station.AddShip(shipInstance);
+            station.LogEvent($"Inspection patrol inbound: {shipInstance.name}.");
+            _eventSystem.QueueEvent("event.arrival_generic",
+                new Dictionary<string, object> { { "ship_uid", shipInstance.uid } });
         }
 
         // ── Arrival generation ────────────────────────────────────────────────

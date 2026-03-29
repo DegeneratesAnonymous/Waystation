@@ -188,4 +188,63 @@ namespace Waystation.Tests
             Assert.Contains("hostile_task_queue", updated.behaviorTags);
         }
     }
+
+    [TestFixture]
+    public class VisitorInspectionPolicyTests
+    {
+        private GameObject _registryGo;
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (_registryGo != null)
+                Object.DestroyImmediate(_registryGo);
+        }
+
+        [Test]
+        public void Tick_InspectionTag_SpawnsIncomingInspector_WhenNonePresent()
+        {
+            _registryGo = new GameObject("VisitorInspectionRegistry");
+            var registry = _registryGo.AddComponent<ContentRegistry>();
+            registry.Ships["ship.authority_cutter"] = new ShipTemplate
+            {
+                id = "ship.authority_cutter",
+                role = "inspector",
+                threatLevel = 4,
+            };
+            registry.Factions["faction.stellar_authority"] = new FactionDefinition
+            {
+                id = "faction.stellar_authority",
+                displayName = "Stellar Authority"
+            };
+
+            var eventRegistry = new EventStubRegistry();
+            eventRegistry.Events["event.arrival_generic"] = new EventDefinition
+            {
+                id = "event.arrival_generic",
+                title = "Arrival",
+                weight = 0f
+            };
+            var events = new EventSystem(eventRegistry, "normal");
+            var visitors = new VisitorSystem(registry, null, events, null, null, null);
+
+            var station = new StationState("InspectionPolicyTest");
+            station.SetTag("inspection_in_progress");
+
+            visitors.Tick(station);
+
+            bool foundIncomingInspector = false;
+            foreach (var ship in station.ships.Values)
+            {
+                if (ship.role == "inspector" && ship.status == "incoming")
+                {
+                    foundIncomingInspector = true;
+                    break;
+                }
+            }
+
+            Assert.IsTrue(foundIncomingInspector,
+                "inspection_in_progress should trigger an incoming inspector ship when none are present.");
+        }
+    }
 }
