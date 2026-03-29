@@ -156,7 +156,7 @@ namespace Waystation.Tests
     // ─────────────────────────────────────────────────────────────────────────
 
     [TestFixture]
-    internal class GovernmentTypeDerivatonTests
+    internal class GovernmentTypeDerivationTests
     {
         [Test]
         public void NullAggregate_ReturnsDemocracy()

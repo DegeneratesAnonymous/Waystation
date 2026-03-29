@@ -216,8 +216,10 @@ namespace Waystation.Systems
 
             if (home == null)
             {
-                Debug.LogWarning("[FactionProceduralGenerator] Home sector not found; " +
-                                 "starting factions not seeded.");
+                Debug.LogWarning("[FactionProceduralGenerator] Home sector not found in station.sectors; " +
+                                 "starting factions not seeded. This indicates an initialisation order " +
+                                 "issue — ensure GalaxyGenerator.Generate() completes before calling " +
+                                 "InitializeStartingFactions().");
                 return;
             }
 
