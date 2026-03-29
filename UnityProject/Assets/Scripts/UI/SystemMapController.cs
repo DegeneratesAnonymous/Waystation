@@ -957,6 +957,9 @@ namespace Waystation.UI
             newSector.discoveryState = SectorDiscoveryState.Visited;
             station.sectors[uid] = newSector;
 
+            // Fire the faction generation roll for the newly-unlocked sector.
+            _gm?.Factions?.OnSectorUnlocked(newSector, station);
+
             ClearExplore();
             RebuildSector();
         }

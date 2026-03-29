@@ -149,6 +149,13 @@ namespace Waystation.Models
         /// <summary>Environmental / political modifier for this sector. None = standard space.</summary>
         public SectorModifier modifier = SectorModifier.None;
 
+        /// <summary>
+        /// IDs of factions (both registry-loaded and procedurally generated) that claim
+        /// territory within this sector.  Populated by FactionSystem.OnSectorUnlocked
+        /// and by the starting-scenario seed.
+        /// </summary>
+        public List<string> factionIds = new List<string>();
+
         // ── Derived display helpers ────────────────────────────────────────────
 
         /// <summary>

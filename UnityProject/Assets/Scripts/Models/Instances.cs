@@ -1943,6 +1943,14 @@ namespace Waystation.Models
         public Dictionary<string, FactionTraitAggregate> factionAggregates =
             new Dictionary<string, FactionTraitAggregate>();
 
+        // ── Procedurally-generated factions ──────────────────────────────────
+        // Factions created at runtime by FactionProceduralGenerator (sector unlock rolls
+        // and the starting-scenario seed).  Keyed by factionId.
+        // These are NOT present in ContentRegistry.Factions; both sets are used together
+        // by FactionSystem and FactionGovernmentSystem.
+        public Dictionary<string, FactionDefinition> generatedFactions =
+            new Dictionary<string, FactionDefinition>();
+
         // ── Departed NPC pool ────────────────────────────────────────────────
         // NPCs who have left the station are retained here (keyed by NPC uid) so
         // their full state is preserved for potential future reinjection via VisitorSystem.

@@ -255,6 +255,9 @@ namespace Waystation.Core
             FactionGov = new FactionGovernmentSystem(Traits);
             Regions    = new RegionSystem();
 
+            // Wire FactionSystem with procedural generation dependencies
+            Factions.SetSystems(Npcs, Traits);
+
             // Stub implementations — replaced by Horizon Simulation work order
             RegionSim     = new RegionSimulationStub();
             FactionHistory = new FactionHistoryStub();
@@ -360,6 +363,10 @@ namespace Waystation.Core
             // Generate the galaxy sector map. Uses the same seed as solar system generation.
             int galaxySeed = seed.HasValue ? seed.Value : SolarSystemGenerator.StableHash(stationName);
             GalaxyGenerator.Generate(galaxySeed, Station);
+
+            // Seed starting factions (always: one friendly, one unfriendly in adjacent sectors).
+            var factionRng = new System.Random(galaxySeed ^ 0x5A5A5A5A);
+            Factions.InitializeStartingFactions(Station, factionRng);
 
             // Initialise skill instances for all starting crew.
             Skills.InitialiseNpcSkills(Station);
@@ -666,7 +673,7 @@ namespace Waystation.Core
                 Tension.Tick(Station);
             }
             if (FeatureFlags.FactionGovernment)
-                FactionGov.Tick(Station, Registry.Factions);
+                FactionGov.Tick(Station, Factions.GetAllFactions(Station));
             if (FeatureFlags.RegionSimulation)
                 Regions.Tick(Station);
 

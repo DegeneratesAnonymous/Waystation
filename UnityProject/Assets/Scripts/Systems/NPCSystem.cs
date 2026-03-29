@@ -52,6 +52,11 @@ namespace Waystation.Systems
         public event System.Action<NPCInstance> OnNPCSleeps;
         public event System.Action<NPCInstance> OnNPCWakes;
 
+        // ── Registry query ────────────────────────────────────────────────────
+
+        /// <summary>All NPC template IDs currently registered in the content registry.</summary>
+        public IEnumerable<string> AvailableTemplateIds => _registry.Npcs.Keys;
+
         // ── Factory methods ────────────────────────────────────────────────────
 
         public NPCInstance SpawnFromTemplate(string templateId,
@@ -63,7 +68,47 @@ namespace Waystation.Systems
                 Debug.LogError($"[NPCSystem] Unknown NPC template '{templateId}'");
                 return null;
             }
+            return BuildNpcFromTemplate(template, templateId,
+                PickTraits(template), statusTags, overrides);
+        }
 
+        /// <summary>
+        /// Spawns an NPC from a template with trait selection biased toward the trait
+        /// categories that align with the given government type (trait gravity mechanic).
+        /// When <paramref name="governmentType"/> is null the behaviour is identical to
+        /// <see cref="SpawnFromTemplate"/>.
+        /// </summary>
+        public NPCInstance SpawnWithGovernmentBias(string templateId,
+                                                    GovernmentType? governmentType,
+                                                    List<string> statusTags = null,
+                                                    Dictionary<string, object> overrides = null)
+        {
+            if (!_registry.Npcs.TryGetValue(templateId, out var template))
+            {
+                Debug.LogError($"[NPCSystem] Unknown NPC template '{templateId}'");
+                return null;
+            }
+            return BuildNpcFromTemplate(template, templateId,
+                PickTraitsWithGovernmentBias(template, governmentType), statusTags, overrides);
+        }
+
+        /// <summary>
+        /// Shared NPC construction core.  Callers are responsible for supplying the
+        /// trait list (e.g., plain <see cref="PickTraits"/> or biased selection).
+        /// All other construction steps — ability scores, skill rolls, faction assignment,
+        /// need depletion rates, and mood initialisation — live here so the two public
+        /// factory methods can never drift apart.
+        /// </summary>
+        /// <param name="template">The resolved NPC template.</param>
+        /// <param name="templateId">The template ID string (used for ability-score archetype lookup).</param>
+        /// <param name="traits">Pre-selected trait IDs to assign.</param>
+        /// <param name="statusTags">Optional initial status tags (e.g. "crew", "visitor").</param>
+        /// <param name="overrides">Optional dictionary overriding "faction_id" or "name".</param>
+        private NPCInstance BuildNpcFromTemplate(NPCTemplate template, string templateId,
+                                                  List<string> traits,
+                                                  List<string> statusTags,
+                                                  Dictionary<string, object> overrides)
+        {
             var npc = NPCInstance.Create(
                 templateId: templateId,
                 name:       GenerateName(template),
@@ -72,22 +117,21 @@ namespace Waystation.Systems
             );
 
             npc.skills     = RollSkills(template);
-            npc.traits     = PickTraits(template);
+            npc.traits     = traits;
             npc.factionId  = PickFaction(template);
             npc.statusTags = statusTags != null ? new List<string>(statusTags) : new List<string>();
 
             if (overrides != null)
             {
-                if (overrides.ContainsKey("faction_id"))  npc.factionId = overrides["faction_id"]?.ToString();
-                if (overrides.ContainsKey("name"))         npc.name      = overrides["name"]?.ToString();
+                if (overrides.ContainsKey("faction_id")) npc.factionId = overrides["faction_id"]?.ToString();
+                if (overrides.ContainsKey("name"))        npc.name      = overrides["name"]?.ToString();
             }
 
-            // Assign standard array ability scores by archetype
             AssignAbilityScores(npc, templateId);
 
-            // Copy species-level need depletion rate multipliers from template
             if (template.needDepletionRates != null && template.needDepletionRates.Count > 0)
-                npc.needDepletionRates = new System.Collections.Generic.Dictionary<string, float>(template.needDepletionRates);
+                npc.needDepletionRates = new System.Collections.Generic.Dictionary<string, float>(
+                    template.needDepletionRates);
 
             npc.RecalculateMood();
             return npc;
@@ -411,6 +455,58 @@ namespace Waystation.Systems
                 int idx = UnityEngine.Random.Range(0, pool.Count);
                 result.Add(pool[idx]);
                 pool.RemoveAt(idx);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Picks traits from the template's trait pool, giving double weight to traits
+        /// whose category aligns with the preferred categories for <paramref name="governmentType"/>.
+        /// Falls back to the unbiased selection when no trait category information is
+        /// available in the registry or when <paramref name="governmentType"/> is null.
+        /// </summary>
+        private List<string> PickTraitsWithGovernmentBias(NPCTemplate template,
+                                                           GovernmentType? governmentType,
+                                                           int count = 2)
+        {
+            if (governmentType == null || template.traitPool.Count == 0)
+                return PickTraits(template, count);
+
+            var preferredCategories = FactionProceduralGenerator.GetGovTraitAffinity(governmentType.Value);
+            if (preferredCategories.Count == 0)
+                return PickTraits(template, count);
+
+            // Build a weighted list: biased traits have weight 2.0, others weight 1.0
+            var weighted = new List<(string traitId, float weight)>();
+            float totalWeight = 0f;
+            foreach (var traitId in template.traitPool)
+            {
+                // Try to get the trait definition from the registry to check its category.
+                // If the trait isn't in the registry (e.g. id mismatch) give it base weight.
+                float weight = 1.0f;
+                if (_registry.Traits.TryGetValue(traitId, out var def) &&
+                    preferredCategories.Contains(def.category))
+                    weight = 2.0f;
+
+                weighted.Add((traitId, weight));
+                totalWeight += weight;
+            }
+
+            var result = new List<string>();
+            int n = Mathf.Min(count, weighted.Count);
+            for (int i = 0; i < n; i++)
+            {
+                float roll = UnityEngine.Random.Range(0f, totalWeight);
+                float acc  = 0f;
+                int   pick = weighted.Count - 1;
+                for (int j = 0; j < weighted.Count; j++)
+                {
+                    acc += weighted[j].weight;
+                    if (roll <= acc) { pick = j; break; }
+                }
+                result.Add(weighted[pick].traitId);
+                totalWeight -= weighted[pick].weight;
+                weighted.RemoveAt(pick);
             }
             return result;
         }

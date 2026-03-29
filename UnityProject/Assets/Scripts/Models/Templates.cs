@@ -553,6 +553,30 @@ namespace Waystation.Models
 
         public SuccessionState successionState       = SuccessionState.Stable;
 
+        // ── Procedural Generation fields ─────────────────────────────────────
+
+        /// <summary>
+        /// UID of the sector where this faction's territory is centred.
+        /// Set by FactionProceduralGenerator when the faction is generated on sector unlock.
+        /// Null for static (data-file-loaded) factions that predate procedural generation.
+        /// </summary>
+        public string sectorUid = null;
+
+        /// <summary>
+        /// True if this faction was procedurally generated at runtime rather than loaded
+        /// from a data file.  Procedurally-generated factions are stored in
+        /// StationState.generatedFactions, not in ContentRegistry.Factions.
+        /// </summary>
+        public bool isGenerated = false;
+
+        /// <summary>
+        /// Disposition override for starting-scenario factions only.
+        /// "friendly"   → faction is seeded with a positive reputation (+45).
+        /// "unfriendly" → faction is seeded with a negative reputation (-45).
+        /// Null for all other factions (reputation starts at 0 and drifts normally).
+        /// </summary>
+        public string startingDisposition = null;
+
         public static FactionDefinition FromDict(Dictionary<string, object> raw)
         {
             var f = new FactionDefinition
