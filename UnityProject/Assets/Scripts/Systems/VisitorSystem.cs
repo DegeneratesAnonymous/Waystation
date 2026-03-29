@@ -22,8 +22,13 @@ namespace Waystation.Systems
         private readonly NPCSystem       _npcSystem;
         private readonly EventSystem     _eventSystem;
         private readonly TradeSystem     _tradeSystem;
+        private readonly NPCTaskQueueManager _taskQueue;
+        private readonly InventorySystem  _inventorySystem;
 
         public const float ContrabandDetectionChance = 0.25f;
+        public const int ContrabandBaseDifficulty = 12;
+        public const float ContrabandCreditPenalty = 200f;
+        public const float ContrabandRepPenalty = -10f;
 
         // How many ticks a docked ship stays before departing
         public const int DockedDurationMin = 3;
@@ -55,12 +60,16 @@ namespace Waystation.Systems
         };
 
         public VisitorSystem(ContentRegistry registry, NPCSystem npcSystem,
-                              EventSystem eventSystem, TradeSystem tradeSystem = null)
+                              EventSystem eventSystem, TradeSystem tradeSystem = null,
+                              NPCTaskQueueManager taskQueue = null,
+                              InventorySystem inventorySystem = null)
         {
             _registry    = registry;
             _npcSystem   = npcSystem;
             _eventSystem = eventSystem;
             _tradeSystem = tradeSystem;
+            _taskQueue   = taskQueue;
+            _inventorySystem = inventorySystem;
         }
 
         // ── Tick ──────────────────────────────────────────────────────────────
@@ -68,8 +77,52 @@ namespace Waystation.Systems
         public void Tick(StationState station)
         {
             ProcessIncoming(station);
+            TickInspectionPolicy(station);
             TickDocked(station);
-            TickContrabandChecks(station);
+        }
+
+        private void TickInspectionPolicy(StationState station)
+        {
+            if (!station.HasTag("inspection_in_progress")) return;
+
+            bool inspectorDocked = false;
+            foreach (var ship in station.GetDockedShips())
+            {
+                if (ship.role == "inspector")
+                {
+                    inspectorDocked = true;
+                    break;
+                }
+            }
+            if (inspectorDocked) return;
+
+            foreach (var ship in station.GetIncomingShips())
+            {
+                if (ship.role == "inspector") return;
+            }
+
+            if (_registry.Ships.Count == 0) return;
+
+            ShipTemplate inspectorTemplate = null;
+            foreach (var t in _registry.Ships.Values)
+            {
+                if (t.role == "inspector")
+                {
+                    inspectorTemplate = t;
+                    break;
+                }
+            }
+            if (inspectorTemplate == null) return;
+
+            string factionId = PickFactionForShip(inspectorTemplate);
+            string name = ShipPrefixes[UnityEngine.Random.Range(0, ShipPrefixes.Length)]
+                        + " " + ShipNames[UnityEngine.Random.Range(0, ShipNames.Length)];
+            var shipInstance = ShipInstance.Create(
+                inspectorTemplate.id, name, inspectorTemplate.role, "inspect", factionId, inspectorTemplate.threatLevel);
+            station.AddShip(shipInstance);
+            station.LogEvent($"Inspection patrol inbound: {shipInstance.name}.");
+            _eventSystem.QueueEvent("event.arrival_generic",
+                new Dictionary<string, object> { { "ship_uid", shipInstance.uid } });
         }
 
         // ── Arrival generation ────────────────────────────────────────────────
@@ -242,9 +295,10 @@ namespace Waystation.Systems
             {
                 ship.status = "hostile";
                 ship.intent = "raid";
+                if (!ship.behaviorTags.Contains("hostile_task_queue"))
+                    ship.behaviorTags.Add("hostile_task_queue");
                 station.LogEvent($"{ship.name} denied — ship turning hostile!");
-                _eventSystem.QueueEvent("event.hostile_ship",
-                    new Dictionary<string, object> { { "ship_uid", shipUid } });
+                QueueBoardingEvent(shipUid, station);
             }
             else
             {
@@ -276,6 +330,7 @@ namespace Waystation.Systems
         {
             foreach (var ship in new List<ShipInstance>(station.GetDockedShips()))
             {
+                EvaluateVisitorCompletion(ship, station);
                 ship.ticksDocked++;
                 // Compare against the departure tick assigned at docking time.
                 // If not set (legacy / edge-case), reconstruct from ticksDocked so the
@@ -286,35 +341,6 @@ namespace Waystation.Systems
 
                 if (station.tick >= ship.plannedDepartureTick)
                     DepartShip(ship.uid, station);
-            }
-        }
-
-        // ── Contraband detection ──────────────────────────────────────────────
-
-        private void TickContrabandChecks(StationState station)
-        {
-            if (!station.HasTag("inspection_in_progress")) return;
-            if (station.tick % 3 != 0) return;
-
-            bool securityOnDuty = false;
-            foreach (var n in station.npcs.Values)
-                if (n.IsCrew() && n.classId == "class.security" &&
-                    (n.currentJobId == "job.patrol" || n.currentJobId == "job.contraband_inspection"))
-                { securityOnDuty = true; break; }
-
-            if (!securityOnDuty) return;
-
-            foreach (var ship in station.GetDockedShips())
-            {
-                if (!_registry.Ships.TryGetValue(ship.templateId, out var template)) continue;
-                if (!template.behaviorTags.Contains("carries_contraband")) continue;
-                if (UnityEngine.Random.value < ContrabandDetectionChance)
-                {
-                    _eventSystem.QueueEvent("event.contraband_found",
-                        new Dictionary<string, object> { { "ship_uid", ship.uid }, { "ship_name", ship.name } });
-                    station.ClearTag("inspection_in_progress");
-                    return;
-                }
             }
         }
 
@@ -333,10 +359,108 @@ namespace Waystation.Systems
             {
                 var npc = _npcSystem.SpawnVisitor(npcTemplateId, ship.factionId);
                 if (npc == null) continue;
-                npc.location = ship.dockedAt ?? "docking_bay";
+                var spawnLocation = ResolveVisitorSpawnTile(station);
+                npc.location = spawnLocation;
+                npc.memory["visitor_ship_uid"] = ship.uid;
+                npc.memory["visitor_ship_tile"] = spawnLocation;
+                npc.memory["visitor_visit_complete"] = false;
                 station.AddNpc(npc);
                 ship.passengerUids.Add(npc.uid);
+                EnqueueVisitTasksForRole(npc, ship, station);
             }
+        }
+
+        private void EnqueueVisitTasksForRole(NPCInstance npc, ShipInstance ship, StationState station)
+        {
+            if (_taskQueue == null) return;
+
+            string roomType = GetRoomTypeForRole(ship.role);
+            bool isPasserby = string.Equals(ship.role, "passerby", StringComparison.Ordinal);
+            bool isInspector = string.Equals(ship.role, "inspector", StringComparison.Ordinal);
+
+            if (isPasserby || string.IsNullOrEmpty(roomType))
+            {
+                _taskQueue.Enqueue(npc.uid, new IdleInHangarTask(12));
+            }
+            else if (ship.role == "trader" || ship.role == "smuggler")
+            {
+                _taskQueue.Enqueue(npc.uid, new ShopVisitTask("cargo_hold", 6));
+            }
+            else
+            {
+                _taskQueue.Enqueue(npc.uid, new VisitRoomTask(roomType, 8));
+            }
+
+            if (isInspector)
+                _taskQueue.Enqueue(npc.uid, new InspectorScanTask(
+                    _registry, _eventSystem, _inventorySystem,
+                    ContrabandBaseDifficulty, ContrabandCreditPenalty, ContrabandRepPenalty));
+
+            NPCTaskHelpers.ParseLocation(
+                npc.memory.TryGetValue("visitor_ship_tile", out var back) ? back?.ToString() : "0_0",
+                out int returnCol, out int returnRow);
+
+            _taskQueue.Enqueue(npc.uid, new ReturnToShipTask(returnCol, returnRow));
+            _taskQueue.Enqueue(npc.uid, new MarkVisitCompleteTask());
+        }
+
+        public static string GetRoomTypeForRole(string role)
+        {
+            switch (role)
+            {
+                case "trader":
+                case "inspector":
+                case "smuggler":
+                    return "cargo_hold";
+                case "diplomat":
+                    return "comms_room";
+                case "medical_emergency":
+                    return "medical_bay";
+                case "refugee":
+                case "transport":
+                    return "common_area";
+                case "passerby":
+                case "raider":
+                case "pirate":
+                    return "hangar";
+                default:
+                    return "hangar";
+            }
+        }
+
+        private static string ResolveVisitorSpawnTile(StationState station)
+        {
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId == "buildable.shuttle_landing_pad" && f.status == "complete")
+                    return $"{f.tileCol}_{f.tileRow}";
+            }
+            return "0_0";
+        }
+
+        private void EvaluateVisitorCompletion(ShipInstance ship, StationState station)
+        {
+            if (ship.passengerUids.Count == 0) return;
+            bool allComplete = true;
+            foreach (var npcUid in ship.passengerUids)
+            {
+                if (!station.npcs.TryGetValue(npcUid, out var npc)) continue;
+                bool done = npc.memory.TryGetValue("visitor_visit_complete", out var completeObj)
+                            && completeObj is bool complete && complete;
+                if (!done) { allComplete = false; break; }
+            }
+            if (allComplete)
+                ship.plannedDepartureTick = Mathf.Min(ship.plannedDepartureTick, station.tick + 1);
+        }
+
+        private void QueueBoardingEvent(string shipUid, StationState station)
+        {
+            if (string.IsNullOrEmpty(shipUid)) return;
+            if (station == null) return;
+
+            // Ensure subsequent resolve_boarding has ship context.
+            _eventSystem.QueueEvent("event.hostile_ship",
+                new Dictionary<string, object> { { "ship_uid", shipUid } });
         }
 
         private string PickVisitorTemplate(ShipInstance ship)
@@ -348,7 +472,10 @@ namespace Waystation.Systems
                 { "inspector", "npc.inspector"},
                 { "smuggler",  "npc.smuggler" },
                 { "raider",    "npc.raider"   },
-                { "transport", "npc.refugee"  }
+                { "transport", "npc.refugee"  },
+                { "diplomat",  "npc.trader"   },
+                { "medical_emergency", "npc.refugee" },
+                { "passerby",  "npc.refugee" }
             };
             if (roleMap.TryGetValue(ship.role, out var tmplId) && _registry.Npcs.ContainsKey(tmplId))
                 return tmplId;
