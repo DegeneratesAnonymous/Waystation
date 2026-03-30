@@ -23,9 +23,10 @@ namespace Waystation.Tests
         // ── Helpers ─────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Minimal round-trip helper: serialises state via MiniJSON and returns the
-        /// deserialized dictionary.  Exercises the same code path as SaveGame/LoadGame
-        /// without requiring a live GameManager MonoBehaviour.
+        /// Minimal JSON round-trip helper: serialises the provided state dictionary via
+        /// MiniJSON and returns the deserialised dictionary. This only validates the
+        /// MiniJSON serialize/deserialize layer that SaveGame/LoadGame rely on; it does
+        /// not invoke BuildSaveData/ApplySaveData or perform any file I/O.
         /// </summary>
         private static Dictionary<string, object> RoundTrip(Dictionary<string, object> data)
         {
@@ -257,21 +258,75 @@ namespace Waystation.Tests
         [Test]
         public void HasSaveFile_ReturnsFalse_WhenFileAbsent()
         {
-            // Use a non-existent path to verify HasSaveFile logic
-            string nonExistentPath = Path.Combine(Application.temporaryCachePath, "waystation_nonexistent_save_test.json");
-            if (File.Exists(nonExistentPath)) File.Delete(nonExistentPath);
-            Assert.IsFalse(File.Exists(nonExistentPath) && new System.IO.FileInfo(nonExistentPath).Length > 10,
-                "HasSaveFile should return false when no file exists.");
+            // Ensure the production save file does not exist, then verify HasSaveFile returns false.
+            string savePath = Path.Combine(Application.persistentDataPath, "waystation_save.json");
+            string backup = null;
+            if (File.Exists(savePath))
+            {
+                backup = savePath + ".bak_test";
+                File.Move(savePath, backup);
+            }
+            try
+            {
+                var go = new GameObject("GM_Test_Absent");
+                var gm = go.AddComponent<GameManager>();
+                Assert.IsFalse(gm.HasSaveFile(), "HasSaveFile should return false when no save file exists.");
+                Object.DestroyImmediate(go);
+            }
+            finally
+            {
+                if (backup != null && File.Exists(backup)) File.Move(backup, savePath);
+            }
         }
 
         [Test]
         public void HasSaveFile_ReturnsFalse_ForEmptyFile()
         {
-            string emptyPath = Path.Combine(Application.temporaryCachePath, "waystation_empty_save_test.json");
-            File.WriteAllText(emptyPath, "");
-            Assert.IsFalse(File.Exists(emptyPath) && new System.IO.FileInfo(emptyPath).Length > 10,
-                "HasSaveFile should return false for an empty file.");
-            File.Delete(emptyPath);
+            string savePath = Path.Combine(Application.persistentDataPath, "waystation_save.json");
+            string backup = null;
+            if (File.Exists(savePath))
+            {
+                backup = savePath + ".bak_test";
+                File.Move(savePath, backup);
+            }
+            try
+            {
+                File.WriteAllText(savePath, "");
+                var go = new GameObject("GM_Test_Empty");
+                var gm = go.AddComponent<GameManager>();
+                Assert.IsFalse(gm.HasSaveFile(), "HasSaveFile should return false for an empty file.");
+                Object.DestroyImmediate(go);
+            }
+            finally
+            {
+                if (File.Exists(savePath)) File.Delete(savePath);
+                if (backup != null && File.Exists(backup)) File.Move(backup, savePath);
+            }
+        }
+
+        [Test]
+        public void HasSaveFile_ReturnsTrue_WhenValidFileExists()
+        {
+            string savePath = Path.Combine(Application.persistentDataPath, "waystation_save.json");
+            string backup = null;
+            if (File.Exists(savePath))
+            {
+                backup = savePath + ".bak_test";
+                File.Move(savePath, backup);
+            }
+            try
+            {
+                File.WriteAllText(savePath, "{\"version\":1,\"full_save\":true}");
+                var go = new GameObject("GM_Test_Valid");
+                var gm = go.AddComponent<GameManager>();
+                Assert.IsTrue(gm.HasSaveFile(), "HasSaveFile should return true when a non-empty save file exists.");
+                Object.DestroyImmediate(go);
+            }
+            finally
+            {
+                if (File.Exists(savePath)) File.Delete(savePath);
+                if (backup != null && File.Exists(backup)) File.Move(backup, savePath);
+            }
         }
 
         // ── FullSaveLoad feature flag ────────────────────────────────────────

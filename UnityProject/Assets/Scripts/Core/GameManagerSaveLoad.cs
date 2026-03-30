@@ -26,7 +26,7 @@ namespace Waystation.Core
                 { "full_save",                        FeatureFlags.FullSaveLoad },
                 { "station_name",                     Station.stationName },
                 { "tick",                             Station.tick },
-                { "rank_names",                       new List<object>(Station.rankNames) },
+                { "rank_names",                       ToObjList(Station.rankNames) },
                 { "player_faction_color",             Station.playerFactionColor },
                 { "player_faction_color_secondary",   Station.playerFactionColorSecondary },
                 { "disposal_tile_designated",         Station.disposalTileDesignated },
@@ -94,7 +94,7 @@ namespace Waystation.Core
             SaveDict(data, "room_roles", Station.roomRoles);
 
             // Pending marriage events
-            data["pending_marriage_events"] = new List<object>(Station.pendingMarriageEvents);
+            data["pending_marriage_events"] = ToObjList(Station.pendingMarriageEvents);
 
             // Regions
             var regOut = new Dictionary<string, object>();
@@ -447,11 +447,11 @@ namespace Waystation.Core
 
             // Collections
             SaveIntDictToField(d, "skills",        n.skills);
-            d["traits"]               = new List<object>(n.traits);
-            d["status_tags"]          = new List<object>(n.statusTags);
-            d["sibling_ids"]          = new List<object>(n.siblingIds);
-            d["chosen_expertise"]     = new List<object>(n.chosenExpertise);
-            d["pending_expertise_skill_ids"] = new List<object>(n.pendingExpertiseSkillIds);
+            d["traits"]               = ToObjList(n.traits);
+            d["status_tags"]          = ToObjList(n.statusTags);
+            d["sibling_ids"]          = ToObjList(n.siblingIds);
+            d["chosen_expertise"]     = ToObjList(n.chosenExpertise);
+            d["pending_expertise_skill_ids"] = ToObjList(n.pendingExpertiseSkillIds);
             d["life_stage"]           = n.lifeStage.ToString();
 
             // Needs legacy dict
@@ -830,7 +830,7 @@ namespace Waystation.Core
         }
 
         private static Dictionary<string, object> SerializeActiveDisease(ActiveDisease ad) => ad == null ? null : new Dictionary<string, object>
-            { { "uid", ad.uid }, { "disease_id", ad.diseaseId }, { "display_name", ad.displayName }, { "current_stage", ad.currentStage }, { "ticks_in_stage", ad.ticksInStage }, { "affected_part_ids", new List<object>(ad.affectedPartIds) }, { "is_chronic", ad.isChronic }, { "immunity_expires_at_tick", ad.immunityExpiresAtTick } };
+            { { "uid", ad.uid }, { "disease_id", ad.diseaseId }, { "display_name", ad.displayName }, { "current_stage", ad.currentStage }, { "ticks_in_stage", ad.ticksInStage }, { "affected_part_ids", ToObjList(ad.affectedPartIds) }, { "is_chronic", ad.isChronic }, { "immunity_expires_at_tick", ad.immunityExpiresAtTick } };
         private static ActiveDisease DeserializeActiveDisease(Dictionary<string, object> d)
         {
             if (d == null) return null;
@@ -871,7 +871,7 @@ namespace Waystation.Core
                 { "pest_accumulator",f.pestAccumulator }, { "has_blight", f.hasBlight }, { "blight_detected", f.blightDetected }, { "blight_ticks", f.blightTicks },
                 { "has_pests",       f.hasPests }, { "pests_detected", f.pestsDetected }, { "pest_ticks", f.pestTicks },
                 { "target_temperature", f.targetTemperature },
-                { "relay_branch_filter", new List<object>(f.relayBranchFilter) },
+                { "relay_branch_filter", ToObjList(f.relayBranchFilter) },
                 { "cargo",           cargoOut }, { "hauled_materials", hauledOut }, { "repair_hauled_materials", repHauledOut },
                 { "access_policy",   f.accessPolicy != null ? SerializeDoorAccessPolicy(f.accessPolicy) : null },
                 { "cargo_settings",  f.cargoSettings != null ? SerializeCargoHoldSettings(f.cargoSettings) : null },
@@ -910,7 +910,7 @@ namespace Waystation.Core
         }
 
         private static Dictionary<string, object> SerializeDoorAccessPolicy(DoorAccessPolicy p) => p == null ? null : new Dictionary<string, object>
-            { { "allow_all", p.allowAll }, { "allowed_species", new List<object>(p.allowedSpecies) }, { "allowed_department_ids", new List<object>(p.allowedDepartmentIds) }, { "min_rank", p.minRank }, { "required_faction_id", p.requiredFactionId }, { "min_faction_rep", p.minFactionRep } };
+            { { "allow_all", p.allowAll }, { "allowed_species", ToObjList(p.allowedSpecies) }, { "allowed_department_ids", ToObjList(p.allowedDepartmentIds) }, { "min_rank", p.minRank }, { "required_faction_id", p.requiredFactionId }, { "min_faction_rep", p.minFactionRep } };
         private static DoorAccessPolicy DeserializeDoorAccessPolicy(Dictionary<string, object> d)
         {
             if (d == null) return null;
@@ -926,7 +926,7 @@ namespace Waystation.Core
             var rbtOut = new Dictionary<string, object>();
             foreach (var kv in s.reservedByType) rbtOut[kv.Key] = kv.Value;
             return new Dictionary<string, object>
-                { { "allowed_types", new List<object>(s.allowedTypes) }, { "priority", s.priority }, { "reserved_by_type", rbtOut } };
+                { { "allowed_types", ToObjList(s.allowedTypes) }, { "priority", s.priority }, { "reserved_by_type", rbtOut } };
         }
         private static CargoHoldSettings DeserializeCargoHoldSettings(Dictionary<string, object> d)
         {
@@ -952,7 +952,7 @@ namespace Waystation.Core
                 { "ticks_docked", s.ticksDocked }, { "planned_departure_tick", s.plannedDepartureTick },
                 { "visit_state", s.visitState.ToString() }, { "world_x", s.worldX }, { "world_y", s.worldY },
                 { "drift_target_x", s.driftTargetX }, { "drift_target_y", s.driftTargetY }, { "in_range_since_tick", s.inRangeSinceTick }, { "shuttle_uid", s.shuttleUid },
-                { "cargo", cargoOut }, { "passenger_uids", new List<object>(s.passengerUids) }, { "behavior_tags", new List<object>(s.behaviorTags) },
+                { "cargo", cargoOut }, { "passenger_uids", ToObjList(s.passengerUids) }, { "behavior_tags", ToObjList(s.behaviorTags) },
             };
         }
         private static ShipInstance DeserializeShip(Dictionary<string, object> d)
@@ -971,7 +971,7 @@ namespace Waystation.Core
         }
 
         private static Dictionary<string, object> SerializeOwnedShip(OwnedShipInstance s) => s == null ? null : new Dictionary<string, object>
-            { { "uid", s.uid }, { "template_id", s.templateId }, { "name", s.name }, { "role", s.role }, { "status", s.status }, { "condition_pct", s.conditionPct }, { "damage_state", s.damageState.ToString() }, { "mission_uid", s.missionUid }, { "mission_type", s.missionType }, { "mission_start_tick", s.missionStartTick }, { "mission_end_tick", s.missionEndTick }, { "crew_uids", new List<object>(s.crewUids) } };
+            { { "uid", s.uid }, { "template_id", s.templateId }, { "name", s.name }, { "role", s.role }, { "status", s.status }, { "condition_pct", s.conditionPct }, { "damage_state", s.damageState.ToString() }, { "mission_uid", s.missionUid }, { "mission_type", s.missionType }, { "mission_start_tick", s.missionStartTick }, { "mission_end_tick", s.missionEndTick }, { "crew_uids", ToObjList(s.crewUids) } };
         private static OwnedShipInstance DeserializeOwnedShip(Dictionary<string, object> d)
         {
             if (d == null) return null;
@@ -986,7 +986,7 @@ namespace Waystation.Core
             if (m == null) return null;
             var rewardsOut = new Dictionary<string, object>(); foreach (var kv in m.rewards) rewardsOut[kv.Key] = kv.Value;
             return new Dictionary<string, object>
-            { { "uid", m.uid }, { "mission_type", m.missionType }, { "display_name", m.displayName }, { "definition_id", m.definitionId }, { "start_tick", m.startTick }, { "end_tick", m.endTick }, { "status", m.status }, { "target_system_seed", m.targetSystemSeed }, { "target_system_name", m.targetSystemName }, { "crew_uids", new List<object>(m.crewUids) }, { "rewards", rewardsOut } };
+            { { "uid", m.uid }, { "mission_type", m.missionType }, { "display_name", m.displayName }, { "definition_id", m.definitionId }, { "start_tick", m.startTick }, { "end_tick", m.endTick }, { "status", m.status }, { "target_system_seed", m.targetSystemSeed }, { "target_system_name", m.targetSystemName }, { "crew_uids", ToObjList(m.crewUids) }, { "rewards", rewardsOut } };
         }
         private static MissionInstance DeserializeMission(Dictionary<string, object> d)
         {
@@ -1005,7 +1005,7 @@ namespace Waystation.Core
             { { "uid", am.uid }, { "poi_uid", am.poiUid }, { "width", am.width }, { "height", am.height }, { "seed", am.seed },
               { "tiles", Convert.ToBase64String(am.tiles) }, { "mission_uid", am.missionUid }, { "status", am.status }, { "start_tick", am.startTick }, { "end_tick", am.endTick },
               { "retreat_ordered", am.retreatOrdered }, { "distress_signal_active", am.distressSignalActive }, { "distress_window_expiry_tick", am.distressWindowExpiryTick }, { "rescue_dispatched", am.rescueDispatched }, { "threat_level", am.threatLevel },
-              { "extracted_resources", extractedOut }, { "assigned_npc_uids", new List<object>(am.assignedNpcUids) } };
+              { "extracted_resources", extractedOut }, { "assigned_npc_uids", ToObjList(am.assignedNpcUids) } };
         }
         private static AsteroidMapState DeserializeAsteroidMap(Dictionary<string, object> d)
         {
@@ -1068,7 +1068,7 @@ namespace Waystation.Core
         }
 
         private static Dictionary<string, object> SerializeDepartment(Department dept) => dept == null ? null : new Dictionary<string, object>
-            { { "uid", dept.uid }, { "name", dept.name }, { "colour_hex", dept.colourHex }, { "secondary_colour_hex", dept.secondaryColourHex }, { "head_npc_uid", dept.headNpcUid }, { "allowed_jobs", new List<object>(dept.allowedJobs) } };
+            { { "uid", dept.uid }, { "name", dept.name }, { "colour_hex", dept.colourHex }, { "secondary_colour_hex", dept.secondaryColourHex }, { "head_npc_uid", dept.headNpcUid }, { "allowed_jobs", ToObjList(dept.allowedJobs) } };
         private static Department DeserializeDepartment(Dictionary<string, object> d)
         {
             if (d == null) return null;
@@ -1121,7 +1121,7 @@ namespace Waystation.Core
             if (rh != null) foreach (var kv in rh.baselines) baselinesOut[kv.Key] = kv.Value;
             return new Dictionary<string, object>
             { { "region_id", r.regionId }, { "display_name", r.displayName }, { "simulation_state", r.simulationState.ToString() }, { "conflict_level", r.conflictLevel }, { "population_density", r.populationDensity },
-              { "faction_ids", new List<object>(r.factionIds) }, { "daily_amounts", dailyAmountsOut }, { "baselines", baselinesOut } };
+              { "faction_ids", ToObjList(r.factionIds) }, { "daily_amounts", dailyAmountsOut }, { "baselines", baselinesOut } };
         }
         private static RegionData DeserializeRegion(Dictionary<string, object> d)
         {
@@ -1137,7 +1137,7 @@ namespace Waystation.Core
         }
 
         private static Dictionary<string, object> SerializeNetwork(NetworkInstance n) => n == null ? null : new Dictionary<string, object>
-            { { "uid", n.uid }, { "network_type", n.networkType }, { "content_type", n.contentType }, { "content_amount", n.contentAmount }, { "content_capacity", n.contentCapacity }, { "member_uids", new List<object>(n.memberUids) } };
+            { { "uid", n.uid }, { "network_type", n.networkType }, { "content_type", n.contentType }, { "content_amount", n.contentAmount }, { "content_capacity", n.contentCapacity }, { "member_uids", ToObjList(n.memberUids) } };
         private static NetworkInstance DeserializeNetwork(Dictionary<string, object> d)
         {
             if (d == null) return null;
@@ -1151,7 +1151,7 @@ namespace Waystation.Core
             if (f == null) return null;
             var relOut = new Dictionary<string, object>(); foreach (var kv in f.relationships) relOut[kv.Key] = kv.Value;
             return new Dictionary<string, object>
-            { { "id", f.id }, { "display_name", f.displayName }, { "type", f.type }, { "description", f.description }, { "ideology_tags", new List<object>(f.ideologyTags) }, { "behavior_tags", new List<object>(f.behaviorTags) }, { "government_type", f.governmentType.ToString() }, { "succession_state", f.successionState.ToString() }, { "stability_score", f.stabilityScore }, { "government_tenure_ticks", f.governmentTenureTicks }, { "member_npc_ids", new List<object>(f.memberNpcIds) }, { "leader_npc_ids", new List<object>(f.leaderNpcIds) }, { "vassal_parent_faction_id", f.vassalParentFactionId }, { "relationships", relOut } };
+            { { "id", f.id }, { "display_name", f.displayName }, { "type", f.type }, { "description", f.description }, { "ideology_tags", ToObjList(f.ideologyTags) }, { "behavior_tags", ToObjList(f.behaviorTags) }, { "government_type", f.governmentType.ToString() }, { "succession_state", f.successionState.ToString() }, { "stability_score", f.stabilityScore }, { "government_tenure_ticks", f.governmentTenureTicks }, { "member_npc_ids", ToObjList(f.memberNpcIds) }, { "leader_npc_ids", ToObjList(f.leaderNpcIds) }, { "vassal_parent_faction_id", f.vassalParentFactionId }, { "relationships", relOut } };
         }
         private static FactionDefinition DeserializeGeneratedFaction(Dictionary<string, object> d)
         {
@@ -1185,7 +1185,7 @@ namespace Waystation.Core
         {
             if (b == null) return null;
             var moonsOut = new List<object>(); foreach (var m in b.moons) moonsOut.Add(SerializeSolarBody(m));
-            return new Dictionary<string, object> { { "name", b.name }, { "body_type", b.bodyType.ToString() }, { "planet_class", b.planetClass.ToString() }, { "orbital_radius", b.orbitalRadius }, { "orbital_period", b.orbitalPeriod }, { "initial_phase", b.initialPhase }, { "size", b.size }, { "color_hex", b.colorHex }, { "has_rings", b.hasRings }, { "station_is_here", b.stationIsHere }, { "tags", new List<object>(b.tags) }, { "moons", moonsOut } };
+            return new Dictionary<string, object> { { "name", b.name }, { "body_type", b.bodyType.ToString() }, { "planet_class", b.planetClass.ToString() }, { "orbital_radius", b.orbitalRadius }, { "orbital_period", b.orbitalPeriod }, { "initial_phase", b.initialPhase }, { "size", b.size }, { "color_hex", b.colorHex }, { "has_rings", b.hasRings }, { "station_is_here", b.stationIsHere }, { "tags", ToObjList(b.tags) }, { "moons", moonsOut } };
         }
         private static SolarBody DeserializeSolarBody(Dictionary<string, object> d)
         {
@@ -1236,7 +1236,11 @@ namespace Waystation.Core
         { var out_ = new List<object>(); foreach (var v in src) out_.Add(v); data[key] = out_; }
 
         private static void SaveStringList(Dictionary<string, object> data, string key, List<string> src)
-        { data[key] = new List<object>(src); }
+        { var out_ = new List<object>(); foreach (var v in src) out_.Add(v); data[key] = out_; }
+
+        // Converts a List<string> (or any IEnumerable<string>) to List<object> for MiniJSON serialization.
+        private static List<object> ToObjList(System.Collections.Generic.IEnumerable<string> src)
+        { var out_ = new List<object>(); foreach (var v in src) out_.Add(v); return out_; }
 
         private static void SaveIntDictToField(Dictionary<string, object> d, string key, Dictionary<string, int> src)
         { var out_ = new Dictionary<string, object>(); foreach (var kv in src) out_[kv.Key] = kv.Value; d[key] = out_; }

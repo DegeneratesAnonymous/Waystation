@@ -5373,7 +5373,7 @@ namespace Waystation.UI
                 y += 34f;
 
                 // Load Game — enabled when FullSaveLoad is active and a save file exists
-                if (FeatureFlags.FullSaveLoad && _gm.HasSaveFile())
+                if (FeatureFlags.FullSaveLoad && _gm != null && _gm.HasSaveFile())
                 {
                     if (GUI.Button(new Rect(area.x, y, w, BtnH), "Load Game", _sBtnWide))
                     {
@@ -5385,7 +5385,7 @@ namespace Waystation.UI
                 {
                     var prevColor = GUI.color;
                     GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.7f);
-                    GUI.Button(new Rect(area.x, y, w, BtnH), _gm.HasSaveFile() ? "Load Game  (disabled)" : "Load Game  (no save)", _sBtnWide);
+                    GUI.Button(new Rect(area.x, y, w, BtnH), (_gm != null && _gm.HasSaveFile()) ? "Load Game  (disabled)" : "Load Game  (no save)", _sBtnWide);
                     GUI.color = prevColor;
                 }
                 y += 34f;
