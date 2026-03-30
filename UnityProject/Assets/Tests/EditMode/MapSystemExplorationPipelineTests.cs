@@ -96,6 +96,52 @@ namespace Waystation.Tests
         }
 
         [Test]
+        public void ScoutMission_UsesContainerWithFreeTotalCapacity()
+        {
+            var go = new GameObject("registry");
+            var registry = go.AddComponent<ContentRegistry>();
+            registry.Items["item.exploration_datachip"] = new ItemDefinition
+            {
+                id = "item.exploration_datachip",
+                item_type = "Valuables",
+            };
+            registry.Missions["mission.scout"] = new MissionDefinition
+            {
+                id = "mission.scout",
+                displayName = "Scout Survey",
+                missionType = "scout",
+                durationTicks = 1,
+                crewRequired = 1,
+                requiredSkill = "science",
+                requiredSkillLevel = 1,
+                successChanceBase = 1f,
+            };
+            var missions = new MissionSystem(registry);
+            var station = new StationState("EXP-Cap");
+            AddFoundation(station, "buildable.cartography_station");
+            var fullHolder = AddFoundation(station, "buildable.storage_cabinet", cargoCapacity: 1);
+            var freeHolder = AddFoundation(station, "buildable.storage_cabinet", cargoCapacity: 2);
+            fullHolder.cargo["item.parts"] = 1;
+
+            var crew = NPCInstance.Create("npc.test", "Scout", "class.scientist");
+            crew.statusTags.Add("crew");
+            crew.skills["science"] = 5;
+            station.npcs[crew.uid] = crew;
+
+            var (ok, _, mission) = missions.DispatchMission("mission.scout", new List<string> { crew.uid }, station);
+            Assert.IsTrue(ok);
+            mission.targetSystemSeed = 701;
+            mission.targetSystemName = "Capacity Target";
+
+            station.tick = mission.endTick;
+            missions.Tick(station);
+
+            Assert.IsFalse(fullHolder.cargo.ContainsKey("item.exploration_datachip"));
+            Assert.AreEqual(1, freeHolder.cargo["item.exploration_datachip"]);
+            Object.DestroyImmediate(go);
+        }
+
+        [Test]
         public void ScoutMission_WithoutCartographyStation_DoesNotProduceExplorationDatachip()
         {
             var go = new GameObject("registry");

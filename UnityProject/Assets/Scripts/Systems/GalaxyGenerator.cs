@@ -264,8 +264,7 @@ namespace Waystation.Systems
         /// </summary>
         public static SectorData GenerateSectorAtCoordinates(int seed, Vector2 coordinates, StationState station)
         {
-            int idx = station?.sectors?.Count ?? 0;
-            int localSeed = seed ^ StableHash($"{coordinates.x:F2},{coordinates.y:F2}") ^ (idx * 265443576);
+            int localSeed = seed ^ StableHash($"{coordinates.x:F2},{coordinates.y:F2}");
             var rng = new Random(localSeed);
 
             var prefix = AssignPrefix(coordinates.x, rng);

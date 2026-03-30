@@ -170,13 +170,17 @@ namespace Waystation.Systems
 
             FoundationInstance cartographyStation = null;
             FoundationInstance chipHolder = null;
+            _registry.Items.TryGetValue(ExplorationDatachipItemId, out var chipDef);
 
             foreach (var f in station.foundations.Values)
             {
                 if (f.status != "complete" || f.Functionality() <= 0f) continue;
                 if (f.buildableId == "buildable.cartography_station")
                     cartographyStation = f;
-                if (chipHolder == null && f.cargoCapacity > 0)
+                if (chipHolder == null &&
+                    f.cargoCapacity > 0 &&
+                    f.CargoItemCount() < f.cargoCapacity &&
+                    (f.cargoSettings == null || chipDef == null || f.cargoSettings.AllowsType(chipDef.itemType)))
                     chipHolder = f;
                 if (cartographyStation != null && chipHolder != null)
                     break;
@@ -185,7 +189,7 @@ namespace Waystation.Systems
             if (cartographyStation == null || !cartographyStation.isEnergised || chipHolder == null) return;
 
             int current = chipHolder.cargo.TryGetValue(ExplorationDatachipItemId, out var n) ? n : 0;
-            if (current >= chipHolder.cargoCapacity) return;
+            if (chipHolder.CargoItemCount() >= chipHolder.cargoCapacity) return;
 
             chipHolder.cargo[ExplorationDatachipItemId] = current + 1;
             var chip = ExplorationDatachipInstance.Create(mission.targetSystemSeed, mission.targetSystemName);

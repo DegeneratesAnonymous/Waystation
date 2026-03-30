@@ -4972,30 +4972,62 @@ namespace Waystation.UI
             if (GUI.Button(new Rect(area.x, y, w, 26f), $"\u2708 Dispatch \"{selDef.displayName}\"", _sBtnSmall))
             {
                 var crewList = new List<string>(_selectedMissionCrew);
-                var (ok, reason, mission) = _gm.Missions.DispatchMission(_selectedMissionDef, crewList, s);
-                if (ok && mission != null && string.Equals(mission.missionType, "scout", StringComparison.OrdinalIgnoreCase))
+                bool isScout = string.Equals(selDef.missionType, "scout", StringComparison.OrdinalIgnoreCase);
+                bool canDispatch = true;
+                string preDispatchFailureReason = null;
+                int scoutTargetSeed = 0;
+                string scoutTargetName = null;
+
+                if (isScout)
                 {
                     var sector = SystemMapController.SelectedSector;
-                    if (sector != null)
+                    if (sector == null)
+                    {
+                        canDispatch = false;
+                        preDispatchFailureReason = "Select a sector to scout before dispatching this mission.";
+                    }
+                    else
                     {
                         var systems = SolarSystemGenerator.GenerateSectorSystems(
                             sector,
                             Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
                             Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY),
                             _gm.Station.solarSystem);
+                        bool foundUncharted = false;
                         foreach (var sys in systems)
                         {
                             if (!_gm.Map.IsSystemCharted(s, sys.seed))
                             {
-                                mission.targetSystemSeed = sys.seed;
-                                mission.targetSystemName = sys.systemName;
+                                scoutTargetSeed = sys.seed;
+                                scoutTargetName = sys.systemName;
+                                foundUncharted = true;
                                 break;
                             }
                         }
+
+                        if (!foundUncharted)
+                        {
+                            canDispatch = false;
+                            preDispatchFailureReason = "All systems in the selected sector are already charted.";
+                        }
                     }
                 }
-                _missionMsg = ok ? $"Dispatched!" : $"!{reason}";
-                if (ok) { _selectedMissionCrew.Clear(); _selectedMissionDef = ""; }
+
+                if (!canDispatch)
+                {
+                    _missionMsg = $"!{preDispatchFailureReason}";
+                }
+                else
+                {
+                    var (ok, reason, mission) = _gm.Missions.DispatchMission(_selectedMissionDef, crewList, s);
+                    if (ok && mission != null && isScout && scoutTargetSeed != 0)
+                    {
+                        mission.targetSystemSeed = scoutTargetSeed;
+                        mission.targetSystemName = scoutTargetName;
+                    }
+                    _missionMsg = ok ? $"Dispatched!" : $"!{reason}";
+                    if (ok) { _selectedMissionCrew.Clear(); _selectedMissionDef = ""; }
+                }
             }
             GUI.enabled = true;
             y += 30f;
