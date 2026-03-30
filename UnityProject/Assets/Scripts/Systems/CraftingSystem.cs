@@ -212,9 +212,10 @@ namespace Waystation.Systems
 
             RefreshNpcTimer(entry, station);
 
+            NPCInstance craftingNpc = null;
             int skillLevel = 0;
             if (entry.assignedNpcUid != null &&
-                station.npcs.TryGetValue(entry.assignedNpcUid, out var craftingNpc))
+                station.npcs.TryGetValue(entry.assignedNpcUid, out craftingNpc))
                 skillLevel = SkillSystem.GetSkillLevel(craftingNpc, CraftingSkillId);
 
             float skillScale    = ComputeSkillScale(skillLevel);
