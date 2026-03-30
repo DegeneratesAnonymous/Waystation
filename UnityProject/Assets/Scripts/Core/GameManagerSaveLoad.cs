@@ -341,7 +341,7 @@ namespace Waystation.Core
                             {
                                 capturedAtTick    = cnd.TryGetValue("captured_at_tick",    out var cat)  ? Convert.ToInt32(cat) : 0,
                                 capturedBy        = cnd.TryGetValue("captured_by",         out var cb)   ? cb?.ToString()       : null,
-                                eligibleForRescue = !cnd.TryGetValue("eligible_for_rescue", out var efr) || Convert.ToBoolean(efr),
+                                eligibleForRescue = cnd.TryGetValue("eligible_for_rescue", out var efr) && Convert.ToBoolean(efr),
                                 npc               = cnd.TryGetValue("npc", out var cn) && cn is Dictionary<string, object> npcd ? DeserializeNpc(npcd) : null,
                             };
                             if (npcRec.npc != null) Station.capturedNpcs[kv.Key] = npcRec;
@@ -920,8 +920,14 @@ namespace Waystation.Core
             return p;
         }
 
-        private static Dictionary<string, object> SerializeCargoHoldSettings(CargoHoldSettings s) => s == null ? null : new Dictionary<string, object>
-            { { "allowed_types", new List<object>(s.allowedTypes) }, { "priority", s.priority }, { "reserved_by_type", new Dictionary<string, object>(s.reservedByType.Count) } };
+        private static Dictionary<string, object> SerializeCargoHoldSettings(CargoHoldSettings s)
+        {
+            if (s == null) return null;
+            var rbtOut = new Dictionary<string, object>();
+            foreach (var kv in s.reservedByType) rbtOut[kv.Key] = kv.Value;
+            return new Dictionary<string, object>
+                { { "allowed_types", new List<object>(s.allowedTypes) }, { "priority", s.priority }, { "reserved_by_type", rbtOut } };
+        }
         private static CargoHoldSettings DeserializeCargoHoldSettings(Dictionary<string, object> d)
         {
             if (d == null) return null;
