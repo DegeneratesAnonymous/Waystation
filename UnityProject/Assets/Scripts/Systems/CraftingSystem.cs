@@ -100,12 +100,12 @@ namespace Waystation.Systems
             if (!string.IsNullOrEmpty(recipe.unlockTag) && !station.HasTag(recipe.unlockTag))
                 return (false, $"Recipe '{recipe.displayName}' is not unlocked (missing tag: {recipe.unlockTag}).", null);
 
-            // Verify workbench type match.
-            if (_registry.Buildables.TryGetValue(bench.buildableId, out var benchDef))
-            {
-                if (benchDef.workbenchRoomType != recipe.requiredWorkbenchType)
-                    return (false, $"Recipe '{recipe.displayName}' requires workbench type '{recipe.requiredWorkbenchType}', but this workbench is '{benchDef.workbenchRoomType}'.", null);
-            }
+            // Verify workbench type match and that the workbench buildable is registered.
+            if (!_registry.Buildables.TryGetValue(bench.buildableId, out var benchDef))
+                return (false, $"Workbench buildable '{bench.buildableId}' is not registered.", null);
+
+            if (benchDef.workbenchRoomType != recipe.requiredWorkbenchType)
+                return (false, $"Recipe '{recipe.displayName}' requires workbench type '{recipe.requiredWorkbenchType}', but this workbench is '{benchDef.workbenchRoomType}'.", null);
 
             var entry = WorkbenchQueueEntry.Create(recipeId);
 
@@ -132,23 +132,35 @@ namespace Waystation.Systems
                 if (bench.status != "complete") continue;
                 if (!_registry.Buildables.TryGetValue(bench.buildableId, out var benchDef)) continue;
 
-                // Only process the head of the queue at any time.
-                var entry = queue[0];
-
-                switch (entry.status)
+                // Process the head of the queue; when an entry completes, immediately
+                // advance to the next one within the same tick so queues flow continuously.
+                while (queue.Count > 0)
                 {
-                    case "queued":
-                        TickQueued(entry, bench, benchDef, station);
-                        break;
-                    case "hauling":
-                        TickHauling(entry, bench, benchDef, station);
-                        break;
-                    case "executing":
-                        TickExecuting(entry, bench, benchDef, station);
-                        break;
-                    case "complete":
-                        // Completed entry: remove it so the next recipe in queue begins.
+                    var entry = queue[0];
+
+                    // Remove already-completed entries first so the next can begin.
+                    if (entry.status == "complete")
+                    {
                         queue.RemoveAt(0);
+                        continue;
+                    }
+
+                    switch (entry.status)
+                    {
+                        case "queued":
+                            TickQueued(entry, bench, benchDef, station);
+                            break;
+                        case "hauling":
+                            TickHauling(entry, bench, benchDef, station);
+                            break;
+                        case "executing":
+                            TickExecuting(entry, bench, benchDef, station);
+                            break;
+                    }
+
+                    // If this tick caused the entry to complete, loop to start the next.
+                    // Otherwise the entry is still in progress — stop until the next tick.
+                    if (entry.status != "complete")
                         break;
                 }
             }
@@ -234,8 +246,8 @@ namespace Waystation.Systems
                                     FoundationInstance bench, StationState station,
                                     NPCInstance craftingNpc)
         {
-            // Place output in nearest compatible storage.
-            bool stored = TryStoreOutput(recipe.outputItemId, recipe.outputQuantity, station);
+            // Place output in nearest compatible storage (by Manhattan distance to workbench).
+            bool stored = TryStoreOutput(recipe.outputItemId, recipe.outputQuantity, bench, station);
 
             string qualityNote = recipe.hasQualityTiers
                 ? $" (quality: {entry.outputQualityTier})"
@@ -299,11 +311,12 @@ namespace Waystation.Systems
                 string itemId   = kv.Key;
                 int    required = kv.Value;
 
-                int alreadyHauled = entry.hauledMaterials.TryGetValue(itemId, out int h) ? h : 0;
-                int stillNeeded   = required - alreadyHauled;
+                int hauledSoFar = entry.hauledMaterials.TryGetValue(itemId, out int h) ? h : 0;
+                int stillNeeded = required - hauledSoFar;
                 if (stillNeeded <= 0) continue;
 
-                // Pull from any available station storage foundation.
+                // Pull from any available station storage foundation; accumulate cumulatively
+                // so that material sourced across multiple containers is tallied correctly.
                 int remaining = stillNeeded;
                 foreach (var foundation in station.foundations.Values)
                 {
@@ -315,10 +328,13 @@ namespace Waystation.Systems
                     if (foundation.cargo[itemId] == 0)
                         foundation.cargo.Remove(itemId);
 
-                    entry.hauledMaterials[itemId] = alreadyHauled + toTake;
-                    remaining -= toTake;
+                    hauledSoFar += toTake;
+                    remaining   -= toTake;
                     if (remaining <= 0) break;
                 }
+
+                // Write cumulative tally back whether or not all material was found.
+                entry.hauledMaterials[itemId] = hauledSoFar;
 
                 if (remaining > 0)
                     return false;  // Not all materials available yet.
@@ -327,26 +343,47 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Places the output into the nearest complete storage foundation that has capacity.
-        /// Returns true if stored successfully, false if no storage found.
+        /// Places output into the nearest complete storage foundation that has capacity
+        /// and accepts the item type.  Nearest is by Manhattan distance to the workbench.
+        /// Capacity is measured by item-unit count (consistent with CargoItemCount /
+        /// InventorySystem.GetCapacityFree).  Type filters from CargoHoldSettings are
+        /// respected.  Returns true if stored successfully.
         /// </summary>
-        private bool TryStoreOutput(string itemId, int qty, StationState station)
+        private bool TryStoreOutput(string itemId, int qty, FoundationInstance bench,
+                                    StationState station)
         {
+            _registry.Items.TryGetValue(itemId, out var itemDefn);
+
+            FoundationInstance best    = null;
+            int                bestDist = int.MaxValue;
+
             foreach (var foundation in station.foundations.Values)
             {
                 if (foundation.status != "complete") continue;
                 if (foundation.cargoCapacity <= 0)   continue;
 
-                int used = 0;
-                foreach (var v in foundation.cargo.Values) used += v;
-                int free = foundation.cargoCapacity - used;
+                // Respect type filters (CargoHoldSettings), identical to InventorySystem.CanStoreItem.
+                if (foundation.cargoSettings != null && itemDefn != null)
+                    if (!foundation.cargoSettings.AllowsType(itemDefn.itemType)) continue;
 
+                // Capacity check using item-unit count (CargoItemCount), not raw weight sum.
+                int free = foundation.cargoCapacity - foundation.CargoItemCount();
                 if (free < qty) continue;
 
-                foundation.cargo[itemId] = (foundation.cargo.TryGetValue(itemId, out int cur) ? cur : 0) + qty;
-                return true;
+                // Prefer the container nearest to the workbench (Manhattan distance).
+                int dist = Mathf.Abs(foundation.tileCol - bench.tileCol)
+                         + Mathf.Abs(foundation.tileRow - bench.tileRow);
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best     = foundation;
+                }
             }
-            return false;
+
+            if (best == null) return false;
+
+            best.cargo[itemId] = (best.cargo.TryGetValue(itemId, out int cur) ? cur : 0) + qty;
+            return true;
         }
 
         /// <summary>Refreshes the assigned NPC's job timer to prevent JobSystem reassignment.</summary>

@@ -203,6 +203,19 @@ namespace Waystation.Tests
             var (ok, reason, uid) = _crafting.QueueRecipe("nonexistent_uid", CraftingTestHelpers.RecipeId, _station);
             Assert.IsFalse(ok, "QueueRecipe should fail when workbench UID is unknown.");
         }
+
+        [Test]
+        public void QueueRecipe_Fails_WhenBuildableNotInRegistry()
+        {
+            _station.SetTag(CraftingTestHelpers.UnlockTag);
+            // Create a workbench whose buildableId is not registered in the registry.
+            var unregisteredBench = FoundationInstance.Create("buildable.unknown", 5, 5);
+            unregisteredBench.status = "complete";
+            _station.foundations[unregisteredBench.uid] = unregisteredBench;
+
+            var (ok, reason, uid) = _crafting.QueueRecipe(unregisteredBench.uid, CraftingTestHelpers.RecipeId, _station);
+            Assert.IsFalse(ok, "QueueRecipe should fail when the workbench buildable is not registered.");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -350,6 +363,38 @@ namespace Waystation.Tests
         }
 
         [Test]
+        public void MaterialsGathered_CorrectlyAcrossMultipleContainers()
+        {
+            // Recipe requires 2 units; split 1 unit across two separate storage containers.
+            CraftingTestHelpers.AddStorage(_station, CraftingTestHelpers.InputItemId, 1);
+            CraftingTestHelpers.AddStorage(_station, CraftingTestHelpers.InputItemId, 1);
+            CraftingTestHelpers.AddStorage(_station); // output storage
+            CraftingTestHelpers.AddCraftingNpc(_station, craftingLevel: 5);
+
+            _crafting.QueueRecipe(_bench.uid, CraftingTestHelpers.RecipeId, _station);
+
+            // Run long enough for the recipe to complete.
+            for (int i = 0; i < 30; i++)
+                _crafting.Tick(_station);
+
+            // Recipe should complete; verify all input material was consumed.
+            int totalRemaining = 0;
+            foreach (var f in _station.foundations.Values)
+                totalRemaining += f.cargo.TryGetValue(CraftingTestHelpers.InputItemId, out int q) ? q : 0;
+
+            Assert.AreEqual(0, totalRemaining,
+                "All input material should be consumed when sourced across multiple containers.");
+
+            // And the output should have been produced.
+            int totalOutput = 0;
+            foreach (var f in _station.foundations.Values)
+                totalOutput += f.cargo.TryGetValue(CraftingTestHelpers.OutputItemId, out int q2) ? q2 : 0;
+
+            Assert.AreEqual(1, totalOutput,
+                "Output should be placed in storage when materials were spread across multiple containers.");
+        }
+
+        [Test]
         public void Execution_TransitionsToComplete_AfterSufficientTicks()
         {
             CraftingTestHelpers.AddStorage(_station, CraftingTestHelpers.InputItemId, 10);
@@ -392,6 +437,39 @@ namespace Waystation.Tests
         }
 
         [Test]
+        public void Output_PlacedInNearest_StorageContainer()
+        {
+            // Workbench is at (0,0).
+            // Input material storage at far-away tile so it doesn't win "nearest" for output.
+            var inputStorage = FoundationInstance.Create("buildable.storage_crate", 50, 0, cargoCapacity: 50);
+            inputStorage.status = "complete";
+            inputStorage.cargo[CraftingTestHelpers.InputItemId] = 10;
+            _station.foundations[inputStorage.uid] = inputStorage;
+
+            // Two empty output containers: one near (2,0, dist=2), one far (20,0, dist=20).
+            var nearStorage = FoundationInstance.Create("buildable.storage_crate", 2, 0, cargoCapacity: 50);
+            nearStorage.status = "complete";
+            _station.foundations[nearStorage.uid] = nearStorage;
+
+            var farStorage = FoundationInstance.Create("buildable.storage_crate", 20, 0, cargoCapacity: 50);
+            farStorage.status = "complete";
+            _station.foundations[farStorage.uid] = farStorage;
+
+            CraftingTestHelpers.AddCraftingNpc(_station, craftingLevel: 5);
+            _crafting.QueueRecipe(_bench.uid, CraftingTestHelpers.RecipeId, _station);
+
+            for (int i = 0; i < 30; i++)
+                _crafting.Tick(_station);
+
+            int nearQty = nearStorage.cargo.TryGetValue(CraftingTestHelpers.OutputItemId, out int nq) ? nq : 0;
+            Assert.AreEqual(1, nearQty,
+                "Output should be placed in the nearest storage container (Manhattan distance).");
+            int farQty = farStorage.cargo.TryGetValue(CraftingTestHelpers.OutputItemId, out int fq) ? fq : 0;
+            Assert.AreEqual(0, farQty,
+                "Output should not be placed in the far storage container when a nearer one is available.");
+        }
+
+        [Test]
         public void MultipleRecipes_ProcessedInOrder()
         {
             CraftingTestHelpers.AddStorage(_station, CraftingTestHelpers.InputItemId, 20);
@@ -409,7 +487,7 @@ namespace Waystation.Tests
             Assert.AreEqual(uid1, queue[0].uid);
             Assert.AreEqual(uid2, queue[1].uid);
 
-            // Run until first completes; second should now be the head.
+            // Run until first completes; second should advance to head in the same tick.
             for (int i = 0; i < 30; i++)
             {
                 _crafting.Tick(_station);
@@ -417,10 +495,10 @@ namespace Waystation.Tests
                 if (queue.Count == 1) break;
             }
 
-            // After first completes, second should be in the queue.
+            // After first completes, second should be the new queue head.
             queue = _crafting.GetQueue(_bench.uid, _station);
             Assert.AreEqual(1, queue.Count,
-                "After first recipe completes, second should still be in queue.");
+                "After first recipe completes, second should be the new queue head.");
             Assert.AreEqual(uid2, queue[0].uid,
                 "Second recipe should be the new head of the queue.");
         }
