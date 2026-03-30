@@ -187,5 +187,23 @@ namespace Waystation.Core
         /// Set to false to revert TendTask to its previous no-effect stub behaviour.
         /// </summary>
         public static bool FarmingNegativeEvents = true;
+
+        /// <summary>
+        /// Enables the captured-NPC pool, real-time crew outcome dispatch (killed/injured/captured),
+        /// and ship-to-station hull damage via BuildingSystem (STA-003).
+        /// When false, crew outcome resolution and hull damage are skipped —
+        /// abstract resource/module loss still applies in all scenario resolvers.
+        /// Set to false to revert to pre-STA-003 abstract-only behaviour.
+        /// </summary>
+        public static bool CombatSystem = true;
+
+        /// <summary>
+        /// Enables the mental break combat scenario (STA-003): a crew member in breakdown
+        /// enters a hostile state and must be resolved via incapacitation, counselling, or
+        /// lethal force.
+        /// When false, breakdown NPCs revert to non-combat behaviour (passive drain only).
+        /// Requires CombatSystem = true for full resolution; can be disabled independently.
+        /// </summary>
+        public static bool MentalBreakCombat = true;
     }
 }
