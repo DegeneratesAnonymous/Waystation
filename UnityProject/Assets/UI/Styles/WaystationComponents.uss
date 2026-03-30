@@ -640,3 +640,123 @@
 
 .ws-hidden  { display: none; }
 .ws-visible { display: flex; }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SIDE PANEL  (.ws-side-panel)
+   Right-edge collapsible icon tab strip and content drawer shell.
+   Structure:
+     .ws-side-panel
+       .ws-side-panel__drawer   ← DrawerPanel (slides left)
+       .ws-side-panel__tab-strip
+         .ws-side-panel__tab × N
+           .ws-side-panel__tab-icon  (inline SVG container)
+           .ws-side-panel__tab-label (hidden by default, revealed on hover) */
+
+.ws-side-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: row;
+    align-items: stretch;
+}
+
+
+/* ── Drawer ─────────────────────────────────────────────────────────── */
+
+.ws-side-panel__drawer {
+    width: var(--ws-drawer-width);
+    background-color: var(--ws-bg-panel);
+    border-left-width: 1px;
+    border-left-color: var(--ws-border-mid);
+    /* DrawerPanel C# adds ws-drawer-panel--horizontal / --open modifier   */
+}
+
+
+/* ── Tab strip ──────────────────────────────────────────────────────── */
+
+.ws-side-panel__tab-strip {
+    width: var(--ws-side-panel-tab-width);
+    flex-direction: column;
+    align-items: center;
+    background-color: var(--ws-bg-raised);
+    border-left-width: 1px;
+    border-left-color: var(--ws-border-mid);
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+
+/* ── Individual tab button ──────────────────────────────────────────── */
+
+.ws-side-panel__tab {
+    width: var(--ws-side-panel-tab-width);
+    height: var(--ws-side-panel-tab-width);
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    border-radius: var(--ws-radius);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: link;
+    flex-shrink: 0;
+    overflow: visible;
+    transition-property: background-color;
+    transition-duration: var(--ws-anim-normal);
+    transition-timing-function: ease;
+}
+
+.ws-side-panel__tab:hover {
+    background-color: var(--ws-bg-hover);
+}
+
+.ws-side-panel__tab--active {
+    background-color: var(--ws-bg-hover);
+    border-left-width: 2px;
+    border-left-color: var(--ws-acc);
+}
+
+
+/* ── Tab icon (inline SVG host, 20×20) ──────────────────────────────── */
+
+.ws-side-panel__tab-icon {
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    --unity-image-tint-color: var(--ws-text-mid);
+}
+
+.ws-side-panel__tab--active .ws-side-panel__tab-icon {
+    --unity-image-tint-color: var(--ws-acc-bright);
+}
+
+.ws-side-panel__tab:hover .ws-side-panel__tab-icon {
+    --unity-image-tint-color: var(--ws-text-bright);
+}
+
+
+/* ── Tab label (hidden by default, fades in on hover) ───────────────── */
+
+.ws-side-panel__tab-label {
+    font-size: var(--ws-fs-section);
+    letter-spacing: var(--ws-ls-section);
+    color: var(--ws-text-dim);
+    -unity-text-align: middle-center;
+    opacity: 0;
+    margin-top: 2px;
+    transition-property: opacity, color;
+    transition-duration: var(--ws-anim-normal), var(--ws-anim-normal);
+    transition-timing-function: ease, ease;
+}
+
+.ws-side-panel__tab:hover .ws-side-panel__tab-label {
+    opacity: 1;
+    color: var(--ws-text-bright);
+}
+
+.ws-side-panel__tab--active .ws-side-panel__tab-label {
+    opacity: 1;
+    color: var(--ws-acc-bright);
+}

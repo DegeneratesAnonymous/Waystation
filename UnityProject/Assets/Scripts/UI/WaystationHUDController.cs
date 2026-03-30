@@ -8,13 +8,14 @@
 // those statics when UseUIToolkitHUD is true so CameraController and StationRoomView
 // require no changes.
 //
-// Migration status: infrastructure scaffold only.
+// Migration status: side panel shell active (WO-UI-005).
 // Full panel implementations are added panel-by-panel behind this controller
-// as described in WO-UI-002.
+// as described in WO-UI-002 onwards.
 using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UIElements;
 using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
@@ -32,6 +33,9 @@ namespace Waystation.UI
         // Placement state — mirrors GameHUD ghost-placement fields.
         private string _ghostBuildableId;
         private int    _ghostRotation;
+
+        // Side panel (WO-UI-005)
+        private SidePanelController _sidePanel;
 
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
@@ -62,6 +66,7 @@ namespace Waystation.UI
         {
             _instance = this;
             BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
+            BuildSidePanel();
             StartCoroutine(WaitForGame());
         }
 
@@ -96,12 +101,50 @@ namespace Waystation.UI
             OnGameLoaded();
         }
 
-        // ── Update — sync placement state ─────────────────────────────────────
+        // ── Side panel setup (WO-UI-005) ──────────────────────────────────────
+
+        private void BuildSidePanel()
+        {
+            // Locate the UIDocument that hosts the HUD panels.
+            // The document is expected to be present in the scene (set up as a
+            // prefab or scene object); a missing document is silently skipped so
+            // the rest of the controller still boots cleanly.
+            var doc = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
+            if (doc == null)
+            {
+                Debug.LogWarning("[WaystationHUDController] No UIDocument found — side panel will not render.");
+                return;
+            }
+
+            var mapSystem = GameManager.Instance?.Map;
+            _sidePanel = new SidePanelController(mapSystem);
+
+            // Hook up the Map fullscreen callback to open SystemMapController
+            _sidePanel.OnMapFullscreenRequested += OnSidePanelMapFullscreen;
+
+            // Register keyboard handler so Escape key works
+            _sidePanel.RegisterKeyboard(doc.rootVisualElement);
+
+            doc.rootVisualElement.Add(_sidePanel);
+        }
+
+        private void OnSidePanelMapFullscreen()
+        {
+            // Delegate to the legacy system map open logic for now.
+            var systemMap = FindFirstObjectByType<SystemMapController>();
+            systemMap?.Open();
+        }
+
+        // ── Update — sync placement state and mouse-over ──────────────────────
         private void Update()
         {
             // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
-            // GameHUD.IsMouseOverDrawer is maintained via NotifyPointerEnterPanel/Leave below.
             GameHUD.InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
+
+            // Keep IsMouseOverDrawer in sync: OR the side panel's pointer state
+            // with any other registered HUD panels.
+            bool sidePanelOver = _sidePanel != null && _sidePanel.IsMouseOverPanel;
+            GameHUD.IsMouseOverDrawer = sidePanelOver || _panelsUnderPointer > 0;
         }
 
         // ── GameManager event handlers ────────────────────────────────────────

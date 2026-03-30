@@ -144,6 +144,12 @@
     /* ── DrawerPanel transition ─────────────────────────────────────────── */
     --ws-drawer-duration: 0.22s;
 
+    /* ── Side panel dimensions ──────────────────────────────────────────── */
+    /* --ws-drawer-width: width of the content drawer that slides out        */
+    --ws-drawer-width: 400px;
+    /* --ws-side-panel-tab-width: width of the right-edge icon tab strip     */
+    --ws-side-panel-tab-width: 48px;
+
     /* ── Modal overlay opacity ──────────────────────────────────────────── */
     --ws-modal-overlay-bg: rgba(0, 0, 0, 0.72);
 }
