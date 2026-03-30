@@ -160,5 +160,15 @@ namespace Waystation.Core
         /// to the legacy system at any point without data loss.
         /// </summary>
         public static bool UseUIToolkitHUD = false;
+
+        /// <summary>
+        /// Enables the full real-time asteroid mission execution system (WO-EXP-004):
+        /// four failure states (abandonment, autonomous abort, distress signal, total loss),
+        /// crew viability evaluation, player retreat orders, distress signal rescue window,
+        /// and in-HUD mission observation mode with tile map display.
+        /// When false, asteroid missions complete normally via time expiry only (pre-EXP-004
+        /// behaviour).
+        /// </summary>
+        public static bool AsteroidMissions = true;
     }
 }
