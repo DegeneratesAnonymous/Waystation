@@ -207,6 +207,18 @@ namespace Waystation.Core
         public static bool MentalBreakCombat = true;
 
         /// <summary>
+        /// Enables the scenario selection screen (STA-006): players choose a starting
+        /// scenario before new game initialisation.  When true, the main menu shows a
+        /// scenario list and GameManager.NewGame() applies crew composition, starting
+        /// resources, and layout seed from the selected scenario.
+        /// When false, GameManager.NewGame() initialises with hardcoded default starting
+        /// conditions as before — scenario data files are loaded but ignored.
+        /// Scenario data files can be removed to return to a no-scenario state (requires
+        /// this flag to be false to avoid an empty selection screen).
+        /// </summary>
+        public static bool ScenarioSelection = true;
+
+        /// <summary>
         /// Enables full game-state serialisation (STA-005): save and load of all runtime
         /// state including NPCs, foundations, ships, fleet, missions, asteroid maps,
         /// farming tasks, crafting queues, relationships, bodies, and narrative chain flags.

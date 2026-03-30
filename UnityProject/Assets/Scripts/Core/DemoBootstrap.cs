@@ -119,7 +119,18 @@ namespace Waystation.Demo
             PlayerPrefs.DeleteKey("pending_station_name");
             PlayerPrefs.DeleteKey("pending_seed");
 
-            _gm.NewGame(stationName, seed);
+            // Read the selected scenario ID (set by the main menu when ScenarioSelection is on).
+            ScenarioDefinition scenario = null;
+            if (FeatureFlags.ScenarioSelection && PlayerPrefs.HasKey("pending_scenario_id"))
+            {
+                string scenarioId = PlayerPrefs.GetString("pending_scenario_id");
+                PlayerPrefs.DeleteKey("pending_scenario_id");
+                _gm.Registry?.Scenarios?.TryGetValue(scenarioId, out scenario);
+                if (scenario == null)
+                    Debug.LogWarning($"[DemoBootstrap] Scenario '{scenarioId}' not found in registry — starting with defaults.");
+            }
+
+            _gm.NewGame(stationName, seed, scenario);
         }
 
         private void OnLogLine(string msg)

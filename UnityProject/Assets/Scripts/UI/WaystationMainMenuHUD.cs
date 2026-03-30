@@ -1,9 +1,12 @@
 // WaystationMainMenuHUD — pure IMGUI main menu with animated warp-speed background.
 // Self-injects via RuntimeInitializeOnLoadMethod; requires no Inspector wiring.
 // Only renders / acts while the active scene is "MainMenuScene".
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Waystation.Core;
+using Waystation.Models;
 
 namespace Waystation.UI
 {
@@ -35,10 +38,15 @@ namespace Waystation.UI
         private System.Random _rng;
 
         // ── Menu state ────────────────────────────────────────────────────────
-        private enum MenuState { Main, NewGame, Settings }
+        private enum MenuState { Main, ScenarioSelect, NewGame, Settings }
         private MenuState _state      = MenuState.Main;
         private string    _stationName = "";
         private string    _seedText    = "";
+
+        // ── Scenario selection state ──────────────────────────────────────────
+        private string                    _selectedScenarioId = "";
+        private List<ScenarioDefinition>  _cachedScenarios;
+        private GUIStyle                  _sScenarioBtn, _sScenarioBtnSelected, _sScenarioDesc, _sScenarioDiff;
 
         // ── Styles ────────────────────────────────────────────────────────────
         private GUIStyle _sTitle, _sBtn, _sBtnDim, _sSub, _sFieldLbl, _sTextField;
@@ -110,7 +118,10 @@ namespace Waystation.UI
 
             // Central panel
             float panelW = 380f;
-            float panelH = _state == MenuState.NewGame ? 330f : _state == MenuState.Settings ? 160f : 420f;
+            float panelH = _state == MenuState.NewGame       ? 330f
+                         : _state == MenuState.Settings      ? 160f
+                         : _state == MenuState.ScenarioSelect ? 480f
+                         : 420f;
             float px     = (sw - panelW) * 0.5f;
             float py     = (sh - panelH) * 0.5f - 20f;   // slightly above-centre
 
@@ -131,9 +142,10 @@ namespace Waystation.UI
 
             switch (_state)
             {
-                case MenuState.Main:     DrawMainButtons(px, ref y, panelW); break;
-                case MenuState.NewGame:  DrawNewGamePanel(px, ref y, panelW); break;
-                case MenuState.Settings: DrawSettingsPanel(px, ref y, panelW); break;
+                case MenuState.Main:           DrawMainButtons(px, ref y, panelW);       break;
+                case MenuState.ScenarioSelect: DrawScenarioSelectPanel(px, ref y, panelW); break;
+                case MenuState.NewGame:        DrawNewGamePanel(px, ref y, panelW);      break;
+                case MenuState.Settings:       DrawSettingsPanel(px, ref y, panelW);     break;
             }
 
             // Version watermark (bottom-right)
@@ -156,7 +168,10 @@ namespace Waystation.UI
                 LoadSaveAndPlay();
             y += BtnH + Gap;
 
-            if (GUI.Button(new Rect(px, y, pw, BtnH), "New Game",        _sBtn)) { _state = MenuState.NewGame; }
+            if (GUI.Button(new Rect(px, y, pw, BtnH), "New Game",        _sBtn))
+            {
+                _state = FeatureFlags.ScenarioSelection ? MenuState.ScenarioSelect : MenuState.NewGame;
+            }
             y += BtnH + Gap;
 
             var prev2 = GUI.color;
@@ -197,7 +212,76 @@ namespace Waystation.UI
                 PlayerPrefs.DeleteKey("load_save");
                 if (int.TryParse(_seedText, out int seed)) PlayerPrefs.SetInt("pending_seed", seed);
                 else                                        PlayerPrefs.DeleteKey("pending_seed");
+                if (FeatureFlags.ScenarioSelection && _selectedScenarioId.Length > 0)
+                    PlayerPrefs.SetString("pending_scenario_id", _selectedScenarioId);
+                else
+                    PlayerPrefs.DeleteKey("pending_scenario_id");
                 SceneManager.LoadScene("GameScene");
+            }
+            y += BtnH + Gap;
+
+            if (GUI.Button(new Rect(px, y, pw, BtnH), "← Back", _sBtn))
+                _state = FeatureFlags.ScenarioSelection ? MenuState.ScenarioSelect : MenuState.Main;
+        }
+
+        // ── Scenario Selection panel ──────────────────────────────────────────
+        private void DrawScenarioSelectPanel(float px, ref float y, float pw)
+        {
+            const float Gap = 8f, BtnH = 44f;
+
+            EnsureScenarioStyles();
+
+            // Heading
+            GUI.Label(new Rect(px, y, pw, 24f), "Choose a Starting Scenario", _sFieldLbl);
+            y += 30f;
+
+            var scenarios = GetScenarios();
+            if (scenarios == null || scenarios.Count == 0)
+            {
+                GUI.Label(new Rect(px, y, pw, 24f), "Loading scenarios…", _sSub);
+                y += 30f;
+            }
+            else
+            {
+                // Each scenario entry is ~110px tall
+                const float EntryH = 108f, EntryGap = 6f;
+
+                for (int i = 0; i < scenarios.Count; i++)
+                {
+                    var sc  = scenarios[i];
+                    bool sel = sc.id == _selectedScenarioId;
+
+                    var btnStyle  = sel ? _sScenarioBtnSelected : _sScenarioBtn;
+                    var entryRect = new Rect(px, y, pw, EntryH);
+
+                    if (GUI.Button(entryRect, "", btnStyle))
+                        _selectedScenarioId = sc.id;
+
+                    // Name row
+                    float iy = y + 10f;
+                    GUI.Label(new Rect(px + 12f, iy, pw - 80f, 22f), sc.name, _sFieldLbl);
+
+                    // Difficulty stars
+                    string stars = new string('★', sc.difficultyRating)
+                                 + new string('☆', 5 - sc.difficultyRating);
+                    GUI.Label(new Rect(px + pw - 72f, iy, 68f, 22f), stars, _sScenarioDiff);
+
+                    iy += 26f;
+                    // Description (word-wrapped)
+                    GUI.Label(new Rect(px + 12f, iy, pw - 24f, EntryH - 36f), sc.description, _sScenarioDesc);
+
+                    y += EntryH + EntryGap;
+                }
+            }
+
+            y += Gap;
+
+            bool hasSelection = _selectedScenarioId.Length > 0;
+            var  continueStyle = hasSelection ? _sBtn : _sBtnDim;
+            if (GUI.Button(new Rect(px, y, pw, BtnH), "Continue →", continueStyle) && hasSelection)
+            {
+                _state = MenuState.NewGame;
+                if (_stationName.Length == 0) _stationName = GenerateStationName();
             }
             y += BtnH + Gap;
 
@@ -307,6 +391,57 @@ namespace Waystation.UI
         }
 
         // ── Style helpers ─────────────────────────────────────────────────────
+        private void EnsureScenarioStyles()
+        {
+            if (_sScenarioBtn != null) return;
+            EnsureStyles();   // ensure base styles are ready first
+
+            _sScenarioBtn = new GUIStyle(GUI.skin.button)
+            {
+                fontSize  = 13,
+                alignment = TextAnchor.UpperLeft,
+                wordWrap  = true,
+                normal    = { background = MakeTex(new Color(0.06f, 0.09f, 0.18f, 0.90f)) },
+                hover     = { background = MakeTex(new Color(0.10f, 0.16f, 0.32f, 0.95f)) },
+                active    = { background = MakeTex(new Color(0.14f, 0.22f, 0.44f, 1.00f)) },
+                border    = new RectOffset(2, 2, 2, 2),
+                padding   = new RectOffset(0, 0, 0, 0),
+            };
+
+            _sScenarioBtnSelected = new GUIStyle(_sScenarioBtn)
+            {
+                normal  = { background = MakeTex(new Color(0.10f, 0.18f, 0.44f, 0.96f)) },
+                hover   = { background = MakeTex(new Color(0.14f, 0.24f, 0.52f, 1.00f)) },
+            };
+
+            _sScenarioDesc = new GUIStyle(GUI.skin.label)
+            {
+                fontSize  = 12,
+                wordWrap  = true,
+                normal    = { textColor = new Color(0.70f, 0.76f, 0.90f) },
+            };
+
+            _sScenarioDiff = new GUIStyle(GUI.skin.label)
+            {
+                fontSize  = 13,
+                alignment = TextAnchor.MiddleRight,
+                normal    = { textColor = new Color(1.00f, 0.82f, 0.30f) },
+            };
+        }
+
+        /// <summary>
+        /// Returns the loaded scenario list.  Reads from ContentRegistry when available;
+        /// returns an empty list while the registry is still loading.
+        /// </summary>
+        private List<ScenarioDefinition> GetScenarios()
+        {
+            if (_cachedScenarios != null) return _cachedScenarios;
+            var reg = GameManager.Instance?.Registry;
+            if (reg == null || !reg.IsLoaded) return new List<ScenarioDefinition>();
+            _cachedScenarios = new List<ScenarioDefinition>(reg.Scenarios.Values);
+            return _cachedScenarios;
+        }
+
         private void EnsureStyles()
         {
             if (_stylesReady) return;

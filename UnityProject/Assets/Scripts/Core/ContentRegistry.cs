@@ -43,6 +43,9 @@ namespace Waystation.Core
         public Dictionary<string, ResourceDefinition> Resources  { get; private set; } = new Dictionary<string, ResourceDefinition>();
         public Dictionary<string, RecipeDefinition>   Recipes    { get; private set; } = new Dictionary<string, RecipeDefinition>();
 
+        // ── Scenario definitions (STA-006) ───────────────────────────────────
+        public Dictionary<string, ScenarioDefinition> Scenarios  { get; private set; } = new Dictionary<string, ScenarioDefinition>();
+
         // ── Trait system tables ──────────────────────────────────────────────
         public Dictionary<string, NpcTraitDefinition>   Traits       { get; private set; } = new Dictionary<string, NpcTraitDefinition>();
         public Dictionary<string, TraitPoolDefinition>  TraitPools   { get; private set; } = new Dictionary<string, TraitPoolDefinition>();
@@ -92,6 +95,7 @@ namespace Waystation.Core
             yield return StartCoroutine(LoadFolder(dataRoot, "npcs/lineages",    LoadTraitLineage));
             yield return StartCoroutine(LoadFolder(dataRoot, "resources",        LoadResource));
             yield return StartCoroutine(LoadFolder(dataRoot, "recipes",           LoadRecipe));
+            yield return StartCoroutine(LoadFolder(dataRoot, "scenarios",         LoadScenario));
             LoadBalanceConfig(dataRoot);
             IsLoaded = true;
             Debug.Log($"[ContentRegistry] Loaded — events:{Events.Count} npcs:{Npcs.Count} " +
@@ -102,7 +106,7 @@ namespace Waystation.Core
                       $"crops:{Crops.Count} skills:{Skills.Count} expertises:{Expertises.Count} " +
                       $"traits:{Traits.Count} traitPools:{TraitPools.Count} " +
                       $"traitLineages:{TraitLineages.Count} resources:{Resources.Count} " +
-                      $"recipes:{Recipes.Count}");
+                      $"recipes:{Recipes.Count} scenarios:{Scenarios.Count}");
         }
 
         // ── Folder loader ────────────────────────────────────────────────────
@@ -177,6 +181,7 @@ namespace Waystation.Core
         private void LoadTraitLineage  (Dictionary<string, object> d) => TraitLineages[d.GetString("id")] = TraitLineageDefinition.FromDict(d);
         private void LoadResource      (Dictionary<string, object> d) => Resources   [d.GetString("id")] = ResourceDefinition   .FromDict(d);
         private void LoadRecipe        (Dictionary<string, object> d) => Recipes     [d.GetString("id")] = RecipeDefinition     .FromDict(d);
+        private void LoadScenario      (Dictionary<string, object> d) => Scenarios   [d.GetString("id")] = ScenarioDefinition   .FromDict(d);
         private void LoadRoomType(Dictionary<string, object> d)
         {
             var rt = new RoomTypeDefinition

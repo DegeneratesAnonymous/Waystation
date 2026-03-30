@@ -469,19 +469,34 @@ namespace Waystation.Core
 
         // ── New game ─────────────────────────────────────────────────────────
 
-        public void NewGame(string stationName, int? seed = null)
+        public void NewGame(string stationName, int? seed = null, ScenarioDefinition scenario = null)
         {
-            if (seed.HasValue) UnityEngine.Random.InitState(seed.Value);
+            // If a scenario specifies a layout seed, it takes precedence over the provided seed.
+            int? effectiveSeed = (FeatureFlags.ScenarioSelection && scenario?.layoutSeed.HasValue == true)
+                                 ? scenario.layoutSeed
+                                 : seed;
+
+            if (effectiveSeed.HasValue) UnityEngine.Random.InitState(effectiveSeed.Value);
 
             Station = new StationState(stationName);
-            Station.solarSystem = SolarSystemGenerator.Generate(stationName, seed);
+            Station.solarSystem = SolarSystemGenerator.Generate(stationName, effectiveSeed);
             SetupStartingModules();
-            SetupStartingCrew();
+
+            if (FeatureFlags.ScenarioSelection && scenario != null)
+            {
+                SetupStartingCrewFromScenario(scenario);
+                ApplyScenarioResources(scenario);
+            }
+            else
+            {
+                SetupStartingCrew();
+            }
+
             SetupStartingPolicies();
             Factions.Initialize(Station);
 
             // Generate the galaxy sector map. Uses the same seed as solar system generation.
-            int galaxySeed = seed.HasValue ? seed.Value : SolarSystemGenerator.StableHash(stationName);
+            int galaxySeed = effectiveSeed.HasValue ? effectiveSeed.Value : SolarSystemGenerator.StableHash(stationName);
             GalaxyGenerator.Generate(galaxySeed, Station);
 
             // Seed starting factions (always: one friendly, one unfriendly in adjacent sectors).
@@ -497,7 +512,10 @@ namespace Waystation.Core
             // Reset threshold crossing state so warnings fire correctly from tick 1.
             Resources.ResetWarningState();
 
-            Log($"Waystation '{stationName}' operational. All systems nominal.");
+            string scenarioLabel = (FeatureFlags.ScenarioSelection && scenario != null)
+                                   ? $" [{scenario.name}]"
+                                   : string.Empty;
+            Log($"Waystation '{stationName}' operational. All systems nominal.{scenarioLabel}");
 
             IsPaused = false;
             OnGameLoaded?.Invoke();
@@ -505,7 +523,7 @@ namespace Waystation.Core
             Rooms.RebuildBonusCache(Station);
             // Rebuild utility networks so grid connectivity is available from tick 1.
             UtilityNetworks.RebuildAll(Station);
-            Debug.Log($"[GameManager] New game started: {stationName}");
+            Debug.Log($"[GameManager] New game started: {stationName}{scenarioLabel}");
         }
 
         private void SetupStartingModules()
@@ -654,6 +672,42 @@ namespace Waystation.Core
                 var npc = Npcs.SpawnCrewMember(tmpl);
                 if (npc != null) { Station.AddNpc(npc); spawned++; }
             }
+        }
+
+        /// <summary>
+        /// Spawns crew defined by the scenario's <see cref="ScenarioDefinition.crewComposition"/> list.
+        /// Each entry is an NPC template ID; duplicates are allowed (the scenario author controls count).
+        /// Falls back to <see cref="SetupStartingCrew"/> when the composition list is empty.
+        /// </summary>
+        private void SetupStartingCrewFromScenario(ScenarioDefinition scenario)
+        {
+            if (scenario.crewComposition == null || scenario.crewComposition.Count == 0)
+            {
+                SetupStartingCrew();
+                return;
+            }
+            foreach (var tmplId in scenario.crewComposition)
+            {
+                if (!Registry.Npcs.ContainsKey(tmplId))
+                {
+                    Debug.LogWarning($"[GameManager] Scenario '{scenario.id}' references unknown NPC template '{tmplId}' — skipped.");
+                    continue;
+                }
+                var npc = Npcs.SpawnCrewMember(tmplId);
+                if (npc != null) Station.AddNpc(npc);
+            }
+        }
+
+        /// <summary>
+        /// Overwrites the station's starting resources with values defined in the scenario.
+        /// Only keys present in the scenario are overwritten; any resource not listed retains
+        /// the StationState default value.
+        /// </summary>
+        private void ApplyScenarioResources(ScenarioDefinition scenario)
+        {
+            if (scenario.startingResources == null) return;
+            foreach (var kv in scenario.startingResources)
+                Station.resources[kv.Key] = kv.Value;
         }
 
         private void SetupStartingPolicies()
