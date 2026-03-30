@@ -11,6 +11,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
@@ -25,6 +26,9 @@ namespace Waystation.Core
         public const float RepairPartsCost   =  10f;
         public const float RepairDamageAmount = 0.25f;
 
+        /// <summary>Current save-file schema version.  Increment when breaking changes are introduced.</summary>
+        private const int SaveVersion = 1;
+
         // ── Singleton ─────────────────────────────────────────────────────────
         public static GameManager Instance { get; private set; }
 
@@ -38,6 +42,22 @@ namespace Waystation.Core
 
         [Header("Saves")]
         [SerializeField] private string saveFileName = "waystation_save.json";
+
+        [Header("Autosave")]
+        [Tooltip("Number of ticks between automatic saves.  0 = autosave disabled.")]
+        [SerializeField] private int autosaveIntervalTicks = 120;
+
+        // ── Save / load runtime state ─────────────────────────────────────────
+        /// <summary>
+        /// Human-readable error message from the most recent failed LoadGame() call.
+        /// Empty when no error has occurred.  Set before OnLoadError is raised.
+        /// </summary>
+        public string LastLoadError { get; private set; } = string.Empty;
+
+        /// <summary>Fired when LoadGame() fails — carries the player-facing error message.</summary>
+        public event Action<string> OnLoadError;
+
+        private bool _autosaveInProgress;
 
         // ── System references ─────────────────────────────────────────────────
         public ContentRegistry      Registry          { get; private set; }
@@ -798,6 +818,14 @@ namespace Waystation.Core
             }
 
             OnTick?.Invoke(Station);
+
+            // Autosave: non-blocking, fires at the configured interval (0 = disabled).
+            if (FeatureFlags.FullSaveLoad && autosaveIntervalTicks > 0
+                && Station.tick % autosaveIntervalTicks == 0
+                && !_autosaveInProgress)
+            {
+                StartCoroutine(AutosaveCoroutine());
+            }
         }
 
         // ── Player actions ────────────────────────────────────────────────────
