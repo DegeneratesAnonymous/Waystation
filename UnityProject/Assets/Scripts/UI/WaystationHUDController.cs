@@ -116,8 +116,10 @@ namespace Waystation.UI
                 return;
             }
 
-            var mapSystem = GameManager.Instance?.Map;
-            _sidePanel = new SidePanelController(mapSystem);
+            // MapSystem is not yet available at Start() time — WaitForGame() will
+            // inject it once the game has finished loading (see InjectMapSystem call
+            // in OnGameLoaded).
+            _sidePanel = new SidePanelController();
 
             // Hook up the Map fullscreen callback to open SystemMapController
             _sidePanel.OnMapFullscreenRequested += OnSidePanelMapFullscreen;
@@ -162,6 +164,11 @@ namespace Waystation.UI
 
         private void OnGameLoaded()
         {
+            // Inject the live MapSystem now that the game has finished loading.
+            // BuildSidePanel() runs before WaitForGame() completes, so MapSystem
+            // was null at construction time.
+            _sidePanel?.InjectMapSystem(_gm?.Map);
+
             if (_gm?.Station != null) OnTick(_gm.Station);
         }
 

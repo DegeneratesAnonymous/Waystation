@@ -280,7 +280,7 @@
 }
 
 .ws-drawer-panel--horizontal.ws-drawer-panel--open {
-    max-width: 400px;       /* Override in panel USS for wider drawers */
+    max-width: var(--ws-drawer-width);   /* controlled by --ws-drawer-width in WaystationVariables.uss */
     max-height: none;
     opacity: 1;
     visibility: visible;

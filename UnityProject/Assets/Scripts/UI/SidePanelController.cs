@@ -82,7 +82,7 @@ namespace Waystation.UI
         private Tab? _activeTab;
         private bool _mapFullscreenActive;
         private int  _panelsUnderPointer;
-        private readonly MapSystem _mapSystem;
+        private MapSystem _mapSystem;
 
         // ── Child elements ────────────────────────────────────────────────────
 
@@ -239,6 +239,16 @@ namespace Waystation.UI
         /// </summary>
         public VisualElement DrawerContentRoot => _drawer;
 
+        /// <summary>
+        /// Injects (or replaces) the live <see cref="MapSystem"/> reference.
+        /// Call once the game has finished loading so the Map tab can update
+        /// <see cref="MapSystem.IsFullscreenActive"/> correctly.
+        /// </summary>
+        public void InjectMapSystem(MapSystem mapSystem)
+        {
+            _mapSystem = mapSystem;
+        }
+
         // ── Tab-click handler ─────────────────────────────────────────────────
 
         private void OnTabClicked(Tab tab) => ActivateTab(tab);
@@ -247,10 +257,14 @@ namespace Waystation.UI
 
         private void HandleMapTab()
         {
-            // Collapse any open drawer and clear active tab
+            // Fire OnActiveTabChanged(null) only if a drawer tab was previously active
+            // so any mounted content listeners can unmount before fullscreen takes over.
+            bool hadActiveTab = _activeTab.HasValue;
             _activeTab = null;
             RefreshTabHighlights();
             _drawer.Close();
+            if (hadActiveTab)
+                OnActiveTabChanged?.Invoke(null);
 
             _mapFullscreenActive = true;
             _mapSystem?.EnterFullscreen();
@@ -305,13 +319,20 @@ namespace Waystation.UI
 
         private static void SetSvgIcon(VisualElement el, string svgMarkup)
         {
+            // Preserve the raw SVG markup so a future VectorImage-based render path
+            // can reconstruct or bind an icon asset without changing the call site.
+            if (!string.IsNullOrEmpty(svgMarkup))
+                el.userData = svgMarkup;
+
             // USS background-image with inline SVG is not supported in UI Toolkit.
-            // Instead, we encode the icon as a tooltip for now and rely on the
-            // USS class for visual styling.  Individual tab icons are authored as
-            // inline VectorImage assets and assigned here when the asset pipeline
-            // is set up.  For the shell implementation the icon host element is
-            // present in the hierarchy and will be back-filled by content WOs.
-            _ = svgMarkup; // reserved for VectorImage asset assignment
+            // Until the VectorImage asset pipeline is wired up, add a simple visible
+            // placeholder so the tab strip is not blank in collapsed mode.
+            if (!string.IsNullOrEmpty(svgMarkup) && el.childCount == 0)
+            {
+                var placeholder = new Label { text = "●" };
+                placeholder.AddToClassList("ws-side-panel__tab-icon-placeholder");
+                el.Add(placeholder);
+            }
         }
     }
 }

@@ -83,8 +83,8 @@ namespace Waystation.UI
             "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' width='20' height='20'>" +
             "<circle cx='10' cy='10' r='3' fill='none' stroke='currentColor' stroke-width='1.5'/>" +
             "<path d='M10 1 L11.5 4 L14.5 2.8 L15.2 6 L18.2 6.7 L17 9.5 L19 11 " +
-            "  L17 12.5 L18.2 15.3 L15.2 16 L14.5 19.2 L11.5 18 L10 21 " +
-            "  L8.5 18 L5.5 19.2 L4.8 16 L1.8 15.3 L3 12.5 L1 11 " +
+            "  L17 12.5 L18.2 15.3 L15.2 16 L14.5 19 L11.5 18 L10 19 " +
+            "  L8.5 18 L5.5 19 L4.8 16 L1.8 15.3 L3 12.5 L1 11 " +
             "  L3 9.5 L1.8 6.7 L4.8 6 L5.5 2.8 L8.5 4 Z' " +
             "  fill='none' stroke='currentColor' stroke-width='1.2' stroke-linejoin='round'/>" +
             "</svg>";

@@ -34,8 +34,10 @@ namespace Waystation.Systems
 
         /// <summary>
         /// True while the full-screen map mode is active (e.g. triggered by the
-        /// Map tab in the side panel). The UI layer is responsible for opening and
-        /// closing the SystemMapController in response to this flag.
+        /// Map tab in the side panel). This flag is updated by <see cref="EnterFullscreen"/>
+        /// and <see cref="ExitFullscreen"/> and can be consulted by the UI layer as
+        /// needed, but fullscreen mode is initiated by UI events (for example,
+        /// <c>SidePanelController.OnMapFullscreenRequested</c>), not by polling this value.
         /// </summary>
         public bool IsFullscreenActive { get; private set; }
 
