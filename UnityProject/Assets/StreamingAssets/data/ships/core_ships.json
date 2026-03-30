@@ -136,6 +136,7 @@
     "visitor_count": 0,
     "visit_duration": 0.0,
     "sprite_variant": 0,
+    "fleet_only": true,
     "crew_capacity": 3,
     "eligible_mission_types": ["scout", "exploration"],
     "build_materials": {
@@ -159,6 +160,7 @@
     "visitor_count": 0,
     "visit_duration": 0.0,
     "sprite_variant": 0,
+    "fleet_only": true,
     "crew_capacity": 6,
     "eligible_mission_types": ["mining", "asteroid"],
     "build_materials": {
@@ -182,6 +184,7 @@
     "visitor_count": 0,
     "visit_duration": 0.0,
     "sprite_variant": 3,
+    "fleet_only": true,
     "crew_capacity": 8,
     "eligible_mission_types": ["combat", "defence", "patrol"],
     "build_materials": {
@@ -205,6 +208,7 @@
     "visitor_count": 0,
     "visit_duration": 0.0,
     "sprite_variant": 1,
+    "fleet_only": true,
     "crew_capacity": 4,
     "eligible_mission_types": ["transport", "cargo", "hauling"],
     "build_materials": {
@@ -228,6 +232,7 @@
     "visitor_count": 0,
     "visit_duration": 0.0,
     "sprite_variant": 1,
+    "fleet_only": true,
     "crew_capacity": 4,
     "eligible_mission_types": ["diplomatic", "courier", "trade"],
     "build_materials": {

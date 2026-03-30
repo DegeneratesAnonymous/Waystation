@@ -103,8 +103,11 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Remove a ship from the fleet (also used internally on destruction).
-        /// Clears assignedShipUid on all crew NPCs.
+        /// Remove a ship from the fleet (player action — e.g. manual deletion).
+        /// Clears both <c>assignedShipUid</c> and <c>missionUid</c> on all crew NPCs so
+        /// they are no longer treated as being on either a fleet or regular mission.
+        /// Does not perform crew-outcome resolution; for in-combat destruction use
+        /// <see cref="ResolveDestruction"/> instead.
         /// </summary>
         public void RemoveShipFromFleet(string shipUid, StationState station)
         {
@@ -113,7 +116,10 @@ namespace Waystation.Systems
             foreach (var crewUid in ship.crewUids)
             {
                 if (station.npcs.TryGetValue(crewUid, out var npc))
+                {
                     npc.assignedShipUid = null;
+                    npc.missionUid      = null;
+                }
             }
 
             station.ownedShips.Remove(shipUid);
@@ -122,6 +128,9 @@ namespace Waystation.Systems
         /// <summary>
         /// Assign a list of crew NPCs to a ship.
         /// Returns (ok=true) on success; (ok=false, reason) on validation failure.
+        /// The list must be non-null and contain no duplicate UIDs.
+        /// If an NPC is currently assigned to a different ship, they are removed from
+        /// that ship's crew list before being assigned here.
         /// </summary>
         public (bool ok, string reason) AssignCrew(string shipUid, List<string> crewUids,
                                                     StationState station)
@@ -129,13 +138,22 @@ namespace Waystation.Systems
             if (!station.ownedShips.TryGetValue(shipUid, out var ship))
                 return (false, $"Ship '{shipUid}' not found in fleet.");
 
+            if (crewUids == null)
+                return (false, "crewUids list must not be null.");
+
+            // Reject duplicates
+            var seen = new HashSet<string>();
+            foreach (var uid in crewUids)
+            {
+                if (!seen.Add(uid))
+                    return (false, $"Duplicate crew UID '{uid}' in assignment list.");
+            }
+
             _registry.Ships.TryGetValue(ship.templateId, out var template);
             int capacity = template?.crewCapacity ?? int.MaxValue;
 
-            // Count existing crew not in the new list (we're re-assigning, not adding)
-            int totalAfter = crewUids?.Count ?? 0;
-            if (totalAfter > capacity)
-                return (false, $"Ship capacity is {capacity}; {totalAfter} crew requested.");
+            if (crewUids.Count > capacity)
+                return (false, $"Ship capacity is {capacity}; {crewUids.Count} crew requested.");
 
             // Validate each NPC
             foreach (var uid in crewUids)
@@ -148,7 +166,7 @@ namespace Waystation.Systems
                     return (false, $"{npc.name} is on an active mission and cannot be reassigned.");
             }
 
-            // Clear previous assignments on this ship's crew
+            // Clear previous assignments on this ship's current crew
             foreach (var prevUid in ship.crewUids)
             {
                 if (station.npcs.TryGetValue(prevUid, out var prevNpc) &&
@@ -162,7 +180,17 @@ namespace Waystation.Systems
             {
                 ship.crewUids.Add(uid);
                 if (station.npcs.TryGetValue(uid, out var npc))
+                {
+                    // If this NPC was previously assigned to a different ship,
+                    // remove them from that ship's crew list to keep fleet state consistent.
+                    if (!string.IsNullOrEmpty(npc.assignedShipUid) && npc.assignedShipUid != shipUid)
+                    {
+                        if (station.ownedShips.TryGetValue(npc.assignedShipUid, out var prevShip))
+                            prevShip.crewUids.Remove(uid);
+                    }
+
                     npc.assignedShipUid = shipUid;
+                }
             }
 
             return (true, null);
@@ -231,6 +259,8 @@ namespace Waystation.Systems
         /// <summary>
         /// Validate whether a ship can be dispatched on a mission.
         /// Returns false and populates <paramref name="reason"/> on failure.
+        /// Validates per-crew readiness: each crew UID must resolve to a valid, non-on-mission
+        /// crew NPC still assigned to this ship. Invalid UIDs are pruned from the list.
         /// </summary>
         public bool CanDispatch(string shipUid, string missionType, StationState station,
                                  out string reason)
@@ -256,10 +286,30 @@ namespace Waystation.Systems
                 return false;
             }
 
+            // Prune stale crew UIDs (NPCs that no longer exist or are no longer assigned here),
+            // then validate remaining crew are ready to depart.
+            ship.crewUids.RemoveAll(uid =>
+                !station.npcs.TryGetValue(uid, out var n) || n.assignedShipUid != shipUid);
+
             if (ship.crewUids.Count == 0)
             {
                 reason = $"Ship '{ship.name}' has no crew assigned.";
                 return false;
+            }
+
+            foreach (var uid in ship.crewUids)
+            {
+                if (!station.npcs.TryGetValue(uid, out var npc)) continue; // already pruned above
+                if (!npc.IsCrew())
+                {
+                    reason = $"{npc.name} is no longer crew and cannot be dispatched.";
+                    return false;
+                }
+                if (npc.missionUid != null)
+                {
+                    reason = $"{npc.name} is already on a mission and cannot be dispatched.";
+                    return false;
+                }
             }
 
             if (!IsEligibleForMission(shipUid, missionType, station))

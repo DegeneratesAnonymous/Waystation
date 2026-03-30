@@ -519,66 +519,90 @@ namespace Waystation.Tests
         [Test]
         public void Destruction_KilledCrew_HasDeadTag()
         {
-            UnityEngine.Random.InitState(42);
-            var ship    = AddShipWithCrew(20, ShipDamageState.Critical);
-            var results = _system.ResolveDestruction(ship.uid, _station);
-
-            bool anyKilled = false;
-            foreach (var r in results)
+            var savedRng = UnityEngine.Random.state;
+            try
             {
-                if (r.outcome != CrewDestructionOutcome.Killed) continue;
-                anyKilled = true;
-                if (_station.npcs.TryGetValue(r.npcUid, out var npc))
-                    Assert.IsTrue(npc.statusTags.Contains("dead"),
-                        "Killed NPC must have 'dead' status tag.");
-            }
+                UnityEngine.Random.InitState(42);
+                var ship    = AddShipWithCrew(20, ShipDamageState.Critical);
+                var results = _system.ResolveDestruction(ship.uid, _station);
 
-            Assert.IsTrue(anyKilled,
-                "With 20 crew and Critical damage at least one should be killed.");
+                bool anyKilled = false;
+                foreach (var r in results)
+                {
+                    if (r.outcome != CrewDestructionOutcome.Killed) continue;
+                    anyKilled = true;
+                    if (_station.npcs.TryGetValue(r.npcUid, out var npc))
+                        Assert.IsTrue(npc.statusTags.Contains("dead"),
+                            "Killed NPC must have 'dead' status tag.");
+                }
+
+                Assert.IsTrue(anyKilled,
+                    "With 20 crew and Critical damage at least one should be killed.");
+            }
+            finally
+            {
+                UnityEngine.Random.state = savedRng;
+            }
         }
 
         [Test]
         public void Destruction_CapturedCrew_HasCapturedTag()
         {
-            UnityEngine.Random.InitState(999);
-            var ship    = AddShipWithCrew(20, ShipDamageState.Heavy);
-            var results = _system.ResolveDestruction(ship.uid, _station);
-
-            bool anyCaptured = false;
-            foreach (var r in results)
+            var savedRng = UnityEngine.Random.state;
+            try
             {
-                if (r.outcome != CrewDestructionOutcome.Captured) continue;
-                anyCaptured = true;
-                if (_station.npcs.TryGetValue(r.npcUid, out var npc))
-                    Assert.IsTrue(npc.statusTags.Contains("captured"),
-                        "Captured NPC must have 'captured' status tag.");
-            }
+                UnityEngine.Random.InitState(999);
+                var ship    = AddShipWithCrew(20, ShipDamageState.Heavy);
+                var results = _system.ResolveDestruction(ship.uid, _station);
 
-            Assert.IsTrue(anyCaptured,
-                "With 20 crew and Heavy damage at least one should be captured.");
+                bool anyCaptured = false;
+                foreach (var r in results)
+                {
+                    if (r.outcome != CrewDestructionOutcome.Captured) continue;
+                    anyCaptured = true;
+                    if (_station.npcs.TryGetValue(r.npcUid, out var npc))
+                        Assert.IsTrue(npc.statusTags.Contains("captured"),
+                            "Captured NPC must have 'captured' status tag.");
+                }
+
+                Assert.IsTrue(anyCaptured,
+                    "With 20 crew and Heavy damage at least one should be captured.");
+            }
+            finally
+            {
+                UnityEngine.Random.state = savedRng;
+            }
         }
 
         [Test]
         public void Destruction_EscapedCrew_MissionAndShipUidCleared()
         {
-            UnityEngine.Random.InitState(1234);
-            var ship    = AddShipWithCrew(20, ShipDamageState.Undamaged);
-            var results = _system.ResolveDestruction(ship.uid, _station);
-
-            bool anyEscaped = false;
-            foreach (var r in results)
+            var savedRng = UnityEngine.Random.state;
+            try
             {
-                if (r.outcome != CrewDestructionOutcome.Escaped) continue;
-                anyEscaped = true;
-                if (_station.npcs.TryGetValue(r.npcUid, out var npc))
-                {
-                    Assert.IsNull(npc.missionUid,       "Escaped NPC missionUid must be null.");
-                    Assert.IsNull(npc.assignedShipUid,  "Escaped NPC assignedShipUid must be null.");
-                }
-            }
+                UnityEngine.Random.InitState(1234);
+                var ship    = AddShipWithCrew(20, ShipDamageState.Undamaged);
+                var results = _system.ResolveDestruction(ship.uid, _station);
 
-            Assert.IsTrue(anyEscaped,
-                "With 20 crew and Undamaged ship at least one should escape.");
+                bool anyEscaped = false;
+                foreach (var r in results)
+                {
+                    if (r.outcome != CrewDestructionOutcome.Escaped) continue;
+                    anyEscaped = true;
+                    if (_station.npcs.TryGetValue(r.npcUid, out var npc))
+                    {
+                        Assert.IsNull(npc.missionUid,       "Escaped NPC missionUid must be null.");
+                        Assert.IsNull(npc.assignedShipUid,  "Escaped NPC assignedShipUid must be null.");
+                    }
+                }
+
+                Assert.IsTrue(anyEscaped,
+                    "With 20 crew and Undamaged ship at least one should escape.");
+            }
+            finally
+            {
+                UnityEngine.Random.state = savedRng;
+            }
         }
     }
 
@@ -864,6 +888,181 @@ namespace Waystation.Tests
             ship.crewUids.Add(npc.uid);
 
             Assert.IsTrue(ship.CanDispatch());
+        }
+    }
+
+    // =========================================================================
+    // Unit: AssignCrew validation — null, duplicates, cross-ship reassignment
+    // =========================================================================
+
+    [TestFixture]
+    public class AssignCrewValidationTests
+    {
+        private ContentRegistry _registry;
+        private ShipSystem      _system;
+        private StationState    _station;
+        private GameObject      _registryGo;
+
+        [SetUp]
+        public void SetUp()
+        {
+            FeatureFlags.FleetManagement = true;
+            (_registry, _registryGo) = ShipTestHelpers.MakeRegistryWithShips(
+                ShipTestHelpers.ScoutTemplate(),
+                ShipTestHelpers.MiningTemplate());
+            _system  = new ShipSystem(_registry);
+            _station = ShipTestHelpers.MakeStation();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            FeatureFlags.FleetManagement = true;
+            Object.DestroyImmediate(_registryGo);
+        }
+
+        [Test]
+        public void AssignCrew_NullList_Fails()
+        {
+            var ship = OwnedShipInstance.Create("ship.scout_vessel", "Scout", "scout");
+            _station.ownedShips[ship.uid] = ship;
+
+            var (ok, reason) = _system.AssignCrew(ship.uid, null, _station);
+            Assert.IsFalse(ok, "AssignCrew with null list should fail.");
+            Assert.IsNotNull(reason);
+        }
+
+        [Test]
+        public void AssignCrew_DuplicateUids_Fails()
+        {
+            var ship = OwnedShipInstance.Create("ship.scout_vessel", "Scout", "scout");
+            _station.ownedShips[ship.uid] = ship;
+
+            var npc = ShipTestHelpers.MakeCrew("Duplicate");
+            _station.npcs[npc.uid] = npc;
+
+            // Same UID twice
+            var (ok, reason) = _system.AssignCrew(ship.uid, new List<string> { npc.uid, npc.uid }, _station);
+            Assert.IsFalse(ok, "AssignCrew with duplicate UIDs should fail.");
+            StringAssert.Contains("Duplicate", reason);
+        }
+
+        [Test]
+        public void AssignCrew_CrossShipReassignment_RemovesFromPreviousShip()
+        {
+            var ship1 = OwnedShipInstance.Create("ship.scout_vessel",  "Scout 1", "scout");
+            var ship2 = OwnedShipInstance.Create("ship.mining_barge",   "Miner 1", "mining");
+            _station.ownedShips[ship1.uid] = ship1;
+            _station.ownedShips[ship2.uid] = ship2;
+
+            var npc = ShipTestHelpers.MakeCrew("Roaming");
+            _station.npcs[npc.uid] = npc;
+
+            // Assign NPC to ship1 first
+            var (ok1, _) = _system.AssignCrew(ship1.uid, new List<string> { npc.uid }, _station);
+            Assert.IsTrue(ok1, "First assignment should succeed.");
+            Assert.IsTrue(ship1.crewUids.Contains(npc.uid));
+
+            // Reassign NPC to ship2
+            var (ok2, _) = _system.AssignCrew(ship2.uid, new List<string> { npc.uid }, _station);
+            Assert.IsTrue(ok2, "Reassignment to second ship should succeed.");
+
+            Assert.IsFalse(ship1.crewUids.Contains(npc.uid),
+                "NPC should be removed from ship1 after reassignment to ship2.");
+            Assert.IsTrue(ship2.crewUids.Contains(npc.uid),
+                "NPC should be present in ship2 after reassignment.");
+            Assert.AreEqual(ship2.uid, npc.assignedShipUid,
+                "NPC assignedShipUid should point to ship2 after reassignment.");
+        }
+    }
+
+    // =========================================================================
+    // Unit: RemoveShipFromFleet clears both assignedShipUid and missionUid
+    // =========================================================================
+
+    [TestFixture]
+    public class RemoveShipFromFleetTests
+    {
+        private ShipSystem   _system;
+        private StationState _station;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _system  = new ShipSystem(null);
+            _station = ShipTestHelpers.MakeStation();
+        }
+
+        [Test]
+        public void RemoveShipFromFleet_ClearsBothMissionAndShipUidOnCrew()
+        {
+            var ship = OwnedShipInstance.Create("ship.scout_vessel", "Scout", "scout");
+            _station.ownedShips[ship.uid] = ship;
+
+            var npc = ShipTestHelpers.MakeCrew();
+            npc.assignedShipUid = ship.uid;
+            npc.missionUid      = "fleet_test_mission";
+            _station.npcs[npc.uid] = npc;
+            ship.crewUids.Add(npc.uid);
+
+            _system.RemoveShipFromFleet(ship.uid, _station);
+
+            Assert.IsNull(npc.assignedShipUid, "assignedShipUid must be cleared after RemoveShipFromFleet.");
+            Assert.IsNull(npc.missionUid,      "missionUid must also be cleared after RemoveShipFromFleet.");
+            Assert.IsFalse(_station.ownedShips.ContainsKey(ship.uid), "Ship must be removed from ownedShips.");
+        }
+    }
+
+    // =========================================================================
+    // Unit: VisitorSystem fleet-only filter
+    // =========================================================================
+
+    [TestFixture]
+    public class VisitorFleetOnlyFilterTests
+    {
+        private ContentRegistry _registry;
+        private GameObject      _registryGo;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _registryGo = new GameObject("FleetOnlyTestRegistry");
+            _registry   = _registryGo.AddComponent<ContentRegistry>();
+
+            // Add one normal visitor template and one fleet-only template
+            _registry.Ships["ship.freighter"] = new ShipTemplate
+            {
+                id        = "ship.freighter",
+                role      = "trader",
+                fleetOnly = false,
+            };
+            _registry.Ships["ship.scout_vessel"] = new ShipTemplate
+            {
+                id        = "ship.scout_vessel",
+                role      = "scout",
+                fleetOnly = true,
+                eligibleMissionTypes = new List<string> { "scout", "exploration" },
+            };
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            Object.DestroyImmediate(_registryGo);
+        }
+
+        [Test]
+        public void FleetOnlyTemplate_HasFleetOnlyFlag_True()
+        {
+            Assert.IsTrue(_registry.Ships["ship.scout_vessel"].fleetOnly,
+                "Fleet ship template must have fleetOnly=true.");
+        }
+
+        [Test]
+        public void NormalTemplate_HasFleetOnlyFlag_False()
+        {
+            Assert.IsFalse(_registry.Ships["ship.freighter"].fleetOnly,
+                "Normal visitor template must have fleetOnly=false.");
         }
     }
 }

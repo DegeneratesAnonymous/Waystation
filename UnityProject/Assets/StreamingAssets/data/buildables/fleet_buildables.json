@@ -16,7 +16,7 @@
     "size": 2,
     "max_health": 300,
     "is_workbench": true,
-    "workbench_room_type": "shipyard",
+    "workbench_room_type": "general_workshop",
     "workbench_beauty_req": 0,
     "workbench_skill_bonuses": {
       "engineering": 2

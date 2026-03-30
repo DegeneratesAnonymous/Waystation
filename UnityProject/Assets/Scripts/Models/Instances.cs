@@ -1871,7 +1871,7 @@ namespace Waystation.Models
         Moderate,    // 50–74 % — reduced cargo capacity
         Heavy,       // 25–49 % — weapon systems offline
         Critical,    // 1–24 %  — very reduced speed, not dispatchable
-        Destroyed    // 0 %
+        Destroyed    // < 1 %
     }
 
     /// <summary>

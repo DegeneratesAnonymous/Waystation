@@ -152,7 +152,13 @@ namespace Waystation.Systems
         {
             if (_registry.Ships.Count == 0) return null;
 
-            var templates = new List<ShipTemplate>(_registry.Ships.Values);
+            // Fleet-only templates are player-owned ships and must not appear as visitors.
+            var templates = new List<ShipTemplate>();
+            foreach (var t in _registry.Ships.Values)
+                if (!t.fleetOnly) templates.Add(t);
+
+            if (templates.Count == 0) return null;
+
             var weights   = new List<float>();
             bool dangerous = station.HasTag("dangerous_region");
             foreach (var t in templates)

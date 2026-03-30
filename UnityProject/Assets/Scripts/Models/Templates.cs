@@ -249,6 +249,9 @@ namespace Waystation.Models
         public Dictionary<string, int> buildMaterials = new Dictionary<string, int>();
         // Base ticks to complete construction at a Shipyard.
         public int   buildTimeTicks        = 0;
+        // When true, this template is reserved for player fleet use only and must
+        // not appear in VisitorSystem's random arrival selection.
+        public bool  fleetOnly             = false;
 
         public static ShipTemplate FromDict(Dictionary<string, object> raw)
         {
@@ -267,6 +270,7 @@ namespace Waystation.Models
                 spriteVariant    = raw.GetInt("sprite_variant", 0),
                 crewCapacity     = raw.GetInt("crew_capacity", 0),
                 buildTimeTicks   = raw.GetInt("build_time_ticks", 0),
+                fleetOnly        = raw.GetBool("fleet_only", false),
             };
             foreach (var s in raw.GetStringList("faction_restrictions"))    t.factionRestrictions.Add(s);
             foreach (var s in raw.GetStringList("behavior_tags"))           t.behaviorTags.Add(s);
