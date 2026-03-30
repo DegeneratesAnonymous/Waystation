@@ -5372,11 +5372,22 @@ namespace Waystation.UI
                     _gm.SaveGame();
                 y += 34f;
 
-                // Load is not yet implemented — show as disabled stub
-                var prevColor = GUI.color;
-                GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.7f);
-                GUI.Button(new Rect(area.x, y, w, BtnH), "Load Game  (coming soon)", _sBtnWide);
-                GUI.color = prevColor;
+                // Load Game — enabled when FullSaveLoad is active and a save file exists
+                if (FeatureFlags.FullSaveLoad && _gm.HasSaveFile())
+                {
+                    if (GUI.Button(new Rect(area.x, y, w, BtnH), "Load Game", _sBtnWide))
+                    {
+                        PlayerPrefs.SetInt("load_save", 1);
+                        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenuScene");
+                    }
+                }
+                else
+                {
+                    var prevColor = GUI.color;
+                    GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.7f);
+                    GUI.Button(new Rect(area.x, y, w, BtnH), _gm.HasSaveFile() ? "Load Game  (disabled)" : "Load Game  (no save)", _sBtnWide);
+                    GUI.color = prevColor;
+                }
                 y += 34f;
             }
 
