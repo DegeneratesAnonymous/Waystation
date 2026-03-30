@@ -230,16 +230,16 @@ namespace Waystation.Systems
 
                 if (FeatureFlags.FarmingNegativeEvents && f.hasBlight && f.blightDetected)
                 {
-                    bool hasTreat = tasks.Exists(t => t.taskType == "treat_blight");
-                    if (!hasTreat)
+                    bool hasTreatBlight = tasks.Exists(t => t.taskType == "treat_blight");
+                    if (!hasTreatBlight)
                         station.farmingTasks.Add(
                             FarmingTaskInstance.Create("treat_blight", f.uid, null, TreatTaskTicks));
                 }
 
                 if (FeatureFlags.FarmingNegativeEvents && f.hasPests && f.pestsDetected)
                 {
-                    bool hasTreat = tasks.Exists(t => t.taskType == "treat_pests");
-                    if (!hasTreat)
+                    bool hasTreatPests = tasks.Exists(t => t.taskType == "treat_pests");
+                    if (!hasTreatPests)
                         station.farmingTasks.Add(
                             FarmingTaskInstance.Create("treat_pests", f.uid, null, TreatTaskTicks));
                 }
@@ -248,7 +248,11 @@ namespace Waystation.Systems
                     && f.cropId != null && f.growthStage > 0 && f.growthStage < 3)
                 {
                     bool hasTend = tasks.Exists(t => t.taskType == "tend");
-                    bool hasTreatment = tasks.Exists(t => t.taskType == "treat_blight" || t.taskType == "treat_pests");
+                    // `tasks` is built once before new treatment tasks are appended. We also gate on
+                    // detected active conditions so tend is suppressed even in that first generation tick.
+                    bool hasTreatment = tasks.Exists(t => t.taskType == "treat_blight" || t.taskType == "treat_pests")
+                        || (f.hasBlight && f.blightDetected)
+                        || (f.hasPests && f.pestsDetected);
                     if (!hasTend && !hasTreatment && IsTendOverdue(f, station.tick))
                         station.farmingTasks.Add(
                             FarmingTaskInstance.Create("tend", f.uid, null, TendTaskTicks));
@@ -337,6 +341,9 @@ namespace Waystation.Systems
                             planter.growthStage    = 1;
                             planter.growthProgress = 0f;
                             planter.cropDamage     = 0f;
+                            planter.lastTendedTick = station.tick;
+                            planter.neglectAccumulator = 0;
+                            planter.pestAccumulator = 0;
                             station.LogEvent($"Planted {sowCrop.cropName} at ({planter.tileCol},{planter.tileRow}).");
                         }
                         else
@@ -607,7 +614,8 @@ namespace Waystation.Systems
 
         private static bool IsTendOverdue(FoundationInstance planter, int currentTick)
         {
-            if (planter.lastTendedTick < 0) return true;
+            if (planter.lastTendedTick < 0)
+                return currentTick >= TendFrequencyTicks;
             return currentTick - planter.lastTendedTick >= TendFrequencyTicks;
         }
 

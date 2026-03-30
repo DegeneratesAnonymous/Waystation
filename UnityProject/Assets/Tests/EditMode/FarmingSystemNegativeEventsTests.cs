@@ -196,5 +196,62 @@ namespace Waystation.Tests
             Assert.AreEqual(0, planter.growthStage, "Planter crop should be destroyed at pest destruction threshold.");
             Assert.IsFalse(planter.hasPests, "Pest state should clear after destruction reset.");
         }
+
+        [Test]
+        public void NeverTendedPlanter_HasInitialGracePeriodBeforeNeglectAccumulates()
+        {
+            var planter = FoundationInstance.Create("buildable.hydroponics_planter", 5, 5);
+            planter.status = "complete";
+            planter.cropId = "crop.test";
+            planter.growthStage = 1;
+            planter.lastTendedTick = -1;
+            _station.foundations[planter.uid] = planter;
+
+            var pipe = FoundationInstance.Create("buildable.pipe", 5, 5);
+            pipe.status = "complete";
+            _station.foundations[pipe.uid] = pipe;
+
+            _station.tick = FarmingSystem.TendFrequencyTicks - 1;
+            _farming.Tick(_station);
+            Assert.AreEqual(0, planter.neglectAccumulator,
+                "Never-tended planters should not accumulate neglect before the initial grace period expires.");
+
+            _station.tick = FarmingSystem.TendFrequencyTicks;
+            _farming.Tick(_station);
+            Assert.AreEqual(1, planter.neglectAccumulator,
+                "Neglect should begin accumulating once the initial grace period expires.");
+        }
+
+        [Test]
+        public void DetectedTreatmentNeed_DoesNotAlsoGenerateTendTaskSameTick()
+        {
+            var planter = FoundationInstance.Create("buildable.hydroponics_planter", 6, 6);
+            planter.status = "complete";
+            planter.cropId = "crop.test";
+            planter.growthStage = 1;
+            planter.hasBlight = true;
+            planter.blightDetected = true;
+            planter.lastTendedTick = 0;
+            _station.foundations[planter.uid] = planter;
+
+            var pipe = FoundationInstance.Create("buildable.pipe", 6, 6);
+            pipe.status = "complete";
+            _station.foundations[pipe.uid] = pipe;
+
+            _station.tick = FarmingSystem.TendFrequencyTicks + 5;
+            _farming.Tick(_station);
+
+            int tendCount = 0;
+            int treatCount = 0;
+            foreach (var task in _station.farmingTasks)
+            {
+                if (task.planterUid != planter.uid) continue;
+                if (task.taskType == "tend") tendCount++;
+                if (task.taskType == "treat_blight") treatCount++;
+            }
+
+            Assert.AreEqual(1, treatCount, "A detected blight should generate exactly one treatment task.");
+            Assert.AreEqual(0, tendCount, "Tend task should be suppressed when treatment is required.");
+        }
     }
 }
