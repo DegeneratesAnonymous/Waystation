@@ -1,0 +1,56 @@
+[
+  {
+    "id": "scenario.standard_start",
+    "name": "Standard Start",
+    "description": "A balanced beginning. Your station is modestly equipped and crewed by a capable team. The sector holds the usual mix of opportunity and threat.",
+    "difficulty_rating": 2,
+    "crew_composition": ["npc.engineer", "npc.scientist", "npc.security_officer"],
+    "starting_resources": {
+      "credits": 500,
+      "food": 120,
+      "power": 100,
+      "oxygen": 120,
+      "parts": 60,
+      "ice": 200,
+      "fuel": 60
+    },
+    "starting_ships": [],
+    "starting_faction_disposition": "standard"
+  },
+  {
+    "id": "scenario.derelict_salvage",
+    "name": "Derelict Salvage",
+    "description": "You have claimed a battered hulk drifting at the sector edge. Crew is thin, resources are lean, and the neighbours are watching. Survival first.",
+    "difficulty_rating": 4,
+    "crew_composition": ["npc.engineer", "npc.engineer"],
+    "starting_resources": {
+      "credits": 150,
+      "food": 60,
+      "power": 60,
+      "oxygen": 70,
+      "parts": 30,
+      "ice": 100,
+      "fuel": 25
+    },
+    "starting_ships": [],
+    "starting_faction_disposition": "standard"
+  },
+  {
+    "id": "scenario.military_outpost",
+    "name": "Military Outpost",
+    "description": "Commissioned to hold a strategic position. Your crew is security-heavy and well-stocked, but resupply is infrequent and one faction already watches your arrival with suspicion.",
+    "difficulty_rating": 3,
+    "crew_composition": ["npc.security_officer", "npc.security_officer", "npc.engineer"],
+    "starting_resources": {
+      "credits": 800,
+      "food": 150,
+      "power": 120,
+      "oxygen": 150,
+      "parts": 100,
+      "ice": 180,
+      "fuel": 80
+    },
+    "starting_ships": [],
+    "starting_faction_disposition": "standard"
+  }
+]

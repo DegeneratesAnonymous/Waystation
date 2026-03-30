@@ -973,6 +973,68 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Scenario Definition — data-driven starting conditions for a new game.
+    // Loaded from StreamingAssets/data/scenarios/*.json
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class ScenarioDefinition
+    {
+        public string id;
+        public string name;
+        public string description;
+        public int    difficultyRating;       // 1 (easiest) to 5 (hardest)
+
+        /// <summary>NPC template IDs for the starting crew (in order).</summary>
+        public List<string> crewComposition = new List<string>();
+
+        /// <summary>Override starting resource amounts. Keys match StationState.resources keys.</summary>
+        public Dictionary<string, float> startingResources = new Dictionary<string, float>();
+
+        /// <summary>Ship template IDs for player-owned ships added at game start (EXP-003).</summary>
+        public List<string> startingShips = new List<string>();
+
+        /// <summary>Optional seed override for the station layout RNG. Null = use station-name hash.</summary>
+        public int? layoutSeed;
+
+        /// <summary>
+        /// Faction disposition preset for the two starting adjacent factions.
+        /// "standard" = one friendly, one unfriendly (default).
+        /// </summary>
+        public string startingFactionDisposition = "standard";
+
+        public static ScenarioDefinition FromDict(Dictionary<string, object> d)
+        {
+            // Clamp difficulty to the documented range [1, 5] so out-of-range JSON values
+            // cannot cause runtime exceptions (e.g. negative string repeat counts in the UI).
+            int rawDifficulty = d.GetInt("difficulty_rating", 2);
+            int difficulty    = Math.Max(1, Math.Min(5, rawDifficulty));
+
+            var s = new ScenarioDefinition
+            {
+                id                          = d.GetString("id"),
+                name                        = d.GetString("name"),
+                description                 = d.GetString("description"),
+                difficultyRating            = difficulty,
+                startingFactionDisposition  = d.GetString("starting_faction_disposition", "standard"),
+            };
+            if (d.TryGetValue("layout_seed", out var seedObj) && seedObj != null)
+                s.layoutSeed = Convert.ToInt32(seedObj);
+            foreach (var npcId in d.GetStringList("crew_composition"))
+                s.crewComposition.Add(npcId);
+            if (d.TryGetValue("starting_resources", out var resObj) &&
+                resObj is Dictionary<string, object> resDict)
+            {
+                foreach (var kv in resDict)
+                    s.startingResources[kv.Key] = Convert.ToSingle(kv.Value);
+            }
+            foreach (var shipId in d.GetStringList("starting_ships"))
+                s.startingShips.Add(shipId);
+            return s;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers — dictionary extension methods used by all From* factory methods
     // -------------------------------------------------------------------------
 
