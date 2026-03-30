@@ -824,6 +824,11 @@ namespace Waystation.Models
         public bool   isSleeping    = false;
         public string missionUid    = null;   // null when not on an away mission
 
+        // Fleet management: uid of the OwnedShipInstance this NPC is permanently assigned to.
+        // Null when not assigned to any player-owned ship.
+        // When set alongside missionUid, the NPC is on a fleet mission and needs continue to deplete.
+        public string assignedShipUid = null;
+
         // Social skill used for hailing ships (1–10, default 1).
         // Migrated to SkillInstance for skill.social on first load.
         public int socialSkill = 1;
@@ -1852,6 +1857,104 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Owned Ship Instance — a ship in the player's fleet.
+    // Distinguished from ShipInstance (visitor/NPC ships) which are managed by VisitorSystem.
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Damage state of a player-owned ship, determined by conditionPct.
+    /// </summary>
+    public enum ShipDamageState
+    {
+        Undamaged,   // 100 %
+        Light,       // 75–99 % — minor speed reduction
+        Moderate,    // 50–74 % — reduced cargo capacity
+        Heavy,       // 25–49 % — weapon systems offline
+        Critical,    // 1–24 %  — very reduced speed, not dispatchable
+        Destroyed    // < 1 %
+    }
+
+    /// <summary>
+    /// A player-owned ship managed by ShipSystem.
+    /// Crew are NPCInstances with assignedShipUid pointing to this ship's uid.
+    /// </summary>
+    [Serializable]
+    public class OwnedShipInstance
+    {
+        public string uid;
+        public string templateId;
+        public string name;
+
+        /// <summary>
+        /// Ship role — determines mission eligibility.
+        /// Values: "scout" | "mining" | "combat" | "transport" | "diplomatic"
+        /// </summary>
+        public string role;
+
+        /// <summary>
+        /// Fleet status.
+        /// Values: "docked" | "on_mission" | "repairing" | "destroyed"
+        /// </summary>
+        public string status = "docked";
+
+        /// <summary>UIDs of NPCInstances permanently assigned to this ship.</summary>
+        public List<string> crewUids = new List<string>();
+
+        /// <summary>Hull condition 0–100. Drives <see cref="DamageState"/>.</summary>
+        public float conditionPct = 100f;
+
+        /// <summary>Current damage tier derived from conditionPct.</summary>
+        public ShipDamageState damageState = ShipDamageState.Undamaged;
+
+        /// <summary>UID of the active fleet mission; null when docked or repairing.</summary>
+        public string missionUid = null;
+
+        /// <summary>Mission type string (e.g. "scout", "mining") for the active mission.</summary>
+        public string missionType = null;
+
+        /// <summary>Tick at which the current mission started.</summary>
+        public int missionStartTick = 0;
+
+        /// <summary>Tick at which the current mission will resolve.</summary>
+        public int missionEndTick = 0;
+
+        public static OwnedShipInstance Create(string templateId, string name, string role)
+        {
+            var ship = new OwnedShipInstance
+            {
+                uid        = Guid.NewGuid().ToString("N").Substring(0, 8),
+                templateId = templateId,
+                name       = name,
+                role       = role,
+                status     = "docked",
+                conditionPct = 100f,
+                damageState  = ShipDamageState.Undamaged,
+            };
+            return ship;
+        }
+
+        /// <summary>Human-readable condition label for UI display.</summary>
+        public string ConditionLabel()
+        {
+            return damageState switch
+            {
+                ShipDamageState.Undamaged => "Undamaged",
+                ShipDamageState.Light     => "Light Damage",
+                ShipDamageState.Moderate  => "Moderate Damage",
+                ShipDamageState.Heavy     => "Heavy Damage",
+                ShipDamageState.Critical  => "Critical",
+                ShipDamageState.Destroyed => "Destroyed",
+                _                         => "Unknown"
+            };
+        }
+
+        /// <summary>True when the ship can be dispatched on a new mission.</summary>
+        public bool CanDispatch()
+            => status == "docked" && damageState != ShipDamageState.Critical
+               && damageState != ShipDamageState.Destroyed && crewUids.Count > 0;
+    }
+
+    // -------------------------------------------------------------------------
     // Station State
     // -------------------------------------------------------------------------
 
@@ -1873,6 +1976,12 @@ namespace Waystation.Models
         public Dictionary<string, NPCInstance>    npcs    = new Dictionary<string, NPCInstance>();
         public Dictionary<string, ShipInstance>   ships   = new Dictionary<string, ShipInstance>();
         public Dictionary<string, ModuleInstance> modules = new Dictionary<string, ModuleInstance>();
+
+        // ── Fleet management (EXP-003) ───────────────────────────────────────
+        // Player-owned ships, keyed by OwnedShipInstance.uid.
+        // Managed by ShipSystem. Distinct from visitor ShipInstances in `ships`.
+        public Dictionary<string, OwnedShipInstance> ownedShips =
+            new Dictionary<string, OwnedShipInstance>();
 
         // Faction reputation: factionId -> -100..100
         public Dictionary<string, float>  factionReputation = new Dictionary<string, float>();

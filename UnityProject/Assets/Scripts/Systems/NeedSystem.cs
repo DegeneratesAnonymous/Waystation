@@ -90,13 +90,25 @@ namespace Waystation.Systems
 
             foreach (var npc in station.npcs.Values)
             {
-                if (!npc.IsCrew() || npc.missionUid != null) continue;
+                if (!npc.IsCrew()) continue;
+
+                // NPCs on regular away missions (no fleet ship assigned) skip need processing:
+                // their state is abstracted until they return.
+                // NPCs on fleet missions (assignedShipUid set) continue to have needs depleted
+                // because their full simulation carries through during travel (EXP-003 design constraint).
+                bool onFleetMission = npc.missionUid != null && npc.assignedShipUid != null;
+                bool onRegularMission = npc.missionUid != null && npc.assignedShipUid == null;
+                if (onRegularMission) continue;
 
                 // FEATURE_MEDICAL_SYSTEM: when the medical system is active and the NPC is
                 // unconscious, need decay still happens (hunger/thirst/sleep continue depleting)
                 // but NPCs cannot actively seek or consume resources.
-                bool suppressSeeking = FeatureFlags.MedicalSystem &&
-                                       npc.medicalProfile != null && npc.medicalProfile.isUnconscious;
+                // NPCs on fleet missions also have seeking suppressed — station facilities are
+                // unavailable during travel, so needs deplete but NPCs cannot claim beds,
+                // dispensers, or recreational equipment.
+                bool suppressSeeking = (FeatureFlags.MedicalSystem &&
+                                        npc.medicalProfile != null && npc.medicalProfile.isUnconscious)
+                                       || onFleetMission;
 
                 EnsureProfiles(npc, station);
 

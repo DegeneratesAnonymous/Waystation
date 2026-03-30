@@ -1,0 +1,26 @@
+[
+  {
+    "id": "buildable.shipyard_workbench",
+    "display_name": "Shipyard Workbench",
+    "category": "object",
+    "description": "A heavy-duty fabrication platform used to construct and repair player-owned ships from blueprints. Requires an Engineering-class NPC to operate. Must be placed in a Shipyard room to unlock ship construction.",
+    "build_time_ticks": 80,
+    "required_materials": {
+      "item.steel_plate": 40,
+      "item.electronics": 20
+    },
+    "required_skills": {
+      "engineering": 3
+    },
+    "required_tags": [],
+    "size": 2,
+    "max_health": 300,
+    "is_workbench": true,
+    "workbench_room_type": "general_workshop",
+    "workbench_beauty_req": 0,
+    "workbench_skill_bonuses": {
+      "engineering": 2
+    },
+    "schema_version": "1"
+  }
+]
