@@ -35,12 +35,10 @@ namespace Waystation.Systems
         private const int TilePrefixLength = 5; // "tile:"
 
         private readonly ContentRegistry _registry;
-        private readonly NetworkSystem _networks;
 
         public TemperatureSystem(ContentRegistry registry, NetworkSystem networks = null)
         {
             _registry = registry;
-            _networks = networks ?? new NetworkSystem(registry);
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -143,15 +141,28 @@ namespace Waystation.Systems
         {
             // Passive circulation: equalise temperature between adjacent thermal nodes,
             // but only when vent-adjacent tiles are connected through duct networks.
-            var ductsByTile = BuildDuctLookup(station);
             var ventPairCounts = new Dictionary<(string a, string b), int>();
+            var ductsByTile = new Dictionary<(int, int), List<FoundationInstance>>();
+            var activeVents = new List<FoundationInstance>();
 
             foreach (var f in station.foundations.Values)
             {
-                if (f.buildableId != "buildable.vent") continue;
-                if (!f.isEnergised) continue;
                 if (f.status != "complete") continue;
 
+                if (IsDuctFoundation(f))
+                {
+                    var ductKey = (f.tileCol, f.tileRow);
+                    if (!ductsByTile.TryGetValue(ductKey, out var ductList))
+                        ductsByTile[ductKey] = ductList = new List<FoundationInstance>();
+                    ductList.Add(f);
+                }
+
+                if (f.buildableId == "buildable.vent" && f.isEnergised)
+                    activeVents.Add(f);
+            }
+
+            foreach (var f in activeVents)
+            {
                 foreach (var (dc, dr) in VentOffsets)
                 {
                     int nc = f.tileCol + dc;
@@ -183,21 +194,6 @@ namespace Waystation.Systems
             }
         }
 
-        private Dictionary<(int, int), List<FoundationInstance>> BuildDuctLookup(StationState station)
-        {
-            var lookup = new Dictionary<(int, int), List<FoundationInstance>>();
-            foreach (var f in station.foundations.Values)
-            {
-                if (f.status != "complete") continue;
-                if (!IsDuctFoundation(f)) continue;
-                var key = (f.tileCol, f.tileRow);
-                if (!lookup.TryGetValue(key, out var list))
-                    lookup[key] = list = new List<FoundationInstance>();
-                list.Add(f);
-            }
-            return lookup;
-        }
-
         private bool IsDuctFoundation(FoundationInstance f)
         {
             if (_registry == null || !_registry.Buildables.TryGetValue(f.buildableId, out var def))
@@ -213,16 +209,19 @@ namespace Waystation.Systems
             if (!ductsByTile.TryGetValue((aCol, aRow), out var aDucts)) return false;
             if (!ductsByTile.TryGetValue((bCol, bRow), out var bDucts)) return false;
 
+            var aNetworkIds = new HashSet<string>();
             foreach (var a in aDucts)
             {
-                var aNet = _networks.GetNetwork(station, a.uid);
-                if (aNet == null) continue;
-                foreach (var b in bDucts)
-                {
-                    var bNet = _networks.GetNetwork(station, b.uid);
-                    if (bNet == null) continue;
-                    if (aNet.uid == bNet.uid) return true;
-                }
+                if (!string.IsNullOrEmpty(a.networkId))
+                    aNetworkIds.Add(a.networkId);
+            }
+
+            if (aNetworkIds.Count == 0) return false;
+
+            foreach (var b in bDucts)
+            {
+                if (!string.IsNullOrEmpty(b.networkId) && aNetworkIds.Contains(b.networkId))
+                    return true;
             }
             return false;
         }
