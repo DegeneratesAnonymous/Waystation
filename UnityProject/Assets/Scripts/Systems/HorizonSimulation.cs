@@ -109,16 +109,51 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Promotes all Undiscovered regions in the registry to OnHorizon
-        /// when the player expands the horizon outward.
+        /// Promotes Undiscovered regions within <paramref name="horizonRadius"/> sectors
+        /// of <paramref name="playerSectorPosition"/> to OnHorizon when the player
+        /// expands the horizon outward.
         /// </summary>
         public void ExpandHorizon(Vector2Int playerSectorPosition, int horizonRadius)
         {
+            if (horizonRadius < 0)
+                return;
+
+            int maxDistanceSquared = horizonRadius * horizonRadius;
+
             foreach (var region in _registry.AllRegions)
             {
-                if (region.simulationState == RegionSimulationState.Undiscovered)
+                if (region.simulationState != RegionSimulationState.Undiscovered)
+                    continue;
+
+                if (!TryGetSectorPositionFromRegionId(region.regionId, out var sectorPosition))
+                    continue;
+
+                Vector2Int delta = sectorPosition - playerSectorPosition;
+                if (delta.sqrMagnitude <= maxDistanceSquared)
                     region.simulationState = RegionSimulationState.OnHorizon;
             }
+        }
+
+        /// <summary>
+        /// Parses the integer XY coordinates embedded in a region ID of the form
+        /// "region_X_Y" and returns them as a <see cref="Vector2Int"/>.
+        /// Returns false when the ID does not match the expected format.
+        /// </summary>
+        private static bool TryGetSectorPositionFromRegionId(string regionId, out Vector2Int sectorPosition)
+        {
+            sectorPosition = default;
+            if (string.IsNullOrEmpty(regionId))
+                return false;
+
+            var parts = regionId.Split('_');
+            if (parts.Length != 3)
+                return false;
+
+            if (!int.TryParse(parts[1], out int x) || !int.TryParse(parts[2], out int y))
+                return false;
+
+            sectorPosition = new Vector2Int(x, y);
+            return true;
         }
 
         /// <summary>
@@ -270,6 +305,11 @@ namespace Waystation.Systems
                 region.conflictLevel = Mathf.Max(0f, region.conflictLevel - ConflictDecayRate * deltaDays);
         }
 
+        // ── Cached resource type values (avoids per-tick allocation + reflection) ─
+
+        private static readonly ResourceType[] _resourceTypes =
+            (ResourceType[])Enum.GetValues(typeof(ResourceType));
+
         // ── Resource flow recording ────────────────────────────────────────────
 
         private void RecordResourceFlows(RegionData region, float deltaDays, float variance)
@@ -277,10 +317,10 @@ namespace Waystation.Systems
             float baseFlow       = BaseResourceFlow * region.populationDensity;
             float conflictFactor = 1f - region.conflictLevel * 0.5f;
 
-            foreach (ResourceType resource in Enum.GetValues(typeof(ResourceType)))
+            foreach (ResourceType resource in _resourceTypes)
             {
                 float jitter = (float)(_rng.NextDouble() * 2.0 - 1.0) * variance;
-                float amount = Mathf.Max(0f, baseFlow * conflictFactor * (1f + jitter));
+                float amount = Mathf.Max(0f, baseFlow * conflictFactor * (1f + jitter)) * deltaDays;
                 _registry.RecordDailyResource(region.regionId, resource, amount);
             }
         }

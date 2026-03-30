@@ -22,10 +22,14 @@ namespace Waystation.Systems
 
         /// <summary>
         /// Returns a copy of the recorded history for the given faction.
-        /// Returns an empty list if no events have been recorded for that faction.
+        /// Returns an empty list if no events have been recorded for that faction
+        /// or when <paramref name="factionId"/> is null or empty.
         /// </summary>
         public List<HistoricalEvent> GetFactionHistory(string factionId)
         {
+            if (string.IsNullOrEmpty(factionId))
+                return new List<HistoricalEvent>();
+
             if (_history.TryGetValue(factionId, out var list))
                 return new List<HistoricalEvent>(list);
             return new List<HistoricalEvent>();
