@@ -360,7 +360,9 @@ namespace Waystation.Systems
                         float yieldMult = _skillSystem != null
                             ? _skillSystem.GetYieldMultiplier(npc, "skill.farming") : 1.0f;
                         int qty = Mathf.RoundToInt(baseQty * yieldMult);
-                        bool stored = qty <= 0 || AddItemToStorage(station, hvCrop.harvestItemId, qty);
+                        bool stored = true;
+                        if (qty > 0)
+                            stored = AddItemToStorage(station, hvCrop.harvestItemId, qty);
                         if (!stored)
                         {
                             // Storage full — drop at tile and warn (no softlock)
@@ -643,7 +645,7 @@ namespace Waystation.Systems
                     f.hasPests      = true;
                     f.pestsDetected = false;
                     f.pestTicks     = 0;
-                    station.LogEvent($"Pest infestation detected at ({f.tileCol},{f.tileRow}).");
+                    station.LogEvent($"Pest infestation developed at ({f.tileCol},{f.tileRow}).");
                 }
 
                 if (f.hasBlight)

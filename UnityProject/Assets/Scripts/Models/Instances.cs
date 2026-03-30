@@ -1846,18 +1846,13 @@ namespace Waystation.Models
     // Status lifecycle: "pending" → "in_progress" → "complete"
     // -------------------------------------------------------------------------
 
-    // FarmingTaskInstance — a pending or active farming task for an NPC.
-    // Types: "sow" | "harvest" | "tend" | "treat_blight" | "treat_pests"
-    // Status lifecycle: "pending" → "in_progress" → "complete"
-    // -------------------------------------------------------------------------
-
     [Serializable]
     public class FarmingTaskInstance
     {
         public string uid;
         public string taskType;         // "sow" | "harvest" | "tend" | "treat_blight" | "treat_pests"
         public string planterUid;       // target FoundationInstance uid
-        public string cropId;           // crop to sow (sow tasks only; null for harvest/tend)
+        public string cropId;           // crop to sow (sow tasks only; null for harvest/tend/treat_*)
         public string assignedNpcUid;   // null = unclaimed
         public string status;           // "pending" | "in_progress" | "complete"
         public int    progressTicks;    // ticks remaining until task completes (counts down)
