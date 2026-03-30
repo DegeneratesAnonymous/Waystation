@@ -8,7 +8,7 @@
 // those statics when UseUIToolkitHUD is true so CameraController and StationRoomView
 // require no changes.
 //
-// Migration status: side panel shell active (WO-UI-005).
+// Migration status: top bar (WO-UI-004) and side panel shell (WO-UI-005) active.
 // Full panel implementations are added panel-by-panel behind this controller
 // as described in WO-UI-002 onwards.
 using System;
@@ -36,6 +36,9 @@ namespace Waystation.UI
 
         // Side panel (WO-UI-005)
         private SidePanelController _sidePanel;
+
+        // Top bar (WO-UI-004)
+        private TopBarController _topBar;
 
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
@@ -66,6 +69,7 @@ namespace Waystation.UI
         {
             _instance = this;
             BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
+            BuildTopBar();
             BuildSidePanel();
             StartCoroutine(WaitForGame());
         }
@@ -74,6 +78,8 @@ namespace Waystation.UI
         {
             _instance = null;
             BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
+
+            _topBar?.Detach();
 
             if (_gm != null)
             {
@@ -99,6 +105,24 @@ namespace Waystation.UI
 
             // Initial refresh once the game state is available.
             OnGameLoaded();
+        }
+
+        // ── Top bar setup (WO-UI-004) ──────────────────────────────────────────
+
+        private void BuildTopBar()
+        {
+            var doc = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
+            if (doc == null)
+            {
+                Debug.LogWarning("[WaystationHUDController] No UIDocument found — top bar will not render.");
+                return;
+            }
+
+            _topBar = new TopBarController();
+            _topBar.RegisterClickOutside(doc.rootVisualElement);
+
+            // Insert before the side panel so it renders at the top.
+            doc.rootVisualElement.Insert(0, _topBar);
         }
 
         // ── Side panel setup (WO-UI-005) ──────────────────────────────────────
@@ -153,6 +177,7 @@ namespace Waystation.UI
 
         private void OnTick(StationState station)
         {
+            _topBar?.OnTick(station);
             // Per-tick panel refresh — panels register their own listeners or are
             // refreshed here as they are migrated.
         }
@@ -169,7 +194,14 @@ namespace Waystation.UI
             // was null at construction time.
             _sidePanel?.InjectMapSystem(_gm?.Map);
 
-            if (_gm?.Station != null) OnTick(_gm.Station);
+            // Set the initial view context to the station name and inject dependencies
+            // into the top bar once the game state is available.
+            if (_gm?.Station != null)
+            {
+                ViewContextManager.Instance.SetContext(_gm.Station.stationName);
+                _topBar?.InjectDependencies(_gm, LogEntryBuffer.Instance, ViewContextManager.Instance);
+                OnTick(_gm.Station);
+            }
         }
 
         // ── Cross-view public API ─────────────────────────────────────────────

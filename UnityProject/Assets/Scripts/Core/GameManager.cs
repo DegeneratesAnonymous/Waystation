@@ -16,10 +16,11 @@ using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
+using Waystation.UI;
 
 namespace Waystation.Core
 {
-    public partial class GameManager : MonoBehaviour
+    public partial class GameManager : MonoBehaviour, ITopBarGameManager
     {
         // ── Constants ─────────────────────────────────────────────────────────
         public const float RecruitCost       = 150f;
@@ -1249,6 +1250,9 @@ namespace Waystation.Core
         }
 
         // ── Speed control ─────────────────────────────────────────────────────
+
+        /// <summary>Current real-time seconds between game ticks.</summary>
+        public float SecondsPerTick => secondsPerTick;
 
         public void SetSpeed(float ticksPerSecond)
             => secondsPerTick = ticksPerSecond > 0f ? 1f / ticksPerSecond : 0.5f;
