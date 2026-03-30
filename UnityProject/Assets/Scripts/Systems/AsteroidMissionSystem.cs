@@ -191,6 +191,7 @@ namespace Waystation.Systems
                 if (npc.inCrisis) { total += 0f; count++; continue; }
 
                 float moraleFactor = npc.moodScore / 100f;
+                // Clamp01 handles injury counts beyond 5 gracefully (factor floors at 0).
                 float injuryFactor = Mathf.Clamp01(1f - npc.injuries * 0.20f);
                 float threatFactor = 1f - Mathf.Clamp01(map.threatLevel);
 

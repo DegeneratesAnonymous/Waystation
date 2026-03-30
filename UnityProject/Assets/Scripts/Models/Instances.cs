@@ -1793,7 +1793,7 @@ namespace Waystation.Models
         public bool  retreatOrdered           = false;
         /// <summary>True while an unresponded distress signal is active.</summary>
         public bool  distressSignalActive     = false;
-        /// <summary>Station tick at which the rescue dispatch window expires.  -1 = not set.</summary>
+        /// <summary>Station tick at which the rescue dispatch window expires.  -1 = not set (check distressSignalActive first).</summary>
         public int   distressWindowExpiryTick = -1;
         /// <summary>True once the player dispatches a rescue (responds to distress signal).</summary>
         public bool  rescueDispatched         = false;

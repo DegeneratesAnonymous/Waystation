@@ -6210,6 +6210,22 @@ namespace Waystation.UI
             foreach (var kv in s.asteroidMaps)
                 if (kv.Value.status == "active") hasActiveMissions = true;
 
+            // Clean up cached textures for missions that are no longer active
+            // to prevent unbounded texture memory growth over long play sessions.
+            var staleMapUids = new List<string>();
+            foreach (var kv in _missionMapTextures)
+            {
+                if (!s.asteroidMaps.TryGetValue(kv.Key, out var checkMap) ||
+                    checkMap.status != "active")
+                    staleMapUids.Add(kv.Key);
+            }
+            foreach (var staleUid in staleMapUids)
+            {
+                if (_missionMapTextures.TryGetValue(staleUid, out var staleTex) && staleTex != null)
+                    UnityEngine.Object.Destroy(staleTex);
+                _missionMapTextures.Remove(staleUid);
+            }
+
             if (hasActiveMissions)
             {
                 GUI.Label(new Rect(area.x, y, w, 16f), "Active Mining Missions:", _sLabel);
@@ -6508,6 +6524,7 @@ namespace Waystation.UI
         /// <summary>
         /// Builds a point-filtered Texture2D from the tile data in
         /// <paramref name="map"/> for use in <see cref="DrawMissionObservation"/>.
+        /// Uses SetPixels32 with a pre-allocated array for efficiency.
         /// </summary>
         private static Texture2D BuildMissionMapTexture(AsteroidMapState map)
         {
@@ -6519,6 +6536,7 @@ namespace Waystation.UI
                 wrapMode   = TextureWrapMode.Clamp,
             };
 
+            var pixels = new Color32[map.width * map.height];
             for (int row = 0; row < map.height; row++)
             for (int col = 0; col < map.width;  col++)
             {
@@ -6532,8 +6550,9 @@ namespace Waystation.UI
                     _                        => TileColEmpty,
                 };
                 // Unity textures have origin at bottom-left; flip Y.
-                tex.SetPixel(col, map.height - 1 - row, c);
+                pixels[(map.height - 1 - row) * map.width + col] = c;
             }
+            tex.SetPixels32(pixels);
             tex.Apply();
             return tex;
         }
