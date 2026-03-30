@@ -187,5 +187,24 @@ namespace Waystation.Core
         /// Set to false to revert TendTask to its previous no-effect stub behaviour.
         /// </summary>
         public static bool FarmingNegativeEvents = true;
+
+        /// <summary>
+        /// Enables real-time tile-based combat execution (STA-003): all six combat scenario
+        /// triggers, NPC combat AI (pathfinding, weapon selection, cover, retreat), crew
+        /// outcome resolution (killed/injured/captured), captured NPC pool, and
+        /// ship-to-station hull damage via BuildingSystem.
+        /// When false, combat falls back to abstract resolution — outcomes still resolve
+        /// (boarding, resource loss) but tile-based visual combat does not play out.
+        /// </summary>
+        public static bool CombatSystem = true;
+
+        /// <summary>
+        /// Enables the mental break combat scenario (STA-003): a crew member in breakdown
+        /// enters a hostile state and must be resolved via incapacitation, counselling, or
+        /// lethal force.
+        /// When false, breakdown NPCs revert to non-combat behaviour (passive drain only).
+        /// Requires CombatSystem = true for full resolution; can be disabled independently.
+        /// </summary>
+        public static bool MentalBreakCombat = true;
     }
 }

@@ -479,6 +479,35 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Captured NPC Record
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Preserves the full state of a crew NPC captured in combat (STA-003).
+    /// Retained in <see cref="StationState.capturedNpcs"/> keyed by NPC uid.
+    /// The NPC may be recovered via a rescue event; if no rescue occurs the record
+    /// persists indefinitely as a permanent loss.
+    /// </summary>
+    [Serializable]
+    public class CapturedNpcRecord
+    {
+        /// <summary>Station tick at which the NPC was captured.</summary>
+        public int    capturedAtTick;
+
+        /// <summary>Name of the faction or ship responsible for the capture.</summary>
+        public string capturedBy;
+
+        /// <summary>
+        /// When true the NPC is eligible for rescue via a future diplomatic or
+        /// rescue mission event.
+        /// </summary>
+        public bool   eligibleForRescue = true;
+
+        /// <summary>Full NPC instance state preserved at capture time.</summary>
+        public NPCInstance npc;
+    }
+
+    // -------------------------------------------------------------------------
     // Faction Government Runtime State
     // -------------------------------------------------------------------------
 
@@ -2219,6 +2248,13 @@ namespace Waystation.Models
         // their full state is preserved for potential future reinjection via VisitorSystem.
         public Dictionary<string, DepartedNpcRecord> departedNpcs =
             new Dictionary<string, DepartedNpcRecord>();
+
+        // ── Captured NPC pool (STA-003) ──────────────────────────────────────
+        // Crew NPCs captured during combat are removed from the active roster and
+        // retained here (keyed by NPC uid) with full state.
+        // A future rescue event or diplomatic mission may recover them.
+        public Dictionary<string, CapturedNpcRecord> capturedNpcs =
+            new Dictionary<string, CapturedNpcRecord>();
 
         // ── Trade standing orders ─────────────────────────────────────────────
         // Persistent buy/sell rules executed automatically by TradeSystem when a

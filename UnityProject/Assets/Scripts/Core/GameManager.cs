@@ -391,6 +391,18 @@ namespace Waystation.Core
                         new Dictionary<string, object> { { "npc_uid", npc.uid } });
             }
 
+            // Wire CombatSystem optional dependencies (STA-003)
+            Combat.SetBuildingSystem(Building);
+            if (FeatureFlags.MedicalSystem)      Combat.SetMedicalSystem(Medical);
+            if (FeatureFlags.NpcDeathHandling)   Combat.SetDeathHandlingSystem(DeathHandling);
+
+            // Register additional combat scenario effect handlers (STA-003)
+            Events.RegisterEffectHandler("resolve_raid",               HandleResolveRaidEffect);
+            Events.RegisterEffectHandler("resolve_ship_to_station",    HandleResolveShipToStationEffect);
+            Events.RegisterEffectHandler("resolve_station_to_station", HandleResolveStationToStationEffect);
+            Events.RegisterEffectHandler("resolve_sabotage",           HandleResolveSabotageEffect);
+            Events.RegisterEffectHandler("resolve_mental_break_combat",HandleResolveMentalBreakCombatEffect);
+
             // Wire ResourceSystem depletion reactive trigger
             Resources.OnResourceDepleted += resourceId =>
             {
@@ -1156,6 +1168,78 @@ namespace Waystation.Core
             if (string.IsNullOrEmpty(templateId)) return;
             var npc = Npcs.SpawnVisitor(templateId);
             if (npc != null) station.AddNpc(npc);
+        }
+
+        // ── Additional combat scenario effect handlers (STA-003) ──────────────
+
+        private void HandleResolveRaidEffect(OutcomeEffect effect, StationState station,
+                                              Dictionary<string, object> context)
+        {
+            string shipUid = context.ContainsKey("ship_uid") ? context["ship_uid"].ToString() : "";
+            if (!station.ships.TryGetValue(shipUid, out var ship)) return;
+            var outcome = Combat.ResolveRaid(station, ship);
+            station.LogEvent(outcome.narrative);
+            station.LogEvent($"Raid combat outcome: {outcome.tier}");
+        }
+
+        private void HandleResolveShipToStationEffect(OutcomeEffect effect, StationState station,
+                                                       Dictionary<string, object> context)
+        {
+            string shipUid = context.ContainsKey("ship_uid") ? context["ship_uid"].ToString() : "";
+            if (!station.ships.TryGetValue(shipUid, out var ship)) return;
+            var outcome = Combat.ResolveShipToStation(station, ship);
+            station.LogEvent(outcome.narrative);
+            station.LogEvent($"Ship-to-station combat outcome: {outcome.tier}");
+        }
+
+        private void HandleResolveStationToStationEffect(OutcomeEffect effect, StationState station,
+                                                          Dictionary<string, object> context)
+        {
+            string attackerName = context.ContainsKey("attacker_name")
+                ? context["attacker_name"].ToString() : "Hostile station";
+            int threatLevel = context.ContainsKey("threat_level")
+                ? System.Convert.ToInt32(context["threat_level"]) : 5;
+            var outcome = Combat.ResolveStationToStation(station, attackerName, threatLevel);
+            station.LogEvent(outcome.narrative);
+            station.LogEvent($"Station-to-station combat outcome: {outcome.tier}");
+        }
+
+        private void HandleResolveSabotageEffect(OutcomeEffect effect, StationState station,
+                                                   Dictionary<string, object> context)
+        {
+            string saboteurName = context.ContainsKey("saboteur_name")
+                ? context["saboteur_name"].ToString() : "Unknown saboteur";
+            var outcome = Combat.ResolveSabotage(station, saboteurName);
+            station.LogEvent(outcome.narrative);
+            station.LogEvent($"Sabotage combat outcome: {outcome.tier}");
+        }
+
+        private void HandleResolveMentalBreakCombatEffect(OutcomeEffect effect, StationState station,
+                                                            Dictionary<string, object> context)
+        {
+            if (!FeatureFlags.MentalBreakCombat) return;
+
+            string npcUid = context.ContainsKey("npc_uid") ? context["npc_uid"].ToString() : "";
+            if (!station.npcs.TryGetValue(npcUid, out var breakdown)) return;
+
+            // Counsellor is available if any crew member has the counsellor class and is not in crisis
+            bool counsellorAvailable = false;
+            if (FeatureFlags.NpcCounselling)
+            {
+                foreach (var npc in station.GetCrew())
+                {
+                    if (npc.uid == breakdown.uid) continue;
+                    if (npc.classId == "class.counsellor")
+                    {
+                        counsellorAvailable = true;
+                        break;
+                    }
+                }
+            }
+
+            var outcome = Combat.ResolveMentalBreakCombat(station, breakdown, counsellorAvailable);
+            station.LogEvent(outcome.narrative);
+            station.LogEvent($"Mental break combat outcome: {outcome.tier}");
         }
 
         // ── Speed control ─────────────────────────────────────────────────────
