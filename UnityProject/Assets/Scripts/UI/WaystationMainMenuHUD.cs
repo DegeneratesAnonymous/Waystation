@@ -236,9 +236,13 @@ namespace Waystation.UI
             y += 30f;
 
             var scenarios = GetScenarios();
-            if (scenarios == null || scenarios.Count == 0)
+            var reg       = GameManager.Instance?.Registry;
+            bool isLoading = reg == null || !reg.IsLoaded;
+
+            if (scenarios.Count == 0)
             {
-                GUI.Label(new Rect(px, y, pw, 24f), "Loading scenarios…", _sSub);
+                string msg = isLoading ? "Loading scenarios…" : "No scenarios found.";
+                GUI.Label(new Rect(px, y, pw, 24f), msg, _sSub);
                 y += 30f;
             }
             else
@@ -261,9 +265,10 @@ namespace Waystation.UI
                     float iy = y + 10f;
                     GUI.Label(new Rect(px + 12f, iy, pw - 80f, 22f), sc.name, _sFieldLbl);
 
-                    // Difficulty stars
-                    string stars = new string('★', sc.difficultyRating)
-                                 + new string('☆', 5 - sc.difficultyRating);
+                    // Difficulty stars — clamp defensively in case of direct construction.
+                    int difficultyClamped = Mathf.Clamp(sc.difficultyRating, 1, 5);
+                    string stars = new string('★', difficultyClamped)
+                                 + new string('☆', 5 - difficultyClamped);
                     GUI.Label(new Rect(px + pw - 72f, iy, 68f, 22f), stars, _sScenarioDiff);
 
                     iy += 26f;
@@ -431,16 +436,38 @@ namespace Waystation.UI
 
         /// <summary>
         /// Returns the loaded scenario list.  Reads from ContentRegistry when available;
-        /// returns an empty list while the registry is still loading.
+        /// returns a shared empty list while the registry is still loading to avoid
+        /// per-frame heap allocations.  Scenarios are sorted by difficulty then name
+        /// for a stable, platform-independent display order.
         /// </summary>
         private List<ScenarioDefinition> GetScenarios()
         {
             if (_cachedScenarios != null) return _cachedScenarios;
+
             var reg = GameManager.Instance?.Registry;
-            if (reg == null || !reg.IsLoaded) return new List<ScenarioDefinition>();
-            _cachedScenarios = new List<ScenarioDefinition>(reg.Scenarios.Values);
+            if (reg == null || !reg.IsLoaded)
+                return _emptyScenarioList;   // registry not ready — no allocation
+
+            if (reg.Scenarios == null || reg.Scenarios.Count == 0)
+            {
+                // Loaded but genuinely empty — cache the sentinel to avoid re-checking every frame.
+                _cachedScenarios = _emptyScenarioList;
+            }
+            else
+            {
+                _cachedScenarios = new List<ScenarioDefinition>(reg.Scenarios.Values);
+                // Sort by difficulty ascending, then name — guarantees stable cross-platform ordering.
+                _cachedScenarios.Sort((a, b) =>
+                {
+                    int cmp = a.difficultyRating.CompareTo(b.difficultyRating);
+                    return cmp != 0 ? cmp : string.Compare(a.name, b.name, System.StringComparison.Ordinal);
+                });
+            }
             return _cachedScenarios;
         }
+
+        private static readonly List<ScenarioDefinition> _emptyScenarioList =
+            new List<ScenarioDefinition>(0);
 
         private void EnsureStyles()
         {

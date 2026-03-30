@@ -1005,12 +1005,17 @@ namespace Waystation.Models
 
         public static ScenarioDefinition FromDict(Dictionary<string, object> d)
         {
+            // Clamp difficulty to the documented range [1, 5] so out-of-range JSON values
+            // cannot cause runtime exceptions (e.g. negative string repeat counts in the UI).
+            int rawDifficulty = d.GetInt("difficulty_rating", 2);
+            int difficulty    = Math.Max(1, Math.Min(5, rawDifficulty));
+
             var s = new ScenarioDefinition
             {
                 id                          = d.GetString("id"),
                 name                        = d.GetString("name"),
                 description                 = d.GetString("description"),
-                difficultyRating            = d.GetInt("difficulty_rating", 2),
+                difficultyRating            = difficulty,
                 startingFactionDisposition  = d.GetString("starting_faction_disposition", "standard"),
             };
             if (d.TryGetValue("layout_seed", out var seedObj) && seedObj != null)

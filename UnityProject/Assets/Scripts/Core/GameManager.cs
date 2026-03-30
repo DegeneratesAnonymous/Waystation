@@ -486,6 +486,11 @@ namespace Waystation.Core
             {
                 SetupStartingCrewFromScenario(scenario);
                 ApplyScenarioResources(scenario);
+                ApplyScenarioShips(scenario);
+                if (scenario.startingFactionDisposition != "standard")
+                    Debug.LogWarning($"[GameManager] Scenario '{scenario.id}' requests non-standard faction disposition " +
+                                     $"'{scenario.startingFactionDisposition}' — only 'standard' is currently supported. " +
+                                     "Initializing with one friendly and one unfriendly faction.");
             }
             else
             {
@@ -708,6 +713,31 @@ namespace Waystation.Core
             if (scenario.startingResources == null) return;
             foreach (var kv in scenario.startingResources)
                 Station.resources[kv.Key] = kv.Value;
+        }
+
+        /// <summary>
+        /// Seeds the player's starting fleet from the scenario's <see cref="ScenarioDefinition.startingShips"/>
+        /// list.  Each entry is a ship template ID.  Only runs when <see cref="FeatureFlags.FleetManagement"/>
+        /// is enabled; skipped silently otherwise.
+        /// </summary>
+        private void ApplyScenarioShips(ScenarioDefinition scenario)
+        {
+            if (!FeatureFlags.FleetManagement) return;
+            if (scenario.startingShips == null || scenario.startingShips.Count == 0) return;
+            if (Fleet == null)
+            {
+                Debug.LogWarning("[GameManager] ApplyScenarioShips: FleetManagement is enabled but ShipSystem is null — starting ships not added.");
+                return;
+            }
+            foreach (var templateId in scenario.startingShips)
+            {
+                if (!Registry.Ships.TryGetValue(templateId, out var tmpl))
+                {
+                    Debug.LogWarning($"[GameManager] Scenario '{scenario.id}' references unknown ship template '{templateId}' — skipped.");
+                    continue;
+                }
+                Fleet.AddShipToFleet(templateId, tmpl.role, Station);
+            }
         }
 
         private void SetupStartingPolicies()

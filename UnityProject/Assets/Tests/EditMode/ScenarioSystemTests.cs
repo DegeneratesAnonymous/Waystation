@@ -204,18 +204,29 @@ namespace Waystation.Tests
     [TestFixture]
     internal class ScenarioFeatureFlagTests
     {
+        private const bool ScenarioSelectionDefault = true;
         private bool _savedFlag;
 
-        [SetUp]    public void SetUp()    => _savedFlag = FeatureFlags.ScenarioSelection;
-        [TearDown] public void TearDown() => FeatureFlags.ScenarioSelection = _savedFlag;
+        [SetUp]
+        public void SetUp()
+        {
+            // Preserve the value from any previous test to avoid cross-test coupling.
+            _savedFlag = FeatureFlags.ScenarioSelection;
+            // Ensure each test starts from the declared default.
+            FeatureFlags.ScenarioSelection = ScenarioSelectionDefault;
+        }
+
+        [TearDown]
+        public void TearDown() => FeatureFlags.ScenarioSelection = _savedFlag;
 
         [Test]
         public void ScenarioSelection_DefaultIsTrue()
         {
-            // Reset to default to confirm it starts enabled.
-            FeatureFlags.ScenarioSelection = true;
-            Assert.IsTrue(FeatureFlags.ScenarioSelection,
-                "FeatureFlags.ScenarioSelection should default to true.");
+            // Validate the declared default constant and the runtime value are in agreement.
+            Assert.IsTrue(ScenarioSelectionDefault,
+                "Declared default for FeatureFlags.ScenarioSelection must be true.");
+            Assert.AreEqual(ScenarioSelectionDefault, FeatureFlags.ScenarioSelection,
+                "FeatureFlags.ScenarioSelection should equal its declared default at test start.");
         }
 
         [Test]
