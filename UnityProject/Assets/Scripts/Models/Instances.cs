@@ -606,9 +606,9 @@ namespace Waystation.Models
     }
 
     /// <summary>
-    /// Represents a single region stub for the Horizon Simulation interface.
-    /// All simulation fields beyond resource history are stubbed with TODO markers
-    /// for the Horizon Simulation work order.
+    /// Represents a region tracked by the Horizon Simulation.
+    /// Carries resource history, faction presence, and Horizon Simulation state
+    /// fields updated each tick at the region's assigned fidelity tier.
     /// </summary>
     [Serializable]
     public class RegionData
@@ -619,17 +619,28 @@ namespace Waystation.Models
         public List<string>          factionIds          = new List<string>();
         public RegionSimulationState simulationState     = RegionSimulationState.Undiscovered;
 
-        // TODO: Add Horizon Simulation fields (population density, conflict level, etc.)
-        //       when the Horizon Simulation work order is implemented.
+        // ── Horizon Simulation fields ──────────────────────────────────────────
+
+        /// <summary>
+        /// Normalised conflict intensity in this region (0 = peaceful, 1 = full war).
+        /// Updated each tick by the Horizon Simulation based on faction composition.
+        /// </summary>
+        public float conflictLevel    = 0f;
+
+        /// <summary>
+        /// Normalised population density (0 = void, 1 = heavily settled).
+        /// Influences base resource flow rates in the Horizon Simulation.
+        /// </summary>
+        public float populationDensity = 0.5f;
     }
 
     // -------------------------------------------------------------------------
-    // Horizon Simulation — HistoricalEvent stub
+    // Horizon Simulation — HistoricalEvent
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Stub data class for recording faction-level historical events.
-    /// Used by IFactionHistoryProvider.
+    /// Data class for recording faction-level historical events.
+    /// Used by IFactionHistoryProvider and persisted by the Horizon Simulation.
     /// </summary>
     [Serializable]
     public class HistoricalEvent

@@ -268,9 +268,12 @@ namespace Waystation.Core
             // Wire FactionSystem with procedural generation dependencies
             Factions.SetSystems(Npcs, Traits);
 
-            // Stub implementations — replaced by Horizon Simulation work order
-            RegionSim     = new RegionSimulationStub();
-            FactionHistory = new FactionHistoryStub();
+            // Horizon Simulation — full implementations replacing stubs
+            var factionHistory = new FactionHistory();
+            var horizonSim     = new HorizonSimulation(Regions.Registry, factionHistory);
+            FactionHistory     = factionHistory;
+            RegionSim          = horizonSim;
+            Regions.Simulation = horizonSim;
 
             // Wire tension stage change events to station log
             Tension.OnTensionStageChanged += (npc, stage) =>

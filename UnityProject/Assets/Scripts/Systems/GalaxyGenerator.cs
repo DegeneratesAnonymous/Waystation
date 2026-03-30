@@ -340,10 +340,14 @@ namespace Waystation.Systems
             // ANC is assigned procedurally to ~8 % of sectors regardless of position.
             if (rng.NextDouble() < AncProbability) return SurveyPrefix.ANC;
 
-            if (x < 40f) return SurveyPrefix.GSC;
-            if (x <= 70f) return SurveyPrefix.FRN;
-            if (x > 85f) return SurveyPrefix.UNK; // outer fringe — density threshold not yet implemented
-            return SurveyPrefix.FRN;  // 70 < x ≤ 85 treated as frontier
+            if (x < 40f)  return SurveyPrefix.GSC;
+            if (x <= 85f) return SurveyPrefix.FRN;  // 40 ≤ x ≤ 85 treated as frontier
+
+            // Outer fringe (x > 85): stellar density decreases linearly with distance.
+            // Sectors in denser patches retain FRN; sparse void regions become UNK.
+            // densityFactor approaches 0 as x approaches CoordMax (99.9).
+            float densityFactor = Mathf.Clamp01(1f - (x - 85f) / 15f);
+            return rng.NextDouble() < densityFactor ? SurveyPrefix.FRN : SurveyPrefix.UNK;
         }
 
         private static List<PhenomenonCode> AssignPhenomenonCodes(Random rng)
