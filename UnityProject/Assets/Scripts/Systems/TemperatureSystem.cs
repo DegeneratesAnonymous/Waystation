@@ -8,7 +8,8 @@
 // Cooler: lowers room temperature at CoolingRate (1 °C/tick) down to TargetTemperature.
 //         Same dynamic power model as Heater.
 // Vent:   passive circulation — equalises temperature between adjacent rooms
-//         toward the average. Duct-to-temperature integration is a stub (TODO).
+//         toward the average through connected duct networks.
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -30,10 +31,15 @@ namespace Waystation.Systems
         // ── Dynamic power constants (Cooler) ──────────────────────────────────
         public const float CoolerMaxWatts     = 200f;
         public const float CoolerStandbyWatts =   5f;
+        private const int RoomPrefixLength = 5; // "room:"
+        private const int TilePrefixLength = 5; // "tile:"
 
         private readonly ContentRegistry _registry;
 
-        public TemperatureSystem(ContentRegistry registry) => _registry = registry;
+        public TemperatureSystem(ContentRegistry registry, NetworkSystem networks = null)
+        {
+            _registry = registry;
+        }
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -133,26 +139,139 @@ namespace Waystation.Systems
 
         private void ProcessVents(StationState station)
         {
-            // Passive circulation: equalise temperature between a vent's room and
-            // adjacent connected room/tile.  Duct-to-temperature integration: TODO.
+            // Passive circulation: equalise temperature between adjacent thermal nodes,
+            // but only when vent-adjacent tiles are connected through duct networks.
+            var ventPairCounts = new Dictionary<(string a, string b), int>();
+            var ductsByTile = new Dictionary<(int, int), List<FoundationInstance>>();
+            var activeVents = new List<FoundationInstance>();
+
             foreach (var f in station.foundations.Values)
             {
-                if (f.buildableId != "buildable.vent") continue;
-                if (!f.isEnergised) continue;
+                if (f.status != "complete") continue;
 
-                float myTemp = GetEffectiveTemperature(station, f.tileCol, f.tileRow);
+                if (IsDuctFoundation(f))
+                {
+                    var ductKey = (f.tileCol, f.tileRow);
+                    if (!ductsByTile.TryGetValue(ductKey, out var ductList))
+                        ductsByTile[ductKey] = ductList = new List<FoundationInstance>();
+                    ductList.Add(f);
+                }
+
+                if (f.buildableId == "buildable.vent" && f.isEnergised)
+                    activeVents.Add(f);
+            }
+
+            foreach (var f in activeVents)
+            {
                 foreach (var (dc, dr) in VentOffsets)
                 {
-                    float neighbour = GetEffectiveTemperature(station,
-                                                               f.tileCol + dc,
-                                                               f.tileRow + dr);
-                    float diff = neighbour - myTemp;
-                    if (Mathf.Abs(diff) < 0.1f) continue;
-                    float move = Mathf.Sign(diff) * Mathf.Min(VentEqualiseRate, Mathf.Abs(diff) * 0.5f);
-                    PropagateHeat(station, f.tileCol,      f.tileRow,      move);
-                    PropagateHeat(station, f.tileCol + dc, f.tileRow + dr, -move);
+                    int nc = f.tileCol + dc;
+                    int nr = f.tileRow + dr;
+
+                    if (!AreTilesDuctConnected(station, ductsByTile, f.tileCol, f.tileRow, nc, nr))
+                        continue;
+
+                    string a = GetThermalNodeKey(station, f.tileCol, f.tileRow);
+                    string b = GetThermalNodeKey(station, nc, nr);
+                    if (a == b) continue;
+                    if (string.CompareOrdinal(a, b) > 0) (a, b) = (b, a);
+                    var key = (a, b);
+                    ventPairCounts[key] = ventPairCounts.TryGetValue(key, out int n) ? n + 1 : 1;
                 }
             }
+
+            foreach (var kv in ventPairCounts)
+            {
+                float aTemp = GetThermalNodeTemperature(station, kv.Key.a);
+                float bTemp = GetThermalNodeTemperature(station, kv.Key.b);
+                float diff = bTemp - aTemp;
+                if (Mathf.Abs(diff) < 0.1f) continue;
+
+                float maxRate = VentEqualiseRate * kv.Value;
+                float move = Mathf.Sign(diff) * Mathf.Min(maxRate, Mathf.Abs(diff) * 0.5f);
+                ApplyThermalNodeDelta(station, kv.Key.a, move);
+                ApplyThermalNodeDelta(station, kv.Key.b, -move);
+            }
+        }
+
+        private bool IsDuctFoundation(FoundationInstance f)
+        {
+            if (_registry == null || !_registry.Buildables.TryGetValue(f.buildableId, out var def))
+                return false;
+            return def.networkType == "duct";
+        }
+
+        private bool AreTilesDuctConnected(
+            StationState station,
+            Dictionary<(int, int), List<FoundationInstance>> ductsByTile,
+            int aCol, int aRow, int bCol, int bRow)
+        {
+            if (!ductsByTile.TryGetValue((aCol, aRow), out var aDucts)) return false;
+            if (!ductsByTile.TryGetValue((bCol, bRow), out var bDucts)) return false;
+
+            var aNetworkIds = new HashSet<string>();
+            foreach (var a in aDucts)
+            {
+                if (!string.IsNullOrEmpty(a.networkId))
+                    aNetworkIds.Add(a.networkId);
+            }
+
+            if (aNetworkIds.Count == 0) return false;
+
+            foreach (var b in bDucts)
+            {
+                if (!string.IsNullOrEmpty(b.networkId) && aNetworkIds.Contains(b.networkId))
+                    return true;
+            }
+            return false;
+        }
+
+        private static string GetThermalNodeKey(StationState station, int col, int row)
+        {
+            string tileKey = $"{col}_{row}";
+            if (station.tileToRoomKey.TryGetValue(tileKey, out var roomKey))
+                return $"room:{roomKey}";
+            return $"tile:{tileKey}";
+        }
+
+        private static float GetThermalNodeTemperature(StationState station, string nodeKey)
+        {
+            if (nodeKey.StartsWith("room:"))
+                return GetRoomTemperature(station, nodeKey.Substring(RoomPrefixLength));
+            var (col, row) = ParseTileKey(nodeKey);
+            return GetTileTemperature(station, col, row);
+        }
+
+        private static void ApplyThermalNodeDelta(StationState station, string nodeKey, float delta)
+        {
+            if (nodeKey.StartsWith("room:"))
+            {
+                string roomKey = nodeKey.Substring(RoomPrefixLength);
+                station.roomTemperatures[roomKey] = GetRoomTemperature(station, roomKey) + delta;
+                return;
+            }
+
+            var (col, row) = ParseTileKey(nodeKey);
+            string tileKey = $"{col}_{row}";
+            station.tileTemperatures[tileKey] = GetTileTemperature(station, col, row) + delta;
+        }
+
+        private static (int col, int row) ParseTileKey(string nodeKey)
+        {
+            if (!nodeKey.StartsWith("tile:"))
+                throw new ArgumentException("Thermal node key must start with 'tile:'", nameof(nodeKey));
+
+            string tile = nodeKey.Substring(TilePrefixLength);
+            int split = tile.IndexOf('_');
+            if (split < 0 || split >= tile.Length - 1)
+                throw new ArgumentException("Thermal tile key must be in 'tile:col_row' format", nameof(nodeKey));
+
+            if (!int.TryParse(tile.Substring(0, split), out int col) ||
+                !int.TryParse(tile.Substring(split + 1), out int row))
+            {
+                throw new ArgumentException("Thermal tile coordinates must be integers in 'tile:col_row'", nameof(nodeKey));
+            }
+            return (col, row);
         }
 
         /// Update tileTemperature on every Hydroponics Planter Tile from the system.
