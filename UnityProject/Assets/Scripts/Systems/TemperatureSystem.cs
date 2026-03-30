@@ -31,6 +31,8 @@ namespace Waystation.Systems
         // ── Dynamic power constants (Cooler) ──────────────────────────────────
         public const float CoolerMaxWatts     = 200f;
         public const float CoolerStandbyWatts =   5f;
+        private const int RoomPrefixLength = 5; // "room:"
+        private const int TilePrefixLength = 5; // "tile:"
 
         private readonly ContentRegistry _registry;
         private readonly NetworkSystem _networks;
@@ -198,7 +200,8 @@ namespace Waystation.Systems
 
         private bool IsDuctFoundation(FoundationInstance f)
         {
-            if (!(_registry?.Buildables.TryGetValue(f.buildableId, out var def) == true)) return false;
+            if (_registry == null || !_registry.Buildables.TryGetValue(f.buildableId, out var def))
+                return false;
             return def.networkType == "duct";
         }
 
@@ -235,7 +238,7 @@ namespace Waystation.Systems
         private static float GetThermalNodeTemperature(StationState station, string nodeKey)
         {
             if (nodeKey.StartsWith("room:"))
-                return GetRoomTemperature(station, nodeKey.Substring(5));
+                return GetRoomTemperature(station, nodeKey.Substring(RoomPrefixLength));
             var (col, row) = ParseTileKey(nodeKey);
             return GetTileTemperature(station, col, row);
         }
@@ -244,7 +247,7 @@ namespace Waystation.Systems
         {
             if (nodeKey.StartsWith("room:"))
             {
-                string roomKey = nodeKey.Substring(5);
+                string roomKey = nodeKey.Substring(RoomPrefixLength);
                 station.roomTemperatures[roomKey] = GetRoomTemperature(station, roomKey) + delta;
                 return;
             }
@@ -256,10 +259,19 @@ namespace Waystation.Systems
 
         private static (int col, int row) ParseTileKey(string nodeKey)
         {
-            string tile = nodeKey.Substring(5);
+            if (!nodeKey.StartsWith("tile:"))
+                throw new ArgumentException("Thermal node key must start with 'tile:'", nameof(nodeKey));
+
+            string tile = nodeKey.Substring(TilePrefixLength);
             int split = tile.IndexOf('_');
-            int col = int.Parse(tile.Substring(0, split));
-            int row = int.Parse(tile.Substring(split + 1));
+            if (split < 0 || split >= tile.Length - 1)
+                throw new ArgumentException("Thermal tile key must be in 'tile:col_row' format", nameof(nodeKey));
+
+            if (!int.TryParse(tile.Substring(0, split), out int col) ||
+                !int.TryParse(tile.Substring(split + 1), out int row))
+            {
+                throw new ArgumentException("Thermal tile coordinates must be integers in 'tile:col_row'", nameof(nodeKey));
+            }
             return (col, row);
         }
 

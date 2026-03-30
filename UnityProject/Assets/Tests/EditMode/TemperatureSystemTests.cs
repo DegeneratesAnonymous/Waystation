@@ -74,7 +74,7 @@ namespace Waystation.Tests
             station.roomTemperatures["B"] = 40f;
 
             AddFoundation(station, "buildable.vent", 0, 0, energised: true);
-            AddFoundation(station, "buildable.duct", 0, 0); // no duct at neighbour tile
+            AddFoundation(station, "buildable.duct", 0, 0); // no duct at neighbor tile
 
             _networks.RebuildNetworks(station);
             _temperature.Tick(station);
