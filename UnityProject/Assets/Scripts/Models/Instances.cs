@@ -1383,12 +1383,20 @@ namespace Waystation.Models
         public bool  isolatorOpen     = true;
 
         // ── Farming / climate fields ─────────────────────────────────────────
-        // ── Farming / climate fields ─────────────────────────────────────────
         // Hydroponics Planter Tile state (only used when buildableId == "buildable.hydroponics_planter")
         public string cropId          = null;  // assigned CropDataDefinition.id; null = unassigned
         public int    growthStage     = 0;     // 0=empty, 1=seedling, 2=established, 3=mature
         public float  growthProgress  = 0f;   // 0–1 within current stage
         public float  cropDamage      = 0f;   // 0–1; plant destroyed at 1.0
+        public int    lastTendedTick  = -1;
+        public int    neglectAccumulator = 0;
+        public int    pestAccumulator = 0;
+        public bool   hasBlight       = false;
+        public bool   blightDetected  = false;
+        public int    blightTicks     = 0;
+        public bool   hasPests        = false;
+        public bool   pestsDetected   = false;
+        public int    pestTicks       = 0;
 
         // Runtime sensor values updated each tick by FarmingSystem/TemperatureSystem
         public float  lightLevel      = 0f;   // set by GrowLight above (0 = dark)
@@ -1834,12 +1842,12 @@ namespace Waystation.Models
 
     // -------------------------------------------------------------------------
     // FarmingTaskInstance — a pending or active farming task for an NPC.
-    // Types: "sow" | "harvest" | "tend"
+    // Types: "sow" | "harvest" | "tend" | "treat_blight" | "treat_pests"
     // Status lifecycle: "pending" → "in_progress" → "complete"
     // -------------------------------------------------------------------------
 
     // FarmingTaskInstance — a pending or active farming task for an NPC.
-    // Types: "sow" | "harvest" | "tend"
+    // Types: "sow" | "harvest" | "tend" | "treat_blight" | "treat_pests"
     // Status lifecycle: "pending" → "in_progress" → "complete"
     // -------------------------------------------------------------------------
 
@@ -1847,7 +1855,7 @@ namespace Waystation.Models
     public class FarmingTaskInstance
     {
         public string uid;
-        public string taskType;         // "sow" | "harvest" | "tend"
+        public string taskType;         // "sow" | "harvest" | "tend" | "treat_blight" | "treat_pests"
         public string planterUid;       // target FoundationInstance uid
         public string cropId;           // crop to sow (sow tasks only; null for harvest/tend)
         public string assignedNpcUid;   // null = unclaimed
