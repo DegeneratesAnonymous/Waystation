@@ -113,6 +113,9 @@ namespace Waystation.Core
         // ── Economy system ─────────────────────────────────────────────────────────────────────
         public EconomySystem            Economy       { get; private set; }
 
+        // ── Fleet management system (EXP-003) ─────────────────────────────────────────────────
+        public ShipSystem               Fleet         { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -413,6 +416,10 @@ namespace Waystation.Core
 
             // Economy system
             Economy = new EconomySystem();
+
+            // Fleet management system (EXP-003)
+            if (FeatureFlags.FleetManagement)
+                Fleet = new ShipSystem(Registry);
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -661,6 +668,10 @@ namespace Waystation.Core
             }
             Comms.Tick(Station);
             Missions.Tick(Station);
+            // Fleet management: resolve completed fleet missions.
+            // Runs after MissionSystem so NPC missionUid state is up to date.
+            if (FeatureFlags.FleetManagement)
+                Fleet?.Tick(Station);
             // Only run the interval tick when no forced rebuild already occurred this tick.
             if (!roomRebuildDoneThisTick) Rooms.Tick(Station);
             Research.Tick(Station);

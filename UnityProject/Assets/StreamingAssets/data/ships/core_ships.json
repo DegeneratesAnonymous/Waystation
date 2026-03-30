@@ -122,5 +122,120 @@
     "visit_duration": 240.0,
     "sprite_variant": 1,
     "schema_version": "1"
+  },
+  {
+    "id": "ship.scout_vessel",
+    "role": "scout",
+    "cargo_capacity": 10,
+    "passenger_capacity": 0,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "social_resistance": 0,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 0,
+    "visit_duration": 0.0,
+    "sprite_variant": 0,
+    "crew_capacity": 3,
+    "eligible_mission_types": ["scout", "exploration"],
+    "build_materials": {
+      "item.steel_plate": 30,
+      "item.electronics": 20,
+      "item.fuel_cell": 10
+    },
+    "build_time_ticks": 240,
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.mining_barge",
+    "role": "mining",
+    "cargo_capacity": 120,
+    "passenger_capacity": 0,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "social_resistance": 0,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 0,
+    "visit_duration": 0.0,
+    "sprite_variant": 0,
+    "crew_capacity": 6,
+    "eligible_mission_types": ["mining", "asteroid"],
+    "build_materials": {
+      "item.steel_plate": 50,
+      "item.electronics": 15,
+      "item.drill_head": 8
+    },
+    "build_time_ticks": 360,
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.combat_frigate",
+    "role": "combat",
+    "cargo_capacity": 20,
+    "passenger_capacity": 0,
+    "threat_level": 6,
+    "behavior_tags": [],
+    "social_resistance": 0,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 0,
+    "visit_duration": 0.0,
+    "sprite_variant": 3,
+    "crew_capacity": 8,
+    "eligible_mission_types": ["combat", "defence", "patrol"],
+    "build_materials": {
+      "item.steel_plate": 60,
+      "item.electronics": 30,
+      "item.weapon_components": 20
+    },
+    "build_time_ticks": 480,
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.transport_hauler",
+    "role": "transport",
+    "cargo_capacity": 160,
+    "passenger_capacity": 0,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "social_resistance": 0,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 0,
+    "visit_duration": 0.0,
+    "sprite_variant": 1,
+    "crew_capacity": 4,
+    "eligible_mission_types": ["transport", "cargo", "hauling"],
+    "build_materials": {
+      "item.steel_plate": 45,
+      "item.electronics": 10,
+      "item.cargo_module": 12
+    },
+    "build_time_ticks": 300,
+    "schema_version": "1"
+  },
+  {
+    "id": "ship.diplomatic_courier",
+    "role": "diplomatic",
+    "cargo_capacity": 15,
+    "passenger_capacity": 8,
+    "threat_level": 1,
+    "behavior_tags": [],
+    "social_resistance": 0,
+    "resources_wanted": [],
+    "has_entertainment_need": false,
+    "visitor_count": 0,
+    "visit_duration": 0.0,
+    "sprite_variant": 1,
+    "crew_capacity": 4,
+    "eligible_mission_types": ["diplomatic", "courier", "trade"],
+    "build_materials": {
+      "item.steel_plate": 25,
+      "item.electronics": 20,
+      "item.luxury_fittings": 10
+    },
+    "build_time_ticks": 200,
+    "schema_version": "1"
   }
 ]

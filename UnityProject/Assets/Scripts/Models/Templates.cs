@@ -239,6 +239,17 @@ namespace Waystation.Models
         // Sprite variant index into npc_ship atlas (0–3)
         public int   spriteVariant         = 0;
 
+        // ── Fleet management fields (EXP-003) ─────────────────────────────
+        // Maximum number of NPC crew that can be assigned to this ship type.
+        public int   crewCapacity          = 0;
+        // Mission type tags this ship role is eligible for.
+        // e.g. ["scout", "exploration"] for a scout vessel.
+        public List<string> eligibleMissionTypes = new List<string>();
+        // Materials required to build this ship at a Shipyard workbench.
+        public Dictionary<string, int> buildMaterials = new Dictionary<string, int>();
+        // Base ticks to complete construction at a Shipyard.
+        public int   buildTimeTicks        = 0;
+
         public static ShipTemplate FromDict(Dictionary<string, object> raw)
         {
             var t = new ShipTemplate
@@ -254,10 +265,19 @@ namespace Waystation.Models
                 visitorCount     = raw.GetInt("visitor_count", 2),
                 visitDuration    = raw.GetFloat("visit_duration", 120f),
                 spriteVariant    = raw.GetInt("sprite_variant", 0),
+                crewCapacity     = raw.GetInt("crew_capacity", 0),
+                buildTimeTicks   = raw.GetInt("build_time_ticks", 0),
             };
-            foreach (var s in raw.GetStringList("faction_restrictions")) t.factionRestrictions.Add(s);
-            foreach (var s in raw.GetStringList("behavior_tags"))         t.behaviorTags.Add(s);
-            foreach (var s in raw.GetStringList("resources_wanted"))      t.resourcesWanted.Add(s);
+            foreach (var s in raw.GetStringList("faction_restrictions"))    t.factionRestrictions.Add(s);
+            foreach (var s in raw.GetStringList("behavior_tags"))           t.behaviorTags.Add(s);
+            foreach (var s in raw.GetStringList("resources_wanted"))        t.resourcesWanted.Add(s);
+            foreach (var s in raw.GetStringList("eligible_mission_types"))  t.eligibleMissionTypes.Add(s);
+            if (raw.ContainsKey("build_materials") &&
+                raw["build_materials"] is Dictionary<string, object> mats)
+            {
+                foreach (var kv in mats)
+                    t.buildMaterials[kv.Key] = Convert.ToInt32(kv.Value);
+            }
             return t;
         }
     }

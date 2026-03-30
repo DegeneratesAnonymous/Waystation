@@ -126,6 +126,16 @@ namespace Waystation.Core
         public static bool EconomySystem = true;
 
         /// <summary>
+        /// Enables the fleet management system (WO-EXP-003): ship acquisition through
+        /// purchase and construction, role-based mission eligibility, NPC crew
+        /// assignment with full simulation carry-through (needs deplete during missions),
+        /// ship damage states, repair, and destruction with crew outcome resolution.
+        /// Set to false to disable fleet management without affecting visitor ships,
+        /// MissionSystem, or any other existing system.
+        /// </summary>
+        public static bool FleetManagement = true;
+
+        /// <summary>
         /// Switches the in-game HUD from the legacy IMGUI/uGUI system (GameHUD.cs /
         /// GameViewController.cs) to the UI Toolkit panel stack
         /// (WaystationHUDController.cs).
