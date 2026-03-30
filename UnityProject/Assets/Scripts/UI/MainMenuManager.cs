@@ -49,9 +49,13 @@ namespace Waystation.UI
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
+        private GameManager _gm;
+
         private void Start()
         {
             if (versionLabel != null) versionLabel.text = $"v{Application.version}";
+
+            _gm = GameManager.Instance;
 
             // Button callbacks
             if (newGameButton)         newGameButton.onClick.AddListener(ShowNewGamePanel);
@@ -62,6 +66,10 @@ namespace Waystation.UI
             if (backFromNewGameButton) backFromNewGameButton.onClick.AddListener(ShowMainPanel);
             if (backFromSettingsButton)backFromSettingsButton.onClick.AddListener(ShowMainPanel);
             if (tickSpeedSlider)       tickSpeedSlider.onValueChanged.AddListener(UpdateTickSpeedLabel);
+
+            // Enable or grey-out the Load Game button based on save file existence and feature flag.
+            if (loadGameButton != null)
+                loadGameButton.interactable = FeatureFlags.FullSaveLoad && _gm != null && _gm.HasSaveFile();
 
             PopulateDifficultyDropdown();
             ShowMainPanel();
@@ -116,13 +124,23 @@ namespace Waystation.UI
 
         private void OnLoadGame()
         {
-            // Load Game is not yet implemented — saving serialises resources,
-            // tags, and the log but full NPC/ship/module state is out of scope
-            // for this release. Show a warning and stay on the main menu rather
-            // than transitioning to the game scene with no StationState.
-            Debug.LogWarning("[MainMenuManager] Load Game requested, but loading is not yet implemented.");
-            if (loadGameButton != null) loadGameButton.interactable = false;
-            SetActivePanel(mainPanel);
+            if (!FeatureFlags.FullSaveLoad)
+            {
+                Debug.LogWarning("[MainMenuManager] Load Game requested but FullSaveLoad feature flag is disabled.");
+                if (loadGameButton != null) loadGameButton.interactable = false;
+                return;
+            }
+
+            if (_gm == null || !_gm.HasSaveFile())
+            {
+                Debug.LogWarning("[MainMenuManager] Load Game requested but no save file exists.");
+                if (loadGameButton != null) loadGameButton.interactable = false;
+                return;
+            }
+
+            PlayerPrefs.SetInt("load_save", 1);
+            SetActivePanel(loadingPanel);
+            StartCoroutine(LoadGameScene());
         }
 
         private void OnQuit()

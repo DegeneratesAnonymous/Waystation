@@ -205,5 +205,16 @@ namespace Waystation.Core
         /// Requires CombatSystem = true for full resolution; can be disabled independently.
         /// </summary>
         public static bool MentalBreakCombat = true;
+
+        /// <summary>
+        /// Enables full game-state serialisation (STA-005): save and load of all runtime
+        /// state including NPCs, foundations, ships, fleet, missions, asteroid maps,
+        /// farming tasks, crafting queues, relationships, bodies, and narrative chain flags.
+        /// When false the legacy partial save (resources, tags, research, galaxy) is used.
+        /// Set to false to revert to the pre-STA-005 partial save without data loss —
+        /// partial saves are a strict subset of the full save schema.
+        /// Load Game buttons are only enabled when this flag is true.
+        /// </summary>
+        public static bool FullSaveLoad = true;
     }
 }

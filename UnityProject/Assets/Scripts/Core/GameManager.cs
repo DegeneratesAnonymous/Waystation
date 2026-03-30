@@ -11,6 +11,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
 using Waystation.Core;
 using Waystation.Models;
@@ -18,12 +19,15 @@ using Waystation.Systems;
 
 namespace Waystation.Core
 {
-    public class GameManager : MonoBehaviour
+    public partial class GameManager : MonoBehaviour
     {
         // ── Constants ─────────────────────────────────────────────────────────
         public const float RecruitCost       = 150f;
         public const float RepairPartsCost   =  10f;
         public const float RepairDamageAmount = 0.25f;
+
+        /// <summary>Current save-file schema version.  Increment when breaking changes are introduced.</summary>
+        private const int SaveVersion = 1;
 
         // ── Singleton ─────────────────────────────────────────────────────────
         public static GameManager Instance { get; private set; }
@@ -38,6 +42,22 @@ namespace Waystation.Core
 
         [Header("Saves")]
         [SerializeField] private string saveFileName = "waystation_save.json";
+
+        [Header("Autosave")]
+        [Tooltip("Number of ticks between automatic saves.  0 = autosave disabled.")]
+        [SerializeField] private int autosaveIntervalTicks = 120;
+
+        // ── Save / load runtime state ─────────────────────────────────────────
+        /// <summary>
+        /// Human-readable error message from the most recent failed LoadGame() call.
+        /// Empty when no error has occurred.  Set before OnLoadError is raised.
+        /// </summary>
+        public string LastLoadError { get; private set; } = string.Empty;
+
+        /// <summary>Fired when LoadGame() fails — carries the player-facing error message.</summary>
+        public event Action<string> OnLoadError;
+
+        private bool _autosaveInProgress;
 
         // ── System references ─────────────────────────────────────────────────
         public ContentRegistry      Registry          { get; private set; }
@@ -798,6 +818,14 @@ namespace Waystation.Core
             }
 
             OnTick?.Invoke(Station);
+
+            // Autosave: non-blocking, fires at the configured interval (0 = disabled).
+            if (FeatureFlags.FullSaveLoad && autosaveIntervalTicks > 0
+                && Station.tick % autosaveIntervalTicks == 0
+                && !_autosaveInProgress)
+            {
+                StartCoroutine(AutosaveCoroutine());
+            }
         }
 
         // ── Player actions ────────────────────────────────────────────────────
@@ -938,132 +966,97 @@ namespace Waystation.Core
         }
 
         /// <summary>
-        /// Loads the persisted save file and restores the fields that are
-        /// currently serialised (resources, tags, log, research, galaxy, etc.).
-        /// Full NPC/ship/module round-trip will be added once that data is saved.
+        /// Saves all runtime state to disk.  When FeatureFlags.FullSaveLoad is true,
+        /// all NPC/foundation/ship/mission/etc. state is serialised.  When false, only
+        /// the legacy partial state (resources, tags, research, galaxy) is saved.
+        /// </summary>
+        public void SaveGame()
+        {
+            if (Station == null) return;
+            string path = Path.Combine(Application.persistentDataPath, saveFileName);
+            try
+            {
+                var data = BuildSaveData();
+                string json = MiniJSON.Json.Serialize(data);
+                File.WriteAllText(path, json);
+                Log("Game saved.");
+                Debug.Log($"[GameManager] Saved to {path}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[GameManager] SaveGame failed: {ex}");
+            }
+        }
+
+        private IEnumerator AutosaveCoroutine()
+        {
+            _autosaveInProgress = true;
+            Dictionary<string, object> data = null;
+            string json = null;
+            try
+            {
+                data = BuildSaveData();
+                json = MiniJSON.Json.Serialize(data);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[GameManager] Autosave serialise failed: {ex.Message}");
+                _autosaveInProgress = false;
+                yield break;
+            }
+
+            string path = Path.Combine(Application.persistentDataPath, saveFileName);
+            var writeTask = Task.Run(() => File.WriteAllText(path, json));
+            yield return new WaitUntil(() => writeTask.IsCompleted);
+
+            if (writeTask.IsFaulted)
+                Debug.LogWarning($"[GameManager] Autosave write failed: {writeTask.Exception?.InnerException?.Message}");
+            else
+                Debug.Log($"[GameManager] Autosaved at tick {Station?.tick}.");
+
+            _autosaveInProgress = false;
+        }
+
+        /// <summary>
+        /// Loads the save file and restores all runtime state.
+        /// Fires <see cref="OnLoadError"/> with a player-facing message on any failure.
         /// </summary>
         public void LoadGame()
         {
             string path = Path.Combine(Application.persistentDataPath, saveFileName);
-            if (!File.Exists(path)) { Debug.LogWarning("[GameManager] No save file found."); return; }
+            LastLoadError = string.Empty;
 
-            string json = File.ReadAllText(path);
-            if (!(MiniJSON.Json.Deserialize(json) is Dictionary<string, object> data))
+            if (!File.Exists(path)) { RaiseLoadError("No save file found."); return; }
+
+            string json;
+            try { json = File.ReadAllText(path); }
+            catch (Exception ex) { RaiseLoadError($"Could not read save file: {ex.Message}"); return; }
+
+            if (string.IsNullOrWhiteSpace(json)) { RaiseLoadError("Save file is empty."); return; }
+
+            Dictionary<string, object> data;
+            try { data = MiniJSON.Json.Deserialize(json) as Dictionary<string, object>; }
+            catch (Exception ex) { RaiseLoadError($"Save file could not be parsed: {ex.Message}"); return; }
+
+            if (data == null) { RaiseLoadError("Save file is corrupt or in an unexpected format."); return; }
+
+            int saveVersion = data.TryGetValue("version", out var vv) ? Convert.ToInt32(vv) : 0;
+            if (saveVersion > SaveVersion)
+                Debug.LogWarning($"[GameManager] Save version {saveVersion} is newer than supported ({SaveVersion}). Some state may not restore correctly.");
+
+            bool isFullSave = data.TryGetValue("full_save", out var fsv) && Convert.ToBoolean(fsv);
+            string stationName = data.TryGetValue("station_name", out var sn) ? sn?.ToString() : "Waystation";
+
+            try
             {
-                Debug.LogError("[GameManager] Save file could not be parsed.");
+                ApplySaveData(data, isFullSave);
+            }
+            catch (Exception ex)
+            {
+                RaiseLoadError($"Save file could not be restored: {ex.Message}");
+                Debug.LogError($"[GameManager] LoadGame failed: {ex}");
                 return;
             }
-
-            string stationName = data.TryGetValue("station_name", out var sn) ? sn.ToString() : "Waystation";
-            Station = new StationState(stationName);
-
-            if (data.TryGetValue("tick", out var tick))
-                Station.tick = System.Convert.ToInt32(tick);
-
-            if (data.TryGetValue("resources", out var res) && res is Dictionary<string, object> resDict)
-                foreach (var kv in resDict)
-                    Station.resources[kv.Key] = System.Convert.ToSingle(kv.Value);
-
-            if (data.TryGetValue("active_tags", out var tags) && tags is List<object> tagList)
-                foreach (var t in tagList) Station.activeTags.Add(t.ToString());
-
-            if (data.TryGetValue("policy", out var pol) && pol is Dictionary<string, object> polDict)
-                foreach (var kv in polDict) Station.policy[kv.Key] = kv.Value.ToString();
-
-            if (data.TryGetValue("event_cooldowns", out var cd) && cd is Dictionary<string, object> cdDict)
-                foreach (var kv in cdDict)
-                    Station.eventCooldowns[kv.Key] = System.Convert.ToInt32(kv.Value);
-
-            if (data.TryGetValue("log", out var lg) && lg is List<object> logList)
-                foreach (var l in logList) Station.log.Add(l.ToString());
-
-            if (data.TryGetValue("custom_room_names", out var crn) && crn is Dictionary<string, object> crnDict)
-                foreach (var kv in crnDict) Station.customRoomNames[kv.Key] = kv.Value.ToString();
-
-            if (data.TryGetValue("player_room_type_assignments", out var prta)
-                && prta is Dictionary<string, object> prtaDict)
-                foreach (var kv in prtaDict)
-                    Station.playerRoomTypeAssignments[kv.Key] = kv.Value.ToString();
-
-            // Research
-            if (data.TryGetValue("research", out var rsr) && rsr is Dictionary<string, object> rsrDict
-                && Station.research != null)
-            {
-                if (rsrDict.TryGetValue("pending_datachips", out var pdv))
-                    Station.research.pendingDatachips = System.Convert.ToInt32(pdv);
-                if (rsrDict.TryGetValue("applied_unlock_tags", out var aut) && aut is List<object> autList)
-                    foreach (var t in autList) Station.research.appliedUnlockTags.Add(t.ToString());
-                foreach (var kv in rsrDict)
-                {
-                    if (kv.Key == "pending_datachips" || kv.Key == "applied_unlock_tags") continue;
-                    if (!(kv.Value is Dictionary<string, object> branchDict)) continue;
-                    if (!System.Enum.TryParse(kv.Key, out ResearchBranch branch)) continue;
-                    if (!Station.research.branches.TryGetValue(branch, out var bs)) continue;
-                    if (branchDict.TryGetValue("points", out var pts))
-                        bs.points = System.Convert.ToSingle(pts);
-                    if (branchDict.TryGetValue("unlocked", out var ul) && ul is List<object> ulList)
-                        foreach (var u in ulList) bs.unlockedNodeIds.Add(u.ToString());
-                    if (branchDict.TryGetValue("unlocked_order", out var uo) && uo is List<object> uoList)
-                        foreach (var u in uoList) bs.unlockedNodeOrder.Add(u.ToString());
-                }
-            }
-
-            // Galaxy
-            if (data.TryGetValue("galaxy", out var gal) && gal is Dictionary<string, object> galDict)
-            {
-                if (galDict.TryGetValue("galaxy_seed", out var gsv))
-                    Station.galaxySeed = System.Convert.ToInt32(gsv);
-                if (galDict.TryGetValue("exploration_points", out var epv))
-                    Station.explorationPoints = System.Convert.ToInt32(epv);
-                if (galDict.TryGetValue("sectors", out var secObj) && secObj is List<object> secList)
-                {
-                    foreach (var secRaw in secList)
-                    {
-                        if (!(secRaw is Dictionary<string, object> sd)) continue;
-                        string uid = sd.TryGetValue("uid", out var uidv) ? uidv.ToString() : null;
-                        if (uid == null || !Station.sectors.TryGetValue(uid, out var sec)) continue;
-                        if (sd.TryGetValue("proper_name",  out var pn))  sec.properName = pn.ToString();
-                        if (sd.TryGetValue("is_renamed",   out var ir))  sec.isRenamed  = System.Convert.ToBoolean(ir);
-                        if (sd.TryGetValue("discovery",    out var dv)
-                            && System.Enum.TryParse(dv.ToString(), out SectorDiscoveryState disc))
-                            sec.discoveryState = disc;
-                    }
-                }
-                if (galDict.TryGetValue("charted_system_seeds", out var cssObj) && cssObj is List<object> cssList)
-                {
-                    foreach (var v in cssList)
-                        Station.chartedSystemSeeds.Add(System.Convert.ToInt32(v));
-                }
-                if (galDict.TryGetValue("exploration_datachips", out var edcObj) && edcObj is List<object> edcList)
-                {
-                    foreach (var rawChip in edcList)
-                    {
-                        if (!(rawChip is Dictionary<string, object> cd)) continue;
-                        var chip = new ExplorationDatachipInstance
-                        {
-                            uid = cd.TryGetValue("uid", out var uidv) ? uidv.ToString() : null,
-                            systemName = cd.TryGetValue("system_name", out var snv) ? snv.ToString() : null,
-                            systemSeed = cd.TryGetValue("system_seed", out var ssv) ? System.Convert.ToInt32(ssv) : 0,
-                            holderFoundationUid = cd.TryGetValue("holder_foundation_uid", out var hfv) ? hfv.ToString() : null,
-                            installedInServer = cd.TryGetValue("installed_in_server", out var iisv) && System.Convert.ToBoolean(iisv),
-                        };
-                        if (!string.IsNullOrEmpty(chip.uid))
-                            Station.explorationDatachips[chip.uid] = chip;
-                    }
-                }
-            }
-
-            SetupStartingModules();
-            SetupStartingCrew();
-            Factions.Initialize(Station);
-            Skills.InitialiseNpcSkills(Station);
-            // Re-initialise DepartmentRegistry with the loaded station's department list.
-            DeptRegistry.Init(Station.departments);
-            Rooms.RebuildBonusCache(Station);
-            UtilityNetworks.RebuildAll(Station);
-
-            // Reset threshold crossing state so warnings fire correctly on the first tick.
-            Resources.ResetWarningState();
 
             Log($"Save loaded: '{stationName}' at tick {Station.tick}.");
             IsPaused = false;
@@ -1071,85 +1064,11 @@ namespace Waystation.Core
             Debug.Log($"[GameManager] Save loaded from {path}");
         }
 
-        public void SaveGame()
+        private void RaiseLoadError(string message)
         {
-            if (Station == null) return;
-            string path = Path.Combine(Application.persistentDataPath, saveFileName);
-
-            // Serialise ResearchState: one entry per branch with points + unlocked node ids.
-            // Also captures pending_datachips (chips produced but awaiting storage space).
-            var researchData = new Dictionary<string, object>();
-            if (Station.research != null)
-            {
-                foreach (var kv in Station.research.branches)
-                {
-                    researchData[kv.Key.ToString()] = new Dictionary<string, object>
-                    {
-                        { "points",   kv.Value.points },
-                        { "unlocked", new List<string>(kv.Value.unlockedNodeIds) },
-                        { "unlocked_order", new List<string>(kv.Value.unlockedNodeOrder) },
-                    };
-                }
-                researchData["pending_datachips"] = Station.research.pendingDatachips;
-                researchData["applied_unlock_tags"] = new List<string>(Station.research.appliedUnlockTags);
-            }
-
-            // Serialise galaxy sector mutable state: seed + per-sector (properName, isRenamed, discoveryState)
-            // The permanent designation code/coordinates are re-generated from the seed on load
-            // if the sector list is missing, but for completeness we persist the mutable fields.
-            var sectorSaveData = new Dictionary<string, object>();
-            sectorSaveData["galaxy_seed"] = Station.galaxySeed;
-            sectorSaveData["exploration_points"] = Station.explorationPoints;
-            var sectorList = new List<object>();
-            foreach (var s in Station.sectors.Values)
-            {
-                sectorList.Add(new Dictionary<string, object>
-                {
-                    { "uid",              s.uid },
-                    { "proper_name",      s.properName },
-                    { "is_renamed",       s.isRenamed },
-                    { "discovery",        s.discoveryState.ToString() },
-                    { "coordinates_x",    s.coordinates.x },
-                    { "coordinates_y",    s.coordinates.y },
-                    { "designation_code", s.designationCode },
-                    { "prefix",           s.surveyPrefix.ToString() },
-                });
-            }
-            sectorSaveData["sectors"] = sectorList;
-            sectorSaveData["charted_system_seeds"] = new List<int>(Station.chartedSystemSeeds);
-            var chipsList = new List<object>();
-            foreach (var chip in Station.explorationDatachips.Values)
-            {
-                chipsList.Add(new Dictionary<string, object>
-                {
-                    { "uid", chip.uid },
-                    { "system_seed", chip.systemSeed },
-                    { "system_name", chip.systemName },
-                    { "holder_foundation_uid", chip.holderFoundationUid },
-                    { "installed_in_server", chip.installedInServer },
-                });
-            }
-            sectorSaveData["exploration_datachips"] = chipsList;
-
-            var data = new Dictionary<string, object>
-            {
-                { "station_name",                  Station.stationName },
-                { "tick",                          Station.tick },
-                { "resources",                     Station.resources },
-                { "faction_reputation",            Station.factionReputation },
-                { "active_tags",                   new List<string>(Station.activeTags) },
-                { "policy",                        Station.policy },
-                { "event_cooldowns",               Station.eventCooldowns },
-                { "log",                           Station.log },
-                { "custom_room_names",             Station.customRoomNames },
-                { "player_room_type_assignments",  Station.playerRoomTypeAssignments },
-                { "research",                      researchData },
-                { "galaxy",                        sectorSaveData },
-                // Full NPC/ship/module serialisation would go here in a production build
-            };
-            File.WriteAllText(path, MiniJSON.Json.Serialize(data));
-            Log("Game saved.");
-            Debug.Log($"[GameManager] Saved to {path}");
+            LastLoadError = message;
+            Debug.LogWarning($"[GameManager] LoadGame: {message}");
+            OnLoadError?.Invoke(message);
         }
 
         // ── Effect handlers (called by EventSystem) ───────────────────────────
