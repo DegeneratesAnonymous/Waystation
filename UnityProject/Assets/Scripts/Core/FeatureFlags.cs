@@ -170,5 +170,15 @@ namespace Waystation.Core
         /// behaviour).
         /// </summary>
         public static bool AsteroidMissions = true;
+
+        /// <summary>
+        /// Enables the workbench-based crafting system (WO-EXP-005): recipe execution at
+        /// typed workbenches, research-Datachip gating, material haul tasks, skill-scaled
+        /// execution time, quality-tier output scaling, and multi-recipe workbench queues.
+        /// CraftingSystem is a new system — disabling this flag has no effect on existing
+        /// systems. Set to false to disable all crafting tick processing without removing
+        /// recipe data or queue state.
+        /// </summary>
+        public static bool CraftingSystem = true;
     }
 }

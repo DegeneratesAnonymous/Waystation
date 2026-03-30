@@ -1,0 +1,100 @@
+[
+  {
+    "id": "recipe.basic_parts",
+    "display_name": "Basic Parts",
+    "description": "Fabricate standard mechanical parts from raw steel plate.",
+    "required_workbench_type": "general_workshop",
+    "unlock_tag": "tech.basic_fabrication",
+    "input_materials": {
+      "item.steel_plate": 2
+    },
+    "output_item_id": "item.parts",
+    "output_quantity": 3,
+    "base_time_ticks": 40,
+    "skill_requirement": 0,
+    "has_quality_tiers": false,
+    "schema_version": "1"
+  },
+  {
+    "id": "recipe.advanced_parts",
+    "display_name": "Advanced Parts",
+    "description": "Precision-machined components for complex assembly work.",
+    "required_workbench_type": "general_workshop",
+    "unlock_tag": "tech.advanced_fabrication",
+    "input_materials": {
+      "item.steel_plate": 3,
+      "item.circuit_board": 1
+    },
+    "output_item_id": "item.parts",
+    "output_quantity": 5,
+    "base_time_ticks": 60,
+    "skill_requirement": 3,
+    "has_quality_tiers": false,
+    "schema_version": "1"
+  },
+  {
+    "id": "recipe.med_kit",
+    "display_name": "Medical Kit",
+    "description": "A field-ready medical kit synthesised from xenobiological compounds. Xenobiology research enables extraction of biologically-active compounds for use in trauma treatment.",
+    "required_workbench_type": "medical_bay",
+    "unlock_tag": "tech.xenobiology",
+    "input_materials": {
+      "item.food": 2
+    },
+    "output_item_id": "item.med_kit",
+    "output_quantity": 1,
+    "base_time_ticks": 60,
+    "skill_requirement": 2,
+    "has_quality_tiers": true,
+    "schema_version": "1"
+  },
+  {
+    "id": "recipe.circuit_board",
+    "display_name": "Circuit Board",
+    "description": "Hand-etched circuit board for electronics assembly.",
+    "required_workbench_type": "general_workshop",
+    "unlock_tag": "tech.composite_materials",
+    "input_materials": {
+      "item.parts": 2
+    },
+    "output_item_id": "item.circuit_board",
+    "output_quantity": 1,
+    "base_time_ticks": 50,
+    "skill_requirement": 2,
+    "has_quality_tiers": false,
+    "schema_version": "1"
+  },
+  {
+    "id": "recipe.steel_plate",
+    "display_name": "Steel Plate",
+    "description": "Refined steel plates for construction and repairs.",
+    "required_workbench_type": "refinery",
+    "unlock_tag": "tech.basic_fabrication",
+    "input_materials": {
+      "item.parts": 3
+    },
+    "output_item_id": "item.steel_plate",
+    "output_quantity": 2,
+    "base_time_ticks": 35,
+    "skill_requirement": 0,
+    "has_quality_tiers": false,
+    "schema_version": "1"
+  },
+  {
+    "id": "recipe.exotic_compound",
+    "display_name": "Exotic Compound",
+    "description": "Rare synthesised compound used in advanced research and high-end equipment.",
+    "required_workbench_type": "research_lab",
+    "unlock_tag": "tech.xenosynthesis",
+    "input_materials": {
+      "item.parts": 4,
+      "item.circuit_board": 2
+    },
+    "output_item_id": "item.exotic_compound",
+    "output_quantity": 1,
+    "base_time_ticks": 120,
+    "skill_requirement": 5,
+    "has_quality_tiers": true,
+    "schema_version": "1"
+  }
+]

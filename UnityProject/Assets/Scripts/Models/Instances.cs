@@ -1870,6 +1870,44 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // WorkbenchQueueEntry — one queued recipe at a workbench.
+    // Managed by CraftingSystem.
+    // -------------------------------------------------------------------------
+
+    [Serializable]
+    public class WorkbenchQueueEntry
+    {
+        public string uid;
+        public string recipeId;
+
+        // Lifecycle status: "queued" → "hauling" → "executing" → "complete"
+        public string status = "queued";
+
+        // UID of the NPC currently executing (or hauling for) this recipe; null when unassigned.
+        public string assignedNpcUid;
+
+        // Materials already moved to the workbench for this recipe: itemId → qty
+        public Dictionary<string, int> hauledMaterials = new Dictionary<string, int>();
+
+        // Execution progress 0–1; reaches 1.0 when the recipe completes.
+        public float executionProgress = 0f;
+
+        // Quality tier determined at execution start from the assigned NPC's crafting skill.
+        // "standard" | "fine" | "superior" — only meaningful when recipe.hasQualityTiers == true.
+        public string outputQualityTier = "standard";
+
+        public static WorkbenchQueueEntry Create(string recipeId)
+        {
+            return new WorkbenchQueueEntry
+            {
+                uid      = Guid.NewGuid().ToString("N")[..8],
+                recipeId = recipeId,
+                status   = "queued",
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Owned Ship Instance — a ship in the player's fleet.
     // Distinguished from ShipInstance (visitor/NPC ships) which are managed by VisitorSystem.
     // -------------------------------------------------------------------------
@@ -2190,6 +2228,12 @@ namespace Waystation.Models
         // Processed each tick by EconomySystem.
         public Dictionary<string, FactionContract> factionContracts =
             new Dictionary<string, FactionContract>();
+
+        // ── Crafting system (EXP-005) ─────────────────────────────────────────
+        // Per-workbench recipe queues: foundationUid → ordered list of queued entries.
+        // Managed by CraftingSystem. Each entry transitions queued → hauling → executing → complete.
+        public Dictionary<string, List<WorkbenchQueueEntry>> workbenchQueues =
+            new Dictionary<string, List<WorkbenchQueueEntry>>();
 
         public StationState(string name)
         {

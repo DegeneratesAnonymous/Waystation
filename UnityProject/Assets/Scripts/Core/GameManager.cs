@@ -116,6 +116,9 @@ namespace Waystation.Core
         // ── Fleet management system (EXP-003) ─────────────────────────────────────────────────
         public ShipSystem               Fleet         { get; private set; }
 
+        // ── Crafting system (EXP-005) ──────────────────────────────────────────────────────────
+        public CraftingSystem           Crafting      { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsPaused { get; set; } = true;
@@ -420,6 +423,13 @@ namespace Waystation.Core
             // Fleet management system (EXP-003)
             if (FeatureFlags.FleetManagement)
                 Fleet = new ShipSystem(Registry);
+
+            // Crafting system (EXP-005)
+            if (FeatureFlags.CraftingSystem)
+            {
+                Crafting = new CraftingSystem(Registry);
+                Crafting.SetSkillSystem(Skills);
+            }
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -678,6 +688,9 @@ namespace Waystation.Core
             Map.TickExplorationState(Station);
             Map.Tick(Station);
             AsteroidMissions.Tick(Station);
+            // Crafting: runs after Research so research unlock tags are current when gating recipes.
+            if (FeatureFlags.CraftingSystem)
+                Crafting?.Tick(Station);
             UtilityNetworks.Tick(Station);
             Departments.Tick(Station, AsteroidMissions);
 

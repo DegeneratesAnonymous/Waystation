@@ -1490,6 +1490,69 @@ namespace Waystation.Models
     }
 
     // =========================================================================
+    // RecipeDefinition — data for a craftable recipe executed at a workbench.
+    // Loaded from data/recipes/*.json by ContentRegistry.
+    // =========================================================================
+
+    [Serializable]
+    public class RecipeDefinition
+    {
+        public string id;
+        public string displayName;
+        public string description = "";
+
+        // The BuildableDefinition.workbenchRoomType this recipe requires.
+        // e.g. "general_workshop", "refinery", "medical_bay"
+        public string requiredWorkbenchType;
+
+        // Station tag (from ResearchSystem) that must be active for this recipe to appear.
+        // Empty string means the recipe is always available (no research gate).
+        public string unlockTag = "";
+
+        // Input materials consumed when the recipe executes: itemId → quantity.
+        public Dictionary<string, int> inputMaterials = new Dictionary<string, int>();
+
+        // Output item and quantity produced on completion.
+        public string outputItemId;
+        public int    outputQuantity = 1;
+
+        // Base execution time in ticks (modified by crafting skill).
+        public int baseTimeTicks = 60;
+
+        // Minimum NPC Crafting skill level required to execute this recipe.
+        public int skillRequirement = 0;
+
+        // When true, the output item quality tier scales with the NPC's crafting skill.
+        // Applicable for items like medical supplies and exotic components.
+        // When false (basic construction materials etc.) quality is always "standard".
+        public bool hasQualityTiers = false;
+
+        public static RecipeDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var r = new RecipeDefinition
+            {
+                id                   = raw.GetString("id"),
+                displayName          = raw.GetString("display_name", raw.GetString("id")),
+                description          = raw.GetString("description", ""),
+                requiredWorkbenchType = raw.GetString("required_workbench_type", ""),
+                unlockTag            = raw.GetString("unlock_tag", ""),
+                outputItemId         = raw.GetString("output_item_id"),
+                outputQuantity       = raw.GetInt("output_quantity", 1),
+                baseTimeTicks        = raw.GetInt("base_time_ticks", 60),
+                skillRequirement     = raw.GetInt("skill_requirement", 0),
+                hasQualityTiers      = raw.GetBool("has_quality_tiers", false),
+            };
+            if (raw.ContainsKey("input_materials") &&
+                raw["input_materials"] is Dictionary<string, object> im)
+            {
+                foreach (var kv in im)
+                    r.inputMaterials[kv.Key] = Convert.ToInt32(kv.Value);
+            }
+            return r;
+        }
+    }
+
+    // =========================================================================
     // Game Balance Config
     // =========================================================================
 
