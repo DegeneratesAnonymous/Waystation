@@ -106,9 +106,11 @@ namespace Waystation.Systems
         /// Issues a manual retreat order for the given mission map.
         /// The crew will begin returning to the ship; the mission resolves on the next
         /// tick with partial yield (outcome: "abandonment").
+        /// Returns <c>(false, reason)</c> when <see cref="FeatureFlags.AsteroidMissions"/> is disabled.
         /// </summary>
         public (bool ok, string reason) IssueRetreatOrder(string mapUid, StationState station)
         {
+            if (!FeatureFlags.AsteroidMissions)                           return (false, "AsteroidMissions feature is disabled.");
             if (station == null)                                          return (false, "Station is null.");
             if (!station.asteroidMaps.TryGetValue(mapUid, out var map))  return (false, $"Map '{mapUid}' not found.");
             if (map.status != "active")                                   return (false, $"Mission is not active (status: {map.status}).");
@@ -123,11 +125,13 @@ namespace Waystation.Systems
         /// <paramref name="windowTicks"/> ticks to respond before the mission
         /// escalates to total loss.
         /// No-op if a distress signal is already active.
+        /// Returns <c>(false, reason)</c> when <see cref="FeatureFlags.AsteroidMissions"/> is disabled.
         /// </summary>
         public (bool ok, string reason) TriggerDistressSignal(
             string mapUid, StationState station,
             int windowTicks = DistressWindowDefaultTicks)
         {
+            if (!FeatureFlags.AsteroidMissions)                           return (false, "AsteroidMissions feature is disabled.");
             if (station == null)                                          return (false, "Station is null.");
             if (!station.asteroidMaps.TryGetValue(mapUid, out var map))  return (false, $"Map '{mapUid}' not found.");
             if (map.status != "active")                                   return (false, "Mission is not active.");
@@ -142,10 +146,12 @@ namespace Waystation.Systems
         /// <summary>
         /// Player response to an active distress signal.  Marks rescue as dispatched;
         /// the mission resolves on the next tick with partial yield (outcome: "rescued").
-        /// Returns <c>(false, reason)</c> when there is no active distress signal.
+        /// Returns <c>(false, reason)</c> when there is no active distress signal or
+        /// when <see cref="FeatureFlags.AsteroidMissions"/> is disabled.
         /// </summary>
         public (bool ok, string reason) RespondToDistressSignal(string mapUid, StationState station)
         {
+            if (!FeatureFlags.AsteroidMissions)                           return (false, "AsteroidMissions feature is disabled.");
             if (station == null)                                          return (false, "Station is null.");
             if (!station.asteroidMaps.TryGetValue(mapUid, out var map))  return (false, $"Map '{mapUid}' not found.");
             if (!map.distressSignalActive)                                return (false, "No active distress signal.");
@@ -160,9 +166,11 @@ namespace Waystation.Systems
         /// <summary>
         /// Immediately resolves the mission as a catastrophic total loss.
         /// No distress signal is generated; the mission ends with no yield.
+        /// Returns <c>(false, reason)</c> when <see cref="FeatureFlags.AsteroidMissions"/> is disabled.
         /// </summary>
         public (bool ok, string reason) TriggerCatastrophicLoss(string mapUid, StationState station)
         {
+            if (!FeatureFlags.AsteroidMissions)                           return (false, "AsteroidMissions feature is disabled.");
             if (station == null)                                          return (false, "Station is null.");
             if (!station.asteroidMaps.TryGetValue(mapUid, out var map))  return (false, $"Map '{mapUid}' not found.");
             if (map.status != "active")                                   return (false, "Mission is not active.");

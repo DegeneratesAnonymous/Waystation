@@ -681,6 +681,86 @@ namespace Waystation.Tests
     internal class AsteroidMissionsFeatureFlagTests
     {
         [Test]
+        public void FlagFalse_IssueRetreatOrder_ReturnsFalseAndDoesNotMutate()
+        {
+            bool wasEnabled = FeatureFlags.AsteroidMissions;
+            try
+            {
+                FeatureFlags.AsteroidMissions = false;
+                var station = AsteroidTestHelpers.MakeStation();
+                var sys     = new AsteroidMissionSystem();
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 9999);
+
+                var (ok, _) = sys.IssueRetreatOrder(map.uid, station);
+
+                Assert.IsFalse(ok, "IssueRetreatOrder should return false when flag is off.");
+                Assert.IsFalse(map.retreatOrdered, "retreatOrdered must not be set when flag is off.");
+            }
+            finally { FeatureFlags.AsteroidMissions = wasEnabled; }
+        }
+
+        [Test]
+        public void FlagFalse_TriggerDistressSignal_ReturnsFalseAndDoesNotMutate()
+        {
+            bool wasEnabled = FeatureFlags.AsteroidMissions;
+            try
+            {
+                FeatureFlags.AsteroidMissions = false;
+                var station = AsteroidTestHelpers.MakeStation();
+                var sys     = new AsteroidMissionSystem();
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 9999);
+
+                var (ok, _) = sys.TriggerDistressSignal(map.uid, station, 60);
+
+                Assert.IsFalse(ok, "TriggerDistressSignal should return false when flag is off.");
+                Assert.IsFalse(map.distressSignalActive, "distressSignalActive must not be set when flag is off.");
+            }
+            finally { FeatureFlags.AsteroidMissions = wasEnabled; }
+        }
+
+        [Test]
+        public void FlagFalse_RespondToDistressSignal_ReturnsFalse()
+        {
+            bool wasEnabled = FeatureFlags.AsteroidMissions;
+            try
+            {
+                FeatureFlags.AsteroidMissions = false;
+                var station = AsteroidTestHelpers.MakeStation();
+                var sys     = new AsteroidMissionSystem();
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 9999);
+
+                // Manually set distress fields to simulate an active signal
+                map.distressSignalActive     = true;
+                map.distressWindowExpiryTick = station.tick + 100;
+
+                var (ok, _) = sys.RespondToDistressSignal(map.uid, station);
+
+                Assert.IsFalse(ok, "RespondToDistressSignal should return false when flag is off.");
+                Assert.IsFalse(map.rescueDispatched, "rescueDispatched must not be set when flag is off.");
+            }
+            finally { FeatureFlags.AsteroidMissions = wasEnabled; }
+        }
+
+        [Test]
+        public void FlagFalse_TriggerCatastrophicLoss_ReturnsFalseAndDoesNotResolve()
+        {
+            bool wasEnabled = FeatureFlags.AsteroidMissions;
+            try
+            {
+                FeatureFlags.AsteroidMissions = false;
+                var station = AsteroidTestHelpers.MakeStation();
+                var sys     = new AsteroidMissionSystem();
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 9999);
+
+                var (ok, _) = sys.TriggerCatastrophicLoss(map.uid, station);
+
+                Assert.IsFalse(ok, "TriggerCatastrophicLoss should return false when flag is off.");
+                Assert.AreEqual("active", map.status, "Mission must stay active when flag is off.");
+            }
+            finally { FeatureFlags.AsteroidMissions = wasEnabled; }
+        }
+
+        [Test]
         public void FlagFalse_RetreatOrder_DoesNotResolveOnTick()
         {
             bool wasEnabled = FeatureFlags.AsteroidMissions;
@@ -689,10 +769,11 @@ namespace Waystation.Tests
                 FeatureFlags.AsteroidMissions = false;
                 var station = AsteroidTestHelpers.MakeStation();
                 var sys     = new AsteroidMissionSystem();
-                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station,
-                    durationTicks: 9999);
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 9999);
 
-                sys.IssueRetreatOrder(map.uid, station);
+                // IssueRetreatOrder now also returns false when flag is off, so
+                // directly set the field to verify Tick() also ignores it.
+                map.retreatOrdered = true;
                 station.tick = map.startTick + 1;
                 sys.Tick(station);
 
@@ -711,8 +792,7 @@ namespace Waystation.Tests
                 FeatureFlags.AsteroidMissions = false;
                 var station = AsteroidTestHelpers.MakeStation();
                 var sys     = new AsteroidMissionSystem();
-                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station,
-                    durationTicks: 9999);
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 9999);
 
                 // Manually set distress fields to simulate expiry
                 map.distressSignalActive     = true;
@@ -735,8 +815,7 @@ namespace Waystation.Tests
                 FeatureFlags.AsteroidMissions = false;
                 var station = AsteroidTestHelpers.MakeStation();
                 var sys     = new AsteroidMissionSystem();
-                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station,
-                    durationTicks: 1);
+                var map     = AsteroidTestHelpers.DispatchTestMission(sys, station, durationTicks: 1);
 
                 station.tick = map.endTick;
                 sys.Tick(station);

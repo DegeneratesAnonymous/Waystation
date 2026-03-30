@@ -299,6 +299,13 @@ namespace Waystation.UI
             BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
             DemoBootstrap.HideOverlay = false;
             foreach (var go in _ghostPool) if (go) Destroy(go);
+
+            // Destroy any remaining cached mission map textures to avoid leaks
+            // when the HUD is torn down (scene change, UI Toolkit switch, etc.).
+            foreach (var tex in _missionMapTextures.Values)
+                if (tex != null) Destroy(tex);
+            _missionMapTextures.Clear();
+            _selectedActiveMissionUid = "";
         }
 
         private IEnumerator WaitForGame()
@@ -6212,6 +6219,7 @@ namespace Waystation.UI
 
             // Clean up cached textures for missions that are no longer active
             // to prevent unbounded texture memory growth over long play sessions.
+            // Also clear the selection if the selected mission is no longer active.
             var staleMapUids = new List<string>();
             foreach (var kv in _missionMapTextures)
             {
@@ -6224,6 +6232,7 @@ namespace Waystation.UI
                 if (_missionMapTextures.TryGetValue(staleUid, out var staleTex) && staleTex != null)
                     UnityEngine.Object.Destroy(staleTex);
                 _missionMapTextures.Remove(staleUid);
+                if (_selectedActiveMissionUid == staleUid) _selectedActiveMissionUid = "";
             }
 
             if (hasActiveMissions)
@@ -6238,36 +6247,45 @@ namespace Waystation.UI
                     int remaining = Mathf.Max(0, am.endTick - s.tick);
                     s.pointsOfInterest.TryGetValue(am.poiUid, out var poi2);
                     string poiName = poi2 != null ? poi2.displayName : am.poiUid;
-                    bool   isSel   = _selectedActiveMissionUid == am.uid;
 
-                    // Distress signal banner tint
-                    Color rowBg = am.distressSignalActive
+                    // Distress signal banner tint — only when EXP-004 is active
+                    bool missionFeatOn = FeatureFlags.AsteroidMissions;
+                    Color rowBg = missionFeatOn && am.distressSignalActive
                         ? new Color(0.30f, 0.12f, 0.06f, 0.95f)
                         : new Color(0.09f, 0.12f, 0.20f, 0.9f);
                     DrawSolid(new Rect(area.x, y, w, 28f), rowBg);
 
-                    // Distress icon
-                    if (am.distressSignalActive)
+                    // Distress icon — only when EXP-004 is active
+                    if (missionFeatOn && am.distressSignalActive)
                     {
                         var prevC = GUI.color; GUI.color = ColBarCrit;
                         GUI.Label(new Rect(area.x + 4f, y + 6f, 16f, 16f), "⚠", _sSub);
                         GUI.color = prevC;
                     }
 
-                    float labelX = am.distressSignalActive ? area.x + 22f : area.x + 4f;
+                    float labelX = missionFeatOn && am.distressSignalActive ? area.x + 22f : area.x + 4f;
                     GUI.Label(new Rect(labelX, y + 2f, w * 0.55f, 16f), poiName, _sSub);
                     GUI.Label(new Rect(area.x + w * 0.55f, y + 4f, w * 0.22f, LineH),
                               $"{remaining}t", _sSub);
 
-                    if (GUI.Button(new Rect(area.x + w * 0.79f, y + 4f, w * 0.21f - 4f, 20f),
-                                   isSel ? "▲" : "▼ View", _sBtnSmall))
+                    // Expand toggle — only available when EXP-004 observation mode is enabled
+                    if (missionFeatOn)
                     {
-                        _selectedActiveMissionUid = isSel ? "" : am.uid;
-                    }
-                    y += 32f;
+                        bool isSel = _selectedActiveMissionUid == am.uid;
+                        if (GUI.Button(new Rect(area.x + w * 0.79f, y + 4f, w * 0.21f - 4f, 20f),
+                                       isSel ? "▲" : "▼ View", _sBtnSmall))
+                        {
+                            _selectedActiveMissionUid = isSel ? "" : am.uid;
+                        }
+                        y += 32f;
 
-                    if (isSel)
-                        y = DrawMissionObservation(am, s, area.x, y, w);
+                        if (isSel)
+                            y = DrawMissionObservation(am, s, area.x, y, w);
+                    }
+                    else
+                    {
+                        y += 32f;
+                    }
                 }
                 DrawSolid(new Rect(area.x, y, w, 1f), ColDivider);
                 y += 8f;
