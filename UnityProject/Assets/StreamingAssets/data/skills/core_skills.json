@@ -5,7 +5,7 @@
     "skill_type": "Simple",
     "description": "Proficiency in growing and harvesting crops in hydroponics bays.",
     "governing_ability": "WIS",
-    "associated_task_types": ["sow", "harvest", "tend"],
+    "associated_task_types": ["sow", "harvest", "tend", "treat_blight", "treat_pests"],
     "xp_per_task_completion": 15.0,
     "xp_per_active_second": 0.0
   },

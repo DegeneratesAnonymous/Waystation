@@ -180,5 +180,12 @@ namespace Waystation.Core
         /// recipe data or queue state.
         /// </summary>
         public static bool CraftingSystem = true;
+
+        /// <summary>
+        /// Enables farming negative events (STA-001): neglect accumulation, blight,
+        /// pest infestation, spread, detection, and treatment mechanics.
+        /// Set to false to revert TendTask to its previous no-effect stub behaviour.
+        /// </summary>
+        public static bool FarmingNegativeEvents = true;
     }
 }

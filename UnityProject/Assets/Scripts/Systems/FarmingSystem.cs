@@ -27,6 +27,7 @@ namespace Waystation.Systems
         private const int SowTaskTicks     = 30;   // simulated walk + seed placement
         private const int HarvestTaskTicks = 30;   // simulated walk + collect + deposit
         private const int TendTaskTicks    = 15;   // simulated walk + tending
+        private const int TreatTaskTicks   = 20;   // simulated walk + crop treatment
         private const int JobRefreshTicks  = 5;    // jobTimer value refreshed each tick to
                                                     // prevent JobSystem reassignment
 
@@ -34,6 +35,19 @@ namespace Waystation.Systems
         private const float ModifierIdeal      = 1.0f;
         private const float ModifierAcceptable = 0.5f;
         private const float ModifierCritical   = 0.0f;
+
+        // ── Neglect / blight / pests tuning ───────────────────────────────────
+        public const int   TendFrequencyTicks              = 60;
+        public const int   BlightNeglectThreshold          = 90;
+        public const int   PestNeglectThreshold            = 70;
+        public const float BlightTriggerChancePerTick      = 0.08f;
+        public const float PestTriggerChancePerTick        = 0.10f;
+        public const int   BlightDetectionBaseDelayTicks   = 18;
+        public const int   PestDetectionBaseDelayTicks     = 14;
+        public const int   PestDestroyThresholdTicks       = 160;
+        public const int   PestYieldZeroTicks              = 120;
+        public const float BlightSpreadBaseChancePerTick   = 0.10f;
+        public const float BlightSpreadFirebreakMultiplier = 0.35f;
 
         // ── Grow Light output ─────────────────────────────────────────────────
         private const float GrowLightOutput = 1.0f;
@@ -68,6 +82,7 @@ namespace Waystation.Systems
 
             UpdateLightLevels(station);
             UpdateWaterStatus(station);
+            UpdateNeglectAndNegativeEvents(station);
             RunGrowthTicks(station);
             GenerateFarmingTasks(station);
             ProcessFarmingTasks(station);
@@ -136,6 +151,7 @@ namespace Waystation.Systems
                 if (f.growthStage == 0 || f.growthStage == 3) continue;  // empty or mature
                 if (f.cropId == null) continue;
                 if (!_registry.Crops.TryGetValue(f.cropId, out var crop)) continue;
+                if (FeatureFlags.FarmingNegativeEvents && f.hasBlight) continue;
 
                 float modifier = EvaluateGrowthModifier(f, crop);
 
@@ -210,6 +226,36 @@ namespace Waystation.Systems
                         station.farmingTasks.Add(
                             FarmingTaskInstance.Create("sow", f.uid, f.cropId, SowTaskTicks));
                     // When seeds are unavailable: no task generated, no error logged (per spec).
+                }
+
+                if (FeatureFlags.FarmingNegativeEvents && f.hasBlight && f.blightDetected)
+                {
+                    bool hasTreatBlight = tasks.Exists(t => t.taskType == "treat_blight");
+                    if (!hasTreatBlight)
+                        station.farmingTasks.Add(
+                            FarmingTaskInstance.Create("treat_blight", f.uid, null, TreatTaskTicks));
+                }
+
+                if (FeatureFlags.FarmingNegativeEvents && f.hasPests && f.pestsDetected)
+                {
+                    bool hasTreatPests = tasks.Exists(t => t.taskType == "treat_pests");
+                    if (!hasTreatPests)
+                        station.farmingTasks.Add(
+                            FarmingTaskInstance.Create("treat_pests", f.uid, null, TreatTaskTicks));
+                }
+
+                if (FeatureFlags.FarmingNegativeEvents
+                    && f.cropId != null && f.growthStage > 0 && f.growthStage < 3)
+                {
+                    bool hasTend = tasks.Exists(t => t.taskType == "tend");
+                    // `tasks` is built once before new treatment tasks are appended. We also gate on
+                    // detected active conditions so tend is suppressed even in that first generation tick.
+                    bool hasTreatment = tasks.Exists(t => t.taskType == "treat_blight" || t.taskType == "treat_pests")
+                        || (f.hasBlight && f.blightDetected)
+                        || (f.hasPests && f.pestsDetected);
+                    if (!hasTend && !hasTreatment && IsTendOverdue(f, station.tick))
+                        station.farmingTasks.Add(
+                            FarmingTaskInstance.Create("tend", f.uid, null, TendTaskTicks));
                 }
             }
 
@@ -295,6 +341,9 @@ namespace Waystation.Systems
                             planter.growthStage    = 1;
                             planter.growthProgress = 0f;
                             planter.cropDamage     = 0f;
+                            planter.lastTendedTick = station.tick;
+                            planter.neglectAccumulator = 0;
+                            planter.pestAccumulator = 0;
                             station.LogEvent($"Planted {sowCrop.cropName} at ({planter.tileCol},{planter.tileRow}).");
                         }
                         else
@@ -310,11 +359,17 @@ namespace Waystation.Systems
                         && _registry.Crops.TryGetValue(planter.cropId, out var hvCrop))
                     {
                         int baseQty = Random.Range(hvCrop.harvestQtyMin, hvCrop.harvestQtyMax + 1);
+                        if (FeatureFlags.FarmingNegativeEvents && planter.hasBlight) baseQty = 0;
+                        float pestYieldMult = (FeatureFlags.FarmingNegativeEvents && planter.hasPests)
+                            ? ComputePestYieldMultiplier(planter.pestTicks) : 1f;
+                        baseQty = Mathf.RoundToInt(baseQty * pestYieldMult);
                         // Apply expertise yield multiplier (Master Harvester +25%)
                         float yieldMult = _skillSystem != null
                             ? _skillSystem.GetYieldMultiplier(npc, "skill.farming") : 1.0f;
                         int qty = Mathf.RoundToInt(baseQty * yieldMult);
-                        bool stored = AddItemToStorage(station, hvCrop.harvestItemId, qty);
+                        bool stored = true;
+                        if (qty > 0)
+                            stored = AddItemToStorage(station, hvCrop.harvestItemId, qty);
                         if (!stored)
                         {
                             // Storage full — drop at tile and warn (no softlock)
@@ -345,7 +400,32 @@ namespace Waystation.Systems
                     break;
 
                 case "tend":
-                    // Stub — no gameplay effect. TODO: fertiliser / pruning mechanics.
+                    if (!FeatureFlags.FarmingNegativeEvents)
+                        break;
+                    planter.lastTendedTick    = station.tick;
+                    planter.neglectAccumulator = 0;
+                    planter.pestAccumulator    = 0;
+                    station.LogEvent($"Planter tended at ({planter.tileCol},{planter.tileRow}).");
+                    break;
+
+                case "treat_blight":
+                    if (!FeatureFlags.FarmingNegativeEvents)
+                        break;
+                    planter.hasBlight          = false;
+                    planter.blightDetected     = false;
+                    planter.blightTicks        = 0;
+                    planter.neglectAccumulator = 0;
+                    station.LogEvent($"Blight treated at ({planter.tileCol},{planter.tileRow}).");
+                    break;
+
+                case "treat_pests":
+                    if (!FeatureFlags.FarmingNegativeEvents)
+                        break;
+                    planter.hasPests        = false;
+                    planter.pestsDetected   = false;
+                    planter.pestTicks       = 0;
+                    planter.pestAccumulator = 0;
+                    station.LogEvent($"Pests treated at ({planter.tileCol},{planter.tileRow}).");
                     break;
             }
 
@@ -507,6 +587,171 @@ namespace Waystation.Systems
                 if (f.buildableId == "buildable.hydroponics_planter")
                     lookup[(f.tileCol, f.tileRow)] = f;
             return lookup;
+        }
+
+        public static float ComputeTemperatureSpreadModifier(float temperatureC)
+        {
+            if (temperatureC <= 10f) return 0.60f;
+            if (temperatureC >= 30f) return 1.50f;
+            return Mathf.Lerp(0.60f, 1.50f, (temperatureC - 10f) / 20f);
+        }
+
+        public static int ComputeDetectionDelayFromBotany(int botanySkill, int baseDelayTicks)
+            => Mathf.Max(2, baseDelayTicks - Mathf.FloorToInt(botanySkill / 2f));
+
+        public static float ComputePestYieldMultiplier(int pestTicks)
+            => Mathf.Clamp01(1f - (float)pestTicks / PestYieldZeroTicks);
+
+        public static float ComputeBlightSpreadChance(float temperatureC, bool throughFirebreak)
+        {
+            float chance = BlightSpreadBaseChancePerTick * ComputeTemperatureSpreadModifier(temperatureC);
+            if (throughFirebreak) chance *= BlightSpreadFirebreakMultiplier;
+            return chance;
+        }
+
+        public static bool ShouldTriggerNegativeEvent(int accumulator, int threshold, float chancePerTick, float roll01)
+            => accumulator >= threshold && roll01 < chancePerTick;
+
+        private static bool IsTendOverdue(FoundationInstance planter, int currentTick)
+        {
+            if (planter.lastTendedTick < 0)
+                return currentTick >= TendFrequencyTicks;
+            return currentTick - planter.lastTendedTick >= TendFrequencyTicks;
+        }
+
+        private void UpdateNeglectAndNegativeEvents(StationState station)
+        {
+            if (!FeatureFlags.FarmingNegativeEvents) return;
+
+            int bestBotany = GetBestActiveBotanySkill(station);
+            var plantersByPos = BuildPlanterLookup(station);
+            var pendingBlight = new HashSet<string>();
+
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != "buildable.hydroponics_planter") continue;
+                if (f.cropId == null || f.growthStage <= 0) continue;
+
+                if (IsTendOverdue(f, station.tick))
+                {
+                    f.neglectAccumulator++;
+                    f.pestAccumulator++;
+                }
+
+                if (!f.hasBlight && ShouldTriggerNegativeEvent(
+                        f.neglectAccumulator, BlightNeglectThreshold, BlightTriggerChancePerTick, Random.value))
+                {
+                    f.hasBlight      = true;
+                    f.blightDetected = false;
+                    f.blightTicks    = 0;
+                    station.LogEvent($"Blight developed at ({f.tileCol},{f.tileRow}).");
+                }
+
+                if (!f.hasPests && ShouldTriggerNegativeEvent(
+                        f.pestAccumulator, PestNeglectThreshold, PestTriggerChancePerTick, Random.value))
+                {
+                    f.hasPests      = true;
+                    f.pestsDetected = false;
+                    f.pestTicks     = 0;
+                    station.LogEvent($"Pest infestation developed at ({f.tileCol},{f.tileRow}).");
+                }
+
+                if (f.hasBlight)
+                {
+                    f.blightTicks++;
+                    int detectDelay = ComputeDetectionDelayFromBotany(bestBotany, BlightDetectionBaseDelayTicks);
+                    if (!f.blightDetected && f.blightTicks >= detectDelay)
+                        f.blightDetected = true;
+                }
+
+                if (f.hasPests)
+                {
+                    f.pestTicks++;
+                    int detectDelay = ComputeDetectionDelayFromBotany(bestBotany, PestDetectionBaseDelayTicks);
+                    if (!f.pestsDetected && f.pestTicks >= detectDelay)
+                        f.pestsDetected = true;
+
+                    if (f.pestTicks >= PestDestroyThresholdTicks)
+                    {
+                        f.growthStage     = 0;
+                        f.growthProgress  = 0f;
+                        f.cropDamage      = 0f;
+                        f.hasPests        = false;
+                        f.pestsDetected   = false;
+                        f.pestTicks       = 0;
+                        f.pestAccumulator = 0;
+                        f.hasBlight       = false;
+                        f.blightDetected  = false;
+                        f.blightTicks     = 0;
+                        station.LogEvent($"Crop destroyed by pests at ({f.tileCol},{f.tileRow}).");
+                        continue;
+                    }
+                }
+            }
+
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.buildableId != "buildable.hydroponics_planter") continue;
+                if (!f.hasBlight) continue;
+                if (f.cropId == null || f.growthStage <= 0) continue;
+
+                float temperature = TemperatureSystem.GetEffectiveTemperature(station, f.tileCol, f.tileRow);
+                float directChance = ComputeBlightSpreadChance(temperature, throughFirebreak: false);
+                float firebreakChance = ComputeBlightSpreadChance(temperature, throughFirebreak: true);
+
+                TrySpreadTo(f.tileCol + 1, f.tileRow, directChance, plantersByPos, pendingBlight);
+                TrySpreadTo(f.tileCol - 1, f.tileRow, directChance, plantersByPos, pendingBlight);
+                TrySpreadTo(f.tileCol, f.tileRow + 1, directChance, plantersByPos, pendingBlight);
+                TrySpreadTo(f.tileCol, f.tileRow - 1, directChance, plantersByPos, pendingBlight);
+
+                TrySpreadAcrossFirebreak(f.tileCol, f.tileRow, 1, 0, firebreakChance, plantersByPos, pendingBlight);
+                TrySpreadAcrossFirebreak(f.tileCol, f.tileRow, -1, 0, firebreakChance, plantersByPos, pendingBlight);
+                TrySpreadAcrossFirebreak(f.tileCol, f.tileRow, 0, 1, firebreakChance, plantersByPos, pendingBlight);
+                TrySpreadAcrossFirebreak(f.tileCol, f.tileRow, 0, -1, firebreakChance, plantersByPos, pendingBlight);
+            }
+
+            foreach (var uid in pendingBlight)
+            {
+                if (!station.foundations.TryGetValue(uid, out var target)) continue;
+                if (target.hasBlight) continue;
+                target.hasBlight      = true;
+                target.blightDetected = false;
+                target.blightTicks    = 0;
+            }
+        }
+
+        private static void TrySpreadTo(int col, int row, float chance,
+            Dictionary<(int, int), FoundationInstance> plantersByPos,
+            HashSet<string> pendingBlight)
+        {
+            if (!plantersByPos.TryGetValue((col, row), out var target)) return;
+            if (target.hasBlight) return;
+            if (target.cropId == null || target.growthStage <= 0) return;
+            if (Random.value < chance)
+                pendingBlight.Add(target.uid);
+        }
+
+        private static void TrySpreadAcrossFirebreak(int sourceCol, int sourceRow, int dc, int dr, float chance,
+            Dictionary<(int, int), FoundationInstance> plantersByPos, HashSet<string> pendingBlight)
+        {
+            int midCol = sourceCol + dc;
+            int midRow = sourceRow + dr;
+            if (plantersByPos.ContainsKey((midCol, midRow))) return;
+            TrySpreadTo(sourceCol + dc * 2, sourceRow + dr * 2, chance, plantersByPos, pendingBlight);
+        }
+
+        private static int GetBestActiveBotanySkill(StationState station)
+        {
+            int best = 0;
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew()) continue;
+                if (npc.classId != "class.farming") continue;
+                if (npc.currentJobId != "job.farming") continue;
+                int botany = npc.abilityScores.WIS + npc.abilityScores.INT / 2;
+                best = Mathf.Max(best, botany);
+            }
+            return best;
         }
     }
 }
