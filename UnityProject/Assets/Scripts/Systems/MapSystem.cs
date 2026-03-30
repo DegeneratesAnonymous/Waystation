@@ -30,6 +30,34 @@ namespace Waystation.Systems
         private int _lastGenTick = -1;
         private const int RegenInterval = 48;
 
+        // ── Fullscreen state ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// True while the full-screen map mode is active (e.g. triggered by the
+        /// Map tab in the side panel). This flag is updated by <see cref="EnterFullscreen"/>
+        /// and <see cref="ExitFullscreen"/> and can be consulted by the UI layer as
+        /// needed, but fullscreen mode is initiated by UI events (for example,
+        /// <c>SidePanelController.OnMapFullscreenRequested</c>), not by polling this value.
+        /// </summary>
+        public bool IsFullscreenActive { get; private set; }
+
+        /// <summary>
+        /// Enters fullscreen map mode. The side panel should collapse when this is
+        /// called. Has no effect if fullscreen is already active.
+        /// </summary>
+        public void EnterFullscreen()
+        {
+            IsFullscreenActive = true;
+        }
+
+        /// <summary>
+        /// Exits fullscreen map mode. Has no effect if fullscreen is not active.
+        /// </summary>
+        public void ExitFullscreen()
+        {
+            IsFullscreenActive = false;
+        }
+
         // ── Tick ──────────────────────────────────────────────────────────────
 
         public void Tick(StationState station)
