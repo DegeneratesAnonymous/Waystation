@@ -50,5 +50,22 @@
         "rewards_on_partial": {
             "credits": 20
         }
+    },
+    {
+        "id": "mission.scout",
+        "display_name": "Scout Survey",
+        "description": "Dispatch a scout crew to survey a nearby system and return with nav telemetry suitable for cartography processing.",
+        "mission_type": "scout",
+        "duration_ticks": 540,
+        "crew_required": 2,
+        "required_skill": "science",
+        "required_skill_level": 2,
+        "success_chance_base": 0.75,
+        "rewards_on_success": {
+            "credits": 40
+        },
+        "rewards_on_partial": {
+            "credits": 10
+        }
     }
 ]

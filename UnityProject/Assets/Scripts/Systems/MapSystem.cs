@@ -1,10 +1,8 @@
 // MapSystem — manages Points of Interest detection and map view level.
 //
 // Map view level is derived from research tag unlocks (not stored separately):
-//   System   = always available
-//   Sector   = requires tech.map_sector
-//   Quadrant = requires tech.map_quadrant
-//   Galaxy   = requires tech.map_galaxy
+//   System = always available
+//   Sector = requires tech.map_sector
 //
 // POI detection range is based on complete "buildable.antenna" foundations.
 //   Base range = 500 units; each complete antenna adds +150 units.
@@ -21,6 +19,9 @@ namespace Waystation.Systems
     {
         private const float BaseRange    = 500f;
         private const float AntennaBonus = 150f;
+        private const int ExplorationPointsPerInterstellarAntenna = 1;
+        public const int SectorUnlockPointCost = 25;
+        private const float GalUnitPerCell = 3.0f;
 
         // POIs are spread across a 2× detection radius; only those within range
         // are discovered and stored.  This makes discovery meaningful.
@@ -52,10 +53,66 @@ namespace Waystation.Systems
         public MapViewLevel GetMapViewLevel(StationState station)
         {
             if (station == null) return MapViewLevel.System;
-            if (station.HasTag("tech.map_galaxy"))   return MapViewLevel.Galaxy;
-            if (station.HasTag("tech.map_quadrant")) return MapViewLevel.Quadrant;
             if (station.HasTag("tech.map_sector"))   return MapViewLevel.Sector;
             return MapViewLevel.System;
+        }
+
+        public int GetExplorationPointIncomePerTick(StationState station)
+        {
+            if (station == null) return 0;
+            int count = 0;
+            foreach (var f in station.foundations.Values)
+            {
+                if (IsPoweredCompleteFoundation(f, "buildable.interstellar_antenna"))
+                    count++;
+            }
+            return count * ExplorationPointsPerInterstellarAntenna;
+        }
+
+        public bool IsSystemCharted(StationState station, int systemSeed)
+            => station != null && station.chartedSystemSeeds.Contains(systemSeed);
+
+        public void TickExplorationState(StationState station)
+        {
+            if (station == null) return;
+            station.explorationPoints += GetExplorationPointIncomePerTick(station);
+            PruneInvalidChartedSystems(station);
+        }
+
+        public bool TryUnlockSector(StationState station, int col, int row)
+        {
+            if (station == null) return false;
+            if (station.explorationPoints < SectorUnlockPointCost) return false;
+
+            float gx = GalaxyGenerator.HomeX + col * GalUnitPerCell;
+            float gy = GalaxyGenerator.HomeY + row * GalUnitPerCell;
+
+            foreach (var existing in station.sectors.Values)
+            {
+                if (Mathf.Approximately(existing.coordinates.x, gx) &&
+                    Mathf.Approximately(existing.coordinates.y, gy))
+                    return false;
+            }
+
+            bool adjacentToKnown = false;
+            foreach (var existing in station.sectors.Values)
+            {
+                int ecol = Mathf.RoundToInt((existing.coordinates.x - GalaxyGenerator.HomeX) / GalUnitPerCell);
+                int erow = Mathf.RoundToInt((existing.coordinates.y - GalaxyGenerator.HomeY) / GalUnitPerCell);
+                if (Mathf.Abs(ecol - col) + Mathf.Abs(erow - row) == 1)
+                {
+                    adjacentToKnown = true;
+                    break;
+                }
+            }
+            if (!adjacentToKnown) return false;
+
+            station.explorationPoints -= SectorUnlockPointCost;
+            var generated = GalaxyGenerator.GenerateSectorAtCoordinates(
+                station.galaxySeed, new Vector2(gx, gy), station);
+            generated.discoveryState = SectorDiscoveryState.Detected;
+            station.sectors[generated.uid] = generated;
+            return true;
         }
 
         /// <summary>Detection range in world units, based on complete antenna count.</summary>
@@ -104,8 +161,6 @@ namespace Waystation.Systems
             {
                 MapViewLevel.System   => rng.Next(1, 4),   // 1-3
                 MapViewLevel.Sector   => rng.Next(4, 9),   // 4-8
-                MapViewLevel.Quadrant => rng.Next(8, 16),  // 8-15
-                MapViewLevel.Galaxy   => rng.Next(15, 31), // 15-30
                 _                    => rng.Next(1, 4),
             };
 
@@ -113,8 +168,6 @@ namespace Waystation.Systems
             {
                 MapViewLevel.System   => new[] { "Asteroid" },
                 MapViewLevel.Sector   => new[] { "Asteroid", "TradePost", "AbandonedStation" },
-                MapViewLevel.Quadrant => new[] { "Asteroid", "TradePost", "AbandonedStation", "NebulaPocket" },
-                MapViewLevel.Galaxy   => new[] { "Asteroid", "TradePost", "AbandonedStation", "NebulaPocket" },
                 _                    => new[] { "Asteroid" },
             };
 
@@ -159,6 +212,89 @@ namespace Waystation.Systems
 
                 station.pointsOfInterest[uid] = poi;
             }
+        }
+
+        /// <summary>
+        /// Reconciles physical exploration-datachip inventory with map chart state.
+        /// Pass 1 keeps chips still present in their holder inventory, pass 2 rebinds
+        /// moved chips to any remaining holder slot, and only truly lost chips are removed.
+        /// Final chart state is then rebuilt from chips installed in powered cartography servers.
+        /// </summary>
+        private static void PruneInvalidChartedSystems(StationState station)
+        {
+            var stillInstalled = new HashSet<int>();
+            var holderSlots = new Dictionary<string, int>();
+            foreach (var f in station.foundations.Values)
+            {
+                int held = f.cargo.TryGetValue("item.exploration_datachip", out var n) ? n : 0;
+                if (held > 0) holderSlots[f.uid] = held;
+            }
+
+            // First pass: keep chips whose current holder still has available chip count.
+            var unresolved = new List<KeyValuePair<string, ExplorationDatachipInstance>>();
+            foreach (var kv in station.explorationDatachips)
+            {
+                var chip = kv.Value;
+                if (!string.IsNullOrEmpty(chip.holderFoundationUid) &&
+                    holderSlots.TryGetValue(chip.holderFoundationUid, out int slots) &&
+                    slots > 0)
+                {
+                    holderSlots[chip.holderFoundationUid] = slots - 1;
+                }
+                else
+                {
+                    unresolved.Add(kv);
+                }
+            }
+
+            // Second pass: rebind unresolved chips to any holder slot (chip moved).
+            foreach (var kv in unresolved)
+            {
+                string reassignedHolder = null;
+                foreach (var hs in holderSlots)
+                {
+                    if (hs.Value <= 0) continue;
+                    reassignedHolder = hs.Key;
+                    holderSlots[hs.Key] = hs.Value - 1;
+                    break;
+                }
+
+                if (string.IsNullOrEmpty(reassignedHolder))
+                {
+                    station.explorationDatachips.Remove(kv.Key);
+                    continue;
+                }
+
+                kv.Value.holderFoundationUid = reassignedHolder;
+            }
+
+            foreach (var chip in station.explorationDatachips.Values)
+            {
+                chip.installedInServer = false;
+                if (string.IsNullOrEmpty(chip.holderFoundationUid) ||
+                    !station.foundations.TryGetValue(chip.holderFoundationUid, out var holder))
+                    continue;
+
+                chip.installedInServer =
+                    holder.buildableId == "buildable.cartography_server" &&
+                    holder.status == "complete" &&
+                    holder.Functionality() > 0f &&
+                    holder.isEnergised;
+
+                if (chip.installedInServer)
+                    stillInstalled.Add(chip.systemSeed);
+            }
+
+            station.chartedSystemSeeds = stillInstalled;
+        }
+
+        private static bool IsPoweredCompleteFoundation(FoundationInstance f, string buildableId)
+        {
+            if (f == null) return false;
+            return f.buildableId == buildableId &&
+                   f.status == "complete" &&
+                   f.Functionality() > 0f &&
+                   f.isEnergised;
         }
 
         /// <summary>All currently discovered POIs.</summary>
@@ -213,3 +349,11 @@ namespace Waystation.Systems
         }
     }
 }
+        public bool HasPoweredCompleteBuildable(StationState station, string buildableId)
+        {
+            if (station == null || string.IsNullOrEmpty(buildableId)) return false;
+            foreach (var f in station.foundations.Values)
+                if (IsPoweredCompleteFoundation(f, buildableId))
+                    return true;
+            return false;
+        }

@@ -664,6 +664,7 @@ namespace Waystation.Core
             // Only run the interval tick when no forced rebuild already occurred this tick.
             if (!roomRebuildDoneThisTick) Rooms.Tick(Station);
             Research.Tick(Station);
+            Map.TickExplorationState(Station);
             Map.Tick(Station);
             AsteroidMissions.Tick(Station);
             UtilityNetworks.Tick(Station);
@@ -973,6 +974,8 @@ namespace Waystation.Core
             {
                 if (galDict.TryGetValue("galaxy_seed", out var gsv))
                     Station.galaxySeed = System.Convert.ToInt32(gsv);
+                if (galDict.TryGetValue("exploration_points", out var epv))
+                    Station.explorationPoints = System.Convert.ToInt32(epv);
                 if (galDict.TryGetValue("sectors", out var secObj) && secObj is List<object> secList)
                 {
                     foreach (var secRaw in secList)
@@ -985,6 +988,28 @@ namespace Waystation.Core
                         if (sd.TryGetValue("discovery",    out var dv)
                             && System.Enum.TryParse(dv.ToString(), out SectorDiscoveryState disc))
                             sec.discoveryState = disc;
+                    }
+                }
+                if (galDict.TryGetValue("charted_system_seeds", out var cssObj) && cssObj is List<object> cssList)
+                {
+                    foreach (var v in cssList)
+                        Station.chartedSystemSeeds.Add(System.Convert.ToInt32(v));
+                }
+                if (galDict.TryGetValue("exploration_datachips", out var edcObj) && edcObj is List<object> edcList)
+                {
+                    foreach (var rawChip in edcList)
+                    {
+                        if (!(rawChip is Dictionary<string, object> cd)) continue;
+                        var chip = new ExplorationDatachipInstance
+                        {
+                            uid = cd.TryGetValue("uid", out var uidv) ? uidv.ToString() : null,
+                            systemName = cd.TryGetValue("system_name", out var snv) ? snv.ToString() : null,
+                            systemSeed = cd.TryGetValue("system_seed", out var ssv) ? System.Convert.ToInt32(ssv) : 0,
+                            holderFoundationUid = cd.TryGetValue("holder_foundation_uid", out var hfv) ? hfv.ToString() : null,
+                            installedInServer = cd.TryGetValue("installed_in_server", out var iisv) && System.Convert.ToBoolean(iisv),
+                        };
+                        if (!string.IsNullOrEmpty(chip.uid))
+                            Station.explorationDatachips[chip.uid] = chip;
                     }
                 }
             }
@@ -1035,6 +1060,7 @@ namespace Waystation.Core
             // if the sector list is missing, but for completeness we persist the mutable fields.
             var sectorSaveData = new Dictionary<string, object>();
             sectorSaveData["galaxy_seed"] = Station.galaxySeed;
+            sectorSaveData["exploration_points"] = Station.explorationPoints;
             var sectorList = new List<object>();
             foreach (var s in Station.sectors.Values)
             {
@@ -1051,6 +1077,20 @@ namespace Waystation.Core
                 });
             }
             sectorSaveData["sectors"] = sectorList;
+            sectorSaveData["charted_system_seeds"] = new List<int>(Station.chartedSystemSeeds);
+            var chipsList = new List<object>();
+            foreach (var chip in Station.explorationDatachips.Values)
+            {
+                chipsList.Add(new Dictionary<string, object>
+                {
+                    { "uid", chip.uid },
+                    { "system_seed", chip.systemSeed },
+                    { "system_name", chip.systemName },
+                    { "holder_foundation_uid", chip.holderFoundationUid },
+                    { "installed_in_server", chip.installedInServer },
+                });
+            }
+            sectorSaveData["exploration_datachips"] = chipsList;
 
             var data = new Dictionary<string, object>
             {

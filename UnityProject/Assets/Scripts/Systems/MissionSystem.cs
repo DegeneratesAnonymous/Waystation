@@ -13,6 +13,7 @@ namespace Waystation.Systems
     public class MissionSystem
     {
         private readonly ContentRegistry _registry;
+        private const string ExplorationDatachipItemId = "item.exploration_datachip";
 
         public MissionSystem(ContentRegistry registry) => _registry = registry;
 
@@ -150,12 +151,51 @@ namespace Waystation.Systems
             mission.status = success ? "complete" : "partial";
             station.LogEvent($"Mission '{def.displayName}' returned. {resultLabel}.");
 
+            if (success)
+                TryProduceExplorationDatachip(mission, station);
+
             // Unlock crew
             foreach (var crewUid in mission.crewUids)
             {
                 if (station.npcs.TryGetValue(crewUid, out var npc))
                     npc.missionUid = null;
             }
+        }
+
+        private void TryProduceExplorationDatachip(MissionInstance mission, StationState station)
+        {
+            if (mission == null || station == null) return;
+            if (!string.Equals(mission.missionType, "scout", StringComparison.OrdinalIgnoreCase)) return;
+            if (mission.targetSystemSeed == 0) return;
+
+            FoundationInstance cartographyStation = null;
+            FoundationInstance chipHolder = null;
+            _registry.Items.TryGetValue(ExplorationDatachipItemId, out var chipDef);
+
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete" || f.Functionality() <= 0f) continue;
+                if (f.buildableId == "buildable.cartography_station")
+                    cartographyStation = f;
+                if (chipHolder == null &&
+                    f.cargoCapacity > 0 &&
+                    f.CargoItemCount() < f.cargoCapacity &&
+                    (f.cargoSettings == null || chipDef == null || f.cargoSettings.AllowsType(chipDef.itemType)))
+                    chipHolder = f;
+                if (cartographyStation != null && chipHolder != null)
+                    break;
+            }
+
+            if (cartographyStation == null || !cartographyStation.isEnergised || chipHolder == null) return;
+
+            int current = chipHolder.cargo.TryGetValue(ExplorationDatachipItemId, out var n) ? n : 0;
+            if (chipHolder.CargoItemCount() >= chipHolder.cargoCapacity) return;
+
+            chipHolder.cargo[ExplorationDatachipItemId] = current + 1;
+            var chip = ExplorationDatachipInstance.Create(mission.targetSystemSeed, mission.targetSystemName);
+            chip.holderFoundationUid = chipHolder.uid;
+            station.explorationDatachips[chip.uid] = chip;
+            station.LogEvent($"Exploration Datachip created: {chip.systemName}");
         }
 
         private float ComputeCrewSkillScore(List<string> crewUids, string skill, StationState station)

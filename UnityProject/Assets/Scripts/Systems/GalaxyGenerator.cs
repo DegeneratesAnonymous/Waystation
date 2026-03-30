@@ -259,6 +259,29 @@ namespace Waystation.Systems
                 ResolveNameCollisions(station);
         }
 
+        /// <summary>
+        /// Generate a single sector at explicit coordinates for interstellar unlocks.
+        /// </summary>
+        public static SectorData GenerateSectorAtCoordinates(int seed, Vector2 coordinates, StationState station)
+        {
+            int localSeed = seed ^ StableHash($"{coordinates.x:F2},{coordinates.y:F2}");
+            var rng = new Random(localSeed);
+
+            var prefix = AssignPrefix(coordinates.x, rng);
+            var codes  = AssignPhenomenonCodes(rng);
+            string name = ProperNameGenerationEnabled ? GenerateProperName(rng) : "";
+
+            var sectorData = SectorData.Create(
+                uid:         $"sector_{seed:x8}_{StableHash($"{coordinates.x:F2}_{coordinates.y:F2}"):x8}",
+                coordinates: coordinates,
+                prefix:      prefix,
+                codes:       codes,
+                properName:  name);
+            sectorData.systemDensity = AssignSystemDensity(rng);
+            sectorData.modifier      = AssignModifier(rng);
+            return sectorData;
+        }
+
         // ── Private helpers ───────────────────────────────────────────────────
 
         /// <summary>
@@ -473,6 +496,20 @@ namespace Waystation.Systems
                         : (i + 1).ToString();
                     list[i].properName = $"{list[i].properName} {suffix}";
                 }
+            }
+        }
+
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                foreach (char c in s)
+                {
+                    hash ^= c;
+                    hash *= 16777619u;
+                }
+                return (int)(hash & int.MaxValue);
             }
         }
     }

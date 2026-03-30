@@ -138,6 +138,19 @@
     "schema_version": "1"
   },
   {
+    "id": "item.exploration_datachip",
+    "display_name": "Exploration Datachip",
+    "item_type": "Valuables",
+    "subtype": "Exploration Data",
+    "description": "A physical cartography datachip recovered from a scout mission. Install it in a Cartography Server to reveal full system details. If destroyed or lost, the mapped system data is lost.",
+    "weight": 0.1,
+    "stack_size": 32,
+    "value": 260.0,
+    "legal": true,
+    "tags": ["datachip", "data", "exploration", "cartography"],
+    "schema_version": "1"
+  },
+  {
     "id": "item.backpack",
     "display_name": "Backpack",
     "item_type": "Equipment",
