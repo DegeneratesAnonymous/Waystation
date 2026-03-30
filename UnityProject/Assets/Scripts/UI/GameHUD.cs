@@ -228,6 +228,10 @@ namespace Waystation.UI
         private readonly HashSet<string> _selectedMapCrew = new HashSet<string>();
         private string               _mapMissionMsg   = "";
 
+        // Active mission observation state (EXP-004)
+        private string                            _selectedActiveMissionUid = "";
+        private readonly Dictionary<string, Texture2D> _missionMapTextures  = new Dictionary<string, Texture2D>();
+
         // Job columns shown in Work Assignment grid
         private static readonly (string id, string label)[] WorkJobCols =
         {
@@ -295,6 +299,13 @@ namespace Waystation.UI
             BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
             DemoBootstrap.HideOverlay = false;
             foreach (var go in _ghostPool) if (go) Destroy(go);
+
+            // Destroy any remaining cached mission map textures to avoid leaks
+            // when the HUD is torn down (scene change, UI Toolkit switch, etc.).
+            foreach (var tex in _missionMapTextures.Values)
+                if (tex != null) Destroy(tex);
+            _missionMapTextures.Clear();
+            _selectedActiveMissionUid = "";
         }
 
         private IEnumerator WaitForGame()
@@ -6206,6 +6217,24 @@ namespace Waystation.UI
             foreach (var kv in s.asteroidMaps)
                 if (kv.Value.status == "active") hasActiveMissions = true;
 
+            // Clean up cached textures for missions that are no longer active
+            // to prevent unbounded texture memory growth over long play sessions.
+            // Also clear the selection if the selected mission is no longer active.
+            var staleMapUids = new List<string>();
+            foreach (var kv in _missionMapTextures)
+            {
+                if (!s.asteroidMaps.TryGetValue(kv.Key, out var checkMap) ||
+                    checkMap.status != "active")
+                    staleMapUids.Add(kv.Key);
+            }
+            foreach (var staleUid in staleMapUids)
+            {
+                if (_missionMapTextures.TryGetValue(staleUid, out var staleTex) && staleTex != null)
+                    UnityEngine.Object.Destroy(staleTex);
+                _missionMapTextures.Remove(staleUid);
+                if (_selectedActiveMissionUid == staleUid) _selectedActiveMissionUid = "";
+            }
+
             if (hasActiveMissions)
             {
                 GUI.Label(new Rect(area.x, y, w, 16f), "Active Mining Missions:", _sLabel);
@@ -6214,14 +6243,49 @@ namespace Waystation.UI
                 {
                     var am = kv.Value;
                     if (am.status != "active") continue;
+
                     int remaining = Mathf.Max(0, am.endTick - s.tick);
                     s.pointsOfInterest.TryGetValue(am.poiUid, out var poi2);
                     string poiName = poi2 != null ? poi2.displayName : am.poiUid;
-                    DrawSolid(new Rect(area.x, y, w, 28f), new Color(0.09f, 0.12f, 0.20f, 0.9f));
-                    GUI.Label(new Rect(area.x + 4f, y + 2f, w * 0.65f, 16f), poiName, _sSub);
-                    GUI.Label(new Rect(area.x + w * 0.67f, y + 4f, w * 0.33f, LineH),
-                              $"{remaining}t left", _sSub);
-                    y += 32f;
+
+                    // Distress signal banner tint — only when EXP-004 is active
+                    bool missionFeatOn = FeatureFlags.AsteroidMissions;
+                    Color rowBg = missionFeatOn && am.distressSignalActive
+                        ? new Color(0.30f, 0.12f, 0.06f, 0.95f)
+                        : new Color(0.09f, 0.12f, 0.20f, 0.9f);
+                    DrawSolid(new Rect(area.x, y, w, 28f), rowBg);
+
+                    // Distress icon — only when EXP-004 is active
+                    if (missionFeatOn && am.distressSignalActive)
+                    {
+                        var prevC = GUI.color; GUI.color = ColBarCrit;
+                        GUI.Label(new Rect(area.x + 4f, y + 6f, 16f, 16f), "⚠", _sSub);
+                        GUI.color = prevC;
+                    }
+
+                    float labelX = missionFeatOn && am.distressSignalActive ? area.x + 22f : area.x + 4f;
+                    GUI.Label(new Rect(labelX, y + 2f, w * 0.55f, 16f), poiName, _sSub);
+                    GUI.Label(new Rect(area.x + w * 0.55f, y + 4f, w * 0.22f, LineH),
+                              $"{remaining}t", _sSub);
+
+                    // Expand toggle — only available when EXP-004 observation mode is enabled
+                    if (missionFeatOn)
+                    {
+                        bool isSel = _selectedActiveMissionUid == am.uid;
+                        if (GUI.Button(new Rect(area.x + w * 0.79f, y + 4f, w * 0.21f - 4f, 20f),
+                                       isSel ? "▲" : "▼ View", _sBtnSmall))
+                        {
+                            _selectedActiveMissionUid = isSel ? "" : am.uid;
+                        }
+                        y += 32f;
+
+                        if (isSel)
+                            y = DrawMissionObservation(am, s, area.x, y, w);
+                    }
+                    else
+                    {
+                        y += 32f;
+                    }
                 }
                 DrawSolid(new Rect(area.x, y, w, 1f), ColDivider);
                 y += 8f;
@@ -6379,6 +6443,136 @@ namespace Waystation.UI
             }
 
             return h + 4f; // 4px gap between rows
+        }
+
+        // ── Mission observation panel (EXP-004) ──────────────────────────────
+
+        private static readonly Color TileColEmpty = new Color(0.06f, 0.07f, 0.10f);
+        private static readonly Color TileColRock  = new Color(0.28f, 0.25f, 0.22f);
+        private static readonly Color TileColOre   = new Color(0.74f, 0.52f, 0.14f);
+        private static readonly Color TileColIce   = new Color(0.22f, 0.55f, 0.87f);
+        private static readonly Color TileColWall  = new Color(0.10f, 0.10f, 0.13f);
+
+        /// <summary>
+        /// Renders the mission observation panel below a selected active mission row.
+        /// Shows the procedural tile map, crew viability, retreat button, and
+        /// distress signal controls.  Returns the new <paramref name="y"/> position.
+        /// </summary>
+        private float DrawMissionObservation(
+            AsteroidMapState am, StationState s, float px, float y, float w)
+        {
+            const float MapDisplaySize = 96f;
+            const float PanelPad      = 4f;
+
+            DrawSolid(new Rect(px, y, w, 1f), ColDivider);
+            y += 4f;
+
+            // ── Tile-map texture ──────────────────────────────────────────────
+            if (!_missionMapTextures.TryGetValue(am.uid, out var mapTex) || mapTex == null)
+            {
+                mapTex = BuildMissionMapTexture(am);
+                _missionMapTextures[am.uid] = mapTex;
+            }
+            if (mapTex != null)
+                GUI.DrawTexture(new Rect(px + PanelPad, y, MapDisplaySize, MapDisplaySize),
+                                mapTex, ScaleMode.ScaleToFit, false);
+
+            // ── Right-side info panel ─────────────────────────────────────────
+            float rx = px + PanelPad + MapDisplaySize + 6f;
+            float rw = w - MapDisplaySize - PanelPad - 10f;
+            float ry = y;
+
+            // Viability bar
+            float viability = _gm.AsteroidMissions.ComputeViabilityScore(am, s);
+            Color viabilityCol = viability >= 0.60f ? ColBarGreen
+                               : viability >= 0.35f ? ColBarWarn
+                               :                      ColBarCrit;
+
+            GUI.Label(new Rect(rx, ry, rw, LineH), "Viability", _sSub);
+            ry += 14f;
+            DrawSolid(new Rect(rx, ry, rw, 8f), new Color(0.07f, 0.08f, 0.12f, 0.9f));
+            DrawSolid(new Rect(rx, ry, rw * viability, 8f), viabilityCol);
+            ry += 12f;
+
+            // Crew count
+            GUI.Label(new Rect(rx, ry, rw, LineH),
+                      $"Crew: {am.assignedNpcUids.Count}", _sSub);
+            ry += 14f;
+
+            // Distress signal info
+            if (am.distressSignalActive)
+            {
+                int window = Mathf.Max(0, am.distressWindowExpiryTick - s.tick);
+                var prevC = GUI.color; GUI.color = ColBarCrit;
+                GUI.Label(new Rect(rx, ry, rw, LineH),
+                          $"⚠ DISTRESS  {window}t", _sSub);
+                GUI.color = prevC;
+                ry += 14f;
+
+                if (GUI.Button(new Rect(rx, ry, rw, 22f), "Dispatch Rescue", _sBtnWide))
+                {
+                    _gm.AsteroidMissions.RespondToDistressSignal(am.uid, s);
+                }
+                ry += 26f;
+            }
+
+            // Retreat button
+            if (!am.retreatOrdered)
+            {
+                if (GUI.Button(new Rect(rx, ry, rw, 22f), "Issue Retreat", _sBtnSmall))
+                {
+                    _gm.AsteroidMissions.IssueRetreatOrder(am.uid, s);
+                }
+                ry += 26f;
+            }
+            else
+            {
+                var prevC = GUI.color; GUI.color = ColBarWarn;
+                GUI.Label(new Rect(rx, ry, rw, LineH), "Retreating…", _sSub);
+                GUI.color = prevC;
+                ry += 14f;
+            }
+
+            y += Mathf.Max(MapDisplaySize, ry - y) + PanelPad;
+            DrawSolid(new Rect(px, y, w, 1f), ColDivider);
+            y += 4f;
+            return y;
+        }
+
+        /// <summary>
+        /// Builds a point-filtered Texture2D from the tile data in
+        /// <paramref name="map"/> for use in <see cref="DrawMissionObservation"/>.
+        /// Uses SetPixels32 with a pre-allocated array for efficiency.
+        /// </summary>
+        private static Texture2D BuildMissionMapTexture(AsteroidMapState map)
+        {
+            if (map == null || map.tiles == null) return null;
+
+            var tex = new Texture2D(map.width, map.height, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode   = TextureWrapMode.Clamp,
+            };
+
+            var pixels = new Color32[map.width * map.height];
+            for (int row = 0; row < map.height; row++)
+            for (int col = 0; col < map.width;  col++)
+            {
+                byte tile = map.GetTile(col, row);
+                Color c = tile switch
+                {
+                    (byte)AsteroidTile.Rock  => TileColRock,
+                    (byte)AsteroidTile.Ore   => TileColOre,
+                    (byte)AsteroidTile.Ice   => TileColIce,
+                    (byte)AsteroidTile.Wall  => TileColWall,
+                    _                        => TileColEmpty,
+                };
+                // Unity textures have origin at bottom-left; flip Y.
+                pixels[(map.height - 1 - row) * map.width + col] = c;
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return tex;
         }
 
         // ── Style setup ───────────────────────────────────────────────────────

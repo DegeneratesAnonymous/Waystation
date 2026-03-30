@@ -1783,9 +1783,22 @@ namespace Waystation.Models
         public Dictionary<string, int> extractedResources = new Dictionary<string, int>();
         public List<string>            assignedNpcUids    = new List<string>();
         public string                  missionUid;
-        public string                  status    = "active";  // "active" | "complete"
+        // "active" | "complete" | "abandonment" | "autonomous_abort" | "rescued" | "total_loss"
+        public string                  status    = "active";
         public int                     startTick;
         public int                     endTick;
+
+        // ── Failure-state fields (EXP-004) ─────────────────────────────────
+        /// <summary>True once the player issues a manual retreat order.</summary>
+        public bool  retreatOrdered           = false;
+        /// <summary>True while an unresponded distress signal is active.</summary>
+        public bool  distressSignalActive     = false;
+        /// <summary>Station tick at which the rescue dispatch window expires.  -1 = not set (check distressSignalActive first).</summary>
+        public int   distressWindowExpiryTick = -1;
+        /// <summary>True once the player dispatches a rescue (responds to distress signal).</summary>
+        public bool  rescueDispatched         = false;
+        /// <summary>0.0–1.0 hostile threat level; raised by in-mission crisis events.</summary>
+        public float threatLevel              = 0f;
 
         public byte GetTile(int x, int y)
         {
