@@ -1,0 +1,38 @@
+[
+  {
+    "id": "item.circuit_board",
+    "display_name": "Circuit Board",
+    "item_type": "Material",
+    "subtype": "Electronics",
+    "description": "A hand-etched circuit board used in electronics assembly and advanced construction.",
+    "weight": 0.2,
+    "stack_size": 50,
+    "value": 15.0,
+    "tags": ["crafted", "electronics"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.med_kit",
+    "display_name": "Medical Kit",
+    "item_type": "Equipment",
+    "subtype": "Medical",
+    "description": "A first-aid kit containing bandages, antiseptics, and basic medications. Quality affects treatment effectiveness.",
+    "weight": 0.5,
+    "stack_size": 10,
+    "value": 30.0,
+    "tags": ["crafted", "medical"],
+    "schema_version": "1"
+  },
+  {
+    "id": "item.exotic_compound",
+    "display_name": "Exotic Compound",
+    "item_type": "Valuables",
+    "subtype": "ExoticMaterial",
+    "description": "A rare synthesised compound with unique material properties. Used in advanced research and high-end manufacturing.",
+    "weight": 0.3,
+    "stack_size": 20,
+    "value": 150.0,
+    "tags": ["crafted", "exotic"],
+    "schema_version": "1"
+  }
+]
