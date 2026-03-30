@@ -189,12 +189,11 @@ namespace Waystation.Core
         public static bool FarmingNegativeEvents = true;
 
         /// <summary>
-        /// Enables real-time tile-based combat execution (STA-003): all six combat scenario
-        /// triggers, NPC combat AI (pathfinding, weapon selection, cover, retreat), crew
-        /// outcome resolution (killed/injured/captured), captured NPC pool, and
-        /// ship-to-station hull damage via BuildingSystem.
-        /// When false, combat falls back to abstract resolution — outcomes still resolve
-        /// (boarding, resource loss) but tile-based visual combat does not play out.
+        /// Enables the captured-NPC pool, real-time crew outcome dispatch (killed/injured/captured),
+        /// and ship-to-station hull damage via BuildingSystem (STA-003).
+        /// When false, crew outcome resolution and hull damage are skipped —
+        /// abstract resource/module loss still applies in all scenario resolvers.
+        /// Set to false to revert to pre-STA-003 abstract-only behaviour.
         /// </summary>
         public static bool CombatSystem = true;
 

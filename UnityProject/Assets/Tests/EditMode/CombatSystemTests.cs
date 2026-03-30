@@ -78,10 +78,14 @@ namespace Waystation.Tests
     {
         private CombatSystem _combat;
         private StationState _station;
+        private bool         _wasCombatSystem;
+        private bool         _wasMentalBreakCombat;
 
         [SetUp]
         public void SetUp()
         {
+            _wasCombatSystem      = FeatureFlags.CombatSystem;
+            _wasMentalBreakCombat = FeatureFlags.MentalBreakCombat;
             FeatureFlags.CombatSystem      = true;
             FeatureFlags.MentalBreakCombat = true;
 
@@ -99,8 +103,8 @@ namespace Waystation.Tests
         [TearDown]
         public void TearDown()
         {
-            FeatureFlags.CombatSystem      = true;
-            FeatureFlags.MentalBreakCombat = true;
+            FeatureFlags.CombatSystem      = _wasCombatSystem;
+            FeatureFlags.MentalBreakCombat = _wasMentalBreakCombat;
         }
 
         // ── Scenario 1: Boarding ──────────────────────────────────────────────
@@ -227,10 +231,16 @@ namespace Waystation.Tests
     {
         private CombatSystem _combat;
         private StationState _station;
+        private bool         _wasCombatSystem;
+        private bool         _wasNpcDeathHandling;
+        private bool         _wasMedicalSystem;
 
         [SetUp]
         public void SetUp()
         {
+            _wasCombatSystem     = FeatureFlags.CombatSystem;
+            _wasNpcDeathHandling = FeatureFlags.NpcDeathHandling;
+            _wasMedicalSystem    = FeatureFlags.MedicalSystem;
             FeatureFlags.CombatSystem     = true;
             FeatureFlags.NpcDeathHandling = true;
             FeatureFlags.MedicalSystem    = true;
@@ -242,9 +252,9 @@ namespace Waystation.Tests
         [TearDown]
         public void TearDown()
         {
-            FeatureFlags.CombatSystem     = true;
-            FeatureFlags.NpcDeathHandling = true;
-            FeatureFlags.MedicalSystem    = true;
+            FeatureFlags.CombatSystem     = _wasCombatSystem;
+            FeatureFlags.NpcDeathHandling = _wasNpcDeathHandling;
+            FeatureFlags.MedicalSystem    = _wasMedicalSystem;
         }
 
         // ── Captured ─────────────────────────────────────────────────────────
@@ -283,12 +293,20 @@ namespace Waystation.Tests
                     Assert.IsFalse(testStation.npcs.ContainsKey(uid),
                         "Captured NPC must be removed from active npcs dictionary.");
             }
+
+            Assert.Greater(captureCount, 0,
+                "Expected at least one NPC to be captured across 20 high-threat boarding attempts.");
         }
 
         [Test]
         public void CapturedNpc_AddedToCapturedPool_WithFullStateRetained()
         {
-            // Force capture by running many high-threat boarding attempts until we get one
+            // Seed the RNG to make this test deterministic.
+            // With threat=20 and no security crew the outcome is always "overrun",
+            // which has a 20% capture probability per victim slot.
+            // Seed 42 reliably produces at least one capture in the first few runs.
+            UnityEngine.Random.InitState(42);
+
             var ship    = CombatTestHelpers.MakeHostileShip(20);
             bool tested = false;
 
@@ -318,8 +336,8 @@ namespace Waystation.Tests
                 tested = true;
             }
 
-            if (!tested)
-                Assert.Inconclusive("No capture occurred in 30 high-threat runs; increase attempts or threat.");
+            Assert.IsTrue(tested,
+                "No capture occurred in 30 runs with seed=42 and threat=20; verify capture probability.");
         }
 
         // ── Injured ──────────────────────────────────────────────────────────
@@ -349,7 +367,9 @@ namespace Waystation.Tests
             }
 
             // At least a few runs should produce injuries with a threat-3 ship
-            // (repelled_damaged or worse); the test is primarily structural
+            // (repelled_damaged or worse).
+            Assert.Greater(injuryCount, 0,
+                "No injuries occurred across 20 runs with a threat-3 ship; injury path may be broken.");
         }
 
         // ── Killed ───────────────────────────────────────────────────────────
@@ -584,10 +604,14 @@ namespace Waystation.Tests
         private CombatSystem _combat;
         private StationState _station;
         private NPCInstance  _breakdown;
+        private bool         _wasMentalBreakCombat;
+        private bool         _wasCombatSystem;
 
         [SetUp]
         public void SetUp()
         {
+            _wasMentalBreakCombat = FeatureFlags.MentalBreakCombat;
+            _wasCombatSystem      = FeatureFlags.CombatSystem;
             FeatureFlags.MentalBreakCombat = true;
             FeatureFlags.CombatSystem      = true;
 
@@ -602,8 +626,8 @@ namespace Waystation.Tests
         [TearDown]
         public void TearDown()
         {
-            FeatureFlags.MentalBreakCombat = true;
-            FeatureFlags.CombatSystem      = true;
+            FeatureFlags.MentalBreakCombat = _wasMentalBreakCombat;
+            FeatureFlags.CombatSystem      = _wasCombatSystem;
         }
 
         [Test]
@@ -682,10 +706,12 @@ namespace Waystation.Tests
         private CombatSystem    _combat;
         private ContentRegistry _registry;
         private GameObject      _registryGo;
+        private bool            _wasCombatSystem;
 
         [SetUp]
         public void SetUp()
         {
+            _wasCombatSystem         = FeatureFlags.CombatSystem;
             FeatureFlags.CombatSystem = true;
             _combat                   = new CombatSystem();
             (_registry, _registryGo)  = CombatTestHelpers.MakeRegistry();
@@ -694,7 +720,7 @@ namespace Waystation.Tests
         [TearDown]
         public void TearDown()
         {
-            FeatureFlags.CombatSystem = true;
+            FeatureFlags.CombatSystem = _wasCombatSystem;
             Object.DestroyImmediate(_registryGo);
         }
 

@@ -737,9 +737,15 @@ namespace Waystation.Systems
             int remaining = totalDamage;
             for (int i = 0; i < foundationsHit && remaining > 0; i++)
             {
+                var foundation   = candidates[i];
+                int healthBefore = foundation.health;
+
                 int share = (i == foundationsHit - 1) ? remaining : remaining / 2;
-                _building.DamageFoundation(station, candidates[i].uid, share);
-                applied   += share;
+                _building.DamageFoundation(station, foundation.uid, share);
+
+                // Use the health diff to record what was actually absorbed (clamped at 0).
+                int actualApplied = Mathf.Max(0, healthBefore - foundation.health);
+                applied   += actualApplied;
                 remaining -= share;
             }
 
