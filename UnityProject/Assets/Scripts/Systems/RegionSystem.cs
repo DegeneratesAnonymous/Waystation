@@ -168,6 +168,12 @@ namespace Waystation.Systems
     {
         public readonly RegionRegistry Registry = new RegionRegistry();
 
+        /// <summary>
+        /// Active region simulation.  When set, <see cref="Tick"/> delegates per-region
+        /// updates to the simulation so that resource flows are recorded via Horizon data.
+        /// </summary>
+        public IRegionSimulation Simulation { get; set; }
+
         /// <summary>Called once per game tick. Records daily resource snapshots.</summary>
         public void Tick(StationState station)
         {
@@ -179,8 +185,13 @@ namespace Waystation.Systems
                 if (!Registry.TryGetRegion(kv.Key, out _))
                     Registry.Register(kv.Value);
 
-            // TODO: Record actual resource flows when Horizon Simulation provides them.
-            // For now the registry is populated but daily amounts must be set by external callers.
+            // Delegate per-region simulation to the active IRegionSimulation.
+            // HorizonSimulation records resource flows and updates faction/conflict state.
+            if (Simulation != null)
+            {
+                foreach (var kv in station.regions)
+                    Simulation.TickRegion(kv.Key, 1f);
+            }
         }
 
         /// <summary>Creates and registers a new region stub.</summary>
