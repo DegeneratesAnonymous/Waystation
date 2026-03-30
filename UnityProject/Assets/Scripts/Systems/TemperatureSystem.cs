@@ -8,7 +8,8 @@
 // Cooler: lowers room temperature at CoolingRate (1 °C/tick) down to TargetTemperature.
 //         Same dynamic power model as Heater.
 // Vent:   passive circulation — equalises temperature between adjacent rooms
-//         toward the average. Duct-to-temperature integration is a stub (TODO).
+//         toward the average through connected duct networks.
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -32,8 +33,13 @@ namespace Waystation.Systems
         public const float CoolerStandbyWatts =   5f;
 
         private readonly ContentRegistry _registry;
+        private readonly NetworkSystem _networks;
 
-        public TemperatureSystem(ContentRegistry registry) => _registry = registry;
+        public TemperatureSystem(ContentRegistry registry, NetworkSystem networks = null)
+        {
+            _registry = registry;
+            _networks = networks ?? new NetworkSystem(registry);
+        }
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -133,26 +139,128 @@ namespace Waystation.Systems
 
         private void ProcessVents(StationState station)
         {
-            // Passive circulation: equalise temperature between a vent's room and
-            // adjacent connected room/tile.  Duct-to-temperature integration: TODO.
+            // Passive circulation: equalise temperature between adjacent thermal nodes,
+            // but only when vent-adjacent tiles are connected through duct networks.
+            var ductsByTile = BuildDuctLookup(station);
+            var ventPairCounts = new Dictionary<(string a, string b), int>();
+
             foreach (var f in station.foundations.Values)
             {
                 if (f.buildableId != "buildable.vent") continue;
                 if (!f.isEnergised) continue;
+                if (f.status != "complete") continue;
 
-                float myTemp = GetEffectiveTemperature(station, f.tileCol, f.tileRow);
                 foreach (var (dc, dr) in VentOffsets)
                 {
-                    float neighbour = GetEffectiveTemperature(station,
-                                                               f.tileCol + dc,
-                                                               f.tileRow + dr);
-                    float diff = neighbour - myTemp;
-                    if (Mathf.Abs(diff) < 0.1f) continue;
-                    float move = Mathf.Sign(diff) * Mathf.Min(VentEqualiseRate, Mathf.Abs(diff) * 0.5f);
-                    PropagateHeat(station, f.tileCol,      f.tileRow,      move);
-                    PropagateHeat(station, f.tileCol + dc, f.tileRow + dr, -move);
+                    int nc = f.tileCol + dc;
+                    int nr = f.tileRow + dr;
+
+                    if (!AreTilesDuctConnected(station, ductsByTile, f.tileCol, f.tileRow, nc, nr))
+                        continue;
+
+                    string a = GetThermalNodeKey(station, f.tileCol, f.tileRow);
+                    string b = GetThermalNodeKey(station, nc, nr);
+                    if (a == b) continue;
+                    if (string.CompareOrdinal(a, b) > 0) (a, b) = (b, a);
+                    var key = (a, b);
+                    ventPairCounts[key] = ventPairCounts.TryGetValue(key, out int n) ? n + 1 : 1;
                 }
             }
+
+            foreach (var kv in ventPairCounts)
+            {
+                float aTemp = GetThermalNodeTemperature(station, kv.Key.a);
+                float bTemp = GetThermalNodeTemperature(station, kv.Key.b);
+                float diff = bTemp - aTemp;
+                if (Mathf.Abs(diff) < 0.1f) continue;
+
+                float maxRate = VentEqualiseRate * kv.Value;
+                float move = Mathf.Sign(diff) * Mathf.Min(maxRate, Mathf.Abs(diff) * 0.5f);
+                ApplyThermalNodeDelta(station, kv.Key.a, move);
+                ApplyThermalNodeDelta(station, kv.Key.b, -move);
+            }
+        }
+
+        private Dictionary<(int, int), List<FoundationInstance>> BuildDuctLookup(StationState station)
+        {
+            var lookup = new Dictionary<(int, int), List<FoundationInstance>>();
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete") continue;
+                if (!IsDuctFoundation(f)) continue;
+                var key = (f.tileCol, f.tileRow);
+                if (!lookup.TryGetValue(key, out var list))
+                    lookup[key] = list = new List<FoundationInstance>();
+                list.Add(f);
+            }
+            return lookup;
+        }
+
+        private bool IsDuctFoundation(FoundationInstance f)
+        {
+            if (!(_registry?.Buildables.TryGetValue(f.buildableId, out var def) == true)) return false;
+            return def.networkType == "duct";
+        }
+
+        private bool AreTilesDuctConnected(
+            StationState station,
+            Dictionary<(int, int), List<FoundationInstance>> ductsByTile,
+            int aCol, int aRow, int bCol, int bRow)
+        {
+            if (!ductsByTile.TryGetValue((aCol, aRow), out var aDucts)) return false;
+            if (!ductsByTile.TryGetValue((bCol, bRow), out var bDucts)) return false;
+
+            foreach (var a in aDucts)
+            {
+                var aNet = _networks.GetNetwork(station, a.uid);
+                if (aNet == null) continue;
+                foreach (var b in bDucts)
+                {
+                    var bNet = _networks.GetNetwork(station, b.uid);
+                    if (bNet == null) continue;
+                    if (aNet.uid == bNet.uid) return true;
+                }
+            }
+            return false;
+        }
+
+        private static string GetThermalNodeKey(StationState station, int col, int row)
+        {
+            string tileKey = $"{col}_{row}";
+            if (station.tileToRoomKey.TryGetValue(tileKey, out var roomKey))
+                return $"room:{roomKey}";
+            return $"tile:{tileKey}";
+        }
+
+        private static float GetThermalNodeTemperature(StationState station, string nodeKey)
+        {
+            if (nodeKey.StartsWith("room:"))
+                return GetRoomTemperature(station, nodeKey.Substring(5));
+            var (col, row) = ParseTileKey(nodeKey);
+            return GetTileTemperature(station, col, row);
+        }
+
+        private static void ApplyThermalNodeDelta(StationState station, string nodeKey, float delta)
+        {
+            if (nodeKey.StartsWith("room:"))
+            {
+                string roomKey = nodeKey.Substring(5);
+                station.roomTemperatures[roomKey] = GetRoomTemperature(station, roomKey) + delta;
+                return;
+            }
+
+            var (col, row) = ParseTileKey(nodeKey);
+            string tileKey = $"{col}_{row}";
+            station.tileTemperatures[tileKey] = GetTileTemperature(station, col, row) + delta;
+        }
+
+        private static (int col, int row) ParseTileKey(string nodeKey)
+        {
+            string tile = nodeKey.Substring(5);
+            int split = tile.IndexOf('_');
+            int col = int.Parse(tile.Substring(0, split));
+            int row = int.Parse(tile.Substring(split + 1));
+            return (col, row);
         }
 
         /// Update tileTemperature on every Hydroponics Planter Tile from the system.
