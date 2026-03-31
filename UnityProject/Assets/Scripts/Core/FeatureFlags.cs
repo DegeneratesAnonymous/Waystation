@@ -228,5 +228,16 @@ namespace Waystation.Core
         /// Load Game buttons are only enabled when this flag is true.
         /// </summary>
         public static bool FullSaveLoad = true;
+
+        /// <summary>
+        /// Enables the persistent event log strip at the bottom of the HUD (WO-UI-003).
+        /// When true, a 32px strip is anchored to the bottom of the screen and shows the
+        /// most recent notable event; clicking expands the strip to reveal the full log
+        /// with category filter chips and per-entry navigate shortcuts.
+        /// When false, the log strip is not installed and the log remains accessible
+        /// only via World → Events Log in the side panel (legacy behaviour).
+        /// Requires UseUIToolkitHUD = true to be effective.
+        /// </summary>
+        public static bool UseEventLogStrip = true;
     }
 }
