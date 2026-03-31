@@ -15,6 +15,7 @@
 //   When an item is placed in a container the caller may apply a cooldown tag
 //   (foundation.commitmentCooldowns[itemId] = expiry tick).  NPC haul evaluation
 //   must call IsItemOnCommitmentCooldown() before picking an item as a task target.
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -22,6 +23,34 @@ using Waystation.Models;
 
 namespace Waystation.Systems
 {
+    // ── Cargo inventory aggregate data (UI-010) ───────────────────────────────
+
+    /// <summary>
+    /// One row in the station inventory aggregate view.
+    /// Holds totals across all cargo-hold containers plus a per-container breakdown.
+    /// </summary>
+    public class CargoItemRow
+    {
+        public string itemId;
+        public string displayName;
+        /// <summary>Item type string (e.g. "Material", "Equipment"). Used as the category badge / filter key.</summary>
+        public string itemType;
+        public int    totalQuantity;
+        public float  totalWeight;
+        public List<CargoContainerEntry> containers = new List<CargoContainerEntry>();
+    }
+
+    /// <summary>
+    /// One container's contribution to a <see cref="CargoItemRow"/> in the expanded detail view.
+    /// </summary>
+    public class CargoContainerEntry
+    {
+        public string foundationUid;
+        /// <summary>Human-readable room name (custom name or roomKey fallback).</summary>
+        public string roomName;
+        public int    quantity;
+    }
+
     public class InventorySystem
     {
         private readonly ContentRegistry _registry;
@@ -32,6 +61,12 @@ namespace Waystation.Systems
         /// 15 in-game hours (~30 real-time seconds at 0.5 s/tick).
         /// </summary>
         public const int DefaultCommitmentCooldownTicks = 60;
+
+        /// <summary>
+        /// Fired whenever items are added to or removed from any cargo-hold container
+        /// or module.  Subscribe in the Inventory sub-panel to trigger a live refresh.
+        /// </summary>
+        public event Action OnContentsChanged;
 
         public InventorySystem(ContentRegistry registry) => _registry = registry;
 
@@ -203,6 +238,7 @@ namespace Waystation.Systems
             if (cooldownTicks > 0)
                 ApplyCommitmentCooldown(foundation, itemId, station.tick, cooldownTicks);
 
+            OnContentsChanged?.Invoke();
             return actual;
         }
 
@@ -234,6 +270,7 @@ namespace Waystation.Systems
             {
                 foundation.cargo[itemId] = newQty;
             }
+            OnContentsChanged?.Invoke();
             return actual;
         }
 
@@ -277,6 +314,7 @@ namespace Waystation.Systems
             if (actual <= 0) return 0;
 
             module.inventory[itemId] = (module.inventory.ContainsKey(itemId) ? module.inventory[itemId] : 0) + actual;
+            OnContentsChanged?.Invoke();
             return actual;
         }
 
@@ -300,6 +338,7 @@ namespace Waystation.Systems
             int newQty = current - actual;
             if (newQty == 0) module.inventory.Remove(itemId);
             else             module.inventory[itemId] = newQty;
+            OnContentsChanged?.Invoke();
             return actual;
         }
 
@@ -406,6 +445,64 @@ namespace Waystation.Systems
                 foreach (var kv in f.cargo)
                     totals[kv.Key] = (totals.ContainsKey(kv.Key) ? totals[kv.Key] : 0) + kv.Value;
             return totals;
+        }
+
+        /// <summary>
+        /// Returns one <see cref="CargoItemRow"/> per unique item type found across all
+        /// cargo-hold containers (foundations in "cargo_hold" rooms).
+        /// Each row includes per-container breakdown for the expanded detail view.
+        /// Used by the Station → Inventory sub-panel (UI-010).
+        /// </summary>
+        public List<CargoItemRow> GetCargoHoldContents(StationState station)
+        {
+            if (station == null) return new List<CargoItemRow>();
+
+            // itemId → row (accumulated across all containers)
+            var rowMap = new Dictionary<string, CargoItemRow>(StringComparer.Ordinal);
+
+            foreach (var foundation in GetCargoHoldContainers(station))
+            {
+                if (foundation.cargo.Count == 0) continue;
+
+                // Determine the room name for this container once.
+                string tileKey = $"{foundation.tileCol}_{foundation.tileRow}";
+                string roomKey = station.tileToRoomKey.TryGetValue(tileKey, out var rk) ? rk : tileKey;
+                string roomName = station.customRoomNames.TryGetValue(roomKey, out var cn) && !string.IsNullOrEmpty(cn)
+                    ? cn
+                    : $"Room {roomKey}";
+
+                foreach (var kv in foundation.cargo)
+                {
+                    if (kv.Value <= 0) continue;
+
+                    string itemId = kv.Key;
+                    _registry.Items.TryGetValue(itemId, out var itemDefn);
+                    if (!rowMap.TryGetValue(itemId, out var row))
+                    {
+                        row = new CargoItemRow
+                        {
+                            itemId       = itemId,
+                            displayName  = itemDefn?.displayName ?? itemId,
+                            itemType     = itemDefn?.itemType ?? "Unknown",
+                        };
+                        rowMap[itemId] = row;
+                    }
+
+                    float unitWeight = itemDefn?.weight ?? 1f;
+
+                    row.totalQuantity += kv.Value;
+                    row.totalWeight   += unitWeight * kv.Value;
+                    row.containers.Add(new CargoContainerEntry
+                    {
+                        foundationUid = foundation.uid,
+                        roomName      = roomName,
+                        quantity      = kv.Value,
+                    });
+                }
+            }
+
+            var result = new List<CargoItemRow>(rowMap.Values);
+            return result;
         }
 
         /// <summary>

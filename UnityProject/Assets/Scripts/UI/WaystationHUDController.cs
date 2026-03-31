@@ -39,7 +39,7 @@ namespace Waystation.UI
         private VisualElement       _contentArea;
 
         // Station tab sub-panel (UI-007)
-        // Active Station sub-tab: "overview" | "build" | "rooms" | "networks"
+        // Active Station sub-tab: "overview" | "build" | "rooms" | "networks" | "inventory"
         private string                   _stationSubTab   = "overview";
         private VisualElement            _stationTabRoot;
         private TabStrip                 _stationSubTabs;
@@ -51,6 +51,9 @@ namespace Waystation.UI
 
         // Station → Networks sub-panel (UI-009)
         private NetworksSubPanelController _networksSubPanel;
+
+        // Station → Inventory sub-panel (UI-010)
+        private InventorySubPanelController _inventorySubPanel;
 
         // Station overview panel (UI-006)
         private StationOverviewController _stationOverview;
@@ -134,6 +137,8 @@ namespace Waystation.UI
                 _roomsSubPanel.OnRoomRowClicked -= OnRoomsSubPanelRoomClicked;
 
             _networksSubPanel?.Detach();
+
+            _inventorySubPanel?.Detach();
 
             if (_gm?.Rooms != null)
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
@@ -343,10 +348,11 @@ namespace Waystation.UI
                 // Subscribe OnTabSelected BEFORE AddTab() — the first AddTab() call
                 // triggers SelectTab() immediately which fires OnTabSelected.
                 _stationSubTabs.OnTabSelected += OnStationSubTabSelected;
-                _stationSubTabs.AddTab("OVERVIEW", "overview");
-                _stationSubTabs.AddTab("BUILD",    "build");
-                _stationSubTabs.AddTab("ROOMS",    "rooms");
-                _stationSubTabs.AddTab("NETWORKS", "networks");
+                _stationSubTabs.AddTab("OVERVIEW",   "overview");
+                _stationSubTabs.AddTab("BUILD",      "build");
+                _stationSubTabs.AddTab("ROOMS",      "rooms");
+                _stationSubTabs.AddTab("NETWORKS",   "networks");
+                _stationSubTabs.AddTab("INVENTORY",  "inventory");
 
                 _stationTabRoot.Add(_stationSubTabs);
                 _stationTabRoot.Add(_stationSubContent);
@@ -419,6 +425,17 @@ namespace Waystation.UI
 
                     if (_gm?.Station != null)
                         _networksSubPanel.Refresh(_gm.Station, _gm?.UtilityNetworks);
+                    break;
+
+                case "inventory":
+                    if (_inventorySubPanel == null)
+                        _inventorySubPanel = new InventorySubPanelController();
+                    _inventorySubPanel.style.flexGrow = 1;
+                    _inventorySubPanel.style.height   = Length.Percent(100);
+                    _stationSubContent.Add(_inventorySubPanel);
+
+                    if (_gm?.Station != null)
+                        _inventorySubPanel.Refresh(_gm.Station, _gm?.Inventory, _gm?.Registry);
                     break;
             }
         }
@@ -500,6 +517,10 @@ namespace Waystation.UI
             // Refresh the networks panel whenever the Networks sub-tab is mounted.
             if (_networksSubPanel != null && stationTabActive && _stationSubTab == "networks")
                 _networksSubPanel.Refresh(station, _gm?.UtilityNetworks);
+
+            // Refresh the inventory panel whenever the Inventory sub-tab is mounted.
+            if (_inventorySubPanel != null && stationTabActive && _stationSubTab == "inventory")
+                _inventorySubPanel.Refresh(station, _gm?.Inventory, _gm?.Registry);
         }
 
         private void OnNewEvent(PendingEvent pending)
