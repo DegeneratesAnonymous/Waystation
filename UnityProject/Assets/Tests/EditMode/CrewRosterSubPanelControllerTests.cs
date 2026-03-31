@@ -79,6 +79,18 @@ namespace Waystation.Tests
             var empties = _panel.Query<Label>(className: "ws-crew-roster-panel__empty").ToList();
             Assert.AreEqual(1, empties.Count, "Empty label should be shown when no crew.");
         }
+
+        [Test]
+        public void Refresh_WithCrew_DoesNotShowEmptyLabel()
+        {
+            var station = CrewRosterTestHelpers.MakeStation();
+            station.AddNpc(CrewRosterTestHelpers.MakeCrewNpc("npc1", "Alice"));
+            _panel.Refresh(station, null);
+
+            var empties = _panel.Query<Label>(className: "ws-crew-roster-panel__empty").ToList();
+            Assert.AreEqual(0, empties.Count,
+                "Empty label should not appear when at least one crew member exists.");
+        }
     }
 
     // ── Row creation ───────────────────────────────────────────────────────────

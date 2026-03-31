@@ -441,24 +441,24 @@ namespace Waystation.UI
                 case SortMode.Level:
                     list.Sort((a, b) =>
                     {
-                        int c = GetCharLevel(b) - GetCharLevel(a);  // descending
-                        return c != 0 ? c : string.Compare(a.name, b.name, StringComparison.Ordinal);
+                        int cmp = GetCharLevel(b) - GetCharLevel(a);  // descending
+                        return cmp != 0 ? cmp : string.Compare(a.name, b.name, StringComparison.Ordinal);
                     });
                     break;
                 case SortMode.Mood:
                     list.Sort((a, b) =>
                     {
-                        int c = b.moodScore.CompareTo(a.moodScore);  // descending
-                        return c != 0 ? c : string.Compare(a.name, b.name, StringComparison.Ordinal);
+                        int cmp = b.moodScore.CompareTo(a.moodScore);  // descending
+                        return cmp != 0 ? cmp : string.Compare(a.name, b.name, StringComparison.Ordinal);
                     });
                     break;
                 case SortMode.Department:
                     list.Sort((a, b) =>
                     {
-                        int c = string.Compare(GetDeptName(a.departmentId),
-                                               GetDeptName(b.departmentId),
-                                               StringComparison.Ordinal);
-                        return c != 0 ? c : string.Compare(a.name, b.name, StringComparison.Ordinal);
+                        int cmp = string.Compare(GetDeptName(a.departmentId),
+                                                 GetDeptName(b.departmentId),
+                                                 StringComparison.Ordinal);
+                        return cmp != 0 ? cmp : string.Compare(a.name, b.name, StringComparison.Ordinal);
                     });
                     break;
                 default:  // Name (ascending)
