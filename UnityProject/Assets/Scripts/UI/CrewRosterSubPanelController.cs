@@ -93,7 +93,7 @@ namespace Waystation.UI
 
         // ── State ──────────────────────────────────────────────────────────────
 
-        private string       _activeDeptFilter = null;   // null = All departments
+        private string       _activeDeptFilter = null;   // null = All departments; otherwise a department uid
         private MoodFilter   _moodFilter        = MoodFilter.All;
         private HealthFilter _healthFilter      = HealthFilter.All;
         private SortMode     _sortMode          = SortMode.Name;
@@ -127,6 +127,7 @@ namespace Waystation.UI
 
             // Department dropdown
             _deptDropdown = new DropdownField();
+            _deptDropdown.name = "crew-roster-dept-filter";
             _deptDropdown.AddToClassList(FilterLabelClass);
             _deptDropdown.style.minWidth   = 90;
             _deptDropdown.style.marginRight = 4;
@@ -137,6 +138,7 @@ namespace Waystation.UI
             // Mood dropdown
             _moodDropdown = new DropdownField("Mood",
                 new List<string> { "All Moods", "Normal", "At Risk", "Crisis" }, 0);
+            _moodDropdown.name = "crew-roster-mood-filter";
             _moodDropdown.AddToClassList(FilterLabelClass);
             _moodDropdown.style.minWidth    = 80;
             _moodDropdown.style.marginRight = 4;
@@ -147,6 +149,7 @@ namespace Waystation.UI
             // Health dropdown
             _healthDropdown = new DropdownField("Health",
                 new List<string> { "All Health", "Healthy", "Injured", "Critical" }, 0);
+            _healthDropdown.name = "crew-roster-health-filter";
             _healthDropdown.AddToClassList(FilterLabelClass);
             _healthDropdown.style.minWidth    = 80;
             _healthDropdown.style.marginRight = 4;
@@ -222,14 +225,24 @@ namespace Waystation.UI
             _deptDropdown.choices = choices;
             _deptDropdown.value = choices.Contains(prevValue) ? prevValue : choices[0];
 
-            // Sync internal filter state with the displayed value.
-            _activeDeptFilter = _deptDropdown.value == "All Depts" ? null : _deptDropdown.value;
+            // Sync internal filter state: store the dept uid (not the display name)
+            // so PassesFilters can compare npc.departmentId directly without an
+            // extra linear lookup per NPC.
+            _activeDeptFilter = DeptUidFromDisplayName(_deptDropdown.value);
         }
 
         private void OnDeptDropdownChanged(ChangeEvent<string> evt)
         {
-            _activeDeptFilter = (evt.newValue == "All Depts") ? null : evt.newValue;
+            _activeDeptFilter = DeptUidFromDisplayName(evt.newValue);
             ApplyFilterAndSort();
+        }
+
+        // Resolves a department display name to its uid.
+        // Returns null for "All Depts" or any unrecognised name.
+        private string DeptUidFromDisplayName(string displayName)
+        {
+            if (displayName == "All Depts" || string.IsNullOrEmpty(displayName)) return null;
+            return _departments.Find(d => d.name == displayName)?.uid;
         }
 
         // ── Mood / health dropdowns ────────────────────────────────────────────
@@ -396,7 +409,13 @@ namespace Waystation.UI
                     filtered.Add(npc);
             }
 
-            SortNpcs(filtered);
+            // Precompute a uid→name map once so SortNpcs can use it without
+            // repeated linear lookups through _departments inside the comparator.
+            var deptNameMap = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var dept in _departments)
+                deptNameMap[dept.uid] = dept.name;
+
+            SortNpcs(filtered, deptNameMap);
 
             // Rebuild the container from the sorted/filtered list.
             _crewList.Clear();
@@ -412,12 +431,10 @@ namespace Waystation.UI
 
         private bool PassesFilters(NPCInstance npc)
         {
-            // Department filter
-            if (_activeDeptFilter != null)
-            {
-                var dept = _departments.Find(d => d.name == _activeDeptFilter);
-                if (dept == null || npc.departmentId != dept.uid) return false;
-            }
+            // Department filter: _activeDeptFilter is a uid (null = All).
+            // Compare directly to npc.departmentId — no secondary lookup needed.
+            if (_activeDeptFilter != null && npc.departmentId != _activeDeptFilter)
+                return false;
 
             // Mood filter
             if (_moodFilter != MoodFilter.All)
@@ -434,7 +451,7 @@ namespace Waystation.UI
             return true;
         }
 
-        private void SortNpcs(List<NPCInstance> list)
+        private void SortNpcs(List<NPCInstance> list, Dictionary<string, string> deptNameMap)
         {
             switch (_sortMode)
             {
@@ -455,9 +472,11 @@ namespace Waystation.UI
                 case SortMode.Department:
                     list.Sort((a, b) =>
                     {
-                        int cmp = string.Compare(GetDeptName(a.departmentId),
-                                                 GetDeptName(b.departmentId),
-                                                 StringComparison.Ordinal);
+                        string nameA = null;
+                        string nameB = null;
+                        if (a.departmentId != null) deptNameMap.TryGetValue(a.departmentId, out nameA);
+                        if (b.departmentId != null) deptNameMap.TryGetValue(b.departmentId, out nameB);
+                        int cmp = string.Compare(nameA ?? "", nameB ?? "", StringComparison.Ordinal);
                         return cmp != 0 ? cmp : string.Compare(a.name, b.name, StringComparison.Ordinal);
                     });
                     break;
@@ -545,12 +564,6 @@ namespace Waystation.UI
             if (c.HasValue)
                 return new Color(c.Value.r * 0.4f, c.Value.g * 0.4f, c.Value.b * 0.4f, 1f);
             return new Color(0.22f, 0.28f, 0.38f, 1f);
-        }
-
-        private string GetDeptName(string deptUid)
-        {
-            if (string.IsNullOrEmpty(deptUid)) return "";
-            return _departments.Find(d => d.uid == deptUid)?.name ?? "";
         }
 
         private static string GetInitials(string name)

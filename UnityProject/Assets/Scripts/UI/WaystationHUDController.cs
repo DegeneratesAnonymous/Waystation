@@ -682,7 +682,8 @@ namespace Waystation.UI
 
         /// <summary>
         /// Called by GameHUD.SelectCrewMember when UseUIToolkitHUD is true.
-        /// Opens the Crew tab → Roster panel and highlights the selected NPC.
+        /// Ensures the Crew tab is open so the roster is visible.
+        /// Crew Detail contextual panel navigation will be implemented in a future Work Order.
         /// </summary>
         internal static void SelectCrewMemberInternal(string npcUid)
         {
