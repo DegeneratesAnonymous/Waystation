@@ -210,7 +210,7 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void Medical_PrimaryDominant_MinStats_Returns8()
+        public void Medical_PrimaryDominant_MinStats_Returns12()
         {
             // All stats at minimum (8): score = 8 + 8/2 = 12
             var npc = SkillDomainTestHelpers.MakeNpc(wis: 8, inte: 8);
@@ -304,7 +304,7 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void Perception_AllMinStats_Returns10()
+        public void Perception_AllMinStats_Returns12()
         {
             // WIS 8, INT 8, CHA 8 → 8 + (8+8)/4 = 8 + 4 = 12
             var npc = SkillDomainTestHelpers.MakeNpc(wis: 8, inte: 8, cha: 8);
