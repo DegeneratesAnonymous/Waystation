@@ -20,7 +20,8 @@ namespace Waystation.UI
     /// Colour can be set by category name or directly by Color value.
     /// Implements IDepartmentColoured for runtime department colour injection.
     /// </summary>
-    public class CategoryStripe : VisualElement, IDepartmentColoured
+    [UxmlElement]
+    public partial class CategoryStripe : VisualElement, IDepartmentColoured
     {
         // ── Enum ──────────────────────────────────────────────────────────
         public enum Category
@@ -32,26 +33,6 @@ namespace Waystation.UI
             Production,
             Plumbing,
             Security,
-        }
-
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<CategoryStripe, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlEnumAttributeDescription<Category> _category =
-                new UxmlEnumAttributeDescription<Category>
-                {
-                    name = "category",
-                    defaultValue = Category.None,
-                };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var stripe = (CategoryStripe)ve;
-                stripe.StripeCategory = _category.GetValueFromBag(bag, cc);
-            }
         }
 
         // ── Backing field ─────────────────────────────────────────────────

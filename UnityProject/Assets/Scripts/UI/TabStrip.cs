@@ -1,4 +1,4 @@
-// TabStrip.cs
+﻿// TabStrip.cs
 // Custom UI Toolkit VisualElement that renders a horizontal or vertical tab
 // row with an active state indicator.
 //
@@ -23,30 +23,11 @@ namespace Waystation.UI
     /// <summary>
     /// Horizontal or vertical tab row with active state indicator.
     /// </summary>
-    public class TabStrip : VisualElement
+    [UxmlElement]
+    public partial class TabStrip : VisualElement
     {
         // ── Orientation enum ──────────────────────────────────────────────
         public enum Orientation { Horizontal, Vertical }
-
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<TabStrip, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlEnumAttributeDescription<Orientation> _orientation =
-                new UxmlEnumAttributeDescription<Orientation>
-                {
-                    name = "orientation",
-                    defaultValue = Orientation.Horizontal,
-                };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var strip = (TabStrip)ve;
-                strip.TabOrientation = _orientation.GetValueFromBag(bag, cc);
-            }
-        }
 
         // ── Internal tab record ───────────────────────────────────────────
         private readonly struct TabEntry

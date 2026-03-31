@@ -41,6 +41,9 @@ namespace Waystation.UI
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
+        // Event log strip (WO-UI-003)
+        private EventLogController _eventLog;
+
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
 
@@ -75,6 +78,7 @@ namespace Waystation.UI
             BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
             BuildTopBar();
             BuildSidePanel();
+            BuildEventLog();
             StartCoroutine(WaitForGame());
         }
 
@@ -222,6 +226,17 @@ namespace Waystation.UI
             systemMap?.Open();
         }
 
+        // ── Event log setup (WO-UI-003) ──────────────────────────────────────
+
+        private void BuildEventLog()
+        {
+            _eventLog = new EventLogController();
+            // Inset from the right by the side-panel tab strip width (56 px) so
+            // the log bar doesn't overlap the tab icon column.
+            _eventLog.style.right = 56;
+            _contentArea.Add(_eventLog);
+        }
+
         // ── Update — sync placement state and mouse-over ──────────────────────
         private void Update()
         {
@@ -239,13 +254,18 @@ namespace Waystation.UI
         private void OnTick(StationState station)
         {
             _topBar?.OnTick(station);
+            _eventLog?.OnTick(station?.tick ?? 0);
             // Per-tick panel refresh — panels register their own listeners or are
             // refreshed here as they are migrated.
         }
 
         private void OnNewEvent(PendingEvent pending)
         {
-            // Event modal handling — implemented when the Event Modal panel is migrated.
+            if (pending?.definition == null) return;
+            // Map the event definition to a log category and add to the buffer.
+            var category = pending.definition.hostile ? LogCategory.Alert : LogCategory.World;
+            EventLogBuffer.Instance.Add(category, pending.definition.description ?? pending.definition.id);
+            _eventLog?.OnBufferChanged();
         }
 
         private void OnGameLoaded()
@@ -261,6 +281,7 @@ namespace Waystation.UI
             {
                 ViewContextManager.Instance.SetContext(_gm.Station.stationName);
                 _topBar?.InjectDependencies(_gm, LogEntryBuffer.Instance, ViewContextManager.Instance);
+                _eventLog?.InjectNavigationCallbacks(null, null, null, null, null);
                 OnTick(_gm.Station);
             }
         }

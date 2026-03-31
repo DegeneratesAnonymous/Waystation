@@ -17,7 +17,8 @@ namespace Waystation.UI
     /// <summary>
     /// A single 6×6 pixel LED indicator element with colour variants.
     /// </summary>
-    public class StatusPip : VisualElement
+    [UxmlElement]
+    public partial class StatusPip : VisualElement
     {
         // ── Enum ──────────────────────────────────────────────────────────
         public enum State
@@ -35,26 +36,6 @@ namespace Waystation.UI
         private const string ClassOff     = "ws-status-pip--off";
         private const string ClassFault   = "ws-status-pip--fault";
         private const string ClassAcc     = "ws-status-pip--acc";
-
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<StatusPip, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlEnumAttributeDescription<State> _state =
-                new UxmlEnumAttributeDescription<State>
-                {
-                    name = "state",
-                    defaultValue = State.Off,
-                };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var pip = (StatusPip)ve;
-                pip.PipState = _state.GetValueFromBag(bag, cc);
-            }
-        }
 
         // ── Backing field ─────────────────────────────────────────────────
         private State _state = State.Off;

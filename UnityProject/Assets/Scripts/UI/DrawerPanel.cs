@@ -27,38 +27,14 @@ namespace Waystation.UI
     /// A sliding panel that animates open/closed via USS transitions.
     /// Input is disabled while the panel is closed.
     /// </summary>
-    public class DrawerPanel : VisualElement
+    [UxmlElement]
+    public partial class DrawerPanel : VisualElement
     {
         // ── Slide direction enum ──────────────────────────────────────────
         public enum Direction { Vertical, Horizontal }
 
         private const string ClassOpen       = "ws-drawer-panel--open";
         private const string ClassHorizontal = "ws-drawer-panel--horizontal";
-
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<DrawerPanel, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlEnumAttributeDescription<Direction> _direction =
-                new UxmlEnumAttributeDescription<Direction>
-                {
-                    name = "direction",
-                    defaultValue = Direction.Vertical,
-                };
-
-            private readonly UxmlBoolAttributeDescription _startOpen =
-                new UxmlBoolAttributeDescription { name = "start-open", defaultValue = false };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var drawer = (DrawerPanel)ve;
-                drawer.SlideDirection = _direction.GetValueFromBag(bag, cc);
-                if (_startOpen.GetValueFromBag(bag, cc))
-                    drawer.Open();
-            }
-        }
 
         // ── Fields ────────────────────────────────────────────────────────
         private bool _isOpen;

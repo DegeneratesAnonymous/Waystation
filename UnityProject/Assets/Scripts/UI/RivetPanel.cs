@@ -20,24 +20,9 @@ namespace Waystation.UI
     /// A VisualElement panel that automatically injects four corner rivet
     /// decorations as child elements, styled via WaystationComponents.uss.
     /// </summary>
-    public class RivetPanel : VisualElement
+    [UxmlElement]
+    public partial class RivetPanel : VisualElement
     {
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<RivetPanel, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlBoolAttributeDescription _showBevel =
-                new UxmlBoolAttributeDescription { name = "show-bevel", defaultValue = false };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var panel = (RivetPanel)ve;
-                panel.ShowBevel = _showBevel.GetValueFromBag(bag, cc);
-            }
-        }
-
         // ── Rivet child elements ──────────────────────────────────────────
         private readonly VisualElement _rivetTL;
         private readonly VisualElement _rivetTR;
