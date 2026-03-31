@@ -98,6 +98,9 @@ namespace Waystation.Systems
         {
             if (station == null) return new List<RoomInfo>();
 
+            // Fall back to the injected registry when no override is provided.
+            var effectiveRegistry = registry ?? _registry;
+
             // Collect all unique room keys from the tile→room reverse map.
             var roomKeys = new HashSet<string>(station.tileToRoomKey.Values);
 
@@ -130,8 +133,8 @@ namespace Waystation.Systems
                 if (!string.IsNullOrEmpty(assignedTypeId))
                 {
                     // Look up display name from built-in registry first, then custom types.
-                    if (registry?.RoomTypes != null &&
-                        registry.RoomTypes.TryGetValue(assignedTypeId, out var rtDef))
+                    if (effectiveRegistry?.RoomTypes != null &&
+                        effectiveRegistry.RoomTypes.TryGetValue(assignedTypeId, out var rtDef))
                         typeName = rtDef.displayName;
                     if (typeName == null)
                         typeName = station.customRoomTypes

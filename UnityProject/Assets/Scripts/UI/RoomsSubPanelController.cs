@@ -72,7 +72,7 @@ namespace Waystation.UI
         // Latest rooms snapshot; rebuilt in Refresh().
         private List<RoomInfo> _rooms = new List<RoomInfo>();
 
-        // Filter button references keyed by type id; null key = "All" button.
+        // Filter button references keyed by type id; AllFilterKey sentinel = "All" button.
         private readonly Dictionary<string, Button> _filterButtons =
             new Dictionary<string, Button>(StringComparer.Ordinal);
 

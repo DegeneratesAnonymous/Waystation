@@ -501,8 +501,13 @@ namespace Waystation.UI
             // Subscribe to RoomSystem.OnLayoutChanged so the Rooms sub-panel
             // refreshes whenever a layout rebuild completes (wall/door placement,
             // workbench completion, etc.) without waiting for the next OnTick.
+            // Unsubscribe first to ensure idempotency across multiple OnGameLoaded
+            // calls (bootstrap, new game, load game).
             if (_gm?.Rooms != null)
+            {
+                _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
                 _gm.Rooms.OnLayoutChanged += OnRoomLayoutChanged;
+            }
 
             // Set the initial view context to the station name and inject dependencies
             // into the top bar once the game state is available.
