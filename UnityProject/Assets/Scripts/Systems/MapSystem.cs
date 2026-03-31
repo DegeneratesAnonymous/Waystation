@@ -375,8 +375,7 @@ namespace Waystation.Systems
                 _                 => $"{prefix} {index + 1}",
             };
         }
-    }
-}
+
         public bool HasPoweredCompleteBuildable(StationState station, string buildableId)
         {
             if (station == null || string.IsNullOrEmpty(buildableId)) return false;
@@ -385,3 +384,5 @@ namespace Waystation.Systems
                     return true;
             return false;
         }
+    }
+}

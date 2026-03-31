@@ -36,9 +36,13 @@ namespace Waystation.UI
 
         // Side panel (WO-UI-005)
         private SidePanelController _sidePanel;
+        private VisualElement       _contentArea;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
+
+        // Shared UIDocument created on demand for all UI Toolkit panels.
+        private UIDocument _uiDocument;
 
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
@@ -81,6 +85,10 @@ namespace Waystation.UI
 
             _topBar?.Detach();
 
+            // Destroy transient PanelSettings if we created one at runtime.
+            if (_uiDocument != null && _uiDocument.panelSettings != null)
+                Destroy(_uiDocument.panelSettings);
+
             if (_gm != null)
             {
                 _gm.OnTick       -= OnTick;
@@ -107,21 +115,75 @@ namespace Waystation.UI
             OnGameLoaded();
         }
 
+        // ── UIDocument provisioning ─────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the UIDocument used by all HUD panels, creating one on this
+        /// GameObject if none exists in the scene.
+        /// </summary>
+        private UIDocument EnsureUIDocument()
+        {
+            if (_uiDocument != null) return _uiDocument;
+
+            _uiDocument = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
+            if (_uiDocument != null) return _uiDocument;
+
+            // No UIDocument exists anywhere — create one on this GameObject.
+            var panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+            panelSettings.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            panelSettings.referenceResolution = new Vector2Int(1280, 720);
+            panelSettings.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
+            panelSettings.match = 0.5f;
+
+            // Assign a default font — ScriptableObject.CreateInstance<PanelSettings>()
+            // does not include one, so without this no text renders.
+            var defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 12);
+            var projectFont = Resources.Load<Font>("Fonts/Quango");
+            if (projectFont != null)
+                defaultFont = projectFont;
+            panelSettings.textSettings = ScriptableObject.CreateInstance<PanelTextSettings>();
+
+            _uiDocument = gameObject.AddComponent<UIDocument>();
+            _uiDocument.panelSettings = panelSettings;
+
+            // Apply font to the root element so all children inherit it.
+            _uiDocument.rootVisualElement.style.unityFontDefinition =
+                FontDefinition.FromFont(defaultFont);
+            _uiDocument.rootVisualElement.style.fontSize = 14;
+            _uiDocument.rootVisualElement.style.color = new Color(0.85f, 0.85f, 0.9f, 1f);
+
+            // Load the shared stylesheet so USS classes work for all panels.
+            var sheet = Resources.Load<StyleSheet>("UI/Styles/WaystationComponents");
+            if (sheet != null)
+                _uiDocument.rootVisualElement.styleSheets.Add(sheet);
+
+            Debug.Log("[WaystationHUDController] Created UIDocument + PanelSettings on HUD GameObject.");
+            return _uiDocument;
+        }
+
+        /// <summary>
+        /// Ensures the UIDocument root fills the screen and can host
+        /// absolutely-positioned children.
+        /// </summary>
+        private void ConfigureRoot(VisualElement root)
+        {
+            root.style.width = Length.Percent(100);
+            root.style.height = Length.Percent(100);
+            root.style.flexDirection = FlexDirection.Column;
+            root.style.alignItems = Align.Stretch;
+        }
+
         // ── Top bar setup (WO-UI-004) ──────────────────────────────────────────
 
         private void BuildTopBar()
         {
-            var doc = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
-            if (doc == null)
-            {
-                Debug.LogWarning("[WaystationHUDController] No UIDocument found — top bar will not render.");
-                return;
-            }
+            var doc = EnsureUIDocument();
+            ConfigureRoot(doc.rootVisualElement);
 
             _topBar = new TopBarController();
             _topBar.RegisterClickOutside(doc.rootVisualElement);
 
-            // Insert before the side panel so it renders at the top.
+            // Insert before the content area so it renders at the top.
             doc.rootVisualElement.Insert(0, _topBar);
         }
 
@@ -129,16 +191,15 @@ namespace Waystation.UI
 
         private void BuildSidePanel()
         {
-            // Locate the UIDocument that hosts the HUD panels.
-            // The document is expected to be present in the scene (set up as a
-            // prefab or scene object); a missing document is silently skipped so
-            // the rest of the controller still boots cleanly.
-            var doc = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
-            if (doc == null)
-            {
-                Debug.LogWarning("[WaystationHUDController] No UIDocument found — side panel will not render.");
-                return;
-            }
+            var doc = EnsureUIDocument();
+
+            // Content area fills the remaining space below the top bar.
+            // The side panel is absolutely positioned inside this container
+            // so it automatically sits below the top bar without hardcoded offsets.
+            _contentArea = new VisualElement();
+            _contentArea.style.flexGrow = 1;
+            _contentArea.style.position = Position.Relative;
+            doc.rootVisualElement.Add(_contentArea);
 
             // MapSystem is not yet available at Start() time — WaitForGame() will
             // inject it once the game has finished loading (see InjectMapSystem call
@@ -151,7 +212,7 @@ namespace Waystation.UI
             // Register keyboard handler so Escape key works
             _sidePanel.RegisterKeyboard(doc.rootVisualElement);
 
-            doc.rootVisualElement.Add(_sidePanel);
+            _contentArea.Add(_sidePanel);
         }
 
         private void OnSidePanelMapFullscreen()

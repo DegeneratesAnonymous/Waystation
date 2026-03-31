@@ -69,11 +69,16 @@ namespace Waystation.View
         private readonly Dictionary<int, Vector3>    _dotTarget = new Dictionary<int, Vector3>();
         private readonly Dictionary<int, float>      _dotWanderAt = new Dictionary<int, float>(); // Time.time when dot next steps
         private readonly HashSet<Vector2Int>         _dotClaimed  = new HashSet<Vector2Int>();     // reused each frame, avoids GC alloc
-        private const float DotMoveSpeed        = 4f;   // world units per second
-        private const float DotStepMinInterval  = 0.6f; // seconds between steps when moving freely
+        private const float DotMoveSpeed        = 4f;   // world units per second at 1× speed
+        private const float DotStepMinInterval  = 0.6f; // seconds between steps at 1× speed
         private const float DotStepMaxInterval  = 1.4f;
-        private const float DotBlockedMinInterval = 1.0f; // longer pause when all neighbours are occupied
+        private const float DotBlockedMinInterval = 1.0f;
         private const float DotBlockedMaxInterval = 2.0f;
+
+        // Returns the current game speed multiplier (1.0 at 1×, 2.0 at 2×, etc.)
+        private float GameSpeedMultiplier => (_gm != null && _gm.SecondsPerTick > 0f)
+            ? 1f / _gm.SecondsPerTick
+            : 1f;
 
         // ── NPC selection & context menu ──────────────────────────────────────
         private readonly HashSet<int> _selectedDots      = new HashSet<int>();
@@ -258,7 +263,7 @@ namespace Waystation.View
                 else
                 {
                     _dots[i].transform.position =
-                        Vector3.MoveTowards(cur, tgt, DotMoveSpeed * Time.deltaTime);
+                        Vector3.MoveTowards(cur, tgt, DotMoveSpeed * GameSpeedMultiplier * Time.deltaTime);
                 }
             }
 
@@ -310,9 +315,11 @@ namespace Waystation.View
                 }
 
                 // Schedule next step: shorter interval if moved, longer if all neighbours were blocked
+                // Intervals scale inversely with game speed so NPCs move proportionally faster.
+                float speedMult = GameSpeedMultiplier;
                 _dotWanderAt[i] = Time.time + UnityEngine.Random.Range(
                     stepped ? DotStepMinInterval    : DotBlockedMinInterval,
-                    stepped ? DotStepMaxInterval    : DotBlockedMaxInterval);
+                    stepped ? DotStepMaxInterval    : DotBlockedMaxInterval) / speedMult;
             }
 
             // ── NPC drag-selection ─────────────────────────────────────────────

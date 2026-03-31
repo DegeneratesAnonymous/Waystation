@@ -18,6 +18,7 @@
 //   drawer.Close();
 
 using System;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Waystation.UI
@@ -89,6 +90,22 @@ namespace Waystation.UI
             SlideDirection = direction;
             // Start with input blocked
             pickingMode = PickingMode.Ignore;
+
+            // Inline closed-state styles — mirrors USS .ws-drawer-panel so the
+            // drawer is hidden without the stylesheet loaded via Resources.
+            style.overflow = Overflow.Hidden;
+            style.visibility = Visibility.Hidden;
+            style.display = DisplayStyle.Flex;
+            if (direction == Direction.Horizontal)
+            {
+                style.maxWidth = 0;
+                style.opacity = 0;
+            }
+            else
+            {
+                style.maxHeight = 0;
+                style.opacity = 0;
+            }
         }
 
         // ── Public API ────────────────────────────────────────────────────
@@ -102,6 +119,15 @@ namespace Waystation.UI
             _isOpen = true;
             pickingMode = PickingMode.Position;
             AddToClassList(ClassOpen);
+
+            // Inline open-state styles for when USS is not loaded.
+            style.visibility = Visibility.Visible;
+            style.opacity = 1;
+            if (_direction == Direction.Horizontal)
+                style.maxWidth = 300;
+            else
+                style.maxHeight = 600;
+
             OnOpenChanged?.Invoke(true);
         }
 
@@ -114,6 +140,15 @@ namespace Waystation.UI
             _isOpen = false;
             RemoveFromClassList(ClassOpen);
             pickingMode = PickingMode.Ignore;
+
+            // Inline closed-state styles for when USS is not loaded.
+            style.visibility = Visibility.Hidden;
+            style.opacity = 0;
+            if (_direction == Direction.Horizontal)
+                style.maxWidth = 0;
+            else
+                style.maxHeight = 0;
+
             OnOpenChanged?.Invoke(false);
         }
 

@@ -18,6 +18,10 @@ using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace Waystation.UI
 {
     /// <summary>
@@ -29,9 +33,9 @@ namespace Waystation.UI
         // (label, secondsPerTick)  — Pause handled separately.
         private static readonly (string Label, float SecondsPerTick)[] SpeedPresets =
         {
-            ("1×", 0.5f),
-            ("2×", 0.25f),
-            ("3×", 1f / 6f),
+            ("1×", 1.0f),
+            ("2×", 0.5f),
+            ("3×", 1f / 3f),
         };
 
         // ── Child elements ────────────────────────────────────────────────────
@@ -58,39 +62,84 @@ namespace Waystation.UI
         {
             AddToClassList("ws-top-bar");
 
+            // Load the stylesheet if not already loaded
+            var styleSheet = Resources.Load<StyleSheet>("UI/Styles/WaystationComponents");
+            if (styleSheet != null && !styleSheets.Contains(styleSheet))
+                styleSheets.Add(styleSheet);
+
+            // Apply basic inline styles to ensure visibility
+            style.flexDirection = FlexDirection.Column;
+            style.alignSelf = Align.Stretch;
+            style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 1f);
+            style.paddingBottom = 0;
+            // Ensure top bar renders above the side panel's absolute positioning
+            style.position = Position.Relative;
+
             // ── Bar row ───────────────────────────────────────────────────────
             var bar = new VisualElement();
             bar.AddToClassList("ws-top-bar__bar");
+            bar.style.flexDirection = FlexDirection.Row;
+            bar.style.alignItems = Align.Center;
+            bar.style.alignSelf = Align.Stretch;
+            bar.style.justifyContent = Justify.FlexStart;
+            bar.style.paddingLeft = 14;
+            bar.style.paddingRight = 14;
+            bar.style.paddingTop = 4;
+            bar.style.paddingBottom = 4;
+            bar.style.minHeight = 30;
+            bar.style.backgroundColor = new Color(0.08f, 0.08f, 0.11f, 1f);
+            bar.style.borderBottomWidth = 1;
+            bar.style.borderBottomColor = new Color(0.2f, 0.2f, 0.25f, 1f);
             Add(bar);
 
             // Location name
             _locationLabel = new Label("—");
             _locationLabel.AddToClassList("ws-top-bar__location");
+            _locationLabel.style.minWidth = 160;
+            _locationLabel.style.flexShrink = 0;
+            _locationLabel.style.color = new Color(0.9f, 0.9f, 0.95f, 1f);
+            _locationLabel.style.fontSize = 16;
+            _locationLabel.style.whiteSpace = WhiteSpace.NoWrap;
             bar.Add(_locationLabel);
 
-            // Spacer
+            // Spacer — pushes the right group to the far right edge
             var spacer = new VisualElement();
             spacer.AddToClassList("ws-top-bar__spacer");
+            spacer.style.flexGrow = 1;
             bar.Add(spacer);
+
+            // ── Right group: time + day/night + speed controls ────────────────
+            var rightGroup = new VisualElement();
+            rightGroup.style.flexDirection = FlexDirection.Row;
+            rightGroup.style.alignItems = Align.Center;
+            rightGroup.style.flexShrink = 0;
+            bar.Add(rightGroup);
 
             // Time label
             _timeLabel = new Label("Day 1  00:00");
             _timeLabel.AddToClassList("ws-top-bar__time");
-            bar.Add(_timeLabel);
+            _timeLabel.style.color = new Color(0.7f, 0.7f, 0.75f, 1f);
+            _timeLabel.style.fontSize = 14;
+            _timeLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            _timeLabel.style.marginRight = 16;
+            _timeLabel.style.minWidth = 120;
+            rightGroup.Add(_timeLabel);
 
-            // Day/Night label
+            // Day/Night label — created but not added to the hierarchy (hidden per design)
             _dayNightLabel = new Label("Day");
             _dayNightLabel.AddToClassList("ws-top-bar__day-night");
-            bar.Add(_dayNightLabel);
 
             // Speed controls
             var speedGroup = new VisualElement();
             speedGroup.AddToClassList("ws-top-bar__speed-group");
-            bar.Add(speedGroup);
+            speedGroup.style.flexDirection = FlexDirection.Row;
+            speedGroup.style.alignItems = Align.Center;
+            rightGroup.Add(speedGroup);
 
             _pauseButton = new Button(OnPauseClicked) { text = "⏸" };
             _pauseButton.AddToClassList("ws-top-bar__speed-btn");
             _pauseButton.AddToClassList("ws-top-bar__speed-btn--pause");
+            StyleSpeedButton(_pauseButton);
             speedGroup.Add(_pauseButton);
 
             _speedButtons = new Button[SpeedPresets.Length];
@@ -99,6 +148,7 @@ namespace Waystation.UI
                 int captured = i;
                 var btn = new Button(() => OnSpeedClicked(captured)) { text = SpeedPresets[i].Label };
                 btn.AddToClassList("ws-top-bar__speed-btn");
+                StyleSpeedButton(btn);
                 speedGroup.Add(btn);
                 _speedButtons[i] = btn;
             }
@@ -107,6 +157,14 @@ namespace Waystation.UI
             _alertBadge = new Label("0");
             _alertBadge.AddToClassList("ws-top-bar__alert-badge");
             _alertBadge.style.display = DisplayStyle.None;
+            _alertBadge.style.minWidth = 20;
+            _alertBadge.style.minHeight = 20;
+            _alertBadge.style.paddingLeft = 4;
+            _alertBadge.style.paddingRight = 4;
+            _alertBadge.style.backgroundColor = new Color(0.8f, 0.2f, 0.2f, 1f);
+            _alertBadge.style.color = Color.white;
+            _alertBadge.style.fontSize = 10;
+            _alertBadge.style.unityTextAlign = TextAnchor.MiddleCenter;
             _alertBadge.RegisterCallback<ClickEvent>(_ => ToggleTray());
             bar.Add(_alertBadge);
 
@@ -114,10 +172,22 @@ namespace Waystation.UI
             _alertTray = new VisualElement();
             _alertTray.AddToClassList("ws-top-bar__alert-tray");
             _alertTray.style.display = DisplayStyle.None;
+            _alertTray.style.flexDirection = FlexDirection.Column;
+            _alertTray.style.backgroundColor = new Color(0.12f, 0.12f, 0.16f, 1f);
+            _alertTray.style.borderBottomWidth = 1;
+            _alertTray.style.borderBottomColor = new Color(0.2f, 0.2f, 0.25f, 1f);
+            _alertTray.style.maxHeight = 240;
+            _alertTray.style.overflow = Overflow.Hidden;
             Add(_alertTray);
 
             _alertTrayList = new VisualElement();
             _alertTrayList.AddToClassList("ws-top-bar__alert-tray-list");
+            _alertTrayList.style.flexDirection = FlexDirection.Column;
+            _alertTrayList.style.overflow = Overflow.Visible;
+            _alertTrayList.style.paddingLeft = 8;
+            _alertTrayList.style.paddingRight = 8;
+            _alertTrayList.style.paddingTop = 8;
+            _alertTrayList.style.paddingBottom = 8;
             _alertTray.Add(_alertTrayList);
         }
 
@@ -194,6 +264,30 @@ namespace Waystation.UI
         }
 
         // ── Speed controls ────────────────────────────────────────────────────
+
+        private static void StyleSpeedButton(Button btn)
+        {
+            btn.style.minWidth = 36;
+            btn.style.height = 28;
+            btn.style.paddingTop = 0;
+            btn.style.paddingBottom = 0;
+            btn.style.paddingLeft = 6;
+            btn.style.paddingRight = 6;
+            btn.style.marginRight = 4;
+            btn.style.backgroundColor = new Color(0.15f, 0.15f, 0.2f, 1f);
+            btn.style.color = new Color(0.85f, 0.85f, 0.9f, 1f);
+            btn.style.fontSize = 14;
+            btn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            btn.style.borderTopWidth = 0;
+            btn.style.borderLeftWidth = 0;
+            btn.style.borderRightWidth = 0;
+            btn.style.borderBottomWidth = 1;
+            btn.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 1f);
+            btn.style.borderTopLeftRadius = 3;
+            btn.style.borderTopRightRadius = 3;
+            btn.style.borderBottomLeftRadius = 3;
+            btn.style.borderBottomRightRadius = 3;
+        }
 
         private void OnPauseClicked()
         {
