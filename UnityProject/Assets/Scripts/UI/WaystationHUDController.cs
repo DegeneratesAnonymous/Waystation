@@ -58,6 +58,16 @@ namespace Waystation.UI
         // Station overview panel (UI-006)
         private StationOverviewController _stationOverview;
 
+        // Crew tab (UI-011)
+        // Active Crew sub-tab: "roster" (more to follow in later Work Orders)
+        private string                        _crewSubTab     = "roster";
+        private VisualElement                 _crewTabRoot;
+        private TabStrip                      _crewSubTabs;
+        private VisualElement                 _crewSubContent;
+        private CrewRosterSubPanelController  _crewRosterPanel;
+        // Tick counter for throttling crew roster refreshes (every 5 ticks).
+        private int _crewRosterTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -135,6 +145,9 @@ namespace Waystation.UI
 
             if (_roomsSubPanel != null)
                 _roomsSubPanel.OnRoomRowClicked -= OnRoomsSubPanelRoomClicked;
+
+            if (_crewRosterPanel != null)
+                _crewRosterPanel.OnCrewRowClicked -= OnCrewRosterRowClicked;
 
             _networksSubPanel?.Detach();
 
@@ -319,6 +332,10 @@ namespace Waystation.UI
             {
                 MountStationPanel();
             }
+            else if (tab == SidePanelController.Tab.Crew)
+            {
+                MountCrewPanel();
+            }
         }
 
         // ── Station tab mount / sub-tab switching ─────────────────────────────
@@ -469,6 +486,73 @@ namespace Waystation.UI
             OpenRoomPanel(roomId);
         }
 
+        // ── Crew tab mount / sub-tab switching (UI-011) ───────────────────────
+
+        /// <summary>
+        /// Creates (once) and mounts the Crew tab root with its Roster sub-tab.
+        /// Re-mounts the previously active sub-tab if the panel was unmounted and
+        /// remounted.
+        /// </summary>
+        private void MountCrewPanel()
+        {
+            if (_crewTabRoot == null)
+            {
+                _crewTabRoot = new VisualElement();
+                _crewTabRoot.style.flexDirection = FlexDirection.Column;
+                _crewTabRoot.style.flexGrow      = 1;
+                _crewTabRoot.style.height        = Length.Percent(100);
+
+                // Create the content area BEFORE setting up the tab strip so the
+                // first-tab auto-selection can safely populate it.
+                _crewSubContent = new VisualElement();
+                _crewSubContent.style.flexGrow = 1;
+                _crewSubContent.style.overflow = Overflow.Hidden;
+
+                _crewSubTabs = new TabStrip(TabStrip.Orientation.Horizontal);
+                _crewSubTabs.OnTabSelected += OnCrewSubTabSelected;
+                _crewSubTabs.AddTab("ROSTER", "roster");
+
+                _crewTabRoot.Add(_crewSubTabs);
+                _crewTabRoot.Add(_crewSubContent);
+            }
+
+            _sidePanel.DrawerContentRoot.Add(_crewTabRoot);
+
+            // Re-select the active sub-tab to restore content after the drawer was
+            // reopened (DrawerContentRoot.Clear() removes child elements).
+            OnCrewSubTabSelected(_crewSubTab);
+        }
+
+        private void OnCrewSubTabSelected(string subTabId)
+        {
+            _crewSubTab = subTabId;
+            _crewSubContent?.Clear();
+
+            if (_crewSubContent == null) return;
+
+            switch (subTabId)
+            {
+                case "roster":
+                    if (_crewRosterPanel == null)
+                    {
+                        _crewRosterPanel = new CrewRosterSubPanelController();
+                        _crewRosterPanel.OnCrewRowClicked += OnCrewRosterRowClicked;
+                    }
+                    _crewRosterPanel.style.flexGrow = 1;
+                    _crewRosterPanel.style.height   = Length.Percent(100);
+                    _crewSubContent.Add(_crewRosterPanel);
+
+                    if (_gm?.Station != null)
+                        _crewRosterPanel.Refresh(_gm.Station, _gm?.DeptRegistry);
+                    break;
+            }
+        }
+
+        private void OnCrewRosterRowClicked(string npcUid)
+        {
+            SelectCrewMemberInternal(npcUid);
+        }
+
         // ── Event log setup (WO-UI-003) ──────────────────────────────────────
 
         private void BuildEventLog()
@@ -521,6 +605,18 @@ namespace Waystation.UI
             // Refresh the inventory panel whenever the Inventory sub-tab is mounted.
             if (_inventorySubPanel != null && stationTabActive && _stationSubTab == "inventory")
                 _inventorySubPanel.Refresh(station, _gm?.Inventory);
+
+            // Refresh the crew roster panel every 5 ticks to avoid GC churn.
+            bool crewTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Crew;
+            if (_crewRosterPanel != null && crewTabActive && _crewSubTab == "roster")
+            {
+                _crewRosterTickCounter++;
+                if (_crewRosterTickCounter >= 5)
+                {
+                    _crewRosterTickCounter = 0;
+                    _crewRosterPanel.Refresh(station, _gm?.DeptRegistry);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -586,12 +682,19 @@ namespace Waystation.UI
 
         /// <summary>
         /// Called by GameHUD.SelectCrewMember when UseUIToolkitHUD is true.
-        /// Opens the Crew Detail panel for the specified NPC.
+        /// Ensures the Crew tab is open so the roster is visible.
+        /// Crew Detail contextual panel navigation will be implemented in a future Work Order.
         /// </summary>
         internal static void SelectCrewMemberInternal(string npcUid)
         {
             if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
-            // Crew Detail panel open — implemented when Crew sub-tab is migrated.
+
+            // Ensure the Crew tab is open and the Roster sub-tab is active.
+            if (_instance._sidePanel?.ActiveTab != SidePanelController.Tab.Crew)
+                _instance._sidePanel?.ActivateTab(SidePanelController.Tab.Crew);
+
+            // Crew Detail panel will be implemented in a future Work Order.
+            // For now, log the selection so callers have feedback.
             Debug.Log($"[WaystationHUDController] SelectCrewMember: {npcUid}");
         }
 
