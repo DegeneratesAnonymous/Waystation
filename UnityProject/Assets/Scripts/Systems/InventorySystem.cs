@@ -37,6 +37,8 @@ namespace Waystation.Systems
         public string itemType;
         public int    totalQuantity;
         public float  totalWeight;
+        /// <summary>Per-unit weight (kg) cached on first creation to avoid repeated registry lookups.</summary>
+        internal float unitWeight;
         public List<CargoContainerEntry> containers = new List<CargoContainerEntry>();
     }
 
@@ -46,7 +48,12 @@ namespace Waystation.Systems
     public class CargoContainerEntry
     {
         public string foundationUid;
-        /// <summary>Human-readable room name (custom name or roomKey fallback).</summary>
+        /// <summary>
+        /// Human-readable location label for the container:
+        /// - a custom room name when available,
+        /// - otherwise formatted as "Room {roomKey}",
+        /// - or a tileKey-based label when no room is associated.
+        /// </summary>
         public string roomName;
         public int    quantity;
     }
@@ -448,9 +455,10 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Returns one <see cref="CargoItemRow"/> per unique item type found across all
+        /// Returns one <see cref="CargoItemRow"/> per unique itemId found across all
         /// cargo-hold containers (foundations in "cargo_hold" rooms).
-        /// Each row includes per-container breakdown for the expanded detail view.
+        /// Each row aggregates quantities for that itemId and includes a per-container
+        /// breakdown for the expanded detail view.
         /// Used by the Station → Inventory sub-panel (UI-010).
         /// </summary>
         public List<CargoItemRow> GetCargoHoldContents(StationState station)
@@ -476,22 +484,23 @@ namespace Waystation.Systems
                     if (kv.Value <= 0) continue;
 
                     string itemId = kv.Key;
-                    _registry.Items.TryGetValue(itemId, out var itemDefn);
                     if (!rowMap.TryGetValue(itemId, out var row))
                     {
+                        // First time we encounter this itemId — do the registry lookup once
+                        // and cache everything on the row for subsequent containers.
+                        _registry.Items.TryGetValue(itemId, out var itemDefn);
                         row = new CargoItemRow
                         {
-                            itemId       = itemId,
-                            displayName  = itemDefn?.displayName ?? itemId,
-                            itemType     = itemDefn?.itemType ?? "Unknown",
+                            itemId      = itemId,
+                            displayName = itemDefn?.displayName ?? itemId,
+                            itemType    = itemDefn?.itemType ?? "Unknown",
+                            unitWeight  = itemDefn?.weight ?? 1f,
                         };
                         rowMap[itemId] = row;
                     }
 
-                    float unitWeight = itemDefn?.weight ?? 1f;
-
                     row.totalQuantity += kv.Value;
-                    row.totalWeight   += unitWeight * kv.Value;
+                    row.totalWeight   += row.unitWeight * kv.Value;
                     row.containers.Add(new CargoContainerEntry
                     {
                         foundationUid = foundation.uid,

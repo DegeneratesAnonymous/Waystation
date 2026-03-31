@@ -435,7 +435,7 @@ namespace Waystation.UI
                     _stationSubContent.Add(_inventorySubPanel);
 
                     if (_gm?.Station != null)
-                        _inventorySubPanel.Refresh(_gm.Station, _gm?.Inventory, _gm?.Registry);
+                        _inventorySubPanel.Refresh(_gm.Station, _gm?.Inventory);
                     break;
             }
         }
@@ -520,7 +520,7 @@ namespace Waystation.UI
 
             // Refresh the inventory panel whenever the Inventory sub-tab is mounted.
             if (_inventorySubPanel != null && stationTabActive && _stationSubTab == "inventory")
-                _inventorySubPanel.Refresh(station, _gm?.Inventory, _gm?.Registry);
+                _inventorySubPanel.Refresh(station, _gm?.Inventory);
         }
 
         private void OnNewEvent(PendingEvent pending)

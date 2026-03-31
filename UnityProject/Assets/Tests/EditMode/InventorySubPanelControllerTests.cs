@@ -316,21 +316,21 @@ namespace Waystation.Tests
         [Test]
         public void Refresh_NullStation_DoesNotThrow()
         {
-            Assert.DoesNotThrow(() => _panel.Refresh(null, _inventory, _registry));
+            Assert.DoesNotThrow(() => _panel.Refresh(null, _inventory));
         }
 
         [Test]
         public void Refresh_NullInventory_DoesNotThrow()
         {
             var station = InventoryTestHelpers.MakeStation();
-            Assert.DoesNotThrow(() => _panel.Refresh(station, null, _registry));
+            Assert.DoesNotThrow(() => _panel.Refresh(station, null));
         }
 
         [Test]
         public void Refresh_NoItems_ShowsAllChipOnly()
         {
             var station = InventoryTestHelpers.MakeStation();
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var chips = _panel.Query<Button>(className: "ws-inventory-panel__filter-btn").ToList();
             Assert.AreEqual(1, chips.Count, "Only the 'ALL' chip should appear when there are no items.");
@@ -346,7 +346,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.ore_iron", 5 }, { "item.medkit", 2 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var chips = _panel.Query<Button>(className: "ws-inventory-panel__filter-btn").ToList();
             // ALL + Material + Equipment = 3
@@ -362,7 +362,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.ore_iron", 5 }, { "item.ore_copper", 3 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var chips = _panel.Query<Button>(className: "ws-inventory-panel__filter-btn").ToList();
             // ALL + Material (deduplicated) = 2
@@ -378,7 +378,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.ore_iron", 5 }, { "item.medkit", 2 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             // Click the Material chip.
             var chips = _panel.Query<Button>(className: "ws-inventory-panel__filter-btn").ToList();
@@ -409,7 +409,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.ore_iron", 5 }, { "item.medkit", 2 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var chips = _panel.Query<Button>(className: "ws-inventory-panel__filter-btn").ToList();
             Button allChip      = null;
@@ -476,7 +476,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.a", 3 }, { "item.b", 10 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             // Click the QTY sort button.
             var sortBtns = _panel.Query<Button>(className: "ws-inventory-panel__sort-btn").ToList();
@@ -501,7 +501,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.light", 10 }, { "item.heavy", 2 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var sortBtns = _panel.Query<Button>(className: "ws-inventory-panel__sort-btn").ToList();
             Button weightBtn = null;
@@ -525,7 +525,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.equip", 5 }, { "item.mat", 5 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var sortBtns = _panel.Query<Button>(className: "ws-inventory-panel__sort-btn").ToList();
             Button catBtn = null;
@@ -572,7 +572,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.ore_iron", 5 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             // Detail should be hidden by default.
             var details = _panel.Query<VisualElement>(className: "ws-inventory-panel__item-detail").ToList();
@@ -597,7 +597,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.AddCargoContainer(station, 0, 0,
                 new Dictionary<string, int> { { "item.ore_iron", 5 } });
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var header  = _panel.Query<VisualElement>(className: "ws-inventory-panel__item-row-header").ToList();
             var details = _panel.Query<VisualElement>(className: "ws-inventory-panel__item-detail").ToList();
@@ -619,7 +619,7 @@ namespace Waystation.Tests
                 new Dictionary<string, int> { { "item.ore_iron", 7 } });
             InventoryTestHelpers.SetRoomName(station, 0, 0, "Cargo Bay 1");
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             // Expand the row.
             var header = _panel.Query<VisualElement>(className: "ws-inventory-panel__item-row-header").ToList();
@@ -648,7 +648,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.SetRoomName(station, 0, 0, "Bay Alpha");
             InventoryTestHelpers.SetRoomName(station, 1, 0, "Bay Beta");
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             var header = _panel.Query<VisualElement>(className: "ws-inventory-panel__item-row-header").ToList();
             using (var e = ClickEvent.GetPooled()) { e.target = header[0]; header[0].SendEvent(e); }
@@ -687,7 +687,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.RegisterItem(_registry, "item.ore_iron", "Iron Ore", "Material", 2f);
             var f = InventoryTestHelpers.AddCargoContainer(station, 0, 0, null);
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
 
             // Before adding any item, list should be empty.
             var rowsBefore = _panel.Query<VisualElement>(className: "ws-inventory-panel__item-row").ToList();
@@ -707,7 +707,7 @@ namespace Waystation.Tests
             InventoryTestHelpers.RegisterItem(_registry, "item.ore_iron", "Iron Ore", "Material", 2f);
             var f = InventoryTestHelpers.AddCargoContainer(station, 0, 0, null);
 
-            _panel.Refresh(station, _inventory, _registry);
+            _panel.Refresh(station, _inventory);
             _panel.Detach();
 
             // After Detach, adding items must not trigger a panel rebuild.

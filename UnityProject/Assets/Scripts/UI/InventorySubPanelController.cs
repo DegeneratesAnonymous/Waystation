@@ -23,9 +23,7 @@
 
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 using UnityEngine.UIElements;
-using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
 
@@ -89,7 +87,6 @@ namespace Waystation.UI
         // Held references used to re-subscribe on Refresh when the system changes.
         private InventorySystem _inventorySystem;
         private StationState    _station;
-        private ContentRegistry _registry;
 
         // ── Constructor ────────────────────────────────────────────────────────
 
@@ -148,7 +145,7 @@ namespace Waystation.UI
         /// station state.  Call once on mount and again on every OnTick while the
         /// panel is active, or in response to <see cref="InventorySystem.OnContentsChanged"/>.
         /// </summary>
-        public void Refresh(StationState station, InventorySystem inventory, ContentRegistry registry)
+        public void Refresh(StationState station, InventorySystem inventory)
         {
             // Wire up (or re-wire) the OnContentsChanged event.
             if (inventory != _inventorySystem)
@@ -160,8 +157,7 @@ namespace Waystation.UI
                     _inventorySystem.OnContentsChanged += OnInventoryContentsChanged;
             }
 
-            _station  = station;
-            _registry = registry;
+            _station = station;
 
             if (station == null || inventory == null)
             {
@@ -291,7 +287,11 @@ namespace Waystation.UI
             switch (_sortMode)
             {
                 case SortMode.Weight:
-                    _rows.Sort((a, b) => b.totalWeight.CompareTo(a.totalWeight));
+                    _rows.Sort((a, b) =>
+                    {
+                        int c = b.totalWeight.CompareTo(a.totalWeight);
+                        return c != 0 ? c : StringComparer.Ordinal.Compare(a.itemId, b.itemId);
+                    });
                     break;
                 case SortMode.Category:
                     _rows.Sort((a, b) =>
@@ -301,7 +301,11 @@ namespace Waystation.UI
                     });
                     break;
                 default: // Quantity (descending)
-                    _rows.Sort((a, b) => b.totalQuantity.CompareTo(a.totalQuantity));
+                    _rows.Sort((a, b) =>
+                    {
+                        int c = b.totalQuantity.CompareTo(a.totalQuantity);
+                        return c != 0 ? c : StringComparer.Ordinal.Compare(a.itemId, b.itemId);
+                    });
                     break;
             }
         }
