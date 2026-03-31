@@ -1,13 +1,13 @@
 // StationOverviewController.cs
-// Station → Overview sub-panel (UI-006).
+// Station -> Overview sub-panel (UI-006).
 //
 // Displays:
-//   • Resource section  — one ResourceMeter row per tracked resource, with
-//                         per-tick delta and warning/depleted colour state.
-//   • Room bonus section — active room type bonuses from StationState.roomBonusCache.
-//   • Station condition  — uptime counter (ticks) and overall damage indicator.
-//   • Department summary — crew count and head-assignment status per department;
-//                          clicking a row fires OnDepartmentRowClicked(deptUid).
+//   * Resource section  -- one ResourceMeter row per tracked resource, with
+//                          per-tick delta and warning/depleted colour state.
+//   * Room bonus section -- active room type bonuses from StationState.roomBonusCache.
+//   * Station condition  -- uptime counter (ticks) and overall damage indicator.
+//   * Department summary -- crew count and head-assignment status per department;
+//                           clicking a row fires OnDepartmentRowClicked(deptUid).
 //
 // Data is pushed in via Refresh(StationState, ResourceSystem). Call this once on
 // construction and again on every OnTick to keep the panel live.
@@ -25,27 +25,27 @@ using Waystation.Systems;
 namespace Waystation.UI
 {
     /// <summary>
-    /// Station → Overview sub-panel. Extends <see cref="VisualElement"/> so it
+    /// Station -> Overview sub-panel. Extends <see cref="VisualElement"/> so it
     /// can be added directly to the side-panel drawer.
     /// </summary>
     public class StationOverviewController : VisualElement
     {
-        // ── Events ────────────────────────────────────────────────────────────
+        // -- Events -----------------------------------------------------------
 
         /// <summary>
         /// Fired when the user clicks a department row.
         /// Argument is the department uid; the caller should navigate to
-        /// Crew → Departments for that department.
+        /// Crew -> Departments for that department.
         /// </summary>
         public event Action<string> OnDepartmentRowClicked;
 
-        // ── Section containers ────────────────────────────────────────────────
+        // -- Section containers -----------------------------------------------
 
         private readonly VisualElement _resourceSection;
         private readonly VisualElement _roomBonusSection;
         private readonly VisualElement _deptSection;
 
-        // ── Per-resource meter rows (keyed by resource id) ────────────────────
+        // -- Per-resource meter rows (keyed by resource id) -------------------
 
         private readonly Dictionary<string, ResourceMeterRow> _resourceRows =
             new Dictionary<string, ResourceMeterRow>();
@@ -54,12 +54,28 @@ namespace Waystation.UI
         private readonly Dictionary<string, float> _prevValues =
             new Dictionary<string, float>();
 
-        // ── Station condition labels ──────────────────────────────────────────
+        // -- Room bonus rows (keyed by roomKey) --------------------------------
+
+        private readonly Dictionary<string, RoomBonusRow> _roomBonusRows =
+            new Dictionary<string, RoomBonusRow>();
+
+        // Cached empty-state label so we don't recreate it every tick.
+        private Label _roomBonusEmptyLabel;
+
+        // -- Department rows (keyed by dept uid) ------------------------------
+
+        private readonly Dictionary<string, DeptRow> _deptRows =
+            new Dictionary<string, DeptRow>();
+
+        // Cached empty-state label.
+        private Label _deptEmptyLabel;
+
+        // -- Station condition labels -----------------------------------------
 
         private readonly Label _uptimeLabel;
         private readonly Label _damageLabel;
 
-        // ── Constructor ───────────────────────────────────────────────────────
+        // -- Constructor ------------------------------------------------------
 
         public StationOverviewController()
         {
@@ -81,31 +97,29 @@ namespace Waystation.UI
             var content = scroll.contentContainer;
             content.style.flexDirection = FlexDirection.Column;
 
-            // ── Resources ─────────────────────────────────────────────────────
+            // -- Resources ----------------------------------------------------
             _resourceSection = BuildSection(content, "RESOURCES");
 
-            // ── Room bonuses ──────────────────────────────────────────────────
+            // -- Room bonuses -------------------------------------------------
             _roomBonusSection = BuildSection(content, "ROOM BONUSES");
 
-            // ── Station condition ─────────────────────────────────────────────
+            // -- Station condition --------------------------------------------
             var condSection = BuildSection(content, "STATION CONDITION");
 
-            var uptimeRow = BuildInfoRow(condSection, "UPTIME");
-            _uptimeLabel = uptimeRow;
+            _uptimeLabel = BuildInfoRow(condSection, "UPTIME");
+            _damageLabel = BuildInfoRow(condSection, "DAMAGE STATE");
 
-            var damageRow = BuildInfoRow(condSection, "DAMAGE STATE");
-            _damageLabel = damageRow;
-
-            // ── Department summary ────────────────────────────────────────────
+            // -- Department summary -------------------------------------------
             _deptSection = BuildSection(content, "DEPARTMENTS");
         }
 
-        // ── Public API ────────────────────────────────────────────────────────
+        // -- Public API -------------------------------------------------------
 
         /// <summary>
         /// Refreshes all sections using the latest <paramref name="station"/> state.
         /// <paramref name="resources"/> is used to resolve soft caps and warning
-        /// thresholds; pass null to fall back to raw value display.
+        /// thresholds when available; pass null to use built-in defaults for
+        /// normalisation (500f soft cap, no warning threshold).
         /// </summary>
         public void Refresh(StationState station, ResourceSystem resources = null)
         {
@@ -117,7 +131,7 @@ namespace Waystation.UI
             RefreshDepartments(station);
         }
 
-        // ── Resource section ──────────────────────────────────────────────────
+        // -- Resource section -------------------------------------------------
 
         private void RefreshResources(StationState station, ResourceSystem resources)
         {
@@ -142,15 +156,16 @@ namespace Waystation.UI
                 string id    = kv.Key;
                 float  value = kv.Value;
 
-                float  softCap   = resources != null ? resources.GetResourceSoftCap(id)            : 500f;
-                float  threshold = resources != null ? resources.GetResourceWarningThreshold(id)    : 0f;
+                float softCap   = resources != null ? resources.GetResourceSoftCap(id)         : 500f;
+                float threshold = resources != null ? resources.GetResourceWarningThreshold(id) : 0f;
 
-                // Compute per-tick rate.
-                _prevValues.TryGetValue(id, out float prev);
-                float rate = value - prev;
+                // Compute per-tick rate. For the first tick of a resource, treat the
+                // current value as the baseline and report a zero rate.
+                bool  hadPrev = _prevValues.TryGetValue(id, out float prev);
+                float rate    = hadPrev ? (value - prev) : 0f;
                 _prevValues[id] = value;
 
-                bool isWarning  = threshold > 0f && value > 0f  && value < threshold;
+                bool isWarning  = threshold > 0f && value > 0f && value < threshold;
                 bool isDepleted = value <= 0f;
 
                 if (!_resourceRows.TryGetValue(id, out var row))
@@ -164,54 +179,75 @@ namespace Waystation.UI
             }
         }
 
-        // ── Room bonus section ────────────────────────────────────────────────
+        // -- Room bonus section -----------------------------------------------
 
         private void RefreshRoomBonuses(StationState station)
         {
-            _roomBonusSection.Clear();
-
-            bool any = false;
+            // Build the set of currently active bonus keys.
+            var activeKeys = new HashSet<string>();
             foreach (var bs in station.roomBonusCache.Values)
             {
                 if (!bs.bonusActive) continue;
-
-                any = true;
-                var row = new VisualElement();
-                row.AddToClassList("ws-station-overview__bonus-row");
-                row.style.flexDirection = FlexDirection.Row;
-                row.style.marginBottom  = 4;
-                row.style.paddingTop    = 3;
-                row.style.paddingBottom = 3;
-
-                var nameLabel = new Label(bs.displayName ?? bs.workbenchRoomType ?? bs.roomKey);
-                nameLabel.AddToClassList("ws-station-overview__bonus-name");
-                nameLabel.style.flexGrow = 1;
-                nameLabel.style.fontSize = 11;
-                nameLabel.style.color    = new Color(0.85f, 0.85f, 0.9f, 1f);
-
-                var typeLabel = new Label(bs.workbenchRoomType ?? "—");
-                typeLabel.AddToClassList("ws-station-overview__bonus-type");
-                typeLabel.style.fontSize = 11;
-                typeLabel.style.color    = new Color(0.45f, 0.8f, 0.55f, 1f);
-                typeLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                typeLabel.style.minWidth = 80;
-
-                row.Add(nameLabel);
-                row.Add(typeLabel);
-                _roomBonusSection.Add(row);
+                string key = bs.roomKey ?? bs.workbenchRoomType ?? bs.displayName;
+                if (!string.IsNullOrEmpty(key))
+                    activeKeys.Add(key);
             }
 
-            if (!any)
+            bool anyActive = activeKeys.Count > 0;
+
+            // Remove rows for bonuses no longer active.
+            var toRemove = new List<string>();
+            foreach (var key in _roomBonusRows.Keys)
+                if (!activeKeys.Contains(key))
+                    toRemove.Add(key);
+            foreach (var key in toRemove)
             {
-                var empty = new Label("No active room bonuses.");
-                empty.AddToClassList("ws-station-overview__empty");
-                empty.style.fontSize = 11;
-                empty.style.color    = new Color(0.55f, 0.55f, 0.6f, 1f);
-                _roomBonusSection.Add(empty);
+                _roomBonusRows[key].Root.RemoveFromHierarchy();
+                _roomBonusRows.Remove(key);
+            }
+
+            if (anyActive)
+            {
+                // Hide the empty-state label when there are active bonuses.
+                _roomBonusEmptyLabel?.RemoveFromHierarchy();
+
+                // Add or update rows for active bonuses.
+                foreach (var bs in station.roomBonusCache.Values)
+                {
+                    if (!bs.bonusActive) continue;
+                    string key = bs.roomKey ?? bs.workbenchRoomType ?? bs.displayName;
+                    if (string.IsNullOrEmpty(key)) continue;
+
+                    string nameText = bs.displayName ?? bs.workbenchRoomType ?? bs.roomKey;
+                    string typeText = bs.workbenchRoomType ?? "-";
+
+                    if (!_roomBonusRows.TryGetValue(key, out var row))
+                    {
+                        row = new RoomBonusRow();
+                        _roomBonusRows[key] = row;
+                        _roomBonusSection.Add(row.Root);
+                    }
+
+                    row.Update(nameText, typeText);
+                }
+            }
+            else
+            {
+                // No active bonuses -- show (and cache) the empty-state label.
+                if (_roomBonusEmptyLabel == null)
+                {
+                    _roomBonusEmptyLabel = new Label("No active room bonuses.");
+                    _roomBonusEmptyLabel.AddToClassList("ws-station-overview__empty");
+                    _roomBonusEmptyLabel.style.fontSize = 11;
+                    _roomBonusEmptyLabel.style.color    = new Color(0.55f, 0.55f, 0.6f, 1f);
+                }
+
+                if (_roomBonusEmptyLabel.parent != _roomBonusSection)
+                    _roomBonusSection.Add(_roomBonusEmptyLabel);
             }
         }
 
-        // ── Station condition section ─────────────────────────────────────────
+        // -- Station condition section ----------------------------------------
 
         private void RefreshCondition(StationState station)
         {
@@ -259,24 +295,52 @@ namespace Waystation.UI
                 }
             }
 
-            _damageLabel.text  = damageText;
+            _damageLabel.text        = damageText;
             _damageLabel.style.color = damageColor;
         }
 
-        // ── Department summary section ────────────────────────────────────────
+        // -- Department summary section ---------------------------------------
 
         private void RefreshDepartments(StationState station)
         {
-            _deptSection.Clear();
-
             if (station.departments == null || station.departments.Count == 0)
             {
-                var empty = new Label("No departments defined.");
-                empty.AddToClassList("ws-station-overview__empty");
-                empty.style.fontSize = 11;
-                empty.style.color    = new Color(0.55f, 0.55f, 0.6f, 1f);
-                _deptSection.Add(empty);
+                // Remove any existing dept rows.
+                foreach (var dr in _deptRows.Values)
+                    dr.Root.RemoveFromHierarchy();
+                _deptRows.Clear();
+
+                // Show empty-state label.
+                if (_deptEmptyLabel == null)
+                {
+                    _deptEmptyLabel = new Label("No departments defined.");
+                    _deptEmptyLabel.AddToClassList("ws-station-overview__empty");
+                    _deptEmptyLabel.style.fontSize = 11;
+                    _deptEmptyLabel.style.color    = new Color(0.55f, 0.55f, 0.6f, 1f);
+                }
+
+                if (_deptEmptyLabel.parent != _deptSection)
+                    _deptSection.Add(_deptEmptyLabel);
                 return;
+            }
+
+            // When there are departments, hide the empty label.
+            _deptEmptyLabel?.RemoveFromHierarchy();
+
+            // Build set of current dept uids.
+            var currentUids = new HashSet<string>();
+            foreach (var dept in station.departments)
+                currentUids.Add(dept.uid);
+
+            // Remove rows for departments that no longer exist.
+            var toRemove = new List<string>();
+            foreach (var uid in _deptRows.Keys)
+                if (!currentUids.Contains(uid))
+                    toRemove.Add(uid);
+            foreach (var uid in toRemove)
+            {
+                _deptRows[uid].Root.RemoveFromHierarchy();
+                _deptRows.Remove(uid);
             }
 
             // Pre-compute crew counts per department.
@@ -293,72 +357,30 @@ namespace Waystation.UI
                 crewCounts.TryGetValue(dept.uid, out int deptCrew);
                 bool hasHead = !string.IsNullOrEmpty(dept.headNpcUid);
 
-                var row = new Button();
-                row.AddToClassList("ws-station-overview__dept-row");
-                row.style.flexDirection   = FlexDirection.Row;
-                row.style.alignItems      = Align.Center;
-                row.style.backgroundColor = new Color(0.16f, 0.16f, 0.20f, 1f);
-                row.style.borderTopWidth  = 0;
-                row.style.borderBottomWidth = 1;
-                row.style.borderBottomColor = new Color(0.25f, 0.25f, 0.30f, 1f);
-                row.style.borderLeftWidth  = 0;
-                row.style.borderRightWidth = 0;
-                row.style.paddingTop    = 4;
-                row.style.paddingBottom = 4;
-                row.style.paddingLeft   = 4;
-                row.style.paddingRight  = 4;
-                row.style.marginBottom  = 2;
+                if (!_deptRows.TryGetValue(dept.uid, out var row))
+                {
+                    string capturedUid = dept.uid;
+                    row = new DeptRow(capturedUid, dept.name ?? dept.uid,
+                                     () => OnDepartmentRowClicked?.Invoke(capturedUid));
+                    _deptRows[dept.uid] = row;
+                    _deptSection.Add(row.Root);
+                }
 
-                // Department name
-                var nameLabel = new Label(dept.name ?? dept.uid);
-                nameLabel.AddToClassList("ws-station-overview__dept-name");
-                nameLabel.style.flexGrow = 1;
-                nameLabel.style.fontSize = 11;
-                nameLabel.style.color    = new Color(0.85f, 0.85f, 0.9f, 1f);
-                nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
-
-                // Crew count
-                var crewLabel = new Label(deptCrew + " crew");
-                crewLabel.AddToClassList("ws-station-overview__dept-crew");
-                crewLabel.style.fontSize = 11;
-                crewLabel.style.color    = new Color(0.65f, 0.65f, 0.70f, 1f);
-                crewLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                crewLabel.style.minWidth = 56;
-
-                // Head status
-                var headLabel = new Label(hasHead ? "✓ HEAD" : "— HEAD");
-                headLabel.AddToClassList("ws-station-overview__dept-head");
-                headLabel.style.fontSize = 11;
-                headLabel.style.color    = hasHead
-                    ? new Color(0.3f, 0.75f, 0.45f, 1f)   // green — head assigned
-                    : new Color(0.6f, 0.35f, 0.35f, 1f);  // muted red — unassigned
-                headLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                headLabel.style.minWidth = 60;
-                headLabel.style.marginLeft = 6;
-
-                row.Add(nameLabel);
-                row.Add(crewLabel);
-                row.Add(headLabel);
-
-                // Capture uid for the click closure.
-                string capturedUid = dept.uid;
-                row.RegisterCallback<ClickEvent>(_ => OnDepartmentRowClicked?.Invoke(capturedUid));
-
-                _deptSection.Add(row);
+                row.Update(dept.name ?? dept.uid, deptCrew, hasHead);
             }
         }
 
-        // ── Layout helpers ────────────────────────────────────────────────────
+        // -- Layout helpers ---------------------------------------------------
 
         /// <summary>Builds a labelled section header and returns a child container.</summary>
         private static VisualElement BuildSection(VisualElement parent, string title)
         {
             var header = new Label(title);
             header.AddToClassList("ws-station-overview__section-header");
-            header.style.fontSize       = 10;
-            header.style.color          = new Color(0.5f, 0.55f, 0.65f, 1f);
-            header.style.marginTop      = 10;
-            header.style.marginBottom   = 4;
+            header.style.fontSize                = 10;
+            header.style.color                   = new Color(0.5f, 0.55f, 0.65f, 1f);
+            header.style.marginTop               = 10;
+            header.style.marginBottom            = 4;
             header.style.unityFontStyleAndWeight = FontStyle.Bold;
             parent.Add(header);
 
@@ -382,14 +404,14 @@ namespace Waystation.UI
             row.style.marginBottom  = 4;
 
             var keyLabel = new Label(key);
-            keyLabel.style.fontSize  = 11;
-            keyLabel.style.color     = new Color(0.55f, 0.55f, 0.6f, 1f);
-            keyLabel.style.flexGrow  = 1;
+            keyLabel.style.fontSize       = 11;
+            keyLabel.style.color          = new Color(0.55f, 0.55f, 0.6f, 1f);
+            keyLabel.style.flexGrow       = 1;
             keyLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
 
-            var valLabel = new Label("—");
-            valLabel.style.fontSize = 11;
-            valLabel.style.color    = new Color(0.85f, 0.85f, 0.9f, 1f);
+            var valLabel = new Label("-");
+            valLabel.style.fontSize       = 11;
+            valLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
             valLabel.style.unityTextAlign = TextAnchor.MiddleRight;
 
             row.Add(keyLabel);
@@ -399,13 +421,13 @@ namespace Waystation.UI
             return valLabel;
         }
 
-        // ── Inner type: ResourceMeterRow ──────────────────────────────────────
+        // -- Inner type: ResourceMeterRow -------------------------------------
 
         /// <summary>
         /// One resource row: a ResourceMeter fill bar plus an absolute-value label
         /// and a per-tick rate indicator.
         /// </summary>
-        private class ResourceMeterRow
+        private sealed class ResourceMeterRow
         {
             public readonly VisualElement Root;
 
@@ -420,37 +442,37 @@ namespace Waystation.UI
                 Root.style.flexDirection = FlexDirection.Column;
                 Root.style.marginBottom  = 6;
 
-                // Header row: label text  +  absolute amount  +  rate delta
+                // Header row: label text + absolute amount + rate delta
                 var header = new VisualElement();
                 header.style.flexDirection = FlexDirection.Row;
                 header.style.marginBottom  = 2;
 
                 var idLabel = new Label(resourceId.ToUpperInvariant());
-                idLabel.style.flexGrow  = 1;
-                idLabel.style.fontSize  = 11;
-                idLabel.style.color     = new Color(0.7f, 0.75f, 0.8f, 1f);
+                idLabel.style.flexGrow       = 1;
+                idLabel.style.fontSize       = 11;
+                idLabel.style.color          = new Color(0.7f, 0.75f, 0.8f, 1f);
                 idLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
 
-                _valueLabel = new Label("—");
-                _valueLabel.style.fontSize = 11;
-                _valueLabel.style.color    = new Color(0.85f, 0.85f, 0.9f, 1f);
+                _valueLabel = new Label("-");
+                _valueLabel.AddToClassList("ws-station-overview__resource-value");
+                _valueLabel.style.fontSize       = 11;
+                _valueLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
                 _valueLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                _valueLabel.style.minWidth = 48;
+                _valueLabel.style.minWidth       = 48;
 
                 _rateLabel = new Label("");
-                _rateLabel.style.fontSize = 11;
+                _rateLabel.AddToClassList("ws-station-overview__resource-rate");
+                _rateLabel.style.fontSize       = 11;
                 _rateLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                _rateLabel.style.minWidth = 44;
-                _rateLabel.style.marginLeft = 4;
+                _rateLabel.style.minWidth       = 44;
+                _rateLabel.style.marginLeft     = 4;
 
                 header.Add(idLabel);
                 header.Add(_valueLabel);
                 header.Add(_rateLabel);
 
-                // Map resource id to ResourceType enum for colour theming.
                 var resType = IdToResourceType(resourceId);
                 _meter = new ResourceMeter(resType, "");
-                // Suppress the built-in label (we have our own header row).
                 _meter.LabelText = "";
 
                 Root.Add(header);
@@ -465,7 +487,7 @@ namespace Waystation.UI
 
                 _valueLabel.text = value.ToString("F0");
 
-                // Rate label: zero → blank; positive → green "+N"; negative → red "−N"
+                // Rate label: zero -> blank; positive -> green "+N"; negative -> red "N"
                 if (Mathf.Approximately(rate, 0f))
                 {
                     _rateLabel.text        = "";
@@ -482,7 +504,7 @@ namespace Waystation.UI
                     _rateLabel.style.color = new Color(0.85f, 0.3f, 0.3f, 1f);  // red
                 }
 
-                // Warning / depleted tint on the row.
+                // Warning / depleted tint on the row background.
                 if (isDepleted)
                     Root.style.backgroundColor = new Color(0.25f, 0.05f, 0.05f, 0.35f);
                 else if (isWarning)
@@ -501,6 +523,121 @@ namespace Waystation.UI
                     "credits" => ResourceMeter.ResourceType.Credits,
                     _         => ResourceMeter.ResourceType.Generic,
                 };
+        }
+
+        // -- Inner type: RoomBonusRow -----------------------------------------
+
+        /// <summary>
+        /// One room-bonus row with cached VisualElements so it can be updated
+        /// in place without recreating elements on every tick.
+        /// </summary>
+        private sealed class RoomBonusRow
+        {
+            public readonly VisualElement Root;
+            private readonly Label _nameLabel;
+            private readonly Label _typeLabel;
+
+            public RoomBonusRow()
+            {
+                Root = new VisualElement();
+                Root.AddToClassList("ws-station-overview__bonus-row");
+                Root.style.flexDirection = FlexDirection.Row;
+                Root.style.marginBottom  = 4;
+                Root.style.paddingTop    = 3;
+                Root.style.paddingBottom = 3;
+
+                _nameLabel = new Label();
+                _nameLabel.AddToClassList("ws-station-overview__bonus-name");
+                _nameLabel.style.flexGrow       = 1;
+                _nameLabel.style.fontSize       = 11;
+                _nameLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
+
+                _typeLabel = new Label();
+                _typeLabel.AddToClassList("ws-station-overview__bonus-type");
+                _typeLabel.style.fontSize       = 11;
+                _typeLabel.style.color          = new Color(0.45f, 0.8f, 0.55f, 1f);
+                _typeLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+                _typeLabel.style.minWidth       = 80;
+
+                Root.Add(_nameLabel);
+                Root.Add(_typeLabel);
+            }
+
+            public void Update(string nameText, string typeText)
+            {
+                _nameLabel.text = nameText;
+                _typeLabel.text = typeText;
+            }
+        }
+
+        // -- Inner type: DeptRow ----------------------------------------------
+
+        /// <summary>
+        /// One department summary row with cached VisualElements updated in place
+        /// each tick to reflect the latest crew count and head-assignment state.
+        /// </summary>
+        private sealed class DeptRow
+        {
+            public readonly VisualElement Root;
+            private readonly Label _nameLabel;
+            private readonly Label _crewLabel;
+            private readonly Label _headLabel;
+
+            public DeptRow(string uid, string initialName, Action onClick)
+            {
+                var btn = new Button();
+                btn.AddToClassList("ws-station-overview__dept-row");
+                btn.style.flexDirection     = FlexDirection.Row;
+                btn.style.alignItems        = Align.Center;
+                btn.style.backgroundColor   = new Color(0.16f, 0.16f, 0.20f, 1f);
+                btn.style.borderTopWidth    = 0;
+                btn.style.borderBottomWidth = 1;
+                btn.style.borderBottomColor = new Color(0.25f, 0.25f, 0.30f, 1f);
+                btn.style.borderLeftWidth   = 0;
+                btn.style.borderRightWidth  = 0;
+                btn.style.paddingTop        = 4;
+                btn.style.paddingBottom     = 4;
+                btn.style.paddingLeft       = 4;
+                btn.style.paddingRight      = 4;
+                btn.style.marginBottom      = 2;
+                btn.RegisterCallback<ClickEvent>(_ => onClick?.Invoke());
+                Root = btn;
+
+                _nameLabel = new Label(initialName);
+                _nameLabel.AddToClassList("ws-station-overview__dept-name");
+                _nameLabel.style.flexGrow       = 1;
+                _nameLabel.style.fontSize       = 11;
+                _nameLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
+                _nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+
+                _crewLabel = new Label();
+                _crewLabel.AddToClassList("ws-station-overview__dept-crew");
+                _crewLabel.style.fontSize       = 11;
+                _crewLabel.style.color          = new Color(0.65f, 0.65f, 0.70f, 1f);
+                _crewLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+                _crewLabel.style.minWidth       = 56;
+
+                _headLabel = new Label();
+                _headLabel.AddToClassList("ws-station-overview__dept-head");
+                _headLabel.style.fontSize       = 11;
+                _headLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+                _headLabel.style.minWidth       = 60;
+                _headLabel.style.marginLeft     = 6;
+
+                btn.Add(_nameLabel);
+                btn.Add(_crewLabel);
+                btn.Add(_headLabel);
+            }
+
+            public void Update(string name, int crewCount, bool hasHead)
+            {
+                _nameLabel.text  = name;
+                _crewLabel.text  = crewCount + " crew";
+                _headLabel.text  = hasHead ? "\u2713 HEAD" : "\u2014 HEAD";
+                _headLabel.style.color = hasHead
+                    ? new Color(0.3f, 0.75f, 0.45f, 1f)   // green -- head assigned
+                    : new Color(0.6f, 0.35f, 0.35f, 1f);  // muted red -- unassigned
+            }
         }
     }
 }

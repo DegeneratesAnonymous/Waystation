@@ -98,6 +98,14 @@ namespace Waystation.UI
 
             _topBar?.Detach();
 
+            // Unsubscribe from side-panel events to prevent callbacks firing on a
+            // destroyed controller during scene teardown or reload.
+            if (_sidePanel != null)
+                _sidePanel.OnActiveTabChanged -= OnSidePanelTabChanged;
+
+            if (_stationOverview != null)
+                _stationOverview.OnDepartmentRowClicked -= OnOverviewDepartmentClicked;
+
             // Only destroy PanelSettings if this controller created it at runtime;
             // if it was found in the scene we don't own it.
             if (_createdPanelSettings && _uiDocument != null && _uiDocument.panelSettings != null)
@@ -242,8 +250,9 @@ namespace Waystation.UI
 
         private void OnSidePanelTabChanged(SidePanelController.Tab? tab)
         {
-            // Unmount any existing panel content first.
-            _stationOverview?.RemoveFromHierarchy();
+            // Clear all drawer content before mounting the selected tab's panel.
+            // This prevents content from stacking when multiple tabs are implemented.
+            _sidePanel.DrawerContentRoot.Clear();
 
             if (tab == SidePanelController.Tab.Station)
             {
