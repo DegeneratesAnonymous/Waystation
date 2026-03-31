@@ -249,6 +249,96 @@ namespace Waystation.Systems
                 net.contentType = contentType;
         }
 
+        // ── Health summary ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns an aggregated health summary for all networks of the given type.
+        /// ConnectedNodes = total member foundation count across all networks of this type.
+        /// SeveredCount   = number of closed isolators of this type that are actively
+        ///                  blocking connectivity to at least one adjacent same-type node.
+        /// Status         = Healthy (≤1 component) / Degraded (>1 component, some isolators)
+        ///                / Severed (>1 component, no isolators — unintentional gaps).
+        /// </summary>
+        public NetworkHealthSummary GetNetworkHealth(StationState station, string networkType)
+        {
+            if (station == null) return new NetworkHealthSummary();
+
+            if (_posLookup.Count == 0)
+                _posLookup = BuildPosLookup(station);
+
+            int connectedNodes  = 0;
+            int componentCount  = 0;
+
+            foreach (var net in station.networks.Values)
+            {
+                if (net.networkType != networkType) continue;
+                connectedNodes += net.memberUids.Count;
+                componentCount++;
+            }
+
+            // Count closed isolators of this type that are actively blocking connectivity
+            // (i.e., that have at least one same-type foundation in a different network on
+            // any adjacent tile).  Each such isolator represents one severed connection.
+            int severedCount = 0;
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete" || f.networkId == null) continue;
+                if (GetNetworkType(f) != networkType) continue;
+                if (!IsClosedIsolator(f)) continue;
+
+                bool blockingNeighbor = false;
+                foreach (var dir in s_Dirs)
+                {
+                    int nc = f.tileCol + dir.x, nr = f.tileRow + dir.y;
+                    if (!_posLookup.TryGetValue((nc, nr), out var neighbors)) continue;
+                    foreach (var nb in neighbors)
+                    {
+                        if (nb.status != "complete" || nb.networkId == null) continue;
+                        if (GetNetworkType(nb) != networkType) continue;
+                        if (nb.networkId != f.networkId)
+                        {
+                            blockingNeighbor = true;
+                            break;
+                        }
+                    }
+                    if (blockingNeighbor) break;
+                }
+                if (blockingNeighbor) severedCount++;
+            }
+
+            NetworkHealthStatus status;
+            if (componentCount <= 1)
+                status = NetworkHealthStatus.Healthy;
+            else if (severedCount > 0)
+                status = NetworkHealthStatus.Degraded;
+            else
+                status = NetworkHealthStatus.Severed;
+
+            return new NetworkHealthSummary
+            {
+                ConnectedNodes = connectedNodes,
+                SeveredCount   = severedCount,
+                Status         = status,
+            };
+        }
+
+        /// <summary>
+        /// Returns the aggregate battery charge level [0, 1] across all electrical networks.
+        /// Returns 0 if there is no battery storage capacity.
+        /// </summary>
+        public float GetBatteryLevel(StationState station)
+        {
+            if (station == null) return 0f;
+            float totalStored = 0f, totalCap = 0f;
+            foreach (var net in station.networks.Values)
+            {
+                if (net.networkType != "electric") continue;
+                totalStored += net.storedEnergy;
+                totalCap    += net.storageCapacity;
+            }
+            return totalCap > 0f ? Mathf.Clamp01(totalStored / totalCap) : 0f;
+        }
+
         // ── Tick helpers ─────────────────────────────────────────────────────
 
         private void TickElectrical(StationState station, NetworkInstance net)
