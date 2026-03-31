@@ -891,6 +891,12 @@ namespace Waystation.Models
         // Cleared as the player selects expertise from the prompted panel.
         public List<string> pendingExpertiseSkillIds = new List<string>();
 
+        // ── Domain Skill Proficiency (WO-NPC-013) ─────────────────────────────
+        // IDs of domain skills the NPC is proficient in (e.g. "skill_medical").
+        // Assigned at NPC generation from background and trait data.
+        // Non-proficient skills: XP accrues at 50% rate and cap at level 6.
+        public List<string> proficiencySkillIds = new List<string>();
+
         // Pathfinding state — managed by AntennaSystem/ShipVisitStateMachine
         // Tile position target when actively walking
         public int  pathTargetCol   = -1;

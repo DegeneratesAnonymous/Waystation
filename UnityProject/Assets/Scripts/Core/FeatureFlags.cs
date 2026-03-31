@@ -239,5 +239,13 @@ namespace Waystation.Core
         /// Requires UseUIToolkitHUD = true to be effective.
         /// </summary>
         public static bool UseEventLogStrip = true;
+
+        /// <summary>
+        /// Enables the NPC-013 domain-skill system: 9+ domain skills with embedded
+        /// expertise slots, proficiency-gated XP rates and level caps, Perception as
+        /// a derived passive stat, and the new domain-formula score calculation.
+        /// When false, SkillSystem falls back to the WO-NPC-004 flat-skill behaviour.
+        /// </summary>
+        public static bool UseNewSkillSystem = false;
     }
 }

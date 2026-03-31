@@ -15,6 +15,17 @@
 //   Simple:   level + governing_ability_mod + need_mod
 //   Advanced: level + governing_ability_mod + composite_terms_sum + need_mod
 //
+// Domain skill score (WO-NPC-013, requires FeatureFlags.UseNewSkillSystem):
+//   PrimaryDominant: primary_stat + secondary_stat / 2  (raw stat values, integer division)
+//   EqualWeight:     (primary_stat + secondary_stat) / 2
+//
+// Perception (WO-NPC-013): WIS + (INT + CHA) / 4  (raw stat values, integer division)
+//   Fires as a contested check against Subterfuge rolls (Stealth, Concealment, Manipulation).
+//   Fires as a flat threshold check for environmental fault detection.
+//
+// Proficiency (WO-NPC-013): 2 base slots + INT modifier slots.
+//   Non-proficient skills: XP accrues at 50% rate; skill caps at level 6.
+//
 // Raw ability check: raw stat value (no skill modifier), used for direct stat rolls.
 //
 // Hauling search radius: BaseHaulRadius + INT_modifier × HaulRadiusPerIntMod (min 3).
@@ -47,6 +58,24 @@ namespace Waystation.Systems
         public const int   BaseHaulRadius       = 10;
         /// <summary>Extra tiles of haul radius per INT modifier point.</summary>
         public const int   HaulRadiusPerIntMod  = 3;
+
+        // ── Domain skill constants (WO-NPC-013) ───────────────────────────────
+
+        /// <summary>
+        /// XP rate multiplier for non-proficient domain skills (WO-NPC-013).
+        /// Non-proficient NPCs earn XP at this fraction of the normal rate.
+        /// </summary>
+        public const float NonProficientXPRate = 0.50f;
+        /// <summary>
+        /// Maximum skill level for non-proficient domain skills (WO-NPC-013).
+        /// XP stops accruing once the skill reaches this level without proficiency.
+        /// </summary>
+        public const int   NonProficientLevelCap = 6;
+        /// <summary>
+        /// Base number of proficiency slots before INT modifier (WO-NPC-013).
+        /// Total = BaseProficiencySlots + INT modifier.
+        /// </summary>
+        public const int   BaseProficiencySlots = 2;
 
         // Mood event constants
         private const float LevelUpMoodDelta      = 5f;
@@ -390,6 +419,119 @@ namespace Waystation.Systems
             return Mathf.Max(3, BaseHaulRadius + intMod * HaulRadiusPerIntMod);
         }
 
+        // ── Domain skill queries (WO-NPC-013) ────────────────────────────────
+
+        /// <summary>
+        /// Calculates the domain skill score using raw primary and secondary stat values.
+        /// PrimaryDominant: score = primary_stat + secondary_stat / 2  (integer division).
+        /// EqualWeight:     score = (primary_stat + secondary_stat) / 2.
+        /// Returns 0 if the skill is not found or does not define primary/secondary stats.
+        /// Does NOT include skill level — the score reflects current stat values only.
+        /// </summary>
+        public int GetDomainSkillScore(NPCInstance npc, string skillId)
+        {
+            if (!_registry.Skills.TryGetValue(skillId, out var def)) return 0;
+            if (!def.IsDomainSkill) return 0;
+
+            int primary   = GetRawAbilityCheck(npc, def.primaryStat);
+            int secondary = GetRawAbilityCheck(npc, def.secondaryStat);
+
+            return def.weight == SkillWeight.EqualWeight
+                ? (primary + secondary) / 2
+                : primary + secondary / 2;
+        }
+
+        /// <summary>
+        /// Calculates the Perception derived passive stat for an NPC (WO-NPC-013).
+        /// Formula: WIS + (INT + CHA) / 4  (integer division; raw stat values).
+        /// </summary>
+        public static int GetPerceptionScore(NPCInstance npc)
+            => npc.abilityScores.WIS + (npc.abilityScores.INT + npc.abilityScores.CHA) / 4;
+
+        /// <summary>
+        /// Performs a Perception contested check (WO-NPC-013).
+        /// The detecting NPC detects when their Perception score strictly exceeds the
+        /// opposing roll (e.g. a Subterfuge Stealth / Concealment / Manipulation roll).
+        /// Returns true when the NPC detects; false otherwise.
+        /// Outcome is binary — no partial detection.
+        /// </summary>
+        public static bool PerceptionContestedCheck(int perceptionScore, int opposingRoll)
+            => perceptionScore > opposingRoll;
+
+        /// <summary>
+        /// Returns true if the NPC is proficient in the given skill (WO-NPC-013).
+        /// Proficiency is stored in NPCInstance.proficiencySkillIds, which is populated
+        /// at NPC generation from background and trait data.
+        /// </summary>
+        public static bool IsSkillProficient(NPCInstance npc, string skillId)
+            => npc.proficiencySkillIds != null && npc.proficiencySkillIds.Contains(skillId);
+
+        /// <summary>
+        /// Returns the total number of proficiency slots available to this NPC (WO-NPC-013).
+        /// Formula: BaseProficiencySlots (2) + INT modifier.
+        /// </summary>
+        public static int GetProficiencySlotCount(NPCInstance npc)
+            => BaseProficiencySlots + AbilityScores.GetModifier(npc.abilityScores.INT);
+
+        /// <summary>
+        /// Attempts to claim a domain expertise option for an NPC (WO-NPC-013).
+        /// The option must belong to a slot in the skill's domainExpertiseSlots at
+        /// the appropriate unlock level.  Adding the option ID to chosenExpertise and
+        /// registering its task tags as soft capabilities in TaskEligibilityResolver.
+        /// Returns (true, "") on success; (false, reason) on failure.
+        /// </summary>
+        public (bool ok, string msg) ChooseDomainExpertise(NPCInstance npc,
+                                                            string skillId,
+                                                            string optionId,
+                                                            StationState station)
+        {
+            if (!_registry.Skills.TryGetValue(skillId, out var skillDef))
+                return (false, $"Unknown skill '{skillId}'.");
+
+            // Find the option across all slots in this skill
+            DomainExpertiseOptionDefinition optionDef = null;
+            int requiredLevel = 0;
+            foreach (var slot in skillDef.domainExpertiseSlots)
+            {
+                foreach (var opt in slot.options)
+                {
+                    if (opt.id == optionId)
+                    {
+                        optionDef     = opt;
+                        requiredLevel = slot.unlockLevel;
+                        break;
+                    }
+                }
+                if (optionDef != null) break;
+            }
+
+            if (optionDef == null)
+                return (false, $"Unknown expertise option '{optionId}' in skill '{skillId}'.");
+
+            if (npc.chosenExpertise.Contains(optionId))
+                return (false, $"{optionDef.name} is already chosen.");
+
+            int currentLevel = GetSkillLevel(npc, skillId);
+            if (currentLevel < requiredLevel)
+                return (false, $"Requires {skillDef.displayName} level {requiredLevel}.");
+
+            npc.chosenExpertise.Add(optionId);
+
+            // Register soft capability unlocks so TaskEligibilityResolver can check them
+            foreach (var tag in optionDef.taskTagsUnlocked)
+                TaskEligibilityResolver.RegisterSoftCapability(tag, optionId);
+
+            // Dequeue pending prompt for this skill if present
+            if (npc.pendingExpertiseSkillIds != null)
+                npc.pendingExpertiseSkillIds.Remove(skillId);
+
+            _mood?.PushModifier(npc, "expertise_unlocked", ExpertiseMoodDelta,
+                               ExpertiseMoodDurationTicks, station.tick, "skill_system");
+
+            station.LogEvent($"{npc.name} gained expertise: {optionDef.name}.");
+            return (true, "");
+        }
+
         // ── Expertise modifier ────────────────────────────────────────────────
 
         /// <summary>
@@ -495,6 +637,21 @@ namespace Waystation.Systems
         private void AddXPWithDiminishing(NPCInstance npc, SkillInstance inst,
                                            float xp, StationState station)
         {
+            // Domain skill proficiency enforcement (WO-NPC-013)
+            if (FeatureFlags.UseNewSkillSystem &&
+                _registry.Skills.TryGetValue(inst.skillId, out var skillDef) &&
+                skillDef.IsDomainSkill && skillDef.proficiencyRequiredForMaxLevel)
+            {
+                bool proficient = IsSkillProficient(npc, inst.skillId);
+                if (!proficient)
+                {
+                    // Hard cap: stop awarding XP once the level cap is reached
+                    if (inst.Level >= NonProficientLevelCap) return;
+                    // Reduced XP rate for non-proficient skills
+                    xp *= NonProficientXPRate;
+                }
+            }
+
             int today = station.tick / Mathf.Max(1, TimeSystem.TicksPerDay);
 
             // Reset daily accumulator when a new day begins
@@ -599,17 +756,35 @@ namespace Waystation.Systems
         // ── Bootstrap ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Register all hard-locked and soft-locked capabilities from loaded ExpertiseDefinitions.
+        /// Register all hard-locked and soft-locked capabilities from loaded ExpertiseDefinitions
+        /// and from domain skill embedded expertise slots (WO-NPC-013).
         /// Called once at startup after ContentRegistry finishes loading.
         /// </summary>
         public void RegisterAllCapabilities()
         {
+            // Legacy expertise definitions (WO-NPC-004)
             foreach (var def in _registry.Expertises.Values)
             {
                 foreach (var cap in def.capabilityUnlocks)
                     TaskEligibilityResolver.RegisterCapability(cap, def.expertiseId);
                 foreach (var cap in def.softCapabilityUnlocks)
                     TaskEligibilityResolver.RegisterSoftCapability(cap, def.expertiseId);
+            }
+
+            // Domain skill embedded expertise slots (WO-NPC-013)
+            if (FeatureFlags.UseNewSkillSystem)
+            {
+                foreach (var skill in _registry.Skills.Values)
+                {
+                    foreach (var slot in skill.domainExpertiseSlots)
+                    {
+                        foreach (var opt in slot.options)
+                        {
+                            foreach (var tag in opt.taskTagsUnlocked)
+                                TaskEligibilityResolver.RegisterSoftCapability(tag, opt.id);
+                        }
+                    }
+                }
             }
         }
 

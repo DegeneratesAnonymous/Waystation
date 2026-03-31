@@ -1,0 +1,488 @@
+[
+  {
+    "id": "skill_combat",
+    "name": "Combat",
+    "primary_stat": "STR",
+    "secondary_stat": "DEX",
+    "weight": "primary_dominant",
+    "description": "Weapons use, tactical positioning, and fighting under pressure.",
+    "associated_task_types": [],
+    "xp_per_task_completion": 15.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_firearms",
+            "name": "Firearms",
+            "description": "Unlocks ranged combat assignments and weapon maintenance tasks.",
+            "task_tags_unlocked": ["firearms", "ranged_combat"]
+          },
+          {
+            "id": "exp_melee_combat",
+            "name": "Melee",
+            "description": "Unlocks close-quarters engagement and unarmed defence tasks.",
+            "task_tags_unlocked": ["melee", "close_quarters"]
+          },
+          {
+            "id": "exp_tactics",
+            "name": "Tactics",
+            "description": "Unlocks squad coordination and breach-and-clear operations.",
+            "task_tags_unlocked": ["tactics", "squad_coordination"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_breaching",
+            "name": "Breaching",
+            "description": "Unlocks forced entry and room-clearing tasks.",
+            "task_tags_unlocked": ["breaching"]
+          },
+          {
+            "id": "exp_suppression",
+            "name": "Suppression",
+            "description": "Unlocks suppressive fire and area-denial tasks.",
+            "task_tags_unlocked": ["suppression"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_conditioning",
+    "name": "Conditioning",
+    "primary_stat": "END",
+    "secondary_stat": "STR",
+    "weight": "primary_dominant",
+    "description": "Physical endurance, load-bearing, and sustained exertion under harsh conditions.",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_hauling",
+            "name": "Hauling",
+            "description": "Unlocks heavy cargo transport and oversized load handling.",
+            "task_tags_unlocked": ["heavy_haul", "cargo_transport"]
+          },
+          {
+            "id": "exp_resilience",
+            "name": "Resilience",
+            "description": "Unlocks extended shift assignments and deprivation-resistance tasks.",
+            "task_tags_unlocked": ["extended_shift", "deprivation_resistance"]
+          },
+          {
+            "id": "exp_athletics_cond",
+            "name": "Athletics",
+            "description": "Unlocks rapid traversal and climbing assignments.",
+            "task_tags_unlocked": ["rapid_traversal", "climbing"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_zero_g",
+            "name": "Zero-G Adaptation",
+            "description": "Unlocks EVA tasks and zero-gravity construction assignments.",
+            "task_tags_unlocked": ["zero_g", "eva"]
+          },
+          {
+            "id": "exp_hazmat",
+            "name": "Hazmat",
+            "description": "Unlocks work in contaminated or extreme-environment zones.",
+            "task_tags_unlocked": ["hazmat", "extreme_environment"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_subterfuge",
+    "name": "Subterfuge",
+    "primary_stat": "DEX",
+    "secondary_stat": "WIS",
+    "weight": "primary_dominant",
+    "description": "Stealth, concealment, manipulation, and clandestine operations.",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_stealth",
+            "name": "Stealth",
+            "description": "Unlocks covert movement and infiltration tasks.",
+            "task_tags_unlocked": ["stealth", "infiltration"]
+          },
+          {
+            "id": "exp_concealment",
+            "name": "Concealment",
+            "description": "Unlocks contraband hiding and cargo smuggling tasks.",
+            "task_tags_unlocked": ["concealment", "smuggling"]
+          },
+          {
+            "id": "exp_manipulation",
+            "name": "Manipulation",
+            "description": "Unlocks social manipulation and deception assignments.",
+            "task_tags_unlocked": ["manipulation", "deception"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_lockpicking",
+            "name": "Lockpicking",
+            "description": "Unlocks secure compartment bypass and access overrides.",
+            "task_tags_unlocked": ["lockpicking", "access_override"]
+          },
+          {
+            "id": "exp_forgery",
+            "name": "Forgery",
+            "description": "Unlocks document fabrication and identity spoofing tasks.",
+            "task_tags_unlocked": ["forgery", "identity_spoof"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_fabrication",
+    "name": "Fabrication",
+    "primary_stat": "INT",
+    "secondary_stat": "END",
+    "weight": "primary_dominant",
+    "description": "Construction, repair, and manufacturing of physical structures and equipment.",
+    "associated_task_types": ["job.build", "job.module_maintenance"],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_construction",
+            "name": "Construction",
+            "description": "Unlocks structural block placement and load-bearing assembly tasks.",
+            "task_tags_unlocked": ["construction", "structural"]
+          },
+          {
+            "id": "exp_machining",
+            "name": "Machining",
+            "description": "Unlocks precision part manufacturing and tooling tasks.",
+            "task_tags_unlocked": ["machining", "precision_fabrication"]
+          },
+          {
+            "id": "exp_welding",
+            "name": "Welding",
+            "description": "Unlocks hull repair and pressure-seal welding assignments.",
+            "task_tags_unlocked": ["welding", "hull_repair"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_advanced_construction",
+            "name": "Advanced Construction",
+            "description": "Unlocks multi-module structural projects and complex assemblies.",
+            "task_tags_unlocked": ["advanced_construction"]
+          },
+          {
+            "id": "exp_armour_fab",
+            "name": "Armour Fabrication",
+            "description": "Unlocks protective equipment manufacturing and armour plating tasks.",
+            "task_tags_unlocked": ["armour_fabrication"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_science",
+    "name": "Science",
+    "primary_stat": "INT",
+    "secondary_stat": "WIS",
+    "weight": "primary_dominant",
+    "description": "Research, analysis, experimentation, and scientific discovery.",
+    "associated_task_types": ["job.research_science"],
+    "xp_per_task_completion": 0.0,
+    "xp_per_active_second": 0.5,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_physics",
+            "name": "Physics",
+            "description": "Unlocks propulsion and energy research branches.",
+            "task_tags_unlocked": ["research_physics", "energy_research"]
+          },
+          {
+            "id": "exp_biology",
+            "name": "Biology",
+            "description": "Unlocks biological research and xenobiology survey tasks.",
+            "task_tags_unlocked": ["research_biology", "xenobiology"]
+          },
+          {
+            "id": "exp_chemistry",
+            "name": "Chemistry",
+            "description": "Unlocks chemical synthesis and materials science research.",
+            "task_tags_unlocked": ["research_chemistry", "materials_science"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_advanced_research",
+            "name": "Advanced Research",
+            "description": "Unlocks tier-3 research nodes and experimental project leads.",
+            "task_tags_unlocked": ["advanced_research", "experimental"]
+          },
+          {
+            "id": "exp_xenology",
+            "name": "Xenology",
+            "description": "Unlocks alien artefact analysis and first-contact protocol tasks.",
+            "task_tags_unlocked": ["xenology", "artefact_analysis"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_navigation",
+    "name": "Navigation",
+    "primary_stat": "WIS",
+    "secondary_stat": "END",
+    "weight": "primary_dominant",
+    "description": "Route planning, stellar cartography, and piloting vessels through hazardous space.",
+    "associated_task_types": ["shuttle_depart", "shuttle_return"],
+    "xp_per_task_completion": 20.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_astrocartography",
+            "name": "Astrocartography",
+            "description": "Unlocks sector mapping and deep-space survey assignments.",
+            "task_tags_unlocked": ["astrocartography", "sector_survey"]
+          },
+          {
+            "id": "exp_shuttle_pilot",
+            "name": "Shuttle Pilot",
+            "description": "Unlocks solo shuttle flight and docking approach tasks.",
+            "task_tags_unlocked": ["shuttle_pilot", "docking"]
+          },
+          {
+            "id": "exp_hazard_nav",
+            "name": "Hazard Navigation",
+            "description": "Unlocks asteroid field and debris-zone traversal tasks.",
+            "task_tags_unlocked": ["hazard_navigation", "asteroid_traverse"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_deep_space_nav",
+            "name": "Deep Space Navigation",
+            "description": "Unlocks long-range independent mission flights.",
+            "task_tags_unlocked": ["deep_space_navigation"]
+          },
+          {
+            "id": "exp_combat_pilot",
+            "name": "Combat Piloting",
+            "description": "Unlocks evasive manoeuvres and combat approach vectors.",
+            "task_tags_unlocked": ["combat_piloting"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_medical",
+    "name": "Medical",
+    "primary_stat": "WIS",
+    "secondary_stat": "INT",
+    "weight": "primary_dominant",
+    "description": "Diagnosis, treatment, and surgical procedures.",
+    "associated_task_types": [],
+    "xp_per_task_completion": 12.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_diagnosis",
+            "name": "Diagnosis",
+            "description": "Unlocks medical assessment tasks.",
+            "task_tags_unlocked": ["diagnosis"]
+          },
+          {
+            "id": "exp_treatment",
+            "name": "Treatment",
+            "description": "Unlocks wound care, medication, and disease management tasks.",
+            "task_tags_unlocked": ["treatment"]
+          },
+          {
+            "id": "exp_psychology",
+            "name": "Psychology",
+            "description": "Unlocks counselling and sanity intervention tasks.",
+            "task_tags_unlocked": ["psychology"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_surgery",
+            "name": "Surgery",
+            "description": "Unlocks invasive surgical procedures.",
+            "task_tags_unlocked": ["surgery"]
+          },
+          {
+            "id": "exp_prosthetics",
+            "name": "Prosthetics",
+            "description": "Unlocks implant and augmentation fitting.",
+            "task_tags_unlocked": ["prosthetics"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_provisioning",
+    "name": "Provisioning",
+    "primary_stat": "WIS",
+    "secondary_stat": "DEX",
+    "weight": "primary_dominant",
+    "description": "Food preparation, resource allocation, and supply-chain management.",
+    "associated_task_types": ["sow", "harvest", "tend"],
+    "xp_per_task_completion": 15.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_cooking",
+            "name": "Cooking",
+            "description": "Unlocks advanced meal preparation and dietary planning tasks.",
+            "task_tags_unlocked": ["cooking", "meal_prep"]
+          },
+          {
+            "id": "exp_botany",
+            "name": "Botany",
+            "description": "Unlocks advanced hydroponics and crop specialisation tasks.",
+            "task_tags_unlocked": ["botany", "hydroponics"]
+          },
+          {
+            "id": "exp_logistics",
+            "name": "Logistics",
+            "description": "Unlocks supply-chain optimisation and stockpile management tasks.",
+            "task_tags_unlocked": ["logistics", "stockpile_management"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_rationing",
+            "name": "Rationing",
+            "description": "Unlocks strict rationing protocols and emergency supply distribution.",
+            "task_tags_unlocked": ["rationing", "emergency_supply"]
+          },
+          {
+            "id": "exp_cultivation",
+            "name": "Advanced Cultivation",
+            "description": "Unlocks exotic crop cultivation and accelerated yield techniques.",
+            "task_tags_unlocked": ["advanced_cultivation"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill_social",
+    "name": "Social",
+    "primary_stat": "CHA",
+    "secondary_stat": "WIS",
+    "weight": "primary_dominant",
+    "description": "Diplomacy, negotiation, leadership, and interpersonal relationships.",
+    "associated_task_types": ["conversation_positive", "hail_success"],
+    "xp_per_task_completion": 10.0,
+    "xp_per_active_second": 0.0,
+    "proficiency_required_for_max_level": true,
+    "expertise_slots": [
+      {
+        "unlock_level": 4,
+        "options": [
+          {
+            "id": "exp_diplomacy",
+            "name": "Diplomacy",
+            "description": "Unlocks faction negotiation and treaty drafting tasks.",
+            "task_tags_unlocked": ["diplomacy", "treaty_negotiation"]
+          },
+          {
+            "id": "exp_leadership",
+            "name": "Leadership",
+            "description": "Unlocks crew morale boosting and command-structure tasks.",
+            "task_tags_unlocked": ["leadership", "morale_boost"]
+          },
+          {
+            "id": "exp_persuasion_adv",
+            "name": "Persuasion",
+            "description": "Unlocks high-stakes negotiation and trade influence tasks.",
+            "task_tags_unlocked": ["persuasion", "trade_influence"]
+          }
+        ]
+      },
+      {
+        "unlock_level": 8,
+        "options": [
+          {
+            "id": "exp_recruitment",
+            "name": "Recruitment",
+            "description": "Unlocks NPC recruitment and faction defection tasks.",
+            "task_tags_unlocked": ["recruitment", "faction_defection"]
+          },
+          {
+            "id": "exp_interrogation",
+            "name": "Interrogation",
+            "description": "Unlocks prisoner interrogation and intelligence extraction tasks.",
+            "task_tags_unlocked": ["interrogation", "intel_extraction"]
+          }
+        ]
+      }
+    ]
+  }
+]
