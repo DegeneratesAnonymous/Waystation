@@ -303,10 +303,10 @@ namespace Waystation.UI
         // ── Test helpers ──────────────────────────────────────────────────────
 
         /// <summary>Returns the text shown in the collapsed preview label.</summary>
-        internal string PreviewText => _previewLabel.text;
+        public string PreviewText => _previewLabel.text;
 
         /// <summary>Returns the number of entry rows currently in the list.</summary>
-        internal int VisibleEntryCount
+        public int VisibleEntryCount
         {
             get
             {
@@ -318,10 +318,10 @@ namespace Waystation.UI
         }
 
         /// <summary>Simulates a pointer-enter event for test purposes.</summary>
-        internal void SimulatePointerEnter() => _pointerCount++;
+        public void SimulatePointerEnter() => _pointerCount++;
 
         /// <summary>Simulates a pointer-leave event for test purposes.</summary>
-        internal void SimulatePointerLeave() => _pointerCount = Mathf.Max(0, _pointerCount - 1);
+        public void SimulatePointerLeave() => _pointerCount = Mathf.Max(0, _pointerCount - 1);
 
         // ── Private helpers ───────────────────────────────────────────────────
 
