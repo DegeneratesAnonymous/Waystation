@@ -305,6 +305,19 @@ namespace Waystation.Systems
         }
 
         /// <summary>
+        /// Returns the soft cap (maximum storable amount) for <paramref name="resourceId"/>,
+        /// using registry data when available and falling back to the built-in defaults.
+        /// </summary>
+        public float GetResourceSoftCap(string resourceId) => GetSoftCap(resourceId);
+
+        /// <summary>
+        /// Returns the warning threshold for <paramref name="resourceId"/>; 0 means no threshold
+        /// is defined for that resource.
+        /// </summary>
+        public float GetResourceWarningThreshold(string resourceId) =>
+            GetWarningThreshold(resourceId, GetResourceDefinitions());
+
+        /// <summary>
         /// Clears the warning threshold crossing state so that crossing events
         /// fire correctly on the first tick of a new or loaded game session.
         /// Call this from GameManager.NewGame() and GameManager.LoadGame().

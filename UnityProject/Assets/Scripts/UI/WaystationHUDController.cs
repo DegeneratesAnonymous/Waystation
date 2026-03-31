@@ -38,6 +38,9 @@ namespace Waystation.UI
         private SidePanelController _sidePanel;
         private VisualElement       _contentArea;
 
+        // Station overview panel (UI-006)
+        private StationOverviewController _stationOverview;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -94,6 +97,14 @@ namespace Waystation.UI
             BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
 
             _topBar?.Detach();
+
+            // Unsubscribe from side-panel events to prevent callbacks firing on a
+            // destroyed controller during scene teardown or reload.
+            if (_sidePanel != null)
+                _sidePanel.OnActiveTabChanged -= OnSidePanelTabChanged;
+
+            if (_stationOverview != null)
+                _stationOverview.OnDepartmentRowClicked -= OnOverviewDepartmentClicked;
 
             // Only destroy PanelSettings if this controller created it at runtime;
             // if it was found in the scene we don't own it.
@@ -221,6 +232,9 @@ namespace Waystation.UI
             // Hook up the Map fullscreen callback to open SystemMapController
             _sidePanel.OnMapFullscreenRequested += OnSidePanelMapFullscreen;
 
+            // Mount / unmount panel content when the active tab changes.
+            _sidePanel.OnActiveTabChanged += OnSidePanelTabChanged;
+
             // Register keyboard handler so Escape key works
             _sidePanel.RegisterKeyboard(doc.rootVisualElement);
 
@@ -232,6 +246,38 @@ namespace Waystation.UI
             // Delegate to the legacy system map open logic for now.
             var systemMap = FindFirstObjectByType<SystemMapController>();
             systemMap?.Open();
+        }
+
+        private void OnSidePanelTabChanged(SidePanelController.Tab? tab)
+        {
+            // Clear all drawer content before mounting the selected tab's panel.
+            // This prevents content from stacking when multiple tabs are implemented.
+            _sidePanel.DrawerContentRoot.Clear();
+
+            if (tab == SidePanelController.Tab.Station)
+            {
+                // Lazily create the station overview panel.
+                if (_stationOverview == null)
+                {
+                    _stationOverview = new StationOverviewController();
+                    _stationOverview.OnDepartmentRowClicked += OnOverviewDepartmentClicked;
+                    _stationOverview.style.flexGrow = 1;
+                    _stationOverview.style.height   = Length.Percent(100);
+                }
+
+                _sidePanel.DrawerContentRoot.Add(_stationOverview);
+
+                // Initial data bind.
+                if (_gm?.Station != null)
+                    _stationOverview.Refresh(_gm.Station, _gm.Resources);
+            }
+        }
+
+        private void OnOverviewDepartmentClicked(string deptUid)
+        {
+            // Navigate to Crew → Departments for the selected department.
+            // Full implementation deferred until the Crew sub-tab is migrated.
+            Debug.Log($"[WaystationHUDController] Navigate to Crew→Departments: {deptUid}");
         }
 
         // ── Event log setup (WO-UI-003) ──────────────────────────────────────
@@ -264,8 +310,10 @@ namespace Waystation.UI
         {
             _topBar?.OnTick(station);
             _eventLog?.OnTick(station?.tick ?? 0);
-            // Per-tick panel refresh — panels register their own listeners or are
-            // refreshed here as they are migrated.
+            // Refresh the station overview whenever it is mounted.
+            if (_stationOverview != null &&
+                _sidePanel?.ActiveTab == SidePanelController.Tab.Station)
+                _stationOverview.Refresh(station, _gm?.Resources);
         }
 
         private void OnNewEvent(PendingEvent pending)
