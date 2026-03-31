@@ -810,6 +810,74 @@ namespace Waystation.Models
     }
 
     /// <summary>
+    /// How a domain skill's two stats are combined for the score formula (NPC-013).
+    /// </summary>
+    public enum SkillWeight
+    {
+        /// <summary>score = primary_stat + secondary_stat / 2  (integer division).</summary>
+        PrimaryDominant,
+        /// <summary>score = (primary_stat + secondary_stat) / 2.</summary>
+        EqualWeight,
+    }
+
+    /// <summary>
+    /// One selectable expertise option within a domain skill's expertise slot (NPC-013).
+    /// Embedded directly in <see cref="DomainExpertiseSlotDefinition"/>.
+    /// </summary>
+    [Serializable]
+    public class DomainExpertiseOptionDefinition
+    {
+        /// <summary>Unique ID added to NPCInstance.chosenExpertise when this option is claimed.</summary>
+        public string id;
+        /// <summary>Display name shown in the expertise picker UI.</summary>
+        public string name;
+        /// <summary>Flavour / mechanical description shown in the UI.</summary>
+        public string description = "";
+        /// <summary>
+        /// Task tag strings that are soft-gated by this expertise.
+        /// NPCs without this expertise can attempt tasks tagged here but receive SoftLockPenalty.
+        /// </summary>
+        public List<string> taskTagsUnlocked = new List<string>();
+
+        public static DomainExpertiseOptionDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var opt = new DomainExpertiseOptionDefinition
+            {
+                id          = raw.GetString("id"),
+                name        = raw.GetString("name", raw.GetString("id")),
+                description = raw.GetString("description", ""),
+            };
+            foreach (var tag in raw.GetStringList("task_tags_unlocked"))
+                opt.taskTagsUnlocked.Add(tag);
+            return opt;
+        }
+    }
+
+    /// <summary>
+    /// A group of expertise options that unlock at a specific skill level (NPC-013).
+    /// Each domain skill embeds one or two of these slots (at level 4 and level 8).
+    /// </summary>
+    [Serializable]
+    public class DomainExpertiseSlotDefinition
+    {
+        /// <summary>Skill level at which this slot's options become selectable.</summary>
+        public int unlockLevel;
+        /// <summary>Options the NPC can choose from when this slot unlocks (typically 2–3).</summary>
+        public List<DomainExpertiseOptionDefinition> options = new List<DomainExpertiseOptionDefinition>();
+
+        public static DomainExpertiseSlotDefinition FromDict(Dictionary<string, object> raw)
+        {
+            var slot = new DomainExpertiseSlotDefinition
+            {
+                unlockLevel = raw.GetInt("unlock_level", 4),
+            };
+            foreach (var item in raw.GetList("options"))
+                slot.options.Add(DomainExpertiseOptionDefinition.FromDict(item.AsStringDict()));
+            return slot;
+        }
+    }
+
+    /// <summary>
     /// One additional term in an Advanced skill's composite check formula.
     /// Each term contributes weight × source_value to the final roll.
     /// </summary>
@@ -876,6 +944,9 @@ namespace Waystation.Models
 
     /// <summary>
     /// Static definition of a skill, loaded from data/skills/*.json.
+    /// Supports both the legacy flat-skill schema (WO-NPC-004) and the domain-skill
+    /// schema introduced in WO-NPC-013 (primary_stat / secondary_stat / weight /
+    /// expertise_slots fields).
     /// </summary>
     [Serializable]
     public class SkillDefinition
@@ -904,23 +975,63 @@ namespace Waystation.Models
         /// <summary>XP awarded per active second (for workstation-based skills).</summary>
         public float        xpPerActiveSecond   = 0f;
 
+        // ── Domain-skill fields (WO-NPC-013) ─────────────────────────────────
+
+        /// <summary>
+        /// Primary ability stat used in the domain formula: score = primary_stat + secondary_stat / 2.
+        /// Valid values: STR / DEX / INT / WIS / CHA / END.  Empty for legacy skills.
+        /// </summary>
+        public string       primaryStat  = "";
+        /// <summary>
+        /// Secondary ability stat used in the domain formula.
+        /// Valid values: STR / DEX / INT / WIS / CHA / END.  Empty for legacy skills.
+        /// </summary>
+        public string       secondaryStat = "";
+        /// <summary>Formula weight mode for combining primary and secondary stats.</summary>
+        public SkillWeight  weight        = SkillWeight.PrimaryDominant;
+        /// <summary>
+        /// When true, an NPC without proficiency in this skill caps at level 6 and
+        /// gains XP at 50% of the normal rate.
+        /// </summary>
+        public bool         proficiencyRequiredForMaxLevel = false;
+        /// <summary>
+        /// Expertise slots embedded directly in this skill definition (NPC-013).
+        /// Each slot unlocks at a specific skill level (typically 4 and 8).
+        /// </summary>
+        public List<DomainExpertiseSlotDefinition> domainExpertiseSlots
+            = new List<DomainExpertiseSlotDefinition>();
+
+        /// <summary>True when this skill uses the domain-skill schema (NPC-013).</summary>
+        public bool IsDomainSkill => !string.IsNullOrEmpty(primaryStat);
+
         public static SkillDefinition FromDict(Dictionary<string, object> raw)
         {
             var s = new SkillDefinition
             {
                 skillId             = raw.GetString("id"),
-                displayName         = raw.GetString("display_name", raw.GetString("id")),
+                displayName         = raw.GetString("display_name",
+                                          raw.GetString("name", raw.GetString("id"))),
                 description         = raw.GetString("description", ""),
                 governingAbility    = raw.GetString("governing_ability", ""),
                 xpPerTaskCompletion = raw.GetFloat("xp_per_task_completion", 10f),
                 xpPerActiveSecond   = raw.GetFloat("xp_per_active_second",   0f),
+                // Domain-skill fields
+                primaryStat         = raw.GetString("primary_stat",  ""),
+                secondaryStat       = raw.GetString("secondary_stat", ""),
+                proficiencyRequiredForMaxLevel =
+                    raw.GetBool("proficiency_required_for_max_level", false),
             };
             s.skillType = Enum.TryParse<SkillType>(raw.GetString("skill_type", "Simple"),
                           true, out var st) ? st : SkillType.Simple;
+            s.weight = Enum.TryParse<SkillWeight>(
+                raw.GetString("weight", "primary_dominant").Replace("_", ""),
+                true, out var sw) ? sw : SkillWeight.PrimaryDominant;
             foreach (var t in raw.GetStringList("associated_task_types"))
                 s.associatedTaskTypes.Add(t);
             foreach (var item in raw.GetList("composite_terms"))
                 s.compositeTerms.Add(SkillCompositeTermDefinition.FromDict(item.AsStringDict()));
+            foreach (var item in raw.GetList("expertise_slots"))
+                s.domainExpertiseSlots.Add(DomainExpertiseSlotDefinition.FromDict(item.AsStringDict()));
             return s;
         }
     }
