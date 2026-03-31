@@ -27,6 +27,7 @@
 // any wall/door/workbench placement or removal, and by BuildingSystem (via
 // GameManager) when a workbench or structural foundation completes construction.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Waystation.Core;
@@ -43,6 +44,16 @@ namespace Waystation.Systems
         {
             _registry = registry;
         }
+
+        // ── Events ────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fired after every <see cref="RebuildBonusCache"/> completes (including
+        /// the periodic tick rebuild and any layout-triggered rebuild).  The Station
+        /// → Rooms sub-panel subscribes to this to keep its list up to date without
+        /// polling on every game tick.
+        /// </summary>
+        public event Action OnLayoutChanged;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -76,6 +87,75 @@ namespace Waystation.Systems
             if (station.roomBonusCache.TryGetValue(roomKey, out var bs))
                 return bs.autoSuggestedRoomType;
             return null;
+        }
+
+        /// <summary>
+        /// Returns a snapshot list of <see cref="RoomInfo"/> for every room that is
+        /// currently discoverable in <paramref name="station"/>, ordered by room key.
+        /// Used by the Station → Rooms sub-panel (UI-008) to populate the room list.
+        /// </summary>
+        public List<RoomInfo> GetAllRooms(StationState station, ContentRegistry registry = null)
+        {
+            if (station == null) return new List<RoomInfo>();
+
+            // Collect all unique room keys from the tile→room reverse map.
+            var roomKeys = new HashSet<string>(station.tileToRoomKey.Values);
+
+            // Also include rooms that are only in the bonus cache (edge-case guard).
+            foreach (var key in station.roomBonusCache.Keys)
+                roomKeys.Add(key);
+
+            // And rooms with player assignments that may predate the current cache.
+            foreach (var key in station.playerRoomTypeAssignments.Keys)
+                roomKeys.Add(key);
+
+            // Build NPC→room lookup for O(n) NPC counting.
+            var roomNpcCount = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var npc in station.GetCrew())
+            {
+                if (string.IsNullOrEmpty(npc.location)) continue;
+                if (station.tileToRoomKey.TryGetValue(npc.location, out var npcRoomKey))
+                {
+                    roomNpcCount.TryGetValue(npcRoomKey, out int count);
+                    roomNpcCount[npcRoomKey] = count + 1;
+                }
+            }
+
+            var result = new List<RoomInfo>(roomKeys.Count);
+            foreach (var roomKey in roomKeys)
+            {
+                station.playerRoomTypeAssignments.TryGetValue(roomKey, out string assignedTypeId);
+
+                string typeName = null;
+                if (!string.IsNullOrEmpty(assignedTypeId))
+                {
+                    // Look up display name from built-in registry first, then custom types.
+                    if (registry?.RoomTypes != null &&
+                        registry.RoomTypes.TryGetValue(assignedTypeId, out var rtDef))
+                        typeName = rtDef.displayName;
+                    if (typeName == null)
+                        typeName = station.customRoomTypes
+                            .FirstOrDefault(t => t.id == assignedTypeId)?.displayName;
+                    if (typeName == null)
+                        typeName = assignedTypeId; // fallback to raw id
+                }
+
+                station.customRoomNames.TryGetValue(roomKey, out string customName);
+
+                roomNpcCount.TryGetValue(roomKey, out int npcCount);
+
+                result.Add(new RoomInfo
+                {
+                    roomKey        = roomKey,
+                    displayName    = !string.IsNullOrEmpty(customName) ? customName : $"Room {roomKey}",
+                    assignedTypeId = string.IsNullOrEmpty(assignedTypeId) ? null : assignedTypeId,
+                    typeName       = typeName,
+                    npcCount       = npcCount,
+                });
+            }
+
+            result.Sort((a, b) => string.Compare(a.roomKey, b.roomKey, StringComparison.Ordinal));
+            return result;
         }
 
         /// Force an immediate cache rebuild (call on game load).
@@ -120,6 +200,8 @@ namespace Waystation.Systems
             }
 
             ClassifyGreenhouseRooms(station);
+
+            OnLayoutChanged?.Invoke();
         }
 
         /// Returns all floor tiles connected to (startCol, startRow) via BFS,
