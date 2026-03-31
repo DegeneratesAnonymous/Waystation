@@ -203,7 +203,11 @@ namespace Waystation.Systems
     {
         /// <summary>Total foundation nodes across all networks of this type.</summary>
         public int ConnectedNodes;
-        /// <summary>Number of adjacent same-type node pairs in different networks (broken edges).</summary>
+        /// <summary>
+        /// Number of closed isolators that are actively severing at least one adjacent
+        /// same-type node connection (each such isolator is counted once, regardless of
+        /// how many edges it blocks).
+        /// </summary>
         public int SeveredCount;
         /// <summary>Overall health status derived from ConnectedNodes and SeveredCount.</summary>
         public NetworkHealthStatus Status;
