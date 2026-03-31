@@ -58,6 +58,10 @@ namespace Waystation.UI
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
 
+        // Root element on which the placement-cancel keyboard handler is registered.
+        // Stored so we can unregister it in OnDestroy.
+        private VisualElement _keyboardRoot;
+
         // True only when EnsureUIDocument() created the PanelSettings at runtime
         // (i.e., no pre-existing UIDocument was found in the scene).  Only destroy
         // it in OnDestroy when we own it, to avoid destroying shared scene assets.
@@ -109,13 +113,21 @@ namespace Waystation.UI
             // Unsubscribe from side-panel events to prevent callbacks firing on a
             // destroyed controller during scene teardown or reload.
             if (_sidePanel != null)
-                _sidePanel.OnActiveTabChanged -= OnSidePanelTabChanged;
+            {
+                _sidePanel.OnActiveTabChanged      -= OnSidePanelTabChanged;
+                _sidePanel.OnMapFullscreenRequested -= OnSidePanelMapFullscreen;
+            }
 
             if (_stationOverview != null)
                 _stationOverview.OnDepartmentRowClicked -= OnOverviewDepartmentClicked;
 
             if (_buildSubPanel != null)
                 _buildSubPanel.OnBuildItemSelected -= OnSubPanelBuildItemSelected;
+
+            // Unregister the placement-cancel keyboard handler from the root element.
+            if (_keyboardRoot != null)
+                _keyboardRoot.UnregisterCallback<KeyDownEvent>(
+                    OnKeyDownPlacementCancel, TrickleDown.TrickleDown);
 
             // Only destroy PanelSettings if this controller created it at runtime;
             // if it was found in the scene we don't own it.
@@ -248,7 +260,8 @@ namespace Waystation.UI
 
             // Register placement-cancel Escape handler BEFORE the side panel's own
             // keyboard handler so an active ghost placement is cancelled first.
-            doc.rootVisualElement.RegisterCallback<KeyDownEvent>(
+            _keyboardRoot = doc.rootVisualElement;
+            _keyboardRoot.RegisterCallback<KeyDownEvent>(
                 OnKeyDownPlacementCancel, TrickleDown.TrickleDown);
 
             // Register keyboard handler so Escape key works for side panel

@@ -140,6 +140,26 @@ namespace Waystation.Tests
         }
 
         [Test]
+        public void BeginPlacement_NullBuildableId_ReturnsFalseAndDoesNotThrow()
+        {
+            bool result = false;
+            Assert.DoesNotThrow(() => result = _building.BeginPlacement(null),
+                "BeginPlacement(null) should not throw.");
+            Assert.IsFalse(result, "BeginPlacement(null) should return false.");
+            Assert.IsNull(_building.PendingPlacementId);
+        }
+
+        [Test]
+        public void BeginPlacement_EmptyBuildableId_ReturnsFalseAndDoesNotThrow()
+        {
+            bool result = false;
+            Assert.DoesNotThrow(() => result = _building.BeginPlacement(string.Empty),
+                "BeginPlacement(\"\") should not throw.");
+            Assert.IsFalse(result, "BeginPlacement(\"\") should return false.");
+            Assert.IsNull(_building.PendingPlacementId);
+        }
+
+        [Test]
         public void EndPlacement_ClearsPendingId()
         {
             _building.BeginPlacement(BuildTestHelpers.WallBuildableId);

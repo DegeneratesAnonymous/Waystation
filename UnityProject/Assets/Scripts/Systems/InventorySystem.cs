@@ -334,10 +334,11 @@ namespace Waystation.Systems
         /// Checks whether station storage holds enough materials to build
         /// <paramref name="buildableId"/>.
         /// Returns <see cref="MaterialStatus.Sufficient"/> when all required quantities
-        /// are met, <see cref="MaterialStatus.Partial"/> when at least one item is
+        /// are met (including when the buildable has no material requirements), 
+        /// <see cref="MaterialStatus.Partial"/> when at least one item is
         /// present but at least one requirement is not fully met, and
         /// <see cref="MaterialStatus.Missing"/> when none of the required items are
-        /// available at all (or the buildable has no material requirements).
+        /// available at all.
         /// </summary>
         public MaterialStatus CheckMaterials(StationState station, string buildableId)
         {

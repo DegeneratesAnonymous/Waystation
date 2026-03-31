@@ -96,12 +96,12 @@ namespace Waystation.Systems
         public string PendingPlacementId { get; private set; }
 
         /// <summary>
-        /// Records that the player intends to place the given buildable.
-        /// The ghost-placement renderer (OnGUI) reads <see cref="PendingPlacementId"/>
-        /// each frame and the player confirms placement by clicking a tile, which
-        /// then calls <see cref="PlaceFoundation"/>.
+        /// Starts a ghost-placement session for the given buildable by recording
+        /// the player's intent to place it and setting <see cref="PendingPlacementId"/>.
+        /// UI code can read <see cref="PendingPlacementId"/> to render a placement
+        /// preview and invoke <see cref="PlaceFoundation"/> when the player confirms.
         /// Does nothing and returns <c>false</c> when <paramref name="buildableId"/>
-        /// is not registered.
+        /// is null, empty, or not registered.
         /// </summary>
         /// <returns>
         /// <c>true</c> if the buildable was found in the registry and the session
@@ -109,7 +109,8 @@ namespace Waystation.Systems
         /// </returns>
         public bool BeginPlacement(string buildableId)
         {
-            if (!_registry.Buildables.ContainsKey(buildableId))
+            if (string.IsNullOrEmpty(buildableId) ||
+                !_registry.Buildables.ContainsKey(buildableId))
             {
                 Debug.LogWarning($"[BuildingSystem] BeginPlacement: unknown buildable '{buildableId}'");
                 return false;

@@ -285,15 +285,16 @@ namespace Waystation.UI
         {
             var active = building.GetQueue(station);
 
-            // Remove rows for foundations no longer in the queue
+            // Build a HashSet of active UIDs for O(1) membership checks.
+            var activeUids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var f in active)
+                activeUids.Add(f.uid);
+
+            // Remove rows for foundations no longer in the queue.
             var toRemove = new List<string>();
             foreach (var uid in _queueRows.Keys)
-            {
-                bool found = false;
-                foreach (var f in active)
-                    if (f.uid == uid) { found = true; break; }
-                if (!found) toRemove.Add(uid);
-            }
+                if (!activeUids.Contains(uid))
+                    toRemove.Add(uid);
             foreach (var uid in toRemove)
             {
                 _queueRows[uid].Root.RemoveFromHierarchy();
