@@ -38,6 +38,14 @@ namespace Waystation.UI
         private SidePanelController _sidePanel;
         private VisualElement       _contentArea;
 
+        // Station tab sub-panel (UI-007)
+        // Active Station sub-tab: "overview" | "build"
+        private string                   _stationSubTab   = "overview";
+        private VisualElement            _stationTabRoot;
+        private TabStrip                 _stationSubTabs;
+        private VisualElement            _stationSubContent;
+        private BuildSubPanelController  _buildSubPanel;
+
         // Station overview panel (UI-006)
         private StationOverviewController _stationOverview;
 
@@ -49,6 +57,10 @@ namespace Waystation.UI
 
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
+
+        // Root element on which the placement-cancel keyboard handler is registered.
+        // Stored so we can unregister it in OnDestroy.
+        private VisualElement _keyboardRoot;
 
         // True only when EnsureUIDocument() created the PanelSettings at runtime
         // (i.e., no pre-existing UIDocument was found in the scene).  Only destroy
@@ -101,10 +113,21 @@ namespace Waystation.UI
             // Unsubscribe from side-panel events to prevent callbacks firing on a
             // destroyed controller during scene teardown or reload.
             if (_sidePanel != null)
-                _sidePanel.OnActiveTabChanged -= OnSidePanelTabChanged;
+            {
+                _sidePanel.OnActiveTabChanged      -= OnSidePanelTabChanged;
+                _sidePanel.OnMapFullscreenRequested -= OnSidePanelMapFullscreen;
+            }
 
             if (_stationOverview != null)
                 _stationOverview.OnDepartmentRowClicked -= OnOverviewDepartmentClicked;
+
+            if (_buildSubPanel != null)
+                _buildSubPanel.OnBuildItemSelected -= OnSubPanelBuildItemSelected;
+
+            // Unregister the placement-cancel keyboard handler from the root element.
+            if (_keyboardRoot != null)
+                _keyboardRoot.UnregisterCallback<KeyDownEvent>(
+                    OnKeyDownPlacementCancel, TrickleDown.TrickleDown);
 
             // Only destroy PanelSettings if this controller created it at runtime;
             // if it was found in the scene we don't own it.
@@ -235,10 +258,29 @@ namespace Waystation.UI
             // Mount / unmount panel content when the active tab changes.
             _sidePanel.OnActiveTabChanged += OnSidePanelTabChanged;
 
-            // Register keyboard handler so Escape key works
+            // Register placement-cancel Escape handler BEFORE the side panel's own
+            // keyboard handler so an active ghost placement is cancelled first.
+            _keyboardRoot = doc.rootVisualElement;
+            _keyboardRoot.RegisterCallback<KeyDownEvent>(
+                OnKeyDownPlacementCancel, TrickleDown.TrickleDown);
+
+            // Register keyboard handler so Escape key works for side panel
             _sidePanel.RegisterKeyboard(doc.rootVisualElement);
 
             _contentArea.Add(_sidePanel);
+        }
+
+        /// <summary>
+        /// Intercepts the Escape key when ghost placement is active and cancels
+        /// it before the side-panel's own Escape handler fires.
+        /// </summary>
+        private void OnKeyDownPlacementCancel(KeyDownEvent evt)
+        {
+            if (evt.keyCode != KeyCode.Escape) return;
+            if (string.IsNullOrEmpty(_ghostBuildableId)) return;
+
+            CancelPlacement();
+            evt.StopPropagation();
         }
 
         private void OnSidePanelMapFullscreen()
@@ -256,21 +298,105 @@ namespace Waystation.UI
 
             if (tab == SidePanelController.Tab.Station)
             {
-                // Lazily create the station overview panel.
-                if (_stationOverview == null)
-                {
-                    _stationOverview = new StationOverviewController();
-                    _stationOverview.OnDepartmentRowClicked += OnOverviewDepartmentClicked;
+                MountStationPanel();
+            }
+        }
+
+        // ── Station tab mount / sub-tab switching ─────────────────────────────
+
+        /// <summary>
+        /// Creates (once) and mounts the Station tab root with its Overview and
+        /// Build sub-tabs.  Re-mounts the previously active sub-tab if the panel
+        /// was unmounted and remounted.
+        /// </summary>
+        private void MountStationPanel()
+        {
+            // Lazily build the shared Station tab container (sub-tab strip + content area).
+            if (_stationTabRoot == null)
+            {
+                _stationTabRoot = new VisualElement();
+                _stationTabRoot.style.flexDirection = FlexDirection.Column;
+                _stationTabRoot.style.flexGrow      = 1;
+                _stationTabRoot.style.height        = Length.Percent(100);
+
+                // Create the content area BEFORE setting up the tab strip, so the
+                // first-tab auto-selection during AddTab() can safely populate it.
+                _stationSubContent = new VisualElement();
+                _stationSubContent.style.flexGrow = 1;
+                _stationSubContent.style.overflow = Overflow.Hidden;
+
+                _stationSubTabs = new TabStrip(TabStrip.Orientation.Horizontal);
+                // Subscribe OnTabSelected BEFORE AddTab() — the first AddTab() call
+                // triggers SelectTab() immediately which fires OnTabSelected.
+                _stationSubTabs.OnTabSelected += OnStationSubTabSelected;
+                _stationSubTabs.AddTab("OVERVIEW", "overview");
+                _stationSubTabs.AddTab("BUILD",    "build");
+
+                _stationTabRoot.Add(_stationSubTabs);
+                _stationTabRoot.Add(_stationSubContent);
+            }
+
+            _sidePanel.DrawerContentRoot.Add(_stationTabRoot);
+
+            // Re-select the active sub-tab to restore content after the drawer was
+            // reopened (DrawerContentRoot.Clear() removes child elements).
+            OnStationSubTabSelected(_stationSubTab);
+        }
+
+        private void OnStationSubTabSelected(string subTabId)
+        {
+            _stationSubTab = subTabId;
+            _stationSubContent?.Clear();
+
+            if (_stationSubContent == null) return;
+
+            switch (subTabId)
+            {
+                case "overview":
+                    if (_stationOverview == null)
+                    {
+                        _stationOverview = new StationOverviewController();
+                        _stationOverview.OnDepartmentRowClicked += OnOverviewDepartmentClicked;
+                    }
                     _stationOverview.style.flexGrow = 1;
                     _stationOverview.style.height   = Length.Percent(100);
-                }
+                    _stationSubContent.Add(_stationOverview);
 
-                _sidePanel.DrawerContentRoot.Add(_stationOverview);
+                    if (_gm?.Station != null)
+                        _stationOverview.Refresh(_gm.Station, _gm.Resources);
+                    break;
 
-                // Initial data bind.
-                if (_gm?.Station != null)
-                    _stationOverview.Refresh(_gm.Station, _gm.Resources);
+                case "build":
+                    if (_buildSubPanel == null)
+                    {
+                        _buildSubPanel = new BuildSubPanelController();
+                        _buildSubPanel.OnBuildItemSelected += OnSubPanelBuildItemSelected;
+                    }
+                    _buildSubPanel.style.flexGrow = 1;
+                    _buildSubPanel.style.height   = Length.Percent(100);
+                    _stationSubContent.Add(_buildSubPanel);
+
+                    if (_gm?.Station != null)
+                        _buildSubPanel.Refresh(_gm.Station, _gm?.Building, _gm?.Inventory, _gm?.Registry);
+                    break;
             }
+        }
+
+        private void OnSubPanelBuildItemSelected(string categoryId, string buildableId)
+        {
+            if (!FeatureFlags.UseUIToolkitHUD) return;
+            if (!_ready || string.IsNullOrEmpty(buildableId)) return;
+
+            if (_gm?.Building == null || !_gm.Building.BeginPlacement(buildableId))
+            {
+                Debug.LogWarning($"[WaystationHUDController] Build sub-panel: cannot begin placement for '{buildableId}'.");
+                return;
+            }
+
+            _ghostBuildableId   = buildableId;
+            _ghostRotation      = 0;
+            GameHUD.InBuildMode = true;
+            Debug.Log($"[WaystationHUDController] Build sub-panel: beginning ghost placement: {buildableId}");
         }
 
         private void OnOverviewDepartmentClicked(string deptUid)
@@ -310,10 +436,16 @@ namespace Waystation.UI
         {
             _topBar?.OnTick(station);
             _eventLog?.OnTick(station?.tick ?? 0);
+
+            bool stationTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Station;
+
             // Refresh the station overview whenever it is mounted.
-            if (_stationOverview != null &&
-                _sidePanel?.ActiveTab == SidePanelController.Tab.Station)
+            if (_stationOverview != null && stationTabActive && _stationSubTab == "overview")
                 _stationOverview.Refresh(station, _gm?.Resources);
+
+            // Refresh the build queue whenever the Build sub-tab is mounted.
+            if (_buildSubPanel != null && stationTabActive && _stationSubTab == "build")
+                _buildSubPanel.Refresh(station, _gm?.Building, _gm?.Inventory, _gm?.Registry);
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -430,6 +562,11 @@ namespace Waystation.UI
                 Debug.LogWarning($"[WaystationHUDController] Build item '{buildableId}' not found in registry.");
                 return;
             }
+
+            // Wire into the placement system so the ghost-placement renderer and
+            // any other consumers can read BuildingSystem.PendingPlacementId.
+            _gm.Building.BeginPlacement(buildableId);
+
             _ghostBuildableId     = buildableId;
             _ghostRotation        = 0;
             GameHUD.InBuildMode   = true;
@@ -439,6 +576,7 @@ namespace Waystation.UI
         /// <summary>Cancels the current ghost placement session.</summary>
         public void CancelPlacement()
         {
+            _gm?.Building?.EndPlacement();
             _ghostBuildableId   = null;
             _ghostRotation      = 0;
             GameHUD.InBuildMode = false;

@@ -86,6 +86,60 @@ namespace Waystation.Systems
 
         public BuildingSystem(ContentRegistry registry) => _registry = registry;
 
+        // ── Ghost-placement state ─────────────────────────────────────────────
+
+        /// <summary>
+        /// The buildable ID currently queued for ghost placement, or null when no
+        /// placement session is active.  Set by <see cref="BeginPlacement"/> and
+        /// cleared by <see cref="EndPlacement"/>.
+        /// </summary>
+        public string PendingPlacementId { get; private set; }
+
+        /// <summary>
+        /// Starts a ghost-placement session for the given buildable by recording
+        /// the player's intent to place it and setting <see cref="PendingPlacementId"/>.
+        /// UI code can read <see cref="PendingPlacementId"/> to render a placement
+        /// preview and invoke <see cref="PlaceFoundation"/> when the player confirms.
+        /// Does nothing and returns <c>false</c> when <paramref name="buildableId"/>
+        /// is null, empty, or not registered.
+        /// </summary>
+        /// <returns>
+        /// <c>true</c> if the buildable was found in the registry and the session
+        /// was started; <c>false</c> if the buildable is unknown.
+        /// </returns>
+        public bool BeginPlacement(string buildableId)
+        {
+            if (string.IsNullOrEmpty(buildableId) ||
+                !_registry.Buildables.ContainsKey(buildableId))
+            {
+                Debug.LogWarning($"[BuildingSystem] BeginPlacement: unknown buildable '{buildableId}'");
+                return false;
+            }
+            PendingPlacementId = buildableId;
+            return true;
+        }
+
+        /// <summary>Cancels the current ghost-placement session.</summary>
+        public void EndPlacement()
+        {
+            PendingPlacementId = null;
+        }
+
+        /// <summary>
+        /// Returns all foundations that are currently in the construction pipeline
+        /// (status is "awaiting_haul" or "constructing") for the given station.
+        /// The returned list is a snapshot — changes to <paramref name="station"/>
+        /// after this call are not reflected in the list.
+        /// </summary>
+        public List<FoundationInstance> GetQueue(StationState station)
+        {
+            var result = new List<FoundationInstance>();
+            foreach (var f in station.foundations.Values)
+                if (f.status == "awaiting_haul" || f.status == "constructing")
+                    result.Add(f);
+            return result;
+        }
+
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>

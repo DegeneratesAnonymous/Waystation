@@ -315,6 +315,83 @@ namespace Waystation.Systems
             return total;
         }
 
+        // ── Material availability ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Availability of required materials for a buildable or recipe.
+        /// </summary>
+        public enum MaterialStatus
+        {
+            /// <summary>All required materials are available in station storage.</summary>
+            Sufficient,
+            /// <summary>Some required materials are present but not all quantities are met.</summary>
+            Partial,
+            /// <summary>None of the required materials are present in station storage.</summary>
+            Missing,
+        }
+
+        /// <summary>
+        /// Checks whether station storage holds enough materials to build
+        /// <paramref name="buildableId"/>.
+        /// Returns <see cref="MaterialStatus.Sufficient"/> when all required quantities
+        /// are met (including when the buildable has no material requirements), 
+        /// <see cref="MaterialStatus.Partial"/> when at least one item is
+        /// present but at least one requirement is not fully met, and
+        /// <see cref="MaterialStatus.Missing"/> when none of the required items are
+        /// available at all.
+        /// </summary>
+        public MaterialStatus CheckMaterials(StationState station, string buildableId)
+        {
+            if (!_registry.Buildables.TryGetValue(buildableId, out var defn))
+                return MaterialStatus.Missing;
+
+            if (defn.requiredMaterials == null || defn.requiredMaterials.Count == 0)
+                return MaterialStatus.Sufficient;
+
+            int metCount  = 0;
+            int totalReqs = defn.requiredMaterials.Count;
+            bool anyPresent = false;
+
+            foreach (var kv in defn.requiredMaterials)
+            {
+                int have = GetItemCount(station, kv.Key);
+                if (have >= kv.Value)
+                    metCount++;
+                else if (have > 0)
+                    anyPresent = true;
+            }
+
+            if (metCount == totalReqs)
+                return MaterialStatus.Sufficient;
+            if (metCount > 0 || anyPresent)
+                return MaterialStatus.Partial;
+            return MaterialStatus.Missing;
+        }
+
+        /// <summary>
+        /// Returns a dictionary of item IDs mapped to the shortfall quantity for
+        /// each material required by <paramref name="buildableId"/> that is not fully
+        /// covered by current station storage.  An empty dictionary means all
+        /// materials are available.  Returns an empty dictionary when the buildable
+        /// is unknown or has no required materials.
+        /// </summary>
+        public Dictionary<string, int> GetMissingMaterials(StationState station, string buildableId)
+        {
+            var missing = new Dictionary<string, int>();
+            if (!_registry.Buildables.TryGetValue(buildableId, out var defn))
+                return missing;
+            if (defn.requiredMaterials == null)
+                return missing;
+
+            foreach (var kv in defn.requiredMaterials)
+            {
+                int have = GetItemCount(station, kv.Key);
+                if (have < kv.Value)
+                    missing[kv.Key] = kv.Value - have;
+            }
+            return missing;
+        }
+
         /// <summary>
         /// Returns the combined inventory of all module cargo holds AND all
         /// foundation containers that are in a "cargo_hold" designated room.
