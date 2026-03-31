@@ -116,11 +116,23 @@ namespace Waystation.Core
         /// <summary>
         /// Returns a snapshot of entries sorted by urgency
         /// (Alert > Crew > Resource > Visitors > MissionDistress).
+        /// Insertion order (most-recent first) is preserved within each category.
         /// </summary>
         public IReadOnlyList<AlertEntry> GetSortedByUrgency()
         {
+            // Build an index map in O(n) to avoid O(n²) IndexOf calls during sort.
+            var indexMap = new Dictionary<AlertEntry, int>(_entries.Count);
+            for (int i = 0; i < _entries.Count; i++)
+                indexMap[_entries[i]] = i;
+
             var sorted = new List<AlertEntry>(_entries);
-            sorted.Sort((a, b) => ((int)a.Category).CompareTo((int)b.Category));
+            sorted.Sort((a, b) =>
+            {
+                int cat = ((int)a.Category).CompareTo((int)b.Category);
+                if (cat != 0) return cat;
+                // Preserve original insertion order within each category.
+                return indexMap[a].CompareTo(indexMap[b]);
+            });
             return sorted;
         }
     }

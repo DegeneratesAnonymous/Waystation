@@ -31,11 +31,12 @@ namespace Waystation.UI
     {
         // ── Speed preset table ────────────────────────────────────────────────
         // (label, secondsPerTick)  — Pause handled separately.
+        // 1× uses the GameManager baseline of 0.5s/tick; faster presets halve it.
         private static readonly (string Label, float SecondsPerTick)[] SpeedPresets =
         {
-            ("1×", 1.0f),
-            ("2×", 0.5f),
-            ("3×", 1f / 3f),
+            ("1×", 0.5f),
+            ("2×", 0.25f),
+            ("3×", 1f / 6f),
         };
 
         // ── Child elements ────────────────────────────────────────────────────
@@ -49,7 +50,8 @@ namespace Waystation.UI
         private readonly VisualElement _alertTrayList;
 
         // ── State ─────────────────────────────────────────────────────────────
-        private bool _trayOpen;
+        private bool           _trayOpen;
+        private VisualElement  _clickOutsideRoot;
 
         // ── Dependencies ──────────────────────────────────────────────────────
         private ITopBarGameManager _gm;
@@ -125,9 +127,10 @@ namespace Waystation.UI
             _timeLabel.style.minWidth = 120;
             rightGroup.Add(_timeLabel);
 
-            // Day/Night label — created but not added to the hierarchy (hidden per design)
+            // Day/Night label
             _dayNightLabel = new Label("Day");
             _dayNightLabel.AddToClassList("ws-top-bar__day-night");
+            rightGroup.Add(_dayNightLabel);
 
             // Speed controls
             var speedGroup = new VisualElement();
@@ -183,7 +186,7 @@ namespace Waystation.UI
             _alertTrayList = new VisualElement();
             _alertTrayList.AddToClassList("ws-top-bar__alert-tray-list");
             _alertTrayList.style.flexDirection = FlexDirection.Column;
-            _alertTrayList.style.overflow = Overflow.Visible;
+            _alertTrayList.style.overflow = Overflow.Scroll;
             _alertTrayList.style.paddingLeft = 8;
             _alertTrayList.style.paddingRight = 8;
             _alertTrayList.style.paddingTop = 8;
@@ -245,6 +248,11 @@ namespace Waystation.UI
                 _buffer.OnBufferChanged -= OnBufferChanged;
             if (_ctxMgr != null)
                 _ctxMgr.OnContextChanged -= OnContextChanged;
+            if (_clickOutsideRoot != null)
+            {
+                _clickOutsideRoot.UnregisterCallback<ClickEvent>(OnRootClick, TrickleDown.TrickleDown);
+                _clickOutsideRoot = null;
+            }
 
             _gm     = null;
             _buffer = null;
@@ -391,11 +399,29 @@ namespace Waystation.UI
         /// Register a click-outside handler on the root so the tray closes
         /// when the player clicks anywhere outside the top bar.
         /// Call once after the panel is attached to the hierarchy.
+        /// The handler is automatically unregistered when this element is
+        /// detached from the panel.
         /// </summary>
         public void RegisterClickOutside(VisualElement root)
         {
             if (root == null) return;
+
+            _clickOutsideRoot = root;
             root.RegisterCallback<ClickEvent>(OnRootClick, TrickleDown.TrickleDown);
+
+            // Auto-unregister when this element leaves the panel hierarchy,
+            // preventing stale callbacks if the HUD is rebuilt.
+            RegisterCallback<DetachFromPanelEvent>(OnDetachedFromPanel);
+        }
+
+        private void OnDetachedFromPanel(DetachFromPanelEvent evt)
+        {
+            if (_clickOutsideRoot != null)
+            {
+                _clickOutsideRoot.UnregisterCallback<ClickEvent>(OnRootClick, TrickleDown.TrickleDown);
+                _clickOutsideRoot = null;
+            }
+            UnregisterCallback<DetachFromPanelEvent>(OnDetachedFromPanel);
         }
 
         private void OnRootClick(ClickEvent evt)

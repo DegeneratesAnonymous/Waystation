@@ -721,6 +721,16 @@
     border-color: var(--ws-border-dim);
 }
 
+.ws-top-bar__speed-btn--active {
+    background-color: var(--ws-accent);
+    color: var(--ws-bg-panel);
+    border-color: var(--ws-accent);
+}
+
+.ws-top-bar__speed-btn--active:hover {
+    background-color: var(--ws-accent);
+}
+
 .ws-top-bar__alert-badge {
     min-width: 20px;
     height: 20px;

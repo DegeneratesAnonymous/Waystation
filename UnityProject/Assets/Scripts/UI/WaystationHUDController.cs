@@ -44,6 +44,11 @@ namespace Waystation.UI
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
 
+        // True only when EnsureUIDocument() created the PanelSettings at runtime
+        // (i.e., no pre-existing UIDocument was found in the scene).  Only destroy
+        // it in OnDestroy when we own it, to avoid destroying shared scene assets.
+        private bool _createdPanelSettings;
+
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
         // is (re)created whenever GameScene becomes active.
@@ -85,8 +90,9 @@ namespace Waystation.UI
 
             _topBar?.Detach();
 
-            // Destroy transient PanelSettings if we created one at runtime.
-            if (_uiDocument != null && _uiDocument.panelSettings != null)
+            // Only destroy PanelSettings if this controller created it at runtime;
+            // if it was found in the scene we don't own it.
+            if (_createdPanelSettings && _uiDocument != null && _uiDocument.panelSettings != null)
                 Destroy(_uiDocument.panelSettings);
 
             if (_gm != null)
@@ -145,6 +151,7 @@ namespace Waystation.UI
 
             _uiDocument = gameObject.AddComponent<UIDocument>();
             _uiDocument.panelSettings = panelSettings;
+            _createdPanelSettings = true;
 
             // Apply font to the root element so all children inherit it.
             _uiDocument.rootVisualElement.style.unityFontDefinition =

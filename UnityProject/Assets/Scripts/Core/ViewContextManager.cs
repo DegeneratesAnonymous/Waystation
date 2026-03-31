@@ -53,8 +53,9 @@ namespace Waystation.Core
         /// </summary>
         public void SetContext(string contextName)
         {
-            if (_currentContextName == contextName) return;
-            _currentContextName = contextName ?? string.Empty;
+            var normalized = contextName ?? string.Empty;
+            if (_currentContextName == normalized) return;
+            _currentContextName = normalized;
             OnContextChanged?.Invoke(_currentContextName);
         }
     }
