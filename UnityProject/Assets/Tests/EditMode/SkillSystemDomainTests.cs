@@ -482,7 +482,6 @@ namespace Waystation.Tests
         {
             var npc  = SkillDomainTestHelpers.MakeNpc();
             // NPC is not proficient (proficiencySkillIds is empty by default)
-            float xpBefore = 0f;
             _skillSystem.AwardSkillXP(npc, "skill_medical", 100f, _station);
 
             var inst = SkillSystem.GetSkillInstance(npc, "skill_medical");
@@ -540,18 +539,38 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void UseNewSkillSystem_False_NoXPPenaltyForNonProficient()
+        public void NonProficient_LargeXPAward_ClampsAtCapLevel()
+        {
+            var npc = SkillDomainTestHelpers.MakeNpc();
+            // NPC at level 5 (below cap of 6) — large award should not jump past level 6
+            SkillDomainTestHelpers.SetSkillLevel(npc, "skill_medical", 5);
+
+            // Award enough that, even at 50%, the raw amount would push past level 7
+            _skillSystem.AwardSkillXP(npc, "skill_medical", 10000f, _station);
+
+            var inst = SkillSystem.GetSkillInstance(npc, "skill_medical");
+            float xpCapForLevel6 = SkillSystem.GetXPForLevel(SkillSystem.NonProficientLevelCap);
+            Assert.LessOrEqual(inst.currentXP, xpCapForLevel6,
+                "Non-proficient NPC's XP should be clamped to the level 6 threshold even after a large award.");
+            Assert.AreEqual(6, inst.Level,
+                "Non-proficient NPC should be exactly at level 6 after a large XP award.");
+        }
+
+        [Test]
+        public void UseNewSkillSystem_False_DomainSkillsIgnoredEntirely()
         {
             FeatureFlags.UseNewSkillSystem = false;
             var npc = SkillDomainTestHelpers.MakeNpc();
-            // NPC is not proficient, but with the flag off the old behaviour applies
 
+            // When the flag is off, domain skills should be completely silenced —
+            // no XP should accrue regardless of proficiency.
             _skillSystem.AwardSkillXP(npc, "skill_medical", 100f, _station);
 
             var inst = SkillSystem.GetSkillInstance(npc, "skill_medical");
-            Assert.IsNotNull(inst);
-            Assert.AreEqual(100f, inst.currentXP, 0.001f,
-                "With UseNewSkillSystem = false, non-proficient XP penalty should not apply.");
+            // GetOrCreate creates the instance but XP should remain 0
+            float xp = inst?.currentXP ?? 0f;
+            Assert.AreEqual(0f, xp, 0.001f,
+                "With UseNewSkillSystem = false, domain skills should receive no XP (schema isolation).");
         }
     }
 
@@ -621,8 +640,10 @@ namespace Waystation.Tests
                 if (skillId == "skill_medical" && lvl == 8) slotEarned = true;
             };
 
-            // Level 7 XP = 4900; Level 8 XP = 6400; need 1500 more
-            _skillSystem.AwardSkillXP(npc, "skill_medical", 1600f, _station);
+            // Level 7 XP = 4900; Level 8 XP = 6400; need ≥1500 applied XP.
+            // Daily soft cap: first 500 at 100%, remainder at 70%.
+            // Awarding 2500: 500 + (2000 * 0.70) = 500 + 1400 = 1900 applied → 4900+1900=6800 > 6400 ✓
+            _skillSystem.AwardSkillXP(npc, "skill_medical", 2500f, _station);
 
             Assert.IsTrue(slotEarned,
                 "OnSlotEarned should fire when skill level crosses 8.");
@@ -743,6 +764,76 @@ namespace Waystation.Tests
             var (ok, msg) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
                                                                 "exp_diagnosis", _station);
             Assert.IsFalse(ok, "Choosing the same option twice should fail.");
+        }
+
+        [Test]
+        public void ChooseDomainExpertise_Fails_WhenFlagOff()
+        {
+            FeatureFlags.UseNewSkillSystem = false;
+            var npc = SkillDomainTestHelpers.MakeNpc();
+            SkillDomainTestHelpers.SetSkillLevel(npc, "skill_medical", 4);
+
+            var (ok, msg) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
+                                                                "exp_diagnosis", _station);
+            Assert.IsFalse(ok, "ChooseDomainExpertise should fail when UseNewSkillSystem is off.");
+        }
+
+        [Test]
+        public void ChooseDomainExpertise_Fails_LegacySkill()
+        {
+            // Register a legacy (non-domain) skill and try to choose a domain option for it
+            _registry.Skills["skill.farming"] = SkillDomainTestHelpers.MakeLegacySkill();
+            var npc = SkillDomainTestHelpers.MakeNpc();
+
+            var (ok, msg) = _skillSystem.ChooseDomainExpertise(npc, "skill.farming",
+                                                                "exp_any", _station);
+            Assert.IsFalse(ok, "ChooseDomainExpertise should fail for legacy (non-domain) skills.");
+        }
+
+        [Test]
+        public void ChooseDomainExpertise_Fails_DuplicateSlotLevel()
+        {
+            // NPC at level 4, chooses exp_diagnosis from the level-4 slot.
+            // Attempting to choose another level-4 option (exp_treatment) should be rejected.
+            var npc = SkillDomainTestHelpers.MakeNpc();
+            SkillDomainTestHelpers.SetSkillLevel(npc, "skill_medical", 4);
+            var (ok1, _) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
+                                                               "exp_diagnosis", _station);
+            Assert.IsTrue(ok1, "First level-4 choice should succeed.");
+
+            var (ok2, msg2) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
+                                                                   "exp_treatment", _station);
+            Assert.IsFalse(ok2,
+                "Choosing a second option from the same level-4 slot should fail. Msg: " + msg2);
+        }
+
+        [Test]
+        public void ChooseDomainExpertise_Fails_NoUnspentSlots()
+        {
+            // NPC at level 4 in skill_medical: has 1 slot earned (floor(4/4) = 1).
+            // Fill the only available slot, then try to claim a second slot's option.
+            // The level-8 slot option requires level 8, so use the level-4 slot first,
+            // then advance to 8 and check the unspent slot count.
+            var npc = SkillDomainTestHelpers.MakeNpc();
+            SkillDomainTestHelpers.SetSkillLevel(npc, "skill_medical", 4);
+            // Claim the level-4 slot (uses the 1 available slot)
+            var (ok1, _) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
+                                                               "exp_diagnosis", _station);
+            Assert.IsTrue(ok1);
+
+            // Advance to level 8 — now 2 slots earned but only 1 was unspent after
+            // the first choice. Floor(8/4)=2 earned, 1 used = 1 unspent.
+            SkillDomainTestHelpers.SetSkillLevel(npc, "skill_medical", 8);
+            var (ok8, _) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
+                                                               "exp_surgery", _station);
+            Assert.IsTrue(ok8, "Level-8 option should succeed with 1 unspent slot remaining.");
+
+            // Now unspent = 0. Any further claim should be rejected.
+            // Reset skill to 8 so level check passes; the slot is full.
+            var (ok_extra, msg_extra) = _skillSystem.ChooseDomainExpertise(npc, "skill_medical",
+                                                                            "exp_prosthetics", _station);
+            Assert.IsFalse(ok_extra,
+                "Should fail when all expertise slots are used. Msg: " + msg_extra);
         }
 
         [Test]

@@ -485,11 +485,19 @@ namespace Waystation.Systems
                                                             string optionId,
                                                             StationState station)
         {
+            // Guard: domain expertise requires the new skill system to be active
+            if (!FeatureFlags.UseNewSkillSystem)
+                return (false, "Domain expertise requires UseNewSkillSystem to be enabled.");
+
             if (!_registry.Skills.TryGetValue(skillId, out var skillDef))
                 return (false, $"Unknown skill '{skillId}'.");
 
-            // Find the option across all slots in this skill
-            DomainExpertiseOptionDefinition optionDef = null;
+            if (!skillDef.IsDomainSkill)
+                return (false, $"Skill '{skillId}' is not a domain skill.");
+
+            // Find the option and remember its parent slot
+            DomainExpertiseOptionDefinition optionDef  = null;
+            DomainExpertiseSlotDefinition   parentSlot = null;
             int requiredLevel = 0;
             foreach (var slot in skillDef.domainExpertiseSlots)
             {
@@ -498,6 +506,7 @@ namespace Waystation.Systems
                     if (opt.id == optionId)
                     {
                         optionDef     = opt;
+                        parentSlot    = slot;
                         requiredLevel = slot.unlockLevel;
                         break;
                     }
@@ -514,6 +523,20 @@ namespace Waystation.Systems
             int currentLevel = GetSkillLevel(npc, skillId);
             if (currentLevel < requiredLevel)
                 return (false, $"Requires {skillDef.displayName} level {requiredLevel}.");
+
+            // Enforce one choice per expertise slot: reject if another option from the same
+            // unlock-level slot is already in use (e.g. cannot pick two level-4 options).
+            foreach (var opt in parentSlot.options)
+            {
+                if (npc.chosenExpertise.Contains(opt.id))
+                    return (false,
+                        $"The level-{parentSlot.unlockLevel} slot of {skillDef.displayName} " +
+                        $"is already filled by {opt.name}.");
+            }
+
+            // Require an unspent expertise slot to claim this option
+            if (GetUnspentSlots(npc) <= 0)
+                return (false, "No unspent expertise slots available.");
 
             npc.chosenExpertise.Add(optionId);
 
@@ -637,10 +660,18 @@ namespace Waystation.Systems
         private void AddXPWithDiminishing(NPCInstance npc, SkillInstance inst,
                                            float xp, StationState station)
         {
-            // Domain skill proficiency enforcement (WO-NPC-013)
-            if (FeatureFlags.UseNewSkillSystem &&
-                _registry.Skills.TryGetValue(inst.skillId, out var skillDef) &&
-                skillDef.IsDomainSkill && skillDef.proficiencyRequiredForMaxLevel)
+            // ── Schema isolation (WO-NPC-013) ─────────────────────────────────────
+            // Ensure only one skill schema accrues XP at a time: domain skills are
+            // silenced when the new system is off; legacy skills are silenced when it is on.
+            bool isDomainSkill = _registry.Skills.TryGetValue(inst.skillId, out var skillDef)
+                                 && skillDef.IsDomainSkill;
+            if (!FeatureFlags.UseNewSkillSystem && isDomainSkill) return;
+            if (FeatureFlags.UseNewSkillSystem  && !isDomainSkill) return;
+
+            // ── Non-proficient domain skill enforcement (WO-NPC-013) ──────────────
+            bool clampToNonProfCap = false;
+            if (FeatureFlags.UseNewSkillSystem && isDomainSkill
+                && skillDef.proficiencyRequiredForMaxLevel)
             {
                 bool proficient = IsSkillProficient(npc, inst.skillId);
                 if (!proficient)
@@ -649,6 +680,7 @@ namespace Waystation.Systems
                     if (inst.Level >= NonProficientLevelCap) return;
                     // Reduced XP rate for non-proficient skills
                     xp *= NonProficientXPRate;
+                    clampToNonProfCap = true;
                 }
             }
 
@@ -674,6 +706,15 @@ namespace Waystation.Systems
                 float fullPart    = Mathf.Max(0f, remaining);
                 float reducedPart = (xp - fullPart) * ReducedXPRate;
                 applied = fullPart + reducedPart;
+            }
+
+            // Clamp applied XP so currentXP cannot overshoot the non-proficient level cap
+            // even when a large single award is given from below level 6 (WO-NPC-013).
+            if (clampToNonProfCap)
+            {
+                float xpCapThreshold = GetXPForLevel(NonProficientLevelCap);
+                applied = Mathf.Min(applied, Mathf.Max(0f, xpCapThreshold - inst.currentXP));
+                if (applied <= 0f) return;
             }
 
             inst.currentXP          += applied;
