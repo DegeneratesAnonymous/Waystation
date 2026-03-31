@@ -1592,6 +1592,20 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // RoomInfo — lightweight view model returned by RoomSystem.GetAllRooms().
+    // Aggregates per-room display data for the Station → Rooms sub-panel (UI-008).
+    // Runtime only (not serialised).
+    // -------------------------------------------------------------------------
+    public class RoomInfo
+    {
+        public string roomKey;         // canonical "minCol_minRow" key; used as roomId for OpenRoomPanel
+        public string displayName;     // custom player name, or fallback "Room {roomKey}"
+        public string assignedTypeId;  // null when unassigned
+        public string typeName;        // display name of the assigned type, or null when unassigned
+        public int    npcCount;        // crew NPCs currently occupying a tile in this room
+    }
+
+    // -------------------------------------------------------------------------
     // Body Instance — a corpse left on the station map after an NPC dies.
     // Created by DeathHandlingSystem when an NPC's death tick fires.
     // Status lifecycle: spawned → haul_pending → hauling → removed

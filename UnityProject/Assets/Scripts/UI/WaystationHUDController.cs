@@ -39,12 +39,15 @@ namespace Waystation.UI
         private VisualElement       _contentArea;
 
         // Station tab sub-panel (UI-007)
-        // Active Station sub-tab: "overview" | "build"
+        // Active Station sub-tab: "overview" | "build" | "rooms"
         private string                   _stationSubTab   = "overview";
         private VisualElement            _stationTabRoot;
         private TabStrip                 _stationSubTabs;
         private VisualElement            _stationSubContent;
         private BuildSubPanelController  _buildSubPanel;
+
+        // Station → Rooms sub-panel (UI-008)
+        private RoomsSubPanelController  _roomsSubPanel;
 
         // Station overview panel (UI-006)
         private StationOverviewController _stationOverview;
@@ -123,6 +126,12 @@ namespace Waystation.UI
 
             if (_buildSubPanel != null)
                 _buildSubPanel.OnBuildItemSelected -= OnSubPanelBuildItemSelected;
+
+            if (_roomsSubPanel != null)
+                _roomsSubPanel.OnRoomRowClicked -= OnRoomsSubPanelRoomClicked;
+
+            if (_gm?.Rooms != null)
+                _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
 
             // Unregister the placement-cancel keyboard handler from the root element.
             if (_keyboardRoot != null)
@@ -331,6 +340,7 @@ namespace Waystation.UI
                 _stationSubTabs.OnTabSelected += OnStationSubTabSelected;
                 _stationSubTabs.AddTab("OVERVIEW", "overview");
                 _stationSubTabs.AddTab("BUILD",    "build");
+                _stationSubTabs.AddTab("ROOMS",    "rooms");
 
                 _stationTabRoot.Add(_stationSubTabs);
                 _stationTabRoot.Add(_stationSubContent);
@@ -379,6 +389,20 @@ namespace Waystation.UI
                     if (_gm?.Station != null)
                         _buildSubPanel.Refresh(_gm.Station, _gm?.Building, _gm?.Inventory, _gm?.Registry);
                     break;
+
+                case "rooms":
+                    if (_roomsSubPanel == null)
+                    {
+                        _roomsSubPanel = new RoomsSubPanelController();
+                        _roomsSubPanel.OnRoomRowClicked += OnRoomsSubPanelRoomClicked;
+                    }
+                    _roomsSubPanel.style.flexGrow = 1;
+                    _roomsSubPanel.style.height   = Length.Percent(100);
+                    _stationSubContent.Add(_roomsSubPanel);
+
+                    if (_gm?.Station != null)
+                        _roomsSubPanel.Refresh(_gm.Station, _gm?.Rooms, _gm?.Registry);
+                    break;
             }
         }
 
@@ -404,6 +428,11 @@ namespace Waystation.UI
             // Navigate to Crew → Departments for the selected department.
             // Full implementation deferred until the Crew sub-tab is migrated.
             Debug.Log($"[WaystationHUDController] Navigate to Crew→Departments: {deptUid}");
+        }
+
+        private void OnRoomsSubPanelRoomClicked(string roomId)
+        {
+            OpenRoomPanel(roomId);
         }
 
         // ── Event log setup (WO-UI-003) ──────────────────────────────────────
@@ -446,6 +475,10 @@ namespace Waystation.UI
             // Refresh the build queue whenever the Build sub-tab is mounted.
             if (_buildSubPanel != null && stationTabActive && _stationSubTab == "build")
                 _buildSubPanel.Refresh(station, _gm?.Building, _gm?.Inventory, _gm?.Registry);
+
+            // Refresh the rooms list whenever the Rooms sub-tab is mounted.
+            if (_roomsSubPanel != null && stationTabActive && _stationSubTab == "rooms")
+                _roomsSubPanel.Refresh(station, _gm?.Rooms, _gm?.Registry);
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -465,6 +498,17 @@ namespace Waystation.UI
             // was null at construction time.
             _sidePanel?.InjectMapSystem(_gm?.Map);
 
+            // Subscribe to RoomSystem.OnLayoutChanged so the Rooms sub-panel
+            // refreshes whenever a layout rebuild completes (wall/door placement,
+            // workbench completion, etc.) without waiting for the next OnTick.
+            // Unsubscribe first to ensure idempotency across multiple OnGameLoaded
+            // calls (bootstrap, new game, load game).
+            if (_gm?.Rooms != null)
+            {
+                _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
+                _gm.Rooms.OnLayoutChanged += OnRoomLayoutChanged;
+            }
+
             // Set the initial view context to the station name and inject dependencies
             // into the top bar once the game state is available.
             if (_gm?.Station != null)
@@ -483,6 +527,16 @@ namespace Waystation.UI
                     openFleetPanel:     uid => OpenFleetPanel(uid));
 
                 OnTick(_gm.Station);
+            }
+        }
+
+        private void OnRoomLayoutChanged()
+        {
+            bool stationTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Station;
+            if (_roomsSubPanel != null && stationTabActive && _stationSubTab == "rooms" &&
+                _gm?.Station != null)
+            {
+                _roomsSubPanel.Refresh(_gm.Station, _gm.Rooms, _gm?.Registry);
             }
         }
 
