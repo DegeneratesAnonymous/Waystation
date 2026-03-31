@@ -39,7 +39,7 @@ namespace Waystation.UI
         private VisualElement       _contentArea;
 
         // Station tab sub-panel (UI-007)
-        // Active Station sub-tab: "overview" | "build" | "rooms"
+        // Active Station sub-tab: "overview" | "build" | "rooms" | "networks"
         private string                   _stationSubTab   = "overview";
         private VisualElement            _stationTabRoot;
         private TabStrip                 _stationSubTabs;
@@ -48,6 +48,9 @@ namespace Waystation.UI
 
         // Station → Rooms sub-panel (UI-008)
         private RoomsSubPanelController  _roomsSubPanel;
+
+        // Station → Networks sub-panel (UI-009)
+        private NetworksSubPanelController _networksSubPanel;
 
         // Station overview panel (UI-006)
         private StationOverviewController _stationOverview;
@@ -129,6 +132,8 @@ namespace Waystation.UI
 
             if (_roomsSubPanel != null)
                 _roomsSubPanel.OnRoomRowClicked -= OnRoomsSubPanelRoomClicked;
+
+            _networksSubPanel?.Detach();
 
             if (_gm?.Rooms != null)
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
@@ -341,6 +346,7 @@ namespace Waystation.UI
                 _stationSubTabs.AddTab("OVERVIEW", "overview");
                 _stationSubTabs.AddTab("BUILD",    "build");
                 _stationSubTabs.AddTab("ROOMS",    "rooms");
+                _stationSubTabs.AddTab("NETWORKS", "networks");
 
                 _stationTabRoot.Add(_stationSubTabs);
                 _stationTabRoot.Add(_stationSubContent);
@@ -402,6 +408,17 @@ namespace Waystation.UI
 
                     if (_gm?.Station != null)
                         _roomsSubPanel.Refresh(_gm.Station, _gm?.Rooms, _gm?.Registry);
+                    break;
+
+                case "networks":
+                    if (_networksSubPanel == null)
+                        _networksSubPanel = new NetworksSubPanelController();
+                    _networksSubPanel.style.flexGrow = 1;
+                    _networksSubPanel.style.height   = Length.Percent(100);
+                    _stationSubContent.Add(_networksSubPanel);
+
+                    if (_gm?.Station != null)
+                        _networksSubPanel.Refresh(_gm.Station, _gm?.UtilityNetworks);
                     break;
             }
         }
@@ -479,6 +496,10 @@ namespace Waystation.UI
             // Refresh the rooms list whenever the Rooms sub-tab is mounted.
             if (_roomsSubPanel != null && stationTabActive && _stationSubTab == "rooms")
                 _roomsSubPanel.Refresh(station, _gm?.Rooms, _gm?.Registry);
+
+            // Refresh the networks panel whenever the Networks sub-tab is mounted.
+            if (_networksSubPanel != null && stationTabActive && _stationSubTab == "networks")
+                _networksSubPanel.Refresh(station, _gm?.UtilityNetworks);
         }
 
         private void OnNewEvent(PendingEvent pending)

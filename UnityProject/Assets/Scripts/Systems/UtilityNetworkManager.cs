@@ -121,6 +121,23 @@ namespace Waystation.Systems
             _networks.Tick(station);
         }
 
+        // ── Network health helpers ────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns an aggregated health summary for all networks of the given type
+        /// (e.g. "electric", "pipe", "duct", "fuel").
+        /// Used by the Networks sub-panel UI.
+        /// </summary>
+        public NetworkHealthSummary GetNetworkHealth(StationState station, string networkType)
+            => _networks.GetNetworkHealth(station, networkType);
+
+        /// <summary>
+        /// Returns the aggregate battery charge level [0, 1] across all electrical networks.
+        /// Returns 0 if there is no battery storage capacity.
+        /// </summary>
+        public float GetBatteryLevel(StationState station)
+            => _networks.GetBatteryLevel(station);
+
         // ── Inspection helpers ────────────────────────────────────────────────
 
         /// <summary>
@@ -170,6 +187,26 @@ namespace Waystation.Systems
 
             return data;
         }
+    }
+
+    // ── Network health summary ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Overall health status for a network type.
+    /// </summary>
+    public enum NetworkHealthStatus { Healthy, Degraded, Severed }
+
+    /// <summary>
+    /// Health snapshot for all networks of one type, used by the Networks sub-panel.
+    /// </summary>
+    public class NetworkHealthSummary
+    {
+        /// <summary>Total foundation nodes across all networks of this type.</summary>
+        public int ConnectedNodes;
+        /// <summary>Number of adjacent same-type node pairs in different networks (broken edges).</summary>
+        public int SeveredCount;
+        /// <summary>Overall health status derived from ConnectedNodes and SeveredCount.</summary>
+        public NetworkHealthStatus Status;
     }
 
     // ── Inspection data containers ────────────────────────────────────────────
