@@ -93,14 +93,18 @@ namespace Waystation.UI
             style.bottom   = 0;
             style.flexDirection = FlexDirection.Column;
 
-            // ── Load stylesheet ───────────────────────────────────────────────
-            var sheet = Resources.Load<StyleSheet>("UI/EventLog/EventLogStrip");
-            if (sheet != null)
-                styleSheets.Add(sheet);
+            // EventLogStrip.uss is not under a Resources/ directory; all visual
+            // styles fall back to the inline style declarations below.
 
             // ── Pointer tracking ──────────────────────────────────────────────
             RegisterCallback<PointerEnterEvent>(_ => _pointerCount++);
             RegisterCallback<PointerLeaveEvent>(_ => _pointerCount = Mathf.Max(0, _pointerCount - 1));
+
+            // ── Subscribe to buffer changes ───────────────────────────────────
+            // Subscribe here so every caller of EventLogBuffer.Instance.Add()
+            // automatically refreshes the strip — no manual call needed.
+            RegisterCallback<AttachToPanelEvent>(_  => EventLogBuffer.Instance.OnBufferChanged += OnBufferChanged);
+            RegisterCallback<DetachFromPanelEvent>(_ => EventLogBuffer.Instance.OnBufferChanged -= OnBufferChanged);
 
             // ── Header row ────────────────────────────────────────────────────
             _header = new VisualElement();
@@ -241,10 +245,15 @@ namespace Waystation.UI
         /// <summary>
         /// Updates the current tick (used for relative timestamps in entry rows).
         /// Called by WaystationHUDController on each game tick.
+        /// When expanded, rebuilds the entry list so relative timestamps stay accurate.
         /// </summary>
         public void OnTick(int tick)
         {
             _currentTick = tick;
+
+            // Rebuild the visible entry list so "now"/"t-N" timestamps remain accurate.
+            if (_expanded)
+                RebuildEntryList();
         }
 
         // ── Buffer subscription ───────────────────────────────────────────────

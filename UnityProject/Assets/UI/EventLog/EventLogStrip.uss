@@ -149,7 +149,8 @@
 
 .ws-event-log__entry-list {
     flex-grow: 1;
-    overflow: hidden scroll;
+    overflow-x: hidden;
+    overflow-y: scroll;
     padding-top: var(--ws-space-xs);
     padding-bottom: var(--ws-space-xs);
 }

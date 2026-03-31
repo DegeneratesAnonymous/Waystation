@@ -159,7 +159,7 @@ namespace Waystation.Core
         /// Set to true to opt in to the new UI Toolkit HUD; set to false to revert
         /// to the legacy system at any point without data loss.
         /// </summary>
-        public static bool UseUIToolkitHUD = true;
+        public static bool UseUIToolkitHUD = false;
 
         /// <summary>
         /// Enables the full real-time asteroid mission execution system (WO-EXP-004):

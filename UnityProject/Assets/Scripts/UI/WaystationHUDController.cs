@@ -47,6 +47,11 @@ namespace Waystation.UI
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
 
+        // True only when EnsureUIDocument() created the PanelSettings at runtime
+        // (i.e., no pre-existing UIDocument was found in the scene).  Only destroy
+        // it in OnDestroy when we own it, to avoid destroying shared scene assets.
+        private bool _createdPanelSettings;
+
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
         // is (re)created whenever GameScene becomes active.
@@ -78,7 +83,8 @@ namespace Waystation.UI
             BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
             BuildTopBar();
             BuildSidePanel();
-            BuildEventLog();
+            if (FeatureFlags.UseEventLogStrip)
+                BuildEventLog();
             StartCoroutine(WaitForGame());
         }
 
@@ -89,8 +95,9 @@ namespace Waystation.UI
 
             _topBar?.Detach();
 
-            // Destroy transient PanelSettings if we created one at runtime.
-            if (_uiDocument != null && _uiDocument.panelSettings != null)
+            // Only destroy PanelSettings if this controller created it at runtime;
+            // if it was found in the scene we don't own it.
+            if (_createdPanelSettings && _uiDocument != null && _uiDocument.panelSettings != null)
                 Destroy(_uiDocument.panelSettings);
 
             if (_gm != null)
@@ -149,6 +156,7 @@ namespace Waystation.UI
 
             _uiDocument = gameObject.AddComponent<UIDocument>();
             _uiDocument.panelSettings = panelSettings;
+            _createdPanelSettings = true;
 
             // Apply font to the root element so all children inherit it.
             _uiDocument.rootVisualElement.style.unityFontDefinition =
@@ -243,10 +251,11 @@ namespace Waystation.UI
             // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
             GameHUD.InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
 
-            // Keep IsMouseOverDrawer in sync: OR the side panel's pointer state
-            // with any other registered HUD panels.
+            // Keep IsMouseOverDrawer in sync: OR the side panel, event log strip,
+            // and any other registered HUD panel pointer states.
             bool sidePanelOver = _sidePanel != null && _sidePanel.IsMouseOverPanel;
-            GameHUD.IsMouseOverDrawer = sidePanelOver || _panelsUnderPointer > 0;
+            bool eventLogOver  = _eventLog  != null && _eventLog.IsMouseOverStrip;
+            GameHUD.IsMouseOverDrawer = sidePanelOver || eventLogOver || _panelsUnderPointer > 0;
         }
 
         // ── GameManager event handlers ────────────────────────────────────────
@@ -263,9 +272,10 @@ namespace Waystation.UI
         {
             if (pending?.definition == null) return;
             // Map the event definition to a log category and add to the buffer.
+            // EventLogController auto-subscribes to EventLogBuffer.OnBufferChanged
+            // so no manual call to OnBufferChanged is needed here.
             var category = pending.definition.hostile ? LogCategory.Alert : LogCategory.World;
             EventLogBuffer.Instance.Add(category, pending.definition.description ?? pending.definition.id);
-            _eventLog?.OnBufferChanged();
         }
 
         private void OnGameLoaded()
@@ -281,7 +291,17 @@ namespace Waystation.UI
             {
                 ViewContextManager.Instance.SetContext(_gm.Station.stationName);
                 _topBar?.InjectDependencies(_gm, LogEntryBuffer.Instance, ViewContextManager.Instance);
-                _eventLog?.InjectNavigationCallbacks(null, null, null, null, null);
+
+                // Wire navigation callbacks into the event log strip.
+                // The navigation methods (SelectCrewMemberInternal, etc.) are already
+                // defined on this class — pass static-compatible lambdas.
+                _eventLog?.InjectNavigationCallbacks(
+                    selectCrewMember:   uid => SelectCrewMemberInternal(uid),
+                    openRoomPanel:      id  => OpenRoomPanel(id),
+                    openNetworkOverlay: ()  => OpenNetworkOverlay(),
+                    openVisitorPanel:   id  => OpenVisitorPanel(id),
+                    openFleetPanel:     uid => OpenFleetPanel(uid));
+
                 OnTick(_gm.Station);
             }
         }
@@ -297,6 +317,30 @@ namespace Waystation.UI
             if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
             // Crew Detail panel open — implemented when Crew sub-tab is migrated.
             Debug.Log($"[WaystationHUDController] SelectCrewMember: {npcUid}");
+        }
+
+        private static void OpenRoomPanel(string roomId)
+        {
+            if (_instance == null || string.IsNullOrEmpty(roomId)) return;
+            Debug.Log($"[WaystationHUDController] OpenRoomPanel: {roomId}");
+        }
+
+        private static void OpenNetworkOverlay()
+        {
+            if (_instance == null) return;
+            Debug.Log("[WaystationHUDController] OpenNetworkOverlay");
+        }
+
+        private static void OpenVisitorPanel(string visitorId)
+        {
+            if (_instance == null) return;
+            Debug.Log($"[WaystationHUDController] OpenVisitorPanel: {visitorId}");
+        }
+
+        private static void OpenFleetPanel(string shipUid)
+        {
+            if (_instance == null) return;
+            Debug.Log($"[WaystationHUDController] OpenFleetPanel: {shipUid}");
         }
 
         // ── Mouse-over helpers (called from panel pointer callbacks) ──────────
