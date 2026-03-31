@@ -710,10 +710,11 @@ namespace Waystation.Systems
 
             // Clamp applied XP so currentXP cannot overshoot the non-proficient level cap
             // even when a large single award is given from below level 6 (WO-NPC-013).
+            // Safe to omit Mathf.Max: the early-return above guarantees currentXP < xpCapThreshold.
             if (clampToNonProfCap)
             {
                 float xpCapThreshold = GetXPForLevel(NonProficientLevelCap);
-                applied = Mathf.Min(applied, Mathf.Max(0f, xpCapThreshold - inst.currentXP));
+                applied = Mathf.Min(applied, xpCapThreshold - inst.currentXP);
                 if (applied <= 0f) return;
             }
 
