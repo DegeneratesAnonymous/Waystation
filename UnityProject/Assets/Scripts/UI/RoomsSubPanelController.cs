@@ -55,6 +55,9 @@ namespace Waystation.UI
         private const string RowNpcClass      = "ws-rooms-panel__room-npc";
         private const string EmptyClass       = "ws-rooms-panel__empty";
 
+        // Sentinel key used in _filterButtons for the "All" chip (active filter = null).
+        private const string AllFilterKey = "__all__";
+
         // ── Child elements ─────────────────────────────────────────────────────
 
         private readonly VisualElement _filterStrip;
@@ -169,8 +172,8 @@ namespace Waystation.UI
             btn.RegisterCallback<ClickEvent>(_ => OnFilterChipClicked(capturedId));
             _filterStrip.Add(btn);
 
-            // Key: use empty string for the "All" chip so we can store it in a string dictionary.
-            string key = typeId ?? "";
+            // Key: use AllFilterKey for the "All" chip to avoid conflicts with type IDs.
+            string key = typeId ?? AllFilterKey;
             _filterButtons[key] = btn;
         }
 
@@ -185,10 +188,11 @@ namespace Waystation.UI
         {
             foreach (var kv in _filterButtons)
             {
-                // Active when the stored key matches the current filter
-                // (both null→"" and typeId→typeId comparisons work here).
-                bool isActive = (kv.Key == "") ? (_activeFilter == null)
-                                               : (kv.Key == _activeFilter);
+                // Active when the stored key matches the current filter:
+                // AllFilterKey → active when no type filter is selected.
+                // type id key  → active when it equals _activeFilter.
+                bool isActive = (kv.Key == AllFilterKey) ? (_activeFilter == null)
+                                                         : (kv.Key == _activeFilter);
                 kv.Value.EnableInClassList(FilterBtnActive, isActive);
             }
         }
@@ -267,7 +271,9 @@ namespace Waystation.UI
             }
 
             // NPC count
-            string npcText = room.npcCount > 0 ? $"{room.npcCount} NPC" : "";
+            string npcText = room.npcCount > 0
+                ? $"{room.npcCount} NPC{(room.npcCount != 1 ? "s" : "")}"
+                : "";
             var npcLabel = new Label(npcText);
             npcLabel.AddToClassList(RowNpcClass);
             npcLabel.style.unityTextAlign = TextAnchor.MiddleRight;
