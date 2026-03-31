@@ -150,6 +150,9 @@ namespace Waystation.Demo
         {
             if (HideOverlay) return;
 
+            // UI Toolkit HUD replaces these IMGUI overlays.
+            if (FeatureFlags.UseUIToolkitHUD) return;
+
             // In the main menu scene, WaystationMainMenuHUD owns the UI.
             if (SceneManager.GetActiveScene().name == "MainMenuScene") return;
 

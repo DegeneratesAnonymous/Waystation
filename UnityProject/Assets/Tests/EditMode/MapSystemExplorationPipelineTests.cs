@@ -103,7 +103,7 @@ namespace Waystation.Tests
             registry.Items["item.exploration_datachip"] = new ItemDefinition
             {
                 id = "item.exploration_datachip",
-                item_type = "Valuables",
+                itemType = "Valuables",
             };
             registry.Missions["mission.scout"] = new MissionDefinition
             {

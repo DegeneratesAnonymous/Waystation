@@ -10,6 +10,7 @@
 //   Minimal — Undiscovered sectors: conflict drift only; no resource recording.
 using System;
 using System.Collections.Generic;
+using Random = System.Random;
 using UnityEngine;
 using Waystation.Models;
 

@@ -119,9 +119,22 @@ namespace Waystation.UI
 
             AddToClassList("ws-side-panel");
 
+            // Inline styles — mirrors USS .ws-side-panel so the panel is visible
+            // even if the stylesheet fails to load via Resources.
+            style.position = Position.Absolute;
+            style.top = 0;
+            style.right = 0;
+            style.bottom = 0;
+            style.flexDirection = FlexDirection.Row;
+            style.alignItems = Align.Stretch;
+
             // ── Drawer (left portion, slides horizontally) ─────────────────────
             _drawer = new DrawerPanel(DrawerPanel.Direction.Horizontal);
             _drawer.AddToClassList("ws-side-panel__drawer");
+            _drawer.style.width = 300;
+            _drawer.style.backgroundColor = new Color(0.12f, 0.12f, 0.16f, 0.95f);
+            _drawer.style.borderLeftWidth = 1;
+            _drawer.style.borderLeftColor = new Color(0.3f, 0.3f, 0.35f, 1f);
             _drawer.RegisterCallback<PointerEnterEvent>(_ => OnPointerEnter());
             _drawer.RegisterCallback<PointerLeaveEvent>(_ => OnPointerLeave());
             Add(_drawer);
@@ -129,6 +142,14 @@ namespace Waystation.UI
             // ── Tab strip (right column) ──────────────────────────────────────
             _tabStrip = new VisualElement();
             _tabStrip.AddToClassList("ws-side-panel__tab-strip");
+            _tabStrip.style.width = 56;
+            _tabStrip.style.flexDirection = FlexDirection.Column;
+            _tabStrip.style.alignItems = Align.Center;
+            _tabStrip.style.backgroundColor = new Color(0.14f, 0.14f, 0.18f, 1f);
+            _tabStrip.style.borderLeftWidth = 1;
+            _tabStrip.style.borderLeftColor = new Color(0.3f, 0.3f, 0.35f, 1f);
+            _tabStrip.style.paddingTop = 8;
+            _tabStrip.style.paddingBottom = 8;
             _tabStrip.RegisterCallback<PointerEnterEvent>(_ => OnPointerEnter());
             _tabStrip.RegisterCallback<PointerLeaveEvent>(_ => OnPointerLeave());
             Add(_tabStrip);
@@ -141,18 +162,42 @@ namespace Waystation.UI
 
                 var btn = new Button();
                 btn.AddToClassList("ws-side-panel__tab");
+                btn.style.width = 52;
+                btn.style.height = 52;
+                btn.style.backgroundColor = new Color(0.18f, 0.18f, 0.22f, 1f);
+                btn.style.borderTopWidth = 0;
+                btn.style.borderBottomWidth = 0;
+                btn.style.borderLeftWidth = 0;
+                btn.style.borderRightWidth = 0;
+                btn.style.borderTopLeftRadius = 4;
+                btn.style.borderTopRightRadius = 4;
+                btn.style.borderBottomLeftRadius = 4;
+                btn.style.borderBottomRightRadius = 4;
+                btn.style.flexDirection = FlexDirection.Column;
+                btn.style.alignItems = Align.Center;
+                btn.style.justifyContent = Justify.Center;
+                btn.style.flexShrink = 0;
+                btn.style.marginBottom = 2;
                 btn.RegisterCallback<ClickEvent>(_ => OnTabClicked(TabDefs[capturedIndex].id));
 
                 // Icon container (hosts inline SVG via VectorImage or placeholder)
                 var iconEl = new VisualElement();
                 iconEl.AddToClassList("ws-side-panel__tab-icon");
+                iconEl.style.width = 24;
+                iconEl.style.height = 24;
+                iconEl.style.alignItems = Align.Center;
+                iconEl.style.justifyContent = Justify.Center;
                 iconEl.tooltip = label;
                 SetSvgIcon(iconEl, svgPath);
                 btn.Add(iconEl);
 
-                // Label (hidden by default, revealed via CSS hover)
+                // Label always visible so the tab strip is identifiable
                 var lbl = new Label(label);
                 lbl.AddToClassList("ws-side-panel__tab-label");
+                lbl.style.fontSize = 9;
+                lbl.style.color = new Color(0.8f, 0.8f, 0.85f, 1f);
+                lbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+                lbl.style.marginTop = 2;
                 btn.Add(lbl);
 
                 _tabStrip.Add(btn);
@@ -331,6 +376,9 @@ namespace Waystation.UI
             {
                 var placeholder = new Label { text = "●" };
                 placeholder.AddToClassList("ws-side-panel__tab-icon-placeholder");
+                placeholder.style.color = new Color(0.7f, 0.75f, 0.8f, 1f);
+                placeholder.style.fontSize = 18;
+                placeholder.style.unityTextAlign = TextAnchor.MiddleCenter;
                 el.Add(placeholder);
             }
         }

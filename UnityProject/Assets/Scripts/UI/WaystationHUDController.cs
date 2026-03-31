@@ -8,7 +8,7 @@
 // those statics when UseUIToolkitHUD is true so CameraController and StationRoomView
 // require no changes.
 //
-// Migration status: side panel shell active (WO-UI-005).
+// Migration status: top bar (WO-UI-004) and side panel shell (WO-UI-005) active.
 // Full panel implementations are added panel-by-panel behind this controller
 // as described in WO-UI-002 onwards.
 using System;
@@ -36,6 +36,18 @@ namespace Waystation.UI
 
         // Side panel (WO-UI-005)
         private SidePanelController _sidePanel;
+        private VisualElement       _contentArea;
+
+        // Top bar (WO-UI-004)
+        private TopBarController _topBar;
+
+        // Shared UIDocument created on demand for all UI Toolkit panels.
+        private UIDocument _uiDocument;
+
+        // True only when EnsureUIDocument() created the PanelSettings at runtime
+        // (i.e., no pre-existing UIDocument was found in the scene).  Only destroy
+        // it in OnDestroy when we own it, to avoid destroying shared scene assets.
+        private bool _createdPanelSettings;
 
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
@@ -66,6 +78,7 @@ namespace Waystation.UI
         {
             _instance = this;
             BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
+            BuildTopBar();
             BuildSidePanel();
             StartCoroutine(WaitForGame());
         }
@@ -74,6 +87,13 @@ namespace Waystation.UI
         {
             _instance = null;
             BuildMenuController.OnBuildItemSelected -= OnBuildMenuItemSelected;
+
+            _topBar?.Detach();
+
+            // Only destroy PanelSettings if this controller created it at runtime;
+            // if it was found in the scene we don't own it.
+            if (_createdPanelSettings && _uiDocument != null && _uiDocument.panelSettings != null)
+                Destroy(_uiDocument.panelSettings);
 
             if (_gm != null)
             {
@@ -101,20 +121,92 @@ namespace Waystation.UI
             OnGameLoaded();
         }
 
+        // ── UIDocument provisioning ─────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the UIDocument used by all HUD panels, creating one on this
+        /// GameObject if none exists in the scene.
+        /// </summary>
+        private UIDocument EnsureUIDocument()
+        {
+            if (_uiDocument != null) return _uiDocument;
+
+            _uiDocument = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
+            if (_uiDocument != null) return _uiDocument;
+
+            // No UIDocument exists anywhere — create one on this GameObject.
+            var panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+            panelSettings.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            panelSettings.referenceResolution = new Vector2Int(1280, 720);
+            panelSettings.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
+            panelSettings.match = 0.5f;
+
+            // Assign a default font — ScriptableObject.CreateInstance<PanelSettings>()
+            // does not include one, so without this no text renders.
+            var defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 12);
+            var projectFont = Resources.Load<Font>("Fonts/Quango");
+            if (projectFont != null)
+                defaultFont = projectFont;
+            panelSettings.textSettings = ScriptableObject.CreateInstance<PanelTextSettings>();
+
+            _uiDocument = gameObject.AddComponent<UIDocument>();
+            _uiDocument.panelSettings = panelSettings;
+            _createdPanelSettings = true;
+
+            // Apply font to the root element so all children inherit it.
+            _uiDocument.rootVisualElement.style.unityFontDefinition =
+                FontDefinition.FromFont(defaultFont);
+            _uiDocument.rootVisualElement.style.fontSize = 14;
+            _uiDocument.rootVisualElement.style.color = new Color(0.85f, 0.85f, 0.9f, 1f);
+
+            // Load the shared stylesheet so USS classes work for all panels.
+            var sheet = Resources.Load<StyleSheet>("UI/Styles/WaystationComponents");
+            if (sheet != null)
+                _uiDocument.rootVisualElement.styleSheets.Add(sheet);
+
+            Debug.Log("[WaystationHUDController] Created UIDocument + PanelSettings on HUD GameObject.");
+            return _uiDocument;
+        }
+
+        /// <summary>
+        /// Ensures the UIDocument root fills the screen and can host
+        /// absolutely-positioned children.
+        /// </summary>
+        private void ConfigureRoot(VisualElement root)
+        {
+            root.style.width = Length.Percent(100);
+            root.style.height = Length.Percent(100);
+            root.style.flexDirection = FlexDirection.Column;
+            root.style.alignItems = Align.Stretch;
+        }
+
+        // ── Top bar setup (WO-UI-004) ──────────────────────────────────────────
+
+        private void BuildTopBar()
+        {
+            var doc = EnsureUIDocument();
+            ConfigureRoot(doc.rootVisualElement);
+
+            _topBar = new TopBarController();
+            _topBar.RegisterClickOutside(doc.rootVisualElement);
+
+            // Insert before the content area so it renders at the top.
+            doc.rootVisualElement.Insert(0, _topBar);
+        }
+
         // ── Side panel setup (WO-UI-005) ──────────────────────────────────────
 
         private void BuildSidePanel()
         {
-            // Locate the UIDocument that hosts the HUD panels.
-            // The document is expected to be present in the scene (set up as a
-            // prefab or scene object); a missing document is silently skipped so
-            // the rest of the controller still boots cleanly.
-            var doc = GetComponent<UIDocument>() ?? FindFirstObjectByType<UIDocument>();
-            if (doc == null)
-            {
-                Debug.LogWarning("[WaystationHUDController] No UIDocument found — side panel will not render.");
-                return;
-            }
+            var doc = EnsureUIDocument();
+
+            // Content area fills the remaining space below the top bar.
+            // The side panel is absolutely positioned inside this container
+            // so it automatically sits below the top bar without hardcoded offsets.
+            _contentArea = new VisualElement();
+            _contentArea.style.flexGrow = 1;
+            _contentArea.style.position = Position.Relative;
+            doc.rootVisualElement.Add(_contentArea);
 
             // MapSystem is not yet available at Start() time — WaitForGame() will
             // inject it once the game has finished loading (see InjectMapSystem call
@@ -127,7 +219,7 @@ namespace Waystation.UI
             // Register keyboard handler so Escape key works
             _sidePanel.RegisterKeyboard(doc.rootVisualElement);
 
-            doc.rootVisualElement.Add(_sidePanel);
+            _contentArea.Add(_sidePanel);
         }
 
         private void OnSidePanelMapFullscreen()
@@ -153,6 +245,7 @@ namespace Waystation.UI
 
         private void OnTick(StationState station)
         {
+            _topBar?.OnTick(station);
             // Per-tick panel refresh — panels register their own listeners or are
             // refreshed here as they are migrated.
         }
@@ -169,7 +262,14 @@ namespace Waystation.UI
             // was null at construction time.
             _sidePanel?.InjectMapSystem(_gm?.Map);
 
-            if (_gm?.Station != null) OnTick(_gm.Station);
+            // Set the initial view context to the station name and inject dependencies
+            // into the top bar once the game state is available.
+            if (_gm?.Station != null)
+            {
+                ViewContextManager.Instance.SetContext(_gm.Station.stationName);
+                _topBar?.InjectDependencies(_gm, LogEntryBuffer.Instance, ViewContextManager.Instance);
+                OnTick(_gm.Station);
+            }
         }
 
         // ── Cross-view public API ─────────────────────────────────────────────

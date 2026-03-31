@@ -643,6 +643,126 @@
 
 
 /* ══════════════════════════════════════════════════════════════════════════
+   TOP BAR  (.ws-top-bar)
+   Persistent top bar with location, time, speed controls, and alert tray.
+   Controlled by TopBarController.cs.                                      */
+
+.ws-top-bar {
+    flex-direction: column;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.ws-top-bar__bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+    background-color: var(--ws-bg-base);
+    height: 32px;
+    -unity-text-align: middle-left;
+}
+
+.ws-top-bar__location {
+    font-size: var(--ws-fs-subtitle);
+    color: var(--ws-text-bright);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 140px;
+}
+
+.ws-top-bar__spacer {
+    flex: 1;
+    min-width: 20px;
+}
+
+.ws-top-bar__time {
+    font-size: var(--ws-fs-subtitle);
+    color: var(--ws-text-base);
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: var(--ws-space-sm);
+}
+
+.ws-top-bar__day-night {
+    font-size: var(--ws-fs-body);
+    color: var(--ws-text-mid);
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: 14px;
+}
+
+.ws-top-bar__speed-group {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 14px;
+}
+
+.ws-top-bar__speed-btn {
+    min-width: 28px;
+    height: 22px;
+    padding: 0 6px;
+    font-size: var(--ws-fs-body);
+    border-width: 1px;
+    border-color: var(--ws-border-dark);
+    background-color: var(--ws-bg-raised);
+    color: var(--ws-text-base);
+    margin-right: 4px;
+}
+
+.ws-top-bar__speed-btn:hover {
+    background-color: var(--ws-bg-hover);
+}
+
+.ws-top-bar__speed-btn--pause {
+    border-color: var(--ws-border-dim);
+}
+
+.ws-top-bar__speed-btn--active {
+    background-color: var(--ws-accent);
+    color: var(--ws-bg-panel);
+    border-color: var(--ws-accent);
+}
+
+.ws-top-bar__speed-btn--active:hover {
+    background-color: var(--ws-accent);
+}
+
+.ws-top-bar__alert-badge {
+    min-width: 20px;
+    height: 20px;
+    margin-left: auto;
+    padding: 0 4px;
+    background-color: var(--ws-red);
+    color: rgb(255, 255, 255);
+    font-size: var(--ws-fs-badge);
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    border-radius: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ws-top-bar__alert-tray {
+    flex-direction: column;
+    background-color: var(--ws-bg-panel);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+    max-height: 240px;
+    overflow: hidden;
+}
+
+.ws-top-bar__alert-tray-list {
+    flex-direction: column;
+    overflow-y: scroll;
+    padding: var(--ws-space-sm);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
    SIDE PANEL  (.ws-side-panel)
    Right-edge collapsible icon tab strip and content drawer shell.
    Structure:
