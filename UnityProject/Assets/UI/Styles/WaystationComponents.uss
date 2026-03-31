@@ -722,13 +722,13 @@
 }
 
 .ws-top-bar__speed-btn--active {
-    background-color: var(--ws-accent);
+    background-color: var(--ws-acc-bright);
     color: var(--ws-bg-panel);
-    border-color: var(--ws-accent);
+    border-color: var(--ws-acc-bright);
 }
 
 .ws-top-bar__speed-btn--active:hover {
-    background-color: var(--ws-accent);
+    background-color: var(--ws-acc-bright);
 }
 
 .ws-top-bar__alert-badge {

@@ -2360,7 +2360,7 @@ namespace Waystation.UI
             // Allow long names / multi-tags to display without clipping
             detailNameLabel.overflowMode    = TextOverflowModes.Ellipsis;
             detailTypeLabel.overflowMode    = TextOverflowModes.Ellipsis;
-            detailTagsLabel.enableWordWrapping = true;
+            detailTagsLabel.textWrappingMode = TextWrappingModes.Normal;
             detailMoonsLabel.overflowMode   = TextOverflowModes.Ellipsis;
             detailStationLabel.overflowMode = TextOverflowModes.Ellipsis;
 

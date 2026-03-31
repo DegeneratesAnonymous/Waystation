@@ -127,10 +127,9 @@ namespace Waystation.UI
             _timeLabel.style.minWidth = 120;
             rightGroup.Add(_timeLabel);
 
-            // Day/Night label
+            // Day/Night label — created but not added to the hierarchy (hidden per design)
             _dayNightLabel = new Label("Day");
             _dayNightLabel.AddToClassList("ws-top-bar__day-night");
-            rightGroup.Add(_dayNightLabel);
 
             // Speed controls
             var speedGroup = new VisualElement();
@@ -186,7 +185,6 @@ namespace Waystation.UI
             _alertTrayList = new VisualElement();
             _alertTrayList.AddToClassList("ws-top-bar__alert-tray-list");
             _alertTrayList.style.flexDirection = FlexDirection.Column;
-            _alertTrayList.style.overflow = Overflow.Scroll;
             _alertTrayList.style.paddingLeft = 8;
             _alertTrayList.style.paddingRight = 8;
             _alertTrayList.style.paddingTop = 8;

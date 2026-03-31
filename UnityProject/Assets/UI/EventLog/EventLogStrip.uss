@@ -1,0 +1,235 @@
+/* EventLogStrip.uss
+   Styles for the persistent event log strip anchored to the bottom of the HUD.
+   Imports WaystationVariables.uss for all palette and spacing tokens.
+
+   Naming convention follows BEM-style: ws-event-log__<element>--<modifier>
+   All colours reference USS variables — no hardcoded hex values.
+*/
+
+/* ── Strip root ──────────────────────────────────────────────────────────── */
+
+.ws-event-log {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: column;
+    background-color: var(--ws-bg-raised);
+    border-top-width: 1px;
+    border-top-color: var(--ws-border-mid);
+}
+
+/* ── Collapsed header row (always visible, 32px) ────────────────────────── */
+
+.ws-event-log__header {
+    flex-direction: row;
+    align-items: center;
+    height: 32px;
+    padding-left: var(--ws-space-md);
+    padding-right: var(--ws-space-md);
+    background-color: var(--ws-bg-raised);
+    cursor: link;
+}
+
+.ws-event-log__header:hover {
+    background-color: var(--ws-bg-hover);
+}
+
+/* Category icon container (16×16) */
+.ws-event-log__cat-icon {
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: var(--ws-space-sm);
+}
+
+/* Centre text — truncates with ellipsis */
+.ws-event-log__preview-text {
+    flex-grow: 1;
+    color: var(--ws-text-base);
+    font-size: var(--ws-fs-subtitle);
+    overflow: hidden;
+    -unity-text-overflow-position: end;
+    /* Unity UI Toolkit uses text-overflow for clipping */
+    white-space: nowrap;
+}
+
+/* Alert accent — left edge coloured strip */
+.ws-event-log__header--alert .ws-event-log__alert-accent {
+    display: flex;
+}
+
+.ws-event-log__alert-accent {
+    display: none;
+    width: 3px;
+    align-self: stretch;
+    background-color: var(--ws-red);
+    margin-right: var(--ws-space-sm);
+    flex-shrink: 0;
+}
+
+/* Chevron (expand/collapse indicator) */
+.ws-event-log__chevron {
+    font-size: var(--ws-fs-badge);
+    color: var(--ws-text-mid);
+    flex-shrink: 0;
+    margin-left: var(--ws-space-sm);
+    transition-property: rotate;
+    transition-duration: var(--ws-anim-normal);
+    transition-timing-function: ease-out;
+}
+
+.ws-event-log__chevron--open {
+    rotate: 180deg;
+}
+
+/* ── Expanded body ───────────────────────────────────────────────────────── */
+
+.ws-event-log__body {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition-property: max-height, opacity;
+    transition-duration: var(--ws-anim-normal), var(--ws-anim-normal);
+    transition-timing-function: ease-out, ease-out;
+    background-color: var(--ws-bg-panel);
+    border-top-width: 1px;
+    border-top-color: var(--ws-border-dark);
+}
+
+.ws-event-log__body--open {
+    max-height: 280px;
+    opacity: 1;
+}
+
+/* ── Filter chips row ───────────────────────────────────────────────────── */
+
+.ws-event-log__filter-row {
+    flex-direction: row;
+    align-items: center;
+    padding-left: var(--ws-space-md);
+    padding-right: var(--ws-space-md);
+    padding-top: var(--ws-space-xs);
+    padding-bottom: var(--ws-space-xs);
+    background-color: var(--ws-bg-raised);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+    flex-shrink: 0;
+}
+
+.ws-event-log__filter-chip {
+    color: var(--ws-text-dim);
+    font-size: var(--ws-fs-badge);
+    letter-spacing: var(--ws-ls-btn);
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: var(--ws-space-sm);
+    padding-right: var(--ws-space-sm);
+    margin-right: var(--ws-space-xs);
+    background-color: var(--ws-bg-base);
+    border-width: 1px;
+    border-color: var(--ws-border-dark);
+    cursor: link;
+}
+
+.ws-event-log__filter-chip:hover {
+    color: var(--ws-text-base);
+    border-color: var(--ws-border-mid);
+}
+
+.ws-event-log__filter-chip--active {
+    color: var(--ws-acc-bright);
+    border-color: var(--ws-acc);
+    background-color: var(--ws-bg-hover);
+}
+
+/* ── Entry list scroll area ─────────────────────────────────────────────── */
+
+.ws-event-log__entry-list {
+    flex-grow: 1;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    padding-top: var(--ws-space-xs);
+    padding-bottom: var(--ws-space-xs);
+}
+
+/* ── Tick group separator ───────────────────────────────────────────────── */
+
+.ws-event-log__tick-label {
+    color: var(--ws-text-dim);
+    font-size: var(--ws-fs-section);
+    letter-spacing: var(--ws-ls-section);
+    padding-left: var(--ws-space-md);
+    padding-top: var(--ws-space-xs);
+    padding-bottom: 2px;
+    -unity-font-style: bold;
+}
+
+/* ── Single entry row ───────────────────────────────────────────────────── */
+
+.ws-event-log__entry {
+    flex-direction: row;
+    align-items: flex-start;
+    padding-left: var(--ws-space-md);
+    padding-right: var(--ws-space-md);
+    padding-top: var(--ws-space-xs);
+    padding-bottom: var(--ws-space-xs);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ws-border-dark);
+}
+
+.ws-event-log__entry:hover {
+    background-color: var(--ws-bg-hover);
+}
+
+/* Entry icon (16×16 container, 10×10 inner SVG placeholder) */
+.ws-event-log__entry-icon {
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: var(--ws-space-sm);
+    margin-top: 1px;
+}
+
+/* Icon placeholder label (●) colour variants */
+.ws-event-log__entry-icon--alert   { color: var(--ws-red);   }
+.ws-event-log__entry-icon--crew    { color: var(--ws-acc);   }
+.ws-event-log__entry-icon--station { color: var(--ws-green); }
+.ws-event-log__entry-icon--world   { color: var(--ws-cyan);  }
+
+/* Entry text area */
+.ws-event-log__entry-content {
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+.ws-event-log__entry-body {
+    color: var(--ws-text-base);
+    font-size: var(--ws-fs-subtitle);
+    white-space: normal;
+}
+
+/* Relative timestamp (right-aligned via flex) */
+.ws-event-log__entry-time {
+    color: var(--ws-text-dim);
+    font-size: var(--ws-fs-badge);
+    flex-shrink: 0;
+    margin-left: var(--ws-space-sm);
+    margin-top: 1px;
+}
+
+/* Navigate shortcut below body text */
+.ws-event-log__entry-nav {
+    color: var(--ws-text-mid);
+    font-size: var(--ws-fs-badge);
+    margin-top: 2px;
+    cursor: link;
+}
+
+.ws-event-log__entry-nav:hover {
+    color: var(--ws-acc-bright);
+}

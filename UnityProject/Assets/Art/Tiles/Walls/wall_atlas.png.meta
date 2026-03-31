@@ -3,7 +3,7 @@ guid: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
-  serializedVersion: 12
+  serializedVersion: 13
   mipmaps:
     mipMapMode: 0
     enableMipMap: 0
@@ -20,6 +20,7 @@ TextureImporter:
     externalNormalMap: 0
     heightScale: 0.25
     normalMapFilter: 0
+    flipGreenChannel: 0
   isReadable: 0
   streamingMipmaps: 0
   streamingMipmapsPriority: 0
@@ -33,18 +34,18 @@ TextureImporter:
   maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
-    filterMode: 0        # Point (no filtering — pixel art)
+    filterMode: 0
     aniso: 1
     mipBias: 0
-    wrapU: 1             # Clamp
-    wrapV: 1             # Clamp
+    wrapU: 1
+    wrapV: 1
     wrapW: 1
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 2          # Multiple sprites
+  spriteMode: 2
   spriteExtrude: 0
-  spriteMeshType: 1      # FullRect — no tight mesh, pixel art needs full rect
+  spriteMeshType: 1
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 64
@@ -53,8 +54,8 @@ TextureImporter:
   alphaUsage: 1
   alphaIsTransparency: 1
   spriteTessellationDetail: -1
-  textureType: 8         # Sprite
-  textureShape: 1        # 2D
+  textureType: 8
+  textureShape: 1
   singleChannelComponent: 0
   flipbookRows: 1
   flipbookColumns: 1
@@ -63,76 +64,117 @@ TextureImporter:
   textureFormatSet: 0
   ignorePngGamma: 0
   applyGammaDecoding: 0
+  swizzle: 50462976
   cookieLightType: 0
   platformSettings:
-  - serializedVersion: 3
+  - serializedVersion: 4
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 2048
+    maxTextureSize: 8192
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 0   # None — keep pixel-perfect
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
     overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
-    # ── base tile ──────────────────────────────────────────────────────────────
+    - serializedVersion: 2
+      name: wall_shadow
+      rect:
+        serializedVersion: 2
+        x: 1
+        y: 1
+        width: 64
+        height: 64
+      alignment: 9
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ee4a5ee9b087d7190800000000000000
+      internalID: -7963076574815345426
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     - serializedVersion: 2
       name: wall_solid_normal
       rect:
         serializedVersion: 2
-        x: 1      # col 0 × 66 + 1px padding
-        y: 1      # row 0 × 66 + 1px padding  (Unity Y is bottom-up: y=1 from bottom)
+        x: 1
+        y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_normal
-      internalID: 1000
+      spriteID: d2171fa93c2871250800000000000000
+      internalID: 5915340412204183853
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # ── interior overlays ──────────────────────────────────────────────────────
-    # bitmask encoding: N=8  S=4  E=2  W=1
-    # int_s    col 1   mask 4   south face interior  → face strip painted
     - serializedVersion: 2
       name: wall_solid_int_s
       rect:
         serializedVersion: 2
-        x: 67     # col 1 × 66 + 1
+        x: 67
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_s
-      internalID: 1001
+      spriteID: e9aa39c0006cba7d0800000000000000
+      internalID: -2906011431024219490
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_n    col 2   mask 8
     - serializedVersion: 2
       name: wall_solid_int_n
       rect:
@@ -141,23 +183,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_n
-      internalID: 1002
+      spriteID: c38c718431bf68ec0800000000000000
+      internalID: -3564885994784700356
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_e    col 3   mask 2
     - serializedVersion: 2
       name: wall_solid_int_e
       rect:
@@ -166,23 +205,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_e
-      internalID: 1003
+      spriteID: 3a6b6e8bf5e5d6c50800000000000000
+      internalID: 6660083189167863459
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_w    col 4   mask 1
     - serializedVersion: 2
       name: wall_solid_int_w
       rect:
@@ -191,23 +227,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_w
-      internalID: 1004
+      spriteID: 89bcd78e4186684c0800000000000000
+      internalID: -4285623556387255400
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_se   col 5   mask 6   (S+E)
     - serializedVersion: 2
       name: wall_solid_int_se
       rect:
@@ -216,23 +249,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_se
-      internalID: 1005
+      spriteID: f542f6ef2b550e300800000000000000
+      internalID: 279317404158207071
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_sw   col 6   mask 5   (S+W)
     - serializedVersion: 2
       name: wall_solid_int_sw
       rect:
@@ -241,23 +271,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_sw
-      internalID: 1006
+      spriteID: 603ea157cf970bb70800000000000000
+      internalID: 8912757787769627398
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_ne   col 7   mask 10  (N+E)
     - serializedVersion: 2
       name: wall_solid_int_ne
       rect:
@@ -266,23 +293,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_ne
-      internalID: 1007
+      spriteID: bede2c01a66d55e80800000000000000
+      internalID: -8190404596267291157
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_nw   col 8   mask 9   (N+W)
     - serializedVersion: 2
       name: wall_solid_int_nw
       rect:
@@ -291,23 +315,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_nw
-      internalID: 1008
+      spriteID: ea935f46ecd802130800000000000000
+      internalID: 3539985224709781934
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_ns   col 9   mask 12  (N+S)
     - serializedVersion: 2
       name: wall_solid_int_ns
       rect:
@@ -316,23 +337,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_ns
-      internalID: 1009
+      spriteID: 097227f938c7ef240800000000000000
+      internalID: 4827432755345368976
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_ew   col 10  mask 3   (E+W)
     - serializedVersion: 2
       name: wall_solid_int_ew
       rect:
@@ -341,23 +359,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_ew
-      internalID: 1010
+      spriteID: 650554cdfd324bfc0800000000000000
+      internalID: -3480117167670341546
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_nse  col 11  mask 14  (N+S+E)
     - serializedVersion: 2
       name: wall_solid_int_nse
       rect:
@@ -366,23 +381,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_nse
-      internalID: 1011
+      spriteID: 347f75a87fb68ef30800000000000000
+      internalID: 4605049329908447043
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_nsw  col 12  mask 13  (N+S+W)
     - serializedVersion: 2
       name: wall_solid_int_nsw
       rect:
@@ -391,23 +403,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_nsw
-      internalID: 1012
+      spriteID: 8ff520000dac696e0800000000000000
+      internalID: -1831053203777363976
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_new  col 13  mask 11  (N+E+W)
     - serializedVersion: 2
       name: wall_solid_int_new
       rect:
@@ -416,23 +425,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_new
-      internalID: 1013
+      spriteID: 5441c61fc0a681190800000000000000
+      internalID: -7991520934946401211
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_sew  col 14  mask 7   (S+E+W)
     - serializedVersion: 2
       name: wall_solid_int_sew
       rect:
@@ -441,23 +447,20 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_sew
-      internalID: 1014
+      spriteID: 0ddc2077b6fd33f20800000000000000
+      internalID: 3401307796246023632
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    # int_nsew col 15  mask 15  (all sides)
     - serializedVersion: 2
       name: wall_solid_int_nsew
       rect:
@@ -466,26 +469,53 @@ TextureImporter:
         y: 1
         width: 64
         height: 64
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      alignment: 9
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: wall_solid_int_nsew
-      internalID: 1015
+      spriteID: d387a192891741910800000000000000
+      internalID: 1807194248820979773
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
-      secondaryTextures: []
-      nameFileIdTable: {}
-
-    spritePackingTag:
-    pSDRemoveMatte: 0
-  spritePackingTag:
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      wall_shadow: -7963076574815345426
+      wall_solid_int_e: 6660083189167863459
+      wall_solid_int_ew: -3480117167670341546
+      wall_solid_int_n: -3564885994784700356
+      wall_solid_int_ne: -8190404596267291157
+      wall_solid_int_new: -7991520934946401211
+      wall_solid_int_ns: 4827432755345368976
+      wall_solid_int_nse: 4605049329908447043
+      wall_solid_int_nsew: 1807194248820979773
+      wall_solid_int_nsw: -1831053203777363976
+      wall_solid_int_nw: 3539985224709781934
+      wall_solid_int_s: -2906011431024219490
+      wall_solid_int_se: 279317404158207071
+      wall_solid_int_sew: 3401307796246023632
+      wall_solid_int_sw: 8912757787769627398
+      wall_solid_int_w: -4285623556387255400
+      wall_solid_normal: 5915340412204183853
+  mipmapLimitGroupName: 
   pSDRemoveMatte: 0
-  userData:
-  assetBundleName:
-  assetBundleVariant:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

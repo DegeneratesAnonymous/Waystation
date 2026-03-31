@@ -30,12 +30,10 @@ namespace Waystation.UI
     /// Full-screen modal overlay with centred content panel.
     /// Blocks pointer input to underlying elements while visible.
     /// </summary>
-    public class ModalOverlay : VisualElement
+    [UxmlElement]
+    public partial class ModalOverlay : VisualElement
     {
         private const string ClassVisible = "ws-modal-overlay--visible";
-
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<ModalOverlay, UxmlTraits> { }
 
         // ── Child elements ────────────────────────────────────────────────
         private readonly VisualElement _panel;

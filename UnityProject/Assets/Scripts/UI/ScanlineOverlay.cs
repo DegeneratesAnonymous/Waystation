@@ -23,24 +23,9 @@ namespace Waystation.UI
     /// A full-bleed overlay element that simulates CRT scanlines over a panel.
     /// Pointer events are ignored so underlying elements remain interactive.
     /// </summary>
-    public class ScanlineOverlay : VisualElement
+    [UxmlElement]
+    public partial class ScanlineOverlay : VisualElement
     {
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<ScanlineOverlay, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlFloatAttributeDescription _opacity =
-                new UxmlFloatAttributeDescription { name = "overlay-opacity", defaultValue = 0.06f };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var overlay = (ScanlineOverlay)ve;
-                overlay.OverlayOpacity = _opacity.GetValueFromBag(bag, cc);
-            }
-        }
-
         // ── Backing fields ────────────────────────────────────────────────
         private Texture2D _backgroundTexture;
         private float _overlayOpacity = 0.06f;

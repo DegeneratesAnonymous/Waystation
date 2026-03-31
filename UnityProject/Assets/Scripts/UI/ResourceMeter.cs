@@ -26,7 +26,8 @@ namespace Waystation.UI
     /// <summary>
     /// Horizontal resource fill bar with label, value text, and colour variant.
     /// </summary>
-    public class ResourceMeter : VisualElement
+    [UxmlElement]
+    public partial class ResourceMeter : VisualElement
     {
         // ── Resource type enum ────────────────────────────────────────────
         public enum ResourceType
@@ -37,34 +38,6 @@ namespace Waystation.UI
             Oxygen,
             Parts,
             Credits,
-        }
-
-        // ── UXML factory ──────────────────────────────────────────────────
-        public new class UxmlFactory : UxmlFactory<ResourceMeter, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlEnumAttributeDescription<ResourceType> _resource =
-                new UxmlEnumAttributeDescription<ResourceType>
-                {
-                    name = "resource",
-                    defaultValue = ResourceType.Generic,
-                };
-
-            private readonly UxmlStringAttributeDescription _label =
-                new UxmlStringAttributeDescription { name = "label", defaultValue = "" };
-
-            private readonly UxmlFloatAttributeDescription _value =
-                new UxmlFloatAttributeDescription { name = "value", defaultValue = 0f };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                var meter = (ResourceMeter)ve;
-                meter.Resource = _resource.GetValueFromBag(bag, cc);
-                meter.LabelText = _label.GetValueFromBag(bag, cc);
-                meter.SetValue(_value.GetValueFromBag(bag, cc));
-            }
         }
 
         // ── Child elements ────────────────────────────────────────────────

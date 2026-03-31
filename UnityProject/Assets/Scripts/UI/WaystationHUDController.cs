@@ -41,6 +41,9 @@ namespace Waystation.UI
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
+        // Event log strip (WO-UI-003)
+        private EventLogController _eventLog;
+
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
 
@@ -80,6 +83,8 @@ namespace Waystation.UI
             BuildMenuController.OnBuildItemSelected += OnBuildMenuItemSelected;
             BuildTopBar();
             BuildSidePanel();
+            if (FeatureFlags.UseEventLogStrip)
+                BuildEventLog();
             StartCoroutine(WaitForGame());
         }
 
@@ -229,16 +234,28 @@ namespace Waystation.UI
             systemMap?.Open();
         }
 
+        // ── Event log setup (WO-UI-003) ──────────────────────────────────────
+
+        private void BuildEventLog()
+        {
+            _eventLog = new EventLogController();
+            // Inset from the right by the side-panel tab strip width (56 px) so
+            // the log bar doesn't overlap the tab icon column.
+            _eventLog.style.right = 56;
+            _contentArea.Add(_eventLog);
+        }
+
         // ── Update — sync placement state and mouse-over ──────────────────────
         private void Update()
         {
             // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
             GameHUD.InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
 
-            // Keep IsMouseOverDrawer in sync: OR the side panel's pointer state
-            // with any other registered HUD panels.
+            // Keep IsMouseOverDrawer in sync: OR the side panel, event log strip,
+            // and any other registered HUD panel pointer states.
             bool sidePanelOver = _sidePanel != null && _sidePanel.IsMouseOverPanel;
-            GameHUD.IsMouseOverDrawer = sidePanelOver || _panelsUnderPointer > 0;
+            bool eventLogOver  = _eventLog  != null && _eventLog.IsMouseOverStrip;
+            GameHUD.IsMouseOverDrawer = sidePanelOver || eventLogOver || _panelsUnderPointer > 0;
         }
 
         // ── GameManager event handlers ────────────────────────────────────────
@@ -246,13 +263,19 @@ namespace Waystation.UI
         private void OnTick(StationState station)
         {
             _topBar?.OnTick(station);
+            _eventLog?.OnTick(station?.tick ?? 0);
             // Per-tick panel refresh — panels register their own listeners or are
             // refreshed here as they are migrated.
         }
 
         private void OnNewEvent(PendingEvent pending)
         {
-            // Event modal handling — implemented when the Event Modal panel is migrated.
+            if (pending?.definition == null) return;
+            // Map the event definition to a log category and add to the buffer.
+            // EventLogController auto-subscribes to EventLogBuffer.OnBufferChanged
+            // so no manual call to OnBufferChanged is needed here.
+            var category = pending.definition.hostile ? LogCategory.Alert : LogCategory.World;
+            EventLogBuffer.Instance.Add(category, pending.definition.description ?? pending.definition.id);
         }
 
         private void OnGameLoaded()
@@ -268,6 +291,17 @@ namespace Waystation.UI
             {
                 ViewContextManager.Instance.SetContext(_gm.Station.stationName);
                 _topBar?.InjectDependencies(_gm, LogEntryBuffer.Instance, ViewContextManager.Instance);
+
+                // Wire navigation callbacks into the event log strip.
+                // The navigation methods (SelectCrewMemberInternal, etc.) are already
+                // defined on this class — pass static-compatible lambdas.
+                _eventLog?.InjectNavigationCallbacks(
+                    selectCrewMember:   uid => SelectCrewMemberInternal(uid),
+                    openRoomPanel:      id  => OpenRoomPanel(id),
+                    openNetworkOverlay: ()  => OpenNetworkOverlay(),
+                    openVisitorPanel:   id  => OpenVisitorPanel(id),
+                    openFleetPanel:     uid => OpenFleetPanel(uid));
+
                 OnTick(_gm.Station);
             }
         }
@@ -283,6 +317,30 @@ namespace Waystation.UI
             if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
             // Crew Detail panel open — implemented when Crew sub-tab is migrated.
             Debug.Log($"[WaystationHUDController] SelectCrewMember: {npcUid}");
+        }
+
+        private static void OpenRoomPanel(string roomId)
+        {
+            if (_instance == null || string.IsNullOrEmpty(roomId)) return;
+            Debug.Log($"[WaystationHUDController] OpenRoomPanel: {roomId}");
+        }
+
+        private static void OpenNetworkOverlay()
+        {
+            if (_instance == null) return;
+            Debug.Log("[WaystationHUDController] OpenNetworkOverlay");
+        }
+
+        private static void OpenVisitorPanel(string visitorId)
+        {
+            if (_instance == null) return;
+            Debug.Log($"[WaystationHUDController] OpenVisitorPanel: {visitorId}");
+        }
+
+        private static void OpenFleetPanel(string shipUid)
+        {
+            if (_instance == null) return;
+            Debug.Log($"[WaystationHUDController] OpenFleetPanel: {shipUid}");
         }
 
         // ── Mouse-over helpers (called from panel pointer callbacks) ──────────
