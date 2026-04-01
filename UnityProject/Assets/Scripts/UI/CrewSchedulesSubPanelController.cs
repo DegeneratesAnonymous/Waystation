@@ -8,8 +8,8 @@
 // Day/night dividers appear at tick 6 (day start) and tick 21 (night start).
 //
 // Slot types and colours:
-//   Work       — blue   (hours 6–20 default)
-//   Rest       — dark   (hours 21–23, 0–5 default)
+//   Work       — blue   (hours 6–17 default, per NPCInstance.InitDefaultSchedule)
+//   Rest       — dark   (hours 18–23, 0–5 default)
 //   Recreation — teal
 //
 // Interactions:
@@ -368,9 +368,22 @@ namespace Waystation.UI
                     _dragNpcUid   = npcUid;
                     _isDragging   = true;
 
+                    // Capture the pointer so PointerUpEvent is guaranteed to fire
+                    // on this element even when the pointer is released outside it.
+                    cell.CapturePointer(evt.pointerId);
+
                     ApplySlot(npcUid, capturedTick, nextSlot, cell);
                     evt.StopPropagation();
                 });
+
+                cell.RegisterCallback<PointerUpEvent>(evt =>
+                {
+                    _isDragging = false;
+                    if (cell.HasPointerCapture(evt.pointerId))
+                        cell.ReleasePointer(evt.pointerId);
+                });
+
+                cell.RegisterCallback<PointerCaptureOutEvent>(_ => _isDragging = false);
 
                 cell.RegisterCallback<PointerEnterEvent>(_ =>
                 {

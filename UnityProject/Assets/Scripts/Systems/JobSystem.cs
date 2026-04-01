@@ -387,6 +387,12 @@ namespace Waystation.Systems
         /// If an NPC has no custom schedule array, <see cref="NPCInstance.InitDefaultSchedule"/>
         /// is called first so the caller always receives a full 24-element array.
         /// Key = npcUid, Value = reference to the NPC's <c>npcSchedule</c> array.
+        /// <para>
+        /// <b>Note:</b> The returned arrays are direct references to the live NPC schedule data.
+        /// Mutating them directly will not interrupt the NPC's current job — always use
+        /// <see cref="SetSlot"/> or <see cref="ApplyTemplate"/> when a slot change should
+        /// take effect on the next scheduler tick.
+        /// </para>
         /// </summary>
         public Dictionary<string, ScheduleSlot[]> GetSchedules(StationState station)
         {
@@ -409,6 +415,7 @@ namespace Waystation.Systems
         public void SetSlot(string npcUid, int tick, ScheduleSlot slotType, StationState station)
         {
             tick = Math.Max(0, Math.Min(23, tick));
+            if (station == null || string.IsNullOrEmpty(npcUid)) return;
             if (!station.npcs.TryGetValue(npcUid, out var npc) || !npc.IsCrew()) return;
             if (npc.npcSchedule == null || npc.npcSchedule.Length != 24)
                 npc.InitDefaultSchedule();
