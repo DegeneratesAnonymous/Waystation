@@ -483,8 +483,19 @@ namespace Waystation.UI
         /// <summary>Reads the NPC uid stored on the nearest ancestor row element.</summary>
         private static string GetRowNpcUid(VisualElement cell)
         {
-            var row = cell.GetFirstAncestorWithClass(RowClass);
+            var row = FindAncestorWithClass(cell, RowClass);
             return row?.userData as string;
+        }
+
+        private static VisualElement FindAncestorWithClass(VisualElement element, string className)
+        {
+            var current = element.parent;
+            while (current != null)
+            {
+                if (current.ClassListContains(className)) return current;
+                current = current.parent;
+            }
+            return null;
         }
 
         private static void UpdateCellColor(VisualElement cell, ScheduleSlot slot)

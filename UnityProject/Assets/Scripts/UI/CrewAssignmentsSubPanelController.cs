@@ -119,7 +119,7 @@ namespace Waystation.UI
                 header.style.borderBottomWidth = 1;
                 header.style.borderBottomColor = new Color(0.3f, 0.35f, 0.45f, 0.6f);
                 // Pointer change to indicate interactivity
-                header.style.cursor = new StyleCursor(MouseCursor.Link);
+                header.style.cursor = new StyleCursor(StyleKeyword.Auto);
 
                 var label = new Label(taskType.ToUpper());
                 label.AddToClassList(GroupLabelClass);

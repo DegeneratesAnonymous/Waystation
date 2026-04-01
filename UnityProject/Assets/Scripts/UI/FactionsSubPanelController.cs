@@ -233,7 +233,7 @@ namespace Waystation.UI
             row.style.borderBottomRightRadius = 4;
             row.style.borderBottomWidth = 1;
             row.style.borderBottomColor = new Color(0.25f, 0.30f, 0.40f, 0.5f);
-            row.style.cursor = new StyleCursor(MouseCursor.Link);
+            row.style.cursor = new StyleCursor(StyleKeyword.Auto);
 
             // ── Top line: name + government badge + contracts ─────────────────
             var topLine = new VisualElement();
@@ -347,7 +347,7 @@ namespace Waystation.UI
             chip.style.borderBottomLeftRadius  = 10;
             chip.style.borderBottomRightRadius = 10;
             chip.style.unityTextAlign = TextAnchor.MiddleCenter;
-            chip.style.cursor         = new StyleCursor(MouseCursor.Link);
+            chip.style.cursor         = new StyleCursor(StyleKeyword.Auto);
             chip.focusable            = true;
 
             string capturedKey = filterKey;

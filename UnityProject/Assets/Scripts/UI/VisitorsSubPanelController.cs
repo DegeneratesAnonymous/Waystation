@@ -260,7 +260,7 @@ namespace Waystation.UI
             btn.style.borderTopRightRadius    = 3;
             btn.style.borderBottomLeftRadius  = 3;
             btn.style.borderBottomRightRadius = 3;
-            btn.style.cursor             = new StyleCursor(MouseCursor.Link);
+            btn.style.cursor             = new StyleCursor(StyleKeyword.Auto);
             btn.focusable                = true;
 
             btn.RegisterCallback<ClickEvent>(_ => onClick?.Invoke());
@@ -309,7 +309,7 @@ namespace Waystation.UI
 
             // Click opens Visiting Ship contextual panel
             string capturedId = ship.uid;
-            row.style.cursor = new StyleCursor(MouseCursor.Link);
+            row.style.cursor = new StyleCursor(StyleKeyword.Auto);
             row.RegisterCallback<ClickEvent>(_ =>
             {
                 Debug.Log($"[VisitorsPanel] Ship row clicked: {capturedId}");
