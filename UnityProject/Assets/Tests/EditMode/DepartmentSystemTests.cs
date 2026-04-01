@@ -3,7 +3,7 @@
 // Validates:
 //   • Department creation, rename, and deletion with correct cascade to assignments
 //   • Duplicate-name guard on create and rename
-//   • Department Head eligibility check at rank boundary (rank 0 fails, rank 1 succeeds)
+//   • AppointHead succeeds for any NPC regardless of rank (WO-INF-005-ADDENDUM: rank gate removed)
 //   • AppointHead fails when NPC is not in the department
 //   • RemoveNpcFromDepartment clears Head role when the NPC is the Head
 //   • DeleteDepartment cascade sets all NPC departmentIds to null
@@ -11,6 +11,7 @@
 //   • OnDeptColourChanged event fires on SetDeptColour
 //   • NotifyColourChanged fires OnNpcsNeedColourResolve with the correct NPC uid list
 //   • DepartmentManagement feature flag gates Tick behaviour
+//   • DepartmentRegistry Team Lead and Operations Terminal methods
 using System.Collections.Generic;
 using NUnit.Framework;
 using Waystation.Core;
@@ -343,19 +344,21 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void AppointHead_BelowMinRank_ReturnsFalse()
+        public void AppointHead_AnyRank_Succeeds()
         {
+            // WO-INF-005-ADDENDUM: rank eligibility gate is removed.
+            // Any NPC (including rank 0) can be appointed as Department Lead.
             var station = DeptTestHelpers.MakeStation();
             var (_, system) = DeptTestHelpers.MakeSystems();
             var dept = system.CreateDepartment("Command", station);
-            var npc  = DeptTestHelpers.MakeCrewNpc("crew1", rank: DepartmentSystem.MinHeadRank - 1);
+            var npc  = DeptTestHelpers.MakeCrewNpc("crew1", rank: 0);
             station.AddNpc(npc);
             npc.departmentId = dept.uid;
 
-            var (ok, _) = system.AppointHead(dept.uid, npc.uid, station);
+            var (ok, reason) = system.AppointHead(dept.uid, npc.uid, station);
 
-            Assert.IsFalse(ok);
-            Assert.IsNull(dept.headNpcUid);
+            Assert.IsTrue(ok, reason);
+            Assert.AreEqual(npc.uid, dept.headNpcUid);
         }
 
         [Test]
@@ -579,6 +582,157 @@ namespace Waystation.Tests
             var result = system.GetNpcsInDepartment(dept.uid, station);
 
             Assert.AreEqual(0, result.Count);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DepartmentRegistry — Team Lead, Operations Terminal, GetDepartmentLead
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [TestFixture]
+    internal class DepartmentRegistryExtensionTests
+    {
+        [Test]
+        public void GetDepartmentLead_ReturnsHeadNpcUid()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Ops", station);
+            dept.headNpcUid = "npc_lead_01";
+
+            Assert.AreEqual("npc_lead_01", registry.GetDepartmentLead(dept.uid));
+        }
+
+        [Test]
+        public void GetDepartmentLead_NoLeadAssigned_ReturnsNull()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Ops", station);
+
+            Assert.IsNull(registry.GetDepartmentLead(dept.uid));
+        }
+
+        [Test]
+        public void AssignTeamLead_ThenGetTeamLead_ReturnsCorrectNpcUid()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Engineering", station);
+
+            registry.AssignTeamLead(dept.uid, "npc_tl_01", "Alpha");
+
+            Assert.AreEqual("npc_tl_01", registry.GetTeamLead(dept.uid, "Alpha"));
+        }
+
+        [Test]
+        public void RemoveTeamLead_ClearsTeamLeadRole()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Engineering", station);
+            registry.AssignTeamLead(dept.uid, "npc_tl_01", "Alpha");
+
+            registry.RemoveTeamLead(dept.uid, "Alpha");
+
+            Assert.IsNull(registry.GetTeamLead(dept.uid, "Alpha"));
+        }
+
+        [Test]
+        public void GetTeamMembers_CreatesEmptyListOnAssignTeamLead()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Security", station);
+            registry.AssignTeamLead(dept.uid, "npc_tl_01", "Bravo");
+
+            // Team member list is initialised to empty on sub-team creation
+            var members = registry.GetTeamMembers(dept.uid, "Bravo");
+            Assert.IsNotNull(members);
+            Assert.AreEqual(0, members.Count);
+        }
+
+        [Test]
+        public void GetTeamMembers_UnknownTeam_ReturnsEmptyList()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Security", station);
+
+            var members = registry.GetTeamMembers(dept.uid, "NonExistentTeam");
+            Assert.IsNotNull(members);
+            Assert.AreEqual(0, members.Count);
+        }
+
+        [Test]
+        public void AssignOperationsTerminal_ThenGetOperationsTerminal_ReturnsCorrectUid()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Medical", station);
+
+            registry.AssignOperationsTerminal(dept.uid, "terminal_01");
+
+            Assert.AreEqual("terminal_01", registry.GetOperationsTerminal(dept.uid));
+        }
+
+        [Test]
+        public void GetOperationsTerminal_NoAssignment_ReturnsNull()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Medical", station);
+
+            Assert.IsNull(registry.GetOperationsTerminal(dept.uid));
+        }
+
+        [Test]
+        public void AssignOperationsTerminal_NullClears_Assignment()
+        {
+            var station = DeptTestHelpers.MakeStation();
+            var (registry, system) = DeptTestHelpers.MakeSystems();
+            registry.Init(station.departments);
+
+            var dept = system.CreateDepartment("Medical", station);
+            registry.AssignOperationsTerminal(dept.uid, "terminal_01");
+            registry.AssignOperationsTerminal(dept.uid, null);
+
+            Assert.IsNull(registry.GetOperationsTerminal(dept.uid));
+        }
+
+        [Test]
+        public void AppointHead_AnyRankIsEligible_Succeeds()
+        {
+            // WO-INF-005-ADDENDUM: rank gate removed — all NPCs are eligible for lead.
+            var station = DeptTestHelpers.MakeStation();
+            var (_, system) = DeptTestHelpers.MakeSystems();
+            var dept = system.CreateDepartment("Science", station);
+
+            // rank 0 NPC — would have failed pre-addendum
+            var npc = DeptTestHelpers.MakeCrewNpc("low_rank_npc", rank: 0);
+            station.AddNpc(npc);
+            npc.departmentId = dept.uid;
+
+            var (ok, reason) = system.AppointHead(dept.uid, npc.uid, station);
+
+            Assert.IsTrue(ok, reason);
+            Assert.AreEqual(npc.uid, dept.headNpcUid);
         }
     }
 }

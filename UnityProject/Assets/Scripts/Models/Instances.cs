@@ -152,9 +152,24 @@ namespace Waystation.Models
         // Optional accent (secondary) colour — nullable, same rules as colourHex.
         public string secondaryColourHex = null;
 
-        // UID of the NPC appointed as Department Head; null when no Head is assigned.
-        // Must satisfy the minimum rank requirement (DepartmentSystem.MinHeadRank).
+        // UID of the NPC appointed as Department Lead (formerly Head); null when none is assigned.
+        // Any NPC can be appointed — there is no rank eligibility gate (WO-INF-005-ADDENDUM).
         public string headNpcUid = null;
+
+        // Team Lead map: teamId → npcUid. Optional. Sub-teams are created on first assignment.
+        // Managed via DepartmentRegistry.AssignTeamLead / RemoveTeamLead.
+        public Dictionary<string, string> teamLeads
+            = new Dictionary<string, string>();
+
+        // Team member map: teamId → list of NPC uids assigned to that sub-team.
+        // Managed via DepartmentRegistry.AssignTeamLead / GetTeamMembers.
+        public Dictionary<string, List<string>> teamMembers
+            = new Dictionary<string, List<string>>();
+
+        // UID of the Operations Terminal assigned to this department, or null if none.
+        // Consumed by WO-JOB-002's HierarchyDistributor.
+        // Assigned via DepartmentRegistry.AssignOperationsTerminal.
+        public string operationsTerminalUid = null;
 
         public static Department Create(string uid, string name, List<string> allowedJobs = null)
         {
