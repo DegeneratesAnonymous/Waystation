@@ -464,6 +464,9 @@ namespace Waystation.Systems
         /// <param name="limit">Maximum number of records to return (default 50).</param>
         public List<TradeRecord> GetTradeHistory(StationState station, int limit = 50)
         {
+            // Clamp limit to non-negative to avoid ArgumentOutOfRangeException from GetRange.
+            if (limit <= 0)
+                return new List<TradeRecord>();
             var history = station.tradeHistory;
             if (history.Count <= limit) return new List<TradeRecord>(history);
             return history.GetRange(0, limit);

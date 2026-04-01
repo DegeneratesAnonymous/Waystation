@@ -345,6 +345,15 @@ namespace Waystation.UI
                 string resource = resDropdown.value;
                 if (string.IsNullOrEmpty(resource)) return;
 
+                // In edit mode, prevent changing the resource from the one originally being
+                // edited — changing the key would leave a stale order behind.  Keep the UI
+                // in sync with the enforced resource.
+                if (!string.IsNullOrEmpty(editResource) && editResource != resource)
+                {
+                    resource           = editResource;
+                    resDropdown.value  = editResource;
+                }
+
                 if (!float.TryParse(priceField.value, out float price) || price <= 0f) return;
                 if (!float.TryParse(qtyField.value,   out float qty)   || qty   <= 0f) return;
 

@@ -317,10 +317,12 @@ namespace Waystation.Tests
         private ContentRegistry _registry;
         private GameObject      _registryGo;
         private TradeSystem     _trade;
+        private bool            _priorTradeStandingOrders;
 
         [SetUp]
         public void SetUp()
         {
+            _priorTradeStandingOrders = FeatureFlags.TradeStandingOrders;
             _registryGo = new GameObject("TradeStandingTestRegistry");
             _registry   = _registryGo.AddComponent<ContentRegistry>();
             _trade      = new TradeSystem(_registry);
@@ -331,7 +333,7 @@ namespace Waystation.Tests
         public void TearDown()
         {
             Object.DestroyImmediate(_registryGo);
-            FeatureFlags.TradeStandingOrders = true;
+            FeatureFlags.TradeStandingOrders = _priorTradeStandingOrders;
         }
 
         [Test]
@@ -496,10 +498,12 @@ namespace Waystation.Tests
         private ContentRegistry _registry;
         private GameObject      _registryGo;
         private TradeSystem     _trade;
+        private bool            _priorTradeStandingOrders;
 
         [SetUp]
         public void SetUp()
         {
+            _priorTradeStandingOrders = FeatureFlags.TradeStandingOrders;
             _registryGo = new GameObject("TradeManagementTestRegistry");
             _registry   = _registryGo.AddComponent<ContentRegistry>();
             _trade      = new TradeSystem(_registry);
@@ -510,7 +514,7 @@ namespace Waystation.Tests
         public void TearDown()
         {
             Object.DestroyImmediate(_registryGo);
-            FeatureFlags.TradeStandingOrders = true;
+            FeatureFlags.TradeStandingOrders = _priorTradeStandingOrders;
         }
 
         // ── SetBuyOrder ───────────────────────────────────────────────────────
