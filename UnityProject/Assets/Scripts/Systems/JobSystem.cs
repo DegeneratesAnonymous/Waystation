@@ -353,17 +353,25 @@ namespace Waystation.Systems
             if (npc.isSleeping) return "Sleeping";
             if (npc.missionUid != null) return "On Mission";
 
-            if (!string.IsNullOrEmpty(npc.currentJobId) &&
-                _registry.Jobs.TryGetValue(npc.currentJobId, out var job))
+            if (!string.IsNullOrEmpty(npc.currentJobId))
             {
-                if (!string.IsNullOrEmpty(npc.jobModuleUid) &&
-                    station.modules.TryGetValue(npc.jobModuleUid, out var mod) &&
-                    !string.IsNullOrEmpty(mod.definitionId))
+                if (_registry.Jobs.TryGetValue(npc.currentJobId, out var job))
                 {
-                    string loc = mod.definitionId.Replace("_", " ");
-                    return $"{job.displayName} in {loc}";
+                    if (!string.IsNullOrEmpty(npc.jobModuleUid) &&
+                        station.modules.TryGetValue(npc.jobModuleUid, out var mod))
+                    {
+                        string loc = !string.IsNullOrEmpty(mod.displayName)
+                            ? mod.displayName
+                            : (!string.IsNullOrEmpty(mod.definitionId)
+                                ? mod.definitionId.Replace("_", " ")
+                                : string.Empty);
+                        if (!string.IsNullOrEmpty(loc))
+                            return $"{job.displayName} in {loc}";
+                    }
+                    return job.displayName;
                 }
-                return job.displayName;
+                // Unknown job id — show a cleaned label rather than "Idle"
+                return npc.currentJobId.Replace("job.", "").Replace("_", " ");
             }
 
             if (!string.IsNullOrEmpty(npc.currentTaskId))

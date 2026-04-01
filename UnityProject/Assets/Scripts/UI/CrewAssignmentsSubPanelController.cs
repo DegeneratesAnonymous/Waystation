@@ -119,7 +119,7 @@ namespace Waystation.UI
                 header.style.borderBottomWidth = 1;
                 header.style.borderBottomColor = new Color(0.3f, 0.35f, 0.45f, 0.6f);
                 // Pointer change to indicate interactivity
-                header.style.cursor = new StyleCursor(new Cursor());
+                header.style.cursor = new StyleCursor(MouseCursor.Link);
 
                 var label = new Label(taskType.ToUpper());
                 label.AddToClassList(GroupLabelClass);
@@ -220,6 +220,10 @@ namespace Waystation.UI
         /// <summary>
         /// Rebuilds the assignments view from the latest station state.
         /// Call once on mount and again on every OnTick (throttled every 5 ticks).
+        /// Grouping is derived directly from NPC job ids via the static
+        /// <see cref="JobSystem.ClassifyTaskType"/> helper so the panel works
+        /// even when <paramref name="jobSystem"/> is null (task descriptions
+        /// fall back to a cleaned job-id label in that case).
         /// </summary>
         public void Refresh(StationState station, JobSystem jobSystem)
         {
@@ -228,13 +232,32 @@ namespace Waystation.UI
             _station   = station;
             _jobSystem = jobSystem;
 
-            var assignments = jobSystem != null
-                ? jobSystem.GetCurrentAssignments(station)
-                : new Dictionary<string, List<NPCInstance>>(StringComparer.Ordinal);
+            // Group NPCs by task type using the static ClassifyTaskType helper.
+            // This does not require a live JobSystem instance.
+            var assignments = new Dictionary<string, List<NPCInstance>>(StringComparer.Ordinal);
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew()) continue;
+                string taskType = JobSystem.ClassifyTaskType(npc.currentJobId);
+                if (!assignments.TryGetValue(taskType, out var bucket))
+                {
+                    bucket = new List<NPCInstance>();
+                    assignments[taskType] = bucket;
+                }
+                bucket.Add(npc);
+            }
 
             foreach (var taskType in TaskTypeOrder)
             {
                 assignments.TryGetValue(taskType, out var npcs);
+
+                // Sort NPCs within each group by name then uid for a stable, deterministic order.
+                npcs?.Sort((a, b) =>
+                {
+                    int cmp = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                    return cmp != 0 ? cmp : string.Compare(a.uid, b.uid, StringComparison.Ordinal);
+                });
+
                 int count = npcs?.Count ?? 0;
 
                 var group = _groups[taskType];

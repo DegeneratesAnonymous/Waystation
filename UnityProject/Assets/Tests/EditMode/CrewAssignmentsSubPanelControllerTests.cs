@@ -93,8 +93,6 @@ namespace Waystation.Tests
             _panel.Refresh(station, null);
 
             // The group body for Idle should be hidden (collapsed).
-            var idleBody = _panel.Q<VisualElement>(className: "ws-crew-assignments-panel__group-body");
-            // We need to find specifically the Idle group body — check via its sibling label.
             // Walk all groups and find the one whose header label says "IDLE".
             var groups = _panel.Query<VisualElement>(className: "ws-crew-assignments-panel__group").ToList();
             VisualElement idleGroup = null;
@@ -106,7 +104,7 @@ namespace Waystation.Tests
 
             Assert.IsNotNull(idleGroup, "Idle group container should be present.");
             var body = idleGroup.Q<VisualElement>(className: "ws-crew-assignments-panel__group-body");
-            Assert.AreEqual(DisplayStyle.None, body.resolvedStyle.display,
+            Assert.AreEqual(DisplayStyle.None, body.style.display.value,
                 "Idle group body should be collapsed (hidden) by default.");
         }
 
@@ -129,7 +127,7 @@ namespace Waystation.Tests
 
             Assert.IsNotNull(recGroup, "Recreation group container should be present.");
             var body = recGroup.Q<VisualElement>(className: "ws-crew-assignments-panel__group-body");
-            Assert.AreEqual(DisplayStyle.None, body.resolvedStyle.display,
+            Assert.AreEqual(DisplayStyle.None, body.style.display.value,
                 "Recreation group body should be collapsed (hidden) by default.");
         }
 
@@ -153,7 +151,7 @@ namespace Waystation.Tests
             Assert.IsNotNull(constGroup, "Construction group container should be present.");
             var body = constGroup.Q<VisualElement>(
                 className: "ws-crew-assignments-panel__group-body");
-            Assert.AreEqual(DisplayStyle.Flex, body.resolvedStyle.display,
+            Assert.AreEqual(DisplayStyle.Flex, body.style.display.value,
                 "Construction group body should be expanded by default.");
         }
     }
@@ -184,7 +182,7 @@ namespace Waystation.Tests
             int visibleCount = 0;
             foreach (var g in groups)
             {
-                if (g.resolvedStyle.display == DisplayStyle.None)
+                if (g.style.display.value == DisplayStyle.None)
                     hiddenCount++;
                 else
                     visibleCount++;
@@ -213,7 +211,7 @@ namespace Waystation.Tests
             }
 
             Assert.IsNotNull(farmGroup, "Farming group should be present.");
-            Assert.AreNotEqual(DisplayStyle.None, farmGroup.resolvedStyle.display,
+            Assert.AreNotEqual(DisplayStyle.None, farmGroup.style.display.value,
                 "Farming group should be visible when it has NPCs.");
         }
     }
