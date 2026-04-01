@@ -137,12 +137,16 @@ namespace Waystation.UI
             // Pending decisions — ships awaiting player approval.
             // These come from VisitorSystem.PendingDecisions (ship UIDs).
             var pendingShips = new List<ShipInstance>();
+            var pendingUids  = new HashSet<string>(StringComparer.Ordinal);
             if (_visitorSystem != null)
             {
                 foreach (var uid in _visitorSystem.PendingDecisions)
                 {
                     if (_station.ships.TryGetValue(uid, out var s))
+                    {
                         pendingShips.Add(s);
+                        pendingUids.Add(uid);
+                    }
                 }
             }
 
@@ -167,12 +171,19 @@ namespace Waystation.UI
             }
 
             // 3. ── Incoming ships ─────────────────────────────────────────────
-            if (incoming.Count > 0)
+            // Exclude ships that are already shown in the Pending Decisions section
+            // (they retain status "incoming" until granted/denied).
+            bool anyIncoming = false;
+            foreach (var ship in incoming)
             {
-                _listRoot.Add(BuildSectionHeader("Incoming", new Color(0.75f, 0.90f, 0.80f, 1f)));
-                foreach (var ship in incoming)
-                    _listRoot.Add(BuildIncomingShipRow(ship));
-                anyContent = true;
+                if (pendingUids.Contains(ship.uid)) continue;
+                if (!anyIncoming)
+                {
+                    _listRoot.Add(BuildSectionHeader("Incoming", new Color(0.75f, 0.90f, 0.80f, 1f)));
+                    anyIncoming = true;
+                    anyContent  = true;
+                }
+                _listRoot.Add(BuildIncomingShipRow(ship));
             }
 
             if (!anyContent)

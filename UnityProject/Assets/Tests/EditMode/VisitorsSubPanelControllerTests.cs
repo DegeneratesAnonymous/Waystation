@@ -247,6 +247,39 @@ namespace Waystation.Tests
             Assert.AreEqual(0, buttons.Count,
                 "No action buttons should appear when there are no pending ships.");
         }
+
+        [Test]
+        public void PendingShip_DoesNotAppearInIncomingSection()
+        {
+            _registryGo = new GameObject("VisitorsTestRegistry4");
+            var registry = _registryGo.AddComponent<ContentRegistry>();
+            var eventStub = new EventStubRegistry();
+            eventStub.Events["event.arrival_generic"] = new EventDefinition
+                { id = "event.arrival_generic", title = "Arrival", weight = 0f };
+            var visitors = new VisitorSystem(registry, null, new EventSystem(eventStub, "normal"));
+
+            var station = VisitorsTestHelpers.MakeStation();
+
+            // Add two incoming ships; mark only the first as pending.
+            var pending  = VisitorsTestHelpers.MakeIncomingShip("ISV Pending Only");
+            var incoming = VisitorsTestHelpers.MakeIncomingShip("ISV True Incoming");
+            station.AddShip(pending);
+            station.AddShip(incoming);
+            visitors.PendingDecisions.Add(pending.uid);
+
+            _panel.Refresh(station, visitors);
+
+            // The panel should have exactly one ship row for the Incoming section
+            // (the truly incoming ship) plus one pending row — not two incoming rows.
+            var allRows = _panel.Query<VisualElement>(className: "ws-visitors-panel__ship-row").ToList();
+            Assert.AreEqual(2, allRows.Count,
+                "Expected 1 pending row + 1 incoming row = 2 total rows (no duplicate).");
+
+            // The pending row must have action buttons; the incoming row must not.
+            var actionBtns = _panel.Query<Label>(className: "ws-visitors-panel__action-btn").ToList();
+            Assert.AreEqual(3, actionBtns.Count,
+                "Only the pending ship should have action buttons; the incoming ship must not.");
+        }
     }
 
     // ── Docked ship row click ──────────────────────────────────────────────────
@@ -491,13 +524,41 @@ namespace Waystation.Tests
             station.AddShip(ship);
             visitors.PendingDecisions.Add(ship.uid);
 
-            visitors.GrantDocking(ship.uid, station);
+            bool admitted = visitors.GrantDocking(ship.uid, station);
 
+            Assert.IsTrue(admitted, "GrantDocking should return true when dock is available.");
             Assert.IsFalse(visitors.PendingDecisions.Contains(ship.uid),
-                "GrantDocking must remove the ship uid from PendingDecisions.");
+                "GrantDocking must remove the ship uid from PendingDecisions on success.");
             Assert.IsTrue(station.ships.TryGetValue(ship.uid, out var updated));
             Assert.AreEqual("docked", updated.status,
                 "GrantDocking must admit the ship (status → docked).");
+        }
+
+        [Test]
+        public void GrantDocking_NoDockAvailable_KeepsPendingDecision()
+        {
+            // Use a setup WITHOUT a dock so AdmitShip returns false.
+            _registryGo = new GameObject("GrantNoDockRegistry");
+            var registry = _registryGo.AddComponent<ContentRegistry>();
+            registry.Ships["ship.test"] = new ShipTemplate
+                { id = "ship.test", role = "trader", passengerCapacity = 0 };
+            var eventStub = new EventStubRegistry();
+            var events    = new EventSystem(eventStub, "normal");
+            var visitors  = new VisitorSystem(registry, null, events);
+
+            var station = VisitorsTestHelpers.MakeStation("GrantNoDock");
+            // Intentionally no dock added.
+            var ship = VisitorsTestHelpers.MakeIncomingShip("ISV No Dock");
+            station.AddShip(ship);
+            visitors.PendingDecisions.Add(ship.uid);
+
+            bool admitted = visitors.GrantDocking(ship.uid, station);
+
+            Assert.IsFalse(admitted, "GrantDocking should return false when no dock is available.");
+            Assert.IsTrue(visitors.PendingDecisions.Contains(ship.uid),
+                "PendingDecisions must NOT be cleared when docking fails.");
+            Assert.AreEqual("incoming", ship.status,
+                "Ship status must remain incoming when docking fails.");
         }
 
         [Test]
@@ -525,13 +586,46 @@ namespace Waystation.Tests
             station.AddShip(ship);
             visitors.PendingDecisions.Add(ship.uid);
 
-            visitors.NegotiateDocking(ship.uid, station);
+            bool admitted = visitors.NegotiateDocking(ship.uid, station);
 
+            Assert.IsTrue(admitted, "NegotiateDocking should return true when dock is available.");
             Assert.IsFalse(visitors.PendingDecisions.Contains(ship.uid),
-                "NegotiateDocking must remove the ship uid from PendingDecisions.");
+                "NegotiateDocking must remove the ship uid from PendingDecisions on success.");
             Assert.IsTrue(station.ships.TryGetValue(ship.uid, out var updated));
             Assert.AreEqual("docked", updated.status,
                 "NegotiateDocking must admit the ship (status → docked).");
+        }
+
+        [Test]
+        public void NegotiateDocking_NullStation_ReturnsFalse()
+        {
+            var (visitors, _) = MakeSetup("NegotiateNullTest");
+            Assert.IsFalse(visitors.NegotiateDocking("any_uid", null),
+                "NegotiateDocking must return false and not throw when station is null.");
+        }
+
+        [Test]
+        public void NegotiateDocking_NoDockAvailable_KeepsPendingDecision()
+        {
+            // Station without a dock.
+            _registryGo = new GameObject("NegotiateNoDockRegistry");
+            var registry = _registryGo.AddComponent<ContentRegistry>();
+            registry.Ships["ship.test"] = new ShipTemplate
+                { id = "ship.test", role = "trader", passengerCapacity = 0 };
+            var eventStub = new EventStubRegistry();
+            var visitors  = new VisitorSystem(registry, null, new EventSystem(eventStub, "normal"));
+
+            var station = VisitorsTestHelpers.MakeStation("NegotiateNoDock");
+            var ship    = VisitorsTestHelpers.MakeIncomingShip("ISV No Dock Negotiate");
+            station.AddShip(ship);
+            visitors.PendingDecisions.Add(ship.uid);
+
+            bool admitted = visitors.NegotiateDocking(ship.uid, station);
+
+            Assert.IsFalse(admitted,
+                "NegotiateDocking should return false when no dock is available.");
+            Assert.IsTrue(visitors.PendingDecisions.Contains(ship.uid),
+                "PendingDecisions must NOT be cleared when negotiate-docking fails.");
         }
 
         [Test]

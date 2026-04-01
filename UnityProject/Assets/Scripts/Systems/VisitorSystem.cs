@@ -89,36 +89,36 @@ namespace Waystation.Systems
             => station?.GetIncomingShips() ?? new List<ShipInstance>();
 
         /// <summary>
-        /// Player grants docking permission.  The ship is admitted and removed from
-        /// <see cref="PendingDecisions"/>.
+        /// Player grants docking permission.  Delegates to <see cref="AdmitShip"/> which
+        /// removes the ship from <see cref="PendingDecisions"/> on success.
+        /// Returns the <see cref="AdmitShip"/> result so callers know whether the ship
+        /// actually docked (false = no dock available; the pending prompt remains active).
         /// </summary>
-        public void GrantDocking(string shipId, StationState station)
-        {
-            PendingDecisions.Remove(shipId);
-            AdmitShip(shipId, station);
-        }
+        public bool GrantDocking(string shipId, StationState station)
+            => AdmitShip(shipId, station);
 
         /// <summary>
-        /// Player denies docking permission.  The ship is denied entry and removed from
-        /// <see cref="PendingDecisions"/>.
+        /// Player denies docking permission.  Delegates to <see cref="DenyShip"/> which
+        /// removes the ship from <see cref="PendingDecisions"/>.
         /// </summary>
         public void DenyDocking(string shipId, StationState station)
-        {
-            PendingDecisions.Remove(shipId);
-            DenyShip(shipId, station);
-        }
+            => DenyShip(shipId, station);
 
         /// <summary>
         /// Player opens a negotiation with the incoming ship.  The ship is admitted
-        /// (it docks to allow talks) and removed from <see cref="PendingDecisions"/>.
-        /// A negotiation event is logged so the comms log reflects the interaction.
+        /// (it docks to allow talks).  <see cref="PendingDecisions"/> is cleared only if
+        /// docking succeeds.  A negotiation event is logged on successful admit.
+        /// Returns false if the station is null or no dock is available.
         /// </summary>
-        public void NegotiateDocking(string shipId, StationState station)
+        public bool NegotiateDocking(string shipId, StationState station)
         {
-            PendingDecisions.Remove(shipId);
+            if (station == null) return false;
+            if (!AdmitShip(shipId, station)) return false;
             if (station.ships.TryGetValue(shipId, out var ship))
                 station.LogEvent($"Negotiation opened with {ship.name}.");
-            AdmitShip(shipId, station);
+            else
+                Debug.LogWarning($"[VisitorSystem] NegotiateDocking: ship uid '{shipId}' not found after admit.");
+            return true;
         }
 
         // ── Tick ──────────────────────────────────────────────────────────────
@@ -283,6 +283,10 @@ namespace Waystation.Systems
             ship.status    = "docked";
             ship.dockedAt  = dock.uid;
             dock.dockedShip = shipUid;
+            // Clear the pending-decision entry now that the ship has successfully docked.
+            // This ensures the invariant holds regardless of whether the caller went through
+            // GrantDocking / NegotiateDocking or bypassed them (e.g. GameManager.AdmitShip).
+            PendingDecisions.Remove(shipUid);
             // Record a deterministic departure tick so TickDocked doesn't re-roll every tick.
             ship.plannedDepartureTick = station.tick +
                 UnityEngine.Random.Range(DockedDurationMin, DockedDurationMax + 1);
@@ -346,6 +350,11 @@ namespace Waystation.Systems
         public void DenyShip(string shipUid, StationState station)
         {
             if (!station.ships.TryGetValue(shipUid, out var ship)) return;
+
+            // Always clear the pending-decision entry on denial, regardless of escalation.
+            // This ensures the invariant holds for all call paths (DenyDocking wrapper or
+            // legacy GameManager.DenyShip).
+            PendingDecisions.Remove(shipUid);
 
             bool willEscalate = false;
             if (_registry.Ships.TryGetValue(ship.templateId, out var template))
