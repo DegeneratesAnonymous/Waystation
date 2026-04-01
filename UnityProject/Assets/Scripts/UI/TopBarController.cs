@@ -31,19 +31,18 @@ namespace Waystation.UI
     {
         // ── Speed preset table ────────────────────────────────────────────────
         // (label, secondsPerTick)  — Pause handled separately.
-        // 1× uses the GameManager baseline of 0.5s/tick; faster presets halve it.
+        // 1× = 1 real second per tick = 15 in-game minutes per second.
         private static readonly (string Label, float SecondsPerTick)[] SpeedPresets =
         {
-            ("1×", 0.5f),
-            ("2×", 0.25f),
-            ("3×", 1f / 6f),
+            ("1×", 1.0f),
+            ("2×", 0.5f),
+            ("3×", 1f / 3f),
         };
 
         // ── Child elements ────────────────────────────────────────────────────
         private readonly Label         _locationLabel;
         private readonly Label         _timeLabel;
         private readonly Label         _dayNightLabel;
-        private readonly Label         _tickLabel;
         private readonly Button        _pauseButton;
         private readonly Button[]      _speedButtons;
         private readonly Label         _alertBadge;
@@ -107,17 +106,6 @@ namespace Waystation.UI
             // Day/Night label
             _dayNightLabel = new Label("Day");
             _dayNightLabel.AddToClassList("ws-top-bar__day-night");
-
-            // Tick counter label
-            _tickLabel = new Label("tick 0");
-            _tickLabel.AddToClassList("ws-top-bar__tick");
-            _tickLabel.style.fontSize = 10;
-            _tickLabel.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
-            _tickLabel.style.marginLeft = 8;
-            _tickLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            rightGroup.Add(_tickLabel);
-
-            // Day/Night label — now visible
             _dayNightLabel.style.fontSize = 10;
             _dayNightLabel.style.marginLeft = 8;
             _dayNightLabel.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
@@ -204,9 +192,8 @@ namespace Waystation.UI
         {
             if (station == null) return;
 
-            _timeLabel.text    = TimeSystem.TimeLabel(station);
+            _timeLabel.text     = TimeSystem.TimeLabel(station);
             _dayNightLabel.text = TimeSystem.IsDayPhase(station) ? "Day" : "Night";
-            _tickLabel.text = "tick " + station.tick.ToString("N0");
 
             // Reflect pause / active-speed state each tick.
             RefreshSpeedButtons();

@@ -7,8 +7,8 @@ namespace Waystation.Systems
 {
     public static class TimeSystem
     {
-        public const int TicksPerDay      = 360;           // 1 tick = 15 in-game minutes
         public const int TicksPerHour     = 4;             // 4 × 15 min = 1 hour
+        public const int TicksPerDay      = 24 * TicksPerHour; // 24-hour day (96 ticks)
         public const int DayStartTick     = 6  * TicksPerHour;  // 06:00
         public const int DayEndTick       = 18 * TicksPerHour;  // 18:00
 

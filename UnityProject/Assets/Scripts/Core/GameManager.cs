@@ -35,8 +35,8 @@ namespace Waystation.Core
 
         // ── Serialised settings (Inspector) ──────────────────────────────────
         [Header("Game Speed")]
-        [Tooltip("Real-time seconds between game ticks.")]
-        [SerializeField] private float secondsPerTick = 0.5f;
+        [Tooltip("Real-time seconds between game ticks.  At 1× one tick = 1 real second = 15 in-game minutes.")]
+        [SerializeField] private float secondsPerTick = 1.0f;
 
         [Header("Difficulty")]
         [SerializeField] private string difficulty = "normal";
