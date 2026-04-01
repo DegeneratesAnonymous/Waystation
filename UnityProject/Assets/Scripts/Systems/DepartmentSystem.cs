@@ -212,10 +212,10 @@ namespace Waystation.Systems
         // ── Department Head ────────────────────────────────────────────────────
 
         /// <summary>
-        /// Appoints an NPC as Department Head.
-        /// Requirements:
-        ///   • NPC must be assigned to the department.
-        ///   • NPC rank must be ≥ <see cref="MinHeadRank"/>.
+        /// Appoints an NPC as Department Lead.
+        /// The NPC must be assigned to the department.  There is no rank eligibility
+        /// gate — any NPC can be appointed (WO-INF-005-ADDENDUM supersedes the original
+        /// MinHeadRank requirement).
         /// Returns <c>(false, reason)</c> on any validation failure.
         /// </summary>
         public (bool ok, string reason) AppointHead(
@@ -229,15 +229,11 @@ namespace Waystation.Systems
             if (!station.npcs.TryGetValue(npcUid, out var npc))
                 return (false, $"NPC '{npcUid}' not found.");
 
-            if (npc.rank < MinHeadRank)
-                return (false,
-                    $"{npc.name} does not meet the minimum rank requirement (rank {MinHeadRank}).");
-
             if (npc.departmentId != deptUid)
                 return (false, $"{npc.name} is not assigned to department '{dept.name}'.");
 
             dept.headNpcUid = npcUid;
-            station.LogEvent($"{npc.name} appointed as Head of {dept.name}.");
+            station.LogEvent($"{npc.name} appointed as Lead of {dept.name}.");
             return (true, null);
         }
 

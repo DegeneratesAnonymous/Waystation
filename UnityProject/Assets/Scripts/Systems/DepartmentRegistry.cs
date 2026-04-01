@@ -111,5 +111,92 @@ namespace Waystation.Systems
             if (_departments == null || string.IsNullOrEmpty(deptUid)) return null;
             return _departments.Find(d => d.uid == deptUid);
         }
+
+        // ── Department Lead ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the NPC uid of the Department Lead for the given department,
+        /// or null if no lead is assigned.
+        /// </summary>
+        public string GetDepartmentLead(string deptUid)
+        {
+            return Find(deptUid)?.headNpcUid;
+        }
+
+        // ── Team Lead ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Assigns <paramref name="npcUid"/> as Team Lead for the named
+        /// <paramref name="teamId"/> within the department.  Creates the sub-team
+        /// record if it does not yet exist.
+        /// </summary>
+        public void AssignTeamLead(string deptUid, string npcUid, string teamId)
+        {
+            var dept = Find(deptUid);
+            if (dept == null || string.IsNullOrEmpty(npcUid) || string.IsNullOrEmpty(teamId))
+                return;
+            dept.teamLeads[teamId] = npcUid;
+            if (!dept.teamMembers.ContainsKey(teamId))
+                dept.teamMembers[teamId] = new List<string>();
+        }
+
+        /// <summary>
+        /// Returns the NPC uid of the Team Lead for <paramref name="teamId"/>,
+        /// or null if no Team Lead is assigned to that sub-team.
+        /// </summary>
+        public string GetTeamLead(string deptUid, string teamId)
+        {
+            var dept = Find(deptUid);
+            if (dept == null || string.IsNullOrEmpty(teamId)) return null;
+            return dept.teamLeads.TryGetValue(teamId, out var uid) ? uid : null;
+        }
+
+        /// <summary>
+        /// Returns the NPC uids of all members assigned to <paramref name="teamId"/>
+        /// within the department, or an empty list if the sub-team does not exist.
+        /// </summary>
+        public List<string> GetTeamMembers(string deptUid, string teamId)
+        {
+            var dept = Find(deptUid);
+            if (dept == null || string.IsNullOrEmpty(teamId))
+                return new List<string>();
+            return dept.teamMembers.TryGetValue(teamId, out var members)
+                ? members
+                : new List<string>();
+        }
+
+        /// <summary>
+        /// Removes the Team Lead role for <paramref name="teamId"/>.  NPCs in that
+        /// sub-team continue to exist in <c>teamMembers</c> but report directly to
+        /// the Department Lead.
+        /// </summary>
+        public void RemoveTeamLead(string deptUid, string teamId)
+        {
+            var dept = Find(deptUid);
+            if (dept == null || string.IsNullOrEmpty(teamId)) return;
+            dept.teamLeads.Remove(teamId);
+        }
+
+        // ── Operations Terminal ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Assigns an Operations Terminal (identified by <paramref name="terminalUid"/>)
+        /// to the given department.  Pass null to clear the assignment.
+        /// </summary>
+        public void AssignOperationsTerminal(string deptUid, string terminalUid)
+        {
+            var dept = Find(deptUid);
+            if (dept == null) return;
+            dept.operationsTerminalUid = terminalUid;
+        }
+
+        /// <summary>
+        /// Returns the UID of the Operations Terminal assigned to the department,
+        /// or null if none has been assigned.
+        /// </summary>
+        public string GetOperationsTerminal(string deptUid)
+        {
+            return Find(deptUid)?.operationsTerminalUid;
+        }
     }
 }

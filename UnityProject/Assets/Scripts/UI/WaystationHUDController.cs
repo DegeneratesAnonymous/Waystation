@@ -59,14 +59,17 @@ namespace Waystation.UI
         private StationOverviewController _stationOverview;
 
         // Crew tab (UI-011)
-        // Active Crew sub-tab: "roster" (more to follow in later Work Orders)
-        private string                        _crewSubTab     = "roster";
-        private VisualElement                 _crewTabRoot;
-        private TabStrip                      _crewSubTabs;
-        private VisualElement                 _crewSubContent;
-        private CrewRosterSubPanelController  _crewRosterPanel;
+        // Active Crew sub-tab: "roster" | "departments"
+        private string                              _crewSubTab     = "roster";
+        private VisualElement                       _crewTabRoot;
+        private TabStrip                            _crewSubTabs;
+        private VisualElement                       _crewSubContent;
+        private CrewRosterSubPanelController        _crewRosterPanel;
+        private CrewDepartmentsSubPanelController   _crewDepartmentsPanel;
         // Tick counter for throttling crew roster refreshes (every 5 ticks).
         private int _crewRosterTickCounter;
+        // Tick counter for throttling crew departments refreshes (every 5 ticks).
+        private int _crewDepartmentsTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -539,6 +542,7 @@ namespace Waystation.UI
                 _crewSubTabs = new TabStrip(TabStrip.Orientation.Horizontal);
                 _crewSubTabs.OnTabSelected += OnCrewSubTabSelected;
                 _crewSubTabs.AddTab("ROSTER", "roster");
+                _crewSubTabs.AddTab("DEPARTMENTS", "departments");
 
                 _crewTabRoot.Add(_crewSubTabs);
                 _crewTabRoot.Add(_crewSubContent);
@@ -572,6 +576,18 @@ namespace Waystation.UI
 
                     if (_gm?.Station != null)
                         _crewRosterPanel.Refresh(_gm.Station, _gm?.DeptRegistry);
+                    break;
+
+                case "departments":
+                    if (_crewDepartmentsPanel == null)
+                        _crewDepartmentsPanel = new CrewDepartmentsSubPanelController();
+                    _crewDepartmentsPanel.style.flexGrow = 1;
+                    _crewDepartmentsPanel.style.height   = Length.Percent(100);
+                    _crewSubContent.Add(_crewDepartmentsPanel);
+
+                    if (_gm?.Station != null)
+                        _crewDepartmentsPanel.Refresh(
+                            _gm.Station, _gm?.DeptRegistry, _gm?.Departments);
                     break;
             }
         }
@@ -650,6 +666,17 @@ namespace Waystation.UI
                 {
                     _crewRosterTickCounter = 0;
                     _crewRosterPanel.Refresh(station, _gm?.DeptRegistry);
+                }
+            }
+
+            // Refresh the departments panel every 5 ticks to avoid GC churn.
+            if (_crewDepartmentsPanel != null && crewTabActive && _crewSubTab == "departments")
+            {
+                _crewDepartmentsTickCounter++;
+                if (_crewDepartmentsTickCounter >= 5)
+                {
+                    _crewDepartmentsTickCounter = 0;
+                    _crewDepartmentsPanel.Refresh(station, _gm?.DeptRegistry, _gm?.Departments);
                 }
             }
         }
