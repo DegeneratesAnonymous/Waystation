@@ -380,6 +380,78 @@ namespace Waystation.Systems
             return "Idle";
         }
 
+        // ── Schedule API (UI-014) ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the per-NPC 24-slot schedule for every crew member.
+        /// If an NPC has no custom schedule array, <see cref="NPCInstance.InitDefaultSchedule"/>
+        /// is called first so the caller always receives a full 24-element array.
+        /// Key = npcUid, Value = reference to the NPC's <c>npcSchedule</c> array.
+        /// </summary>
+        public Dictionary<string, ScheduleSlot[]> GetSchedules(StationState station)
+        {
+            var result = new Dictionary<string, ScheduleSlot[]>(StringComparer.Ordinal);
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew()) continue;
+                if (npc.npcSchedule == null || npc.npcSchedule.Length != 24)
+                    npc.InitDefaultSchedule();
+                result[npc.uid] = npc.npcSchedule;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Sets a single schedule slot for one NPC and interrupts its current job
+        /// so the scheduler re-evaluates on the next tick.
+        /// <paramref name="tick"/> is clamped to 0–23.
+        /// </summary>
+        public void SetSlot(string npcUid, int tick, ScheduleSlot slotType, StationState station)
+        {
+            tick = Math.Max(0, Math.Min(23, tick));
+            if (!station.npcs.TryGetValue(npcUid, out var npc) || !npc.IsCrew()) return;
+            if (npc.npcSchedule == null || npc.npcSchedule.Length != 24)
+                npc.InitDefaultSchedule();
+            npc.npcSchedule[tick] = slotType;
+            npc.jobInterrupted = true;
+        }
+
+        /// <summary>
+        /// Applies a named schedule template to one or more NPCs and interrupts
+        /// their current jobs so the scheduler picks up the new schedule immediately.
+        /// Supported templates: <c>"Day Worker"</c> (Work 06–20, Rest otherwise),
+        /// <c>"Night Worker"</c> (Work 21–05, Rest otherwise).
+        /// <c>"Custom"</c> is a no-op — the player defines it slot-by-slot.
+        /// </summary>
+        public void ApplyTemplate(string[] npcUids, string template, StationState station)
+        {
+            if (npcUids == null || template == null || station == null) return;
+            foreach (var uid in npcUids)
+            {
+                if (!station.npcs.TryGetValue(uid, out var npc) || !npc.IsCrew()) continue;
+                if (npc.npcSchedule == null || npc.npcSchedule.Length != 24)
+                    npc.InitDefaultSchedule();
+                ApplyTemplateToSchedule(npc.npcSchedule, template);
+                npc.jobInterrupted = true;
+            }
+        }
+
+        private static void ApplyTemplateToSchedule(ScheduleSlot[] schedule, string template)
+        {
+            switch (template)
+            {
+                case "Day Worker":
+                    for (int h = 0; h < 24; h++)
+                        schedule[h] = (h >= 6 && h <= 20) ? ScheduleSlot.Work : ScheduleSlot.Rest;
+                    break;
+                case "Night Worker":
+                    for (int h = 0; h < 24; h++)
+                        schedule[h] = (h >= 21 || h < 6) ? ScheduleSlot.Work : ScheduleSlot.Rest;
+                    break;
+                // "Custom": user-defined — leave schedule unchanged
+            }
+        }
+
         /// <summary>
         /// Maps a job id to one of the canonical task-type group names used by
         /// the Assignments sub-panel (UI-013).

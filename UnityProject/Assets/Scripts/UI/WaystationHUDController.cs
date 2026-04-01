@@ -68,12 +68,16 @@ namespace Waystation.UI
         private CrewDepartmentsSubPanelController   _crewDepartmentsPanel;
         // Crew → Assignments sub-panel (UI-013).
         private CrewAssignmentsSubPanelController   _crewAssignmentsPanel;
+        // Crew → Schedules sub-panel (UI-014).
+        private CrewSchedulesSubPanelController     _crewSchedulesPanel;
         // Tick counter for throttling crew roster refreshes (every 5 ticks).
         private int _crewRosterTickCounter;
         // Tick counter for throttling crew departments refreshes (every 5 ticks).
         private int _crewDepartmentsTickCounter;
         // Tick counter for throttling crew assignments refreshes (every 5 ticks).
         private int _crewAssignmentsTickCounter;
+        // Tick counter for throttling crew schedules refreshes (every 5 ticks).
+        private int _crewSchedulesTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -551,6 +555,7 @@ namespace Waystation.UI
                 _crewSubTabs.AddTab("ROSTER", "roster");
                 _crewSubTabs.AddTab("DEPARTMENTS", "departments");
                 _crewSubTabs.AddTab("ASSIGNMENTS", "assignments");
+                _crewSubTabs.AddTab("SCHEDULES", "schedules");
 
                 _crewTabRoot.Add(_crewSubTabs);
                 _crewTabRoot.Add(_crewSubContent);
@@ -610,6 +615,17 @@ namespace Waystation.UI
 
                     if (_gm?.Station != null)
                         _crewAssignmentsPanel.Refresh(_gm.Station, _gm?.Jobs);
+                    break;
+
+                case "schedules":
+                    if (_crewSchedulesPanel == null)
+                        _crewSchedulesPanel = new CrewSchedulesSubPanelController();
+                    _crewSchedulesPanel.style.flexGrow = 1;
+                    _crewSchedulesPanel.style.height   = Length.Percent(100);
+                    _crewSubContent.Add(_crewSchedulesPanel);
+
+                    if (_gm?.Station != null)
+                        _crewSchedulesPanel.Refresh(_gm.Station, _gm?.Jobs);
                     break;
             }
         }
@@ -715,6 +731,17 @@ namespace Waystation.UI
                 {
                     _crewAssignmentsTickCounter = 0;
                     _crewAssignmentsPanel.Refresh(station, _gm?.Jobs);
+                }
+            }
+
+            // Refresh the schedules panel every 5 ticks to avoid GC churn.
+            if (_crewSchedulesPanel != null && crewTabActive && _crewSubTab == "schedules")
+            {
+                _crewSchedulesTickCounter++;
+                if (_crewSchedulesTickCounter >= 5)
+                {
+                    _crewSchedulesTickCounter = 0;
+                    _crewSchedulesPanel.Refresh(station, _gm?.Jobs);
                 }
             }
         }
