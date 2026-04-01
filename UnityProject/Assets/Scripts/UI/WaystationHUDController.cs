@@ -79,6 +79,17 @@ namespace Waystation.UI
         // Tick counter for throttling crew schedules refreshes (every 5 ticks).
         private int _crewSchedulesTickCounter;
 
+        // World tab (UI-015)
+        // Active World sub-tab: "factions"
+        private string                       _worldSubTab    = "factions";
+        private VisualElement                _worldTabRoot;
+        private TabStrip                     _worldSubTabs;
+        private VisualElement                _worldSubContent;
+        // World → Factions sub-panel (UI-015).
+        private FactionsSubPanelController   _factionsSubPanel;
+        // Tick counter for throttling factions refreshes (every 5 ticks).
+        private int _factionsTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -174,6 +185,9 @@ namespace Waystation.UI
 
             if (_gm?.Rooms != null)
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
+
+            if (_gm?.Factions != null)
+                _gm.Factions.OnFactionRepThresholdCrossed -= OnFactionRepThresholdCrossed;
 
             // Unregister the placement-cancel keyboard handler from the root element.
             if (_keyboardRoot != null)
@@ -377,6 +391,10 @@ namespace Waystation.UI
             else if (tab == SidePanelController.Tab.Crew)
             {
                 MountCrewPanel();
+            }
+            else if (tab == SidePanelController.Tab.World)
+            {
+                MountWorldPanel();
             }
         }
 
@@ -640,7 +658,85 @@ namespace Waystation.UI
             SelectCrewMemberInternal(npcUid);
         }
 
-        // ── Event log setup (WO-UI-003) ──────────────────────────────────────
+        // ── World tab mount / sub-tab switching (UI-015) ──────────────────────
+
+        /// <summary>
+        /// Creates (once) and mounts the World tab root with its Factions sub-tab.
+        /// Re-mounts the previously active sub-tab if the panel was unmounted and
+        /// remounted.
+        /// </summary>
+        private void MountWorldPanel()
+        {
+            if (_worldTabRoot == null)
+            {
+                _worldTabRoot = new VisualElement();
+                _worldTabRoot.style.flexDirection = FlexDirection.Column;
+                _worldTabRoot.style.flexGrow      = 1;
+                _worldTabRoot.style.height        = Length.Percent(100);
+
+                // Create the content area BEFORE setting up the tab strip so the
+                // first-tab auto-selection can safely populate it.
+                _worldSubContent = new VisualElement();
+                _worldSubContent.style.flexGrow = 1;
+                _worldSubContent.style.overflow = Overflow.Hidden;
+
+                _worldSubTabs = new TabStrip(TabStrip.Orientation.Horizontal);
+                _worldSubTabs.OnTabSelected += OnWorldSubTabSelected;
+                _worldSubTabs.AddTab("FACTIONS", "factions");
+
+                _worldTabRoot.Add(_worldSubTabs);
+                _worldTabRoot.Add(_worldSubContent);
+            }
+
+            _sidePanel.DrawerContentRoot.Add(_worldTabRoot);
+
+            // Re-select the active sub-tab to restore content after the drawer was
+            // reopened (DrawerContentRoot.Clear() removes child elements).
+            OnWorldSubTabSelected(_worldSubTab);
+        }
+
+        private void OnWorldSubTabSelected(string subTabId)
+        {
+            _worldSubTab = subTabId;
+            _worldSubContent?.Clear();
+
+            if (_worldSubContent == null) return;
+
+            switch (subTabId)
+            {
+                case "factions":
+                    if (_factionsSubPanel == null)
+                    {
+                        _factionsSubPanel = new FactionsSubPanelController();
+                        _factionsSubPanel.OnFactionRowClicked += OnFactionRowClicked;
+                    }
+                    _factionsSubPanel.style.flexGrow = 1;
+                    _factionsSubPanel.style.height   = Length.Percent(100);
+                    _worldSubContent.Add(_factionsSubPanel);
+
+                    if (_gm?.Station != null)
+                        _factionsSubPanel.Refresh(_gm.Station, _gm?.Factions);
+                    break;
+            }
+        }
+
+        private void OnFactionRowClicked(string factionId)
+        {
+            // Faction Detail panel will be implemented in a separate Work Order (WO-UI-026).
+            Debug.Log($"[WaystationHUDController] OpenFactionDetail: {factionId}");
+        }
+
+        private void OnFactionRepThresholdCrossed(string factionId, float oldRep, float newRep)
+        {
+            // Refresh the factions panel immediately when a reputation threshold is crossed
+            // so the tier label and meter update without waiting for the next tick.
+            bool worldTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.World;
+            if (_factionsSubPanel != null && worldTabActive && _worldSubTab == "factions" &&
+                _gm?.Station != null)
+            {
+                _factionsSubPanel.Refresh(_gm.Station, _gm?.Factions);
+            }
+        }
 
         private void BuildEventLog()
         {
@@ -744,6 +840,18 @@ namespace Waystation.UI
                     _crewSchedulesPanel.Refresh(station, _gm?.Jobs);
                 }
             }
+
+            // Refresh the factions panel every 5 ticks to avoid GC churn.
+            bool worldTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.World;
+            if (_factionsSubPanel != null && worldTabActive && _worldSubTab == "factions")
+            {
+                _factionsTickCounter++;
+                if (_factionsTickCounter >= 5)
+                {
+                    _factionsTickCounter = 0;
+                    _factionsSubPanel.Refresh(station, _gm?.Factions);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -772,6 +880,16 @@ namespace Waystation.UI
             {
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
                 _gm.Rooms.OnLayoutChanged += OnRoomLayoutChanged;
+            }
+
+            // Subscribe to FactionSystem.OnFactionRepThresholdCrossed so the
+            // Factions panel refreshes immediately when a rep band changes.
+            // Unsubscribe first to guard against double-subscription across
+            // multiple OnGameLoaded calls.
+            if (_gm?.Factions != null)
+            {
+                _gm.Factions.OnFactionRepThresholdCrossed -= OnFactionRepThresholdCrossed;
+                _gm.Factions.OnFactionRepThresholdCrossed += OnFactionRepThresholdCrossed;
             }
 
             // Set the initial view context to the station name and inject dependencies
