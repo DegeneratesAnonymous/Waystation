@@ -186,6 +186,9 @@ namespace Waystation.UI
             if (_gm?.Rooms != null)
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
 
+            if (_gm?.Factions != null)
+                _gm.Factions.OnFactionRepThresholdCrossed -= OnFactionRepThresholdCrossed;
+
             // Unregister the placement-cancel keyboard handler from the root element.
             if (_keyboardRoot != null)
                 _keyboardRoot.UnregisterCallback<KeyDownEvent>(

@@ -41,7 +41,10 @@ namespace Waystation.Systems
         public event Action<string, float, float> OnFactionRepThresholdCrossed;
 
         // Threshold values that define boundary crossings (sorted ascending).
-        private static readonly float[] RepThresholds = { -50f, -20f, 10f, 40f, 75f };
+        // Includes UI tier boundaries (0, 50) alongside the original simulation
+        // thresholds (-50, -20, 10, 40, 75) so the FactionsSubPanelController
+        // receives an immediate refresh whenever a tier label or filter bucket changes.
+        private static readonly float[] RepThresholds = { -50f, -20f, 0f, 10f, 40f, 50f, 75f };
 
         public FactionSystem(ContentRegistry registry) => _registry = registry;
 

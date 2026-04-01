@@ -348,9 +348,18 @@ namespace Waystation.UI
             chip.style.borderBottomRightRadius = 10;
             chip.style.unityTextAlign = TextAnchor.MiddleCenter;
             chip.style.cursor         = new StyleCursor(MouseCursor.Link);
+            chip.focusable            = true;
 
             string capturedKey = filterKey;
             chip.RegisterCallback<ClickEvent>(_ => SetFilter(capturedKey));
+            chip.RegisterCallback<KeyDownEvent>(evt =>
+            {
+                if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.Space)
+                {
+                    SetFilter(capturedKey);
+                    evt.StopPropagation();
+                }
+            });
 
             return chip;
         }
