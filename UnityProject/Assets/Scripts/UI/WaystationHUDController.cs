@@ -86,6 +86,11 @@ namespace Waystation.UI
         // it in OnDestroy when we own it, to avoid destroying shared scene assets.
         private bool _createdPanelSettings;
 
+        // ScriptableObjects created at runtime alongside PanelSettings.
+        // Kept as fields so OnDestroy can clean them up to prevent leaks.
+        private ThemeStyleSheet  _runtimeTheme;
+        private PanelTextSettings _runtimeTextSettings;
+
         // ── Auto-install ──────────────────────────────────────────────────────
         // Fires once at startup; re-registers on every scene load so the controller
         // is (re)created whenever GameScene becomes active.
@@ -166,6 +171,10 @@ namespace Waystation.UI
             if (_createdPanelSettings && _uiDocument != null && _uiDocument.panelSettings != null)
                 Destroy(_uiDocument.panelSettings);
 
+            // Destroy the companion ScriptableObjects created alongside PanelSettings.
+            if (_runtimeTheme       != null) Destroy(_runtimeTheme);
+            if (_runtimeTextSettings != null) Destroy(_runtimeTextSettings);
+
             if (_gm != null)
             {
                 _gm.OnTick       -= OnTick;
@@ -214,7 +223,8 @@ namespace Waystation.UI
 
             // Assign an empty ThemeStyleSheet to satisfy Unity's requirement and
             // prevent the "No Theme Style Sheet" panic that breaks var() processing.
-            panelSettings.themeStyleSheet = ScriptableObject.CreateInstance<ThemeStyleSheet>();
+            _runtimeTheme = ScriptableObject.CreateInstance<ThemeStyleSheet>();
+            panelSettings.themeStyleSheet = _runtimeTheme;
 
             // Assign a default font — ScriptableObject.CreateInstance<PanelSettings>()
             // does not include one, so without this no text renders.
@@ -222,7 +232,8 @@ namespace Waystation.UI
             var projectFont = Resources.Load<Font>("Fonts/Quango");
             if (projectFont != null)
                 defaultFont = projectFont;
-            panelSettings.textSettings = ScriptableObject.CreateInstance<PanelTextSettings>();
+            _runtimeTextSettings = ScriptableObject.CreateInstance<PanelTextSettings>();
+            panelSettings.textSettings = _runtimeTextSettings;
 
             _uiDocument = gameObject.AddComponent<UIDocument>();
             _uiDocument.panelSettings = panelSettings;

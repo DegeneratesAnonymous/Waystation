@@ -172,7 +172,7 @@ namespace Waystation.UI
                 btn.style.flexDirection   = FlexDirection.Column;
                 btn.style.alignItems      = Align.Center;
                 btn.style.justifyContent  = Justify.Center;
-                btn.style.backgroundColor = new Color(0, 0, 0, 0);
+                btn.style.backgroundColor = StyleKeyword.Null; // let USS control normal/hover background
                 btn.style.borderTopWidth  = 0;
                 btn.style.borderRightWidth = 0;
                 btn.style.borderBottomWidth = 0;
@@ -186,13 +186,16 @@ namespace Waystation.UI
                 btn.Add(iconEl);
 
                 // Label — hidden by default, shown on hover or when active.
+                // fontSize and display are left unset (StyleKeyword.Null) so USS
+                // (.ws-side-panel__tab-label) drives those values; only the colour
+                // fallback is applied inline.
                 var lbl = new Label(label);
                 lbl.AddToClassList("ws-side-panel__tab-label");
-                lbl.style.fontSize       = 8;
+                lbl.style.fontSize       = StyleKeyword.Null; // let USS var(--ws-fs-section) apply
                 lbl.style.unityTextAlign = TextAnchor.MiddleCenter;
                 lbl.style.color          = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid fallback
                 lbl.style.marginTop      = 2;
-                lbl.style.display        = DisplayStyle.None;
+                lbl.style.display        = StyleKeyword.Null; // visibility controlled via USS class
                 btn.Add(lbl);
 
                 _tabLabels[i] = lbl;
@@ -204,7 +207,7 @@ namespace Waystation.UI
                     // Keep label visible if this tab is active
                     bool isActive = _activeTab.HasValue && TabDefs[capturedIndex].id == _activeTab.Value;
                     if (!isActive)
-                        capturedLabel.style.display = DisplayStyle.None;
+                        capturedLabel.style.display = StyleKeyword.Null; // let USS hide via display: none
                 });
 
                 _tabStrip.Add(btn);
@@ -365,7 +368,8 @@ namespace Waystation.UI
                 bool active = _activeTab.HasValue && TabDefs[i].id == _activeTab.Value;
                 _tabButtons[i].EnableInClassList("ws-side-panel__tab--active", active);
 
-                // Inline fallback for active state
+                // Inline fallback for active state.
+                // Inactive tabs clear inline styles so USS (incl. :hover) can drive them.
                 if (active)
                 {
                     _tabButtons[i].style.backgroundColor = new Color(0.12f, 0.16f, 0.24f, 1f); // bg-select
@@ -374,8 +378,10 @@ namespace Waystation.UI
                 }
                 else
                 {
-                    _tabButtons[i].style.backgroundColor = new Color(0, 0, 0, 0);
-                    _tabButtons[i].style.borderLeftWidth = 0;
+                    // Clear inline overrides so USS :hover background works for inactive tabs.
+                    _tabButtons[i].style.backgroundColor = StyleKeyword.Null;
+                    _tabButtons[i].style.borderLeftWidth = StyleKeyword.Null;
+                    _tabButtons[i].style.borderLeftColor = StyleKeyword.Null;
                 }
 
                 // Icon color: bright when active
@@ -385,11 +391,12 @@ namespace Waystation.UI
                         ? new Color(0.39f, 0.75f, 1.00f, 1f) // acc-bright
                         : new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
 
-                // Label: always visible when tab is active
-                var label = _tabButtons[i].Q<Label>(className: "ws-side-panel__tab-label");
+                // Label: use the cached reference from construction; show/hide via USS class.
+                // active → inline Flex override; inactive → clear override so USS display: none applies.
+                var label = _tabLabels[i];
                 if (label != null)
                 {
-                    label.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+                    label.style.display = active ? DisplayStyle.Flex : StyleKeyword.Null;
                     label.style.color = active
                         ? new Color(0.39f, 0.75f, 1.00f, 1f)  // acc-bright
                         : new Color(0.34f, 0.47f, 0.63f, 1f);  // text-mid

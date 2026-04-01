@@ -4,8 +4,10 @@
    Every panel's USS must @import or extend this file.
    Do NOT duplicate palette values in per-panel stylesheets.
 
-   NOTE: USS does not support CSS custom properties (var(--x)).
-   All palette values are written out as rgb() directly.
+   NOTE: This project uses CSS custom properties (var(--ws-*)) for palette
+   and theme values, defined centrally in WaystationVariables.uss and
+   WaystationComponents.uss. Load WaystationVariables.uss first so that
+   var() references in subsequent sheets resolve correctly.
    Font assets must be assigned via Unity font-asset references —
    see Typography.uss and the "Fonts" section below.
    ═══════════════════════════════════════════════════════════════════════════

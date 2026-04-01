@@ -429,7 +429,8 @@ namespace Waystation.UI
 
             bool paused = _gm.IsPaused;
             _pauseButton.EnableInClassList("ws-top-bar__speed-btn--active", paused);
-            // Inline fallback for pause
+            // Inline fallback for pause: set accent/amber when paused;
+            // clear inline overrides when not paused so USS base/hover styles apply.
             if (paused)
             {
                 _pauseButton.style.backgroundColor = new Color(0.86f, 0.66f, 0.16f, 1f); // amber
@@ -437,8 +438,8 @@ namespace Waystation.UI
             }
             else
             {
-                _pauseButton.style.backgroundColor = new Color(0f, 0f, 0f, 0f); // transparent
-                _pauseButton.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+                _pauseButton.style.backgroundColor = StyleKeyword.Null;
+                _pauseButton.style.color = StyleKeyword.Null;
             }
 
             for (int i = 0; i < SpeedPresets.Length; i++)
@@ -446,7 +447,8 @@ namespace Waystation.UI
                 bool active = !paused &&
                               Mathf.Approximately(_gm.SecondsPerTick, SpeedPresets[i].SecondsPerTick);
                 _speedButtons[i].EnableInClassList("ws-top-bar__speed-btn--active", active);
-                // Inline fallback for speed buttons
+                // Inline fallback: set accent colour when active;
+                // clear inline overrides when inactive so USS base/hover styles apply.
                 if (active)
                 {
                     _speedButtons[i].style.backgroundColor = new Color(0.12f, 0.36f, 0.62f, 1f); // acc
@@ -454,8 +456,8 @@ namespace Waystation.UI
                 }
                 else
                 {
-                    _speedButtons[i].style.backgroundColor = new Color(0f, 0f, 0f, 0f); // transparent
-                    _speedButtons[i].style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+                    _speedButtons[i].style.backgroundColor = StyleKeyword.Null;
+                    _speedButtons[i].style.color = StyleKeyword.Null;
                 }
             }
         }
