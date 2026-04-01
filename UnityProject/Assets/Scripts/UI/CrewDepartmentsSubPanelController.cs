@@ -74,9 +74,6 @@ namespace Waystation.UI
         private float  _pickerH, _pickerS, _pickerV;
         private string _pickerHexInput = "#ffffff";
 
-        // True when the "New Department" create row is visible
-        private bool _createRowVisible;
-
         // ── Child elements ─────────────────────────────────────────────────────
 
         private readonly VisualElement _toolbar;
@@ -172,7 +169,6 @@ namespace Waystation.UI
 
         private void OnNewDeptClicked()
         {
-            _createRowVisible        = true;
             _createRow.style.display = DisplayStyle.Flex;
             _createInput.value       = string.Empty;
             _createInput.Focus();
@@ -197,7 +193,6 @@ namespace Waystation.UI
 
         private void OnCancelCreate()
         {
-            _createRowVisible        = false;
             _createRow.style.display = DisplayStyle.None;
             _createInput.value       = string.Empty;
             RebuildList();
@@ -396,7 +391,7 @@ namespace Waystation.UI
             confirm.style.alignItems    = Align.Center;
             confirm.style.flexGrow      = 1;
 
-            var label = new Label($"Delete "{dept.name}"?");
+            var label = new Label($"Delete \"{dept.name}\"?");
             label.style.flexGrow   = 1;
             label.style.marginRight = 4;
             confirm.Add(label);
@@ -442,29 +437,46 @@ namespace Waystation.UI
             label.style.minWidth    = 36;
             row.Add(label);
 
-            // Build choices: "None" + all NPCs in this department
-            var choices    = new List<string> { "None" };
-            var npcChoices = new List<string>();
+            // Build choices: "None" + all NPCs in this department.
+            // Disambiguate duplicate NPC names by appending a short uid suffix.
+            var choices      = new List<string> { "None" };
+            var displayToUid = new Dictionary<string, string>();
             if (_station?.npcs != null)
             {
+                // First pass: count how many NPCs share each name
+                var nameCount = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (var npc in _station.npcs.Values)
                 {
                     if (npc.departmentId != dept.uid) continue;
-                    choices.Add(npc.name);
-                    npcChoices.Add(npc.uid);
+                    nameCount[npc.name] = nameCount.TryGetValue(npc.name, out int c) ? c + 1 : 1;
+                }
+
+                // Second pass: build unique display strings
+                foreach (var npc in _station.npcs.Values)
+                {
+                    if (npc.departmentId != dept.uid) continue;
+                    string display = nameCount[npc.name] > 1
+                        ? $"{npc.name} ({npc.uid.Substring(0, 4)})"
+                        : npc.name;
+                    choices.Add(display);
+                    displayToUid[display] = npc.uid;
                 }
             }
 
-            // Determine current value
-            string currentLeadName = "None";
+            // Determine the current lead's display string
+            string currentLeadDisplay = "None";
             if (!string.IsNullOrEmpty(dept.headNpcUid) &&
                 _station?.npcs != null &&
                 _station.npcs.TryGetValue(dept.headNpcUid, out var headNpc))
             {
-                currentLeadName = headNpc.name;
+                foreach (var kv in displayToUid)
+                {
+                    if (kv.Value == dept.headNpcUid) { currentLeadDisplay = kv.Key; break; }
+                }
             }
 
-            var dropdown = new DropdownField(choices, choices.Contains(currentLeadName) ? currentLeadName : "None");
+            var dropdown = new DropdownField(choices,
+                choices.Contains(currentLeadDisplay) ? currentLeadDisplay : "None");
             dropdown.style.flexGrow  = 1;
             dropdown.style.minWidth  = 80;
             dropdown.RegisterValueChangedCallback(evt =>
@@ -474,14 +486,9 @@ namespace Waystation.UI
                 {
                     _deptSystem.RemoveHead(dept.uid, _station);
                 }
-                else
+                else if (displayToUid.TryGetValue(evt.newValue, out string npcUid))
                 {
-                    int idx = choices.IndexOf(evt.newValue);
-                    if (idx > 0 && idx - 1 < npcChoices.Count)
-                    {
-                        string npcUid = npcChoices[idx - 1];
-                        _deptSystem.AppointHead(dept.uid, npcUid, _station);
-                    }
+                    _deptSystem.AppointHead(dept.uid, npcUid, _station);
                 }
                 RebuildList();
             });
@@ -542,7 +549,8 @@ namespace Waystation.UI
 
             section.Add(channelRow);
 
-            // Preview swatch
+            // Preview swatch — captured by slider/hex callbacks so they can
+            // update it in-place without rebuilding the entire list.
             Color previewColour = Color.HSVToRGB(_pickerH, _pickerS, _pickerV);
             var previewSwatch = new VisualElement();
             previewSwatch.AddToClassList(ColourSwatchLgClass);
@@ -556,31 +564,7 @@ namespace Waystation.UI
             previewSwatch.style.backgroundColor = new StyleColor(previewColour);
             section.Add(previewSwatch);
 
-            // H slider
-            section.Add(BuildHsvSliderRow("H", _pickerH, 0f, 1f, v =>
-            {
-                _pickerH        = v;
-                _pickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(Color.HSVToRGB(_pickerH, _pickerS, _pickerV));
-                RebuildList();
-            }));
-
-            // S slider
-            section.Add(BuildHsvSliderRow("S", _pickerS, 0f, 1f, v =>
-            {
-                _pickerS        = v;
-                _pickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(Color.HSVToRGB(_pickerH, _pickerS, _pickerV));
-                RebuildList();
-            }));
-
-            // V slider
-            section.Add(BuildHsvSliderRow("V", _pickerV, 0f, 1f, v =>
-            {
-                _pickerV        = v;
-                _pickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(Color.HSVToRGB(_pickerH, _pickerS, _pickerV));
-                RebuildList();
-            }));
-
-            // Hex input
+            // Hex input — declared before sliders so it can be captured in slider lambdas.
             var hexRow = new VisualElement();
             hexRow.AddToClassList(HsvRowClass);
             hexRow.style.flexDirection = FlexDirection.Row;
@@ -594,12 +578,46 @@ namespace Waystation.UI
 
             var hexField = new TextField { value = _pickerHexInput };
             hexField.style.flexGrow = 1;
+
+            // H slider — updates swatch and hex field in-place to avoid GC churn
+            // from rebuilding the full department list on every drag tick.
+            section.Add(BuildHsvSliderRow("H", _pickerH, 0f, 1f, v =>
+            {
+                _pickerH = v;
+                var newColour = Color.HSVToRGB(_pickerH, _pickerS, _pickerV);
+                _pickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(newColour);
+                previewSwatch.style.backgroundColor = new StyleColor(newColour);
+                hexField.SetValueWithoutNotify(_pickerHexInput);
+            }));
+
+            // S slider
+            section.Add(BuildHsvSliderRow("S", _pickerS, 0f, 1f, v =>
+            {
+                _pickerS = v;
+                var newColour = Color.HSVToRGB(_pickerH, _pickerS, _pickerV);
+                _pickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(newColour);
+                previewSwatch.style.backgroundColor = new StyleColor(newColour);
+                hexField.SetValueWithoutNotify(_pickerHexInput);
+            }));
+
+            // V slider
+            section.Add(BuildHsvSliderRow("V", _pickerV, 0f, 1f, v =>
+            {
+                _pickerV = v;
+                var newColour = Color.HSVToRGB(_pickerH, _pickerS, _pickerV);
+                _pickerHexInput = "#" + ColorUtility.ToHtmlStringRGB(newColour);
+                previewSwatch.style.backgroundColor = new StyleColor(newColour);
+                hexField.SetValueWithoutNotify(_pickerHexInput);
+            }));
+
+            // Hex input callback — a discrete edit, so a full rebuild is acceptable here.
             hexField.RegisterValueChangedCallback(evt =>
             {
                 _pickerHexInput = evt.newValue;
                 if (ColorUtility.TryParseHtmlString(evt.newValue, out Color parsed))
                 {
                     Color.RGBToHSV(parsed, out _pickerH, out _pickerS, out _pickerV);
+                    previewSwatch.style.backgroundColor = new StyleColor(parsed);
                     RebuildList();
                 }
             });

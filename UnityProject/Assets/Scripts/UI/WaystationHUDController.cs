@@ -68,6 +68,8 @@ namespace Waystation.UI
         private CrewDepartmentsSubPanelController   _crewDepartmentsPanel;
         // Tick counter for throttling crew roster refreshes (every 5 ticks).
         private int _crewRosterTickCounter;
+        // Tick counter for throttling crew departments refreshes (every 5 ticks).
+        private int _crewDepartmentsTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -667,9 +669,16 @@ namespace Waystation.UI
                 }
             }
 
-            // Refresh the departments panel whenever it is mounted.
+            // Refresh the departments panel every 5 ticks to avoid GC churn.
             if (_crewDepartmentsPanel != null && crewTabActive && _crewSubTab == "departments")
-                _crewDepartmentsPanel.Refresh(station, _gm?.DeptRegistry, _gm?.Departments);
+            {
+                _crewDepartmentsTickCounter++;
+                if (_crewDepartmentsTickCounter >= 5)
+                {
+                    _crewDepartmentsTickCounter = 0;
+                    _crewDepartmentsPanel.Refresh(station, _gm?.DeptRegistry, _gm?.Departments);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
