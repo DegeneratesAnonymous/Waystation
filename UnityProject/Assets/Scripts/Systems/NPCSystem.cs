@@ -49,8 +49,10 @@ namespace Waystation.Systems
 
         // ── Sleep / Wake events ────────────────────────────────────────────────
         // Subscribed by MoodSystem in GameManager.InitSystems()
+#pragma warning disable CS0067
         public event System.Action<NPCInstance> OnNPCSleeps;
         public event System.Action<NPCInstance> OnNPCWakes;
+#pragma warning restore CS0067
 
         // ── Registry query ────────────────────────────────────────────────────
 

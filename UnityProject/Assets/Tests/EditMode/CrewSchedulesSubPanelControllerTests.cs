@@ -530,7 +530,7 @@ namespace Waystation.Tests
 
             if (sw.ElapsedMilliseconds > 200)
             {
-                Debug.LogWarning(
+                UnityEngine.Debug.LogWarning(
                     $"Refresh with 50 NPCs exceeded the 200 ms budget (took {sw.ElapsedMilliseconds} ms).");
             }
         }

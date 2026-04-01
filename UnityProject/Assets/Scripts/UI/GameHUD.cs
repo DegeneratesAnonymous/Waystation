@@ -130,7 +130,9 @@ namespace Waystation.UI
         private string  _inventorySearch = "";
 
         // Station Inventory state
+#pragma warning disable CS0414
         private string  _selectedHoldUid = "";  // uid of the hold whose settings panel is open
+#pragma warning restore CS0414
 
         // All recognised item type names (used by the filter checkboxes)
         private static readonly string[] ItemTypes =
@@ -156,7 +158,9 @@ namespace Waystation.UI
         private string _renamingDeptUid  = "";
         private string _renameDeptBuffer = "";
         // ── Crew detail view ──────────────────────────────────────────────────
+#pragma warning disable CS0414
         private string  _crewDetailNpcUid = "";   // non-empty = showing detail page for this NPC
+#pragma warning restore CS0414
         private Vector2 _crewListScroll;
         private bool    _crewDeptConfigMode = false; // true = dept rename/delete controls visible
 
@@ -996,7 +1000,9 @@ namespace Waystation.UI
 
         // ── Designer tab ──────────────────────────────────────────────────────
         private Vector2 _buildScroll;
+#pragma warning disable CS0414
         private string  _buildInfoOpen     = "";  // buildable id whose info panel is expanded (unused, kept for compat)
+#pragma warning restore CS0414
         private string  _buildHoverItem    = "";  // defn.id hovered this frame
         private Rect    _buildHoverContentRect;   // content-space rect of the hovered tile
         private string  _foundSettingsOpen = "";  // foundation uid whose cargo settings are open

@@ -32,7 +32,9 @@ namespace Waystation.UI
 
         // Placement state — mirrors GameHUD ghost-placement fields.
         private string _ghostBuildableId;
+#pragma warning disable CS0414
         private int    _ghostRotation;
+#pragma warning restore CS0414
 
         // Side panel (WO-UI-005)
         private SidePanelController _sidePanel;
