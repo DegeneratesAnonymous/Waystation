@@ -59,6 +59,12 @@ namespace Waystation.Systems
             { "patrol",    new List<(string,float)> { ("patrol",1.0f) } }
         };
 
+        // ── Pending docking decisions ─────────────────────────────────────────
+        // Ship UIDs that require an explicit player Grant / Deny / Negotiate decision
+        // before they are admitted.  Populated in ProcessIncoming and cleared by the
+        // three decision methods below.
+        public readonly HashSet<string> PendingDecisions = new HashSet<string>(StringComparer.Ordinal);
+
         public VisitorSystem(ContentRegistry registry, NPCSystem npcSystem,
                               EventSystem eventSystem, TradeSystem tradeSystem = null,
                               NPCTaskQueueManager taskQueue = null,
@@ -70,6 +76,49 @@ namespace Waystation.Systems
             _tradeSystem = tradeSystem;
             _taskQueue   = taskQueue;
             _inventorySystem = inventorySystem;
+        }
+
+        // ── Docking decision API (UI-016) ─────────────────────────────────────
+
+        /// <summary>Returns all docked ships for the given station.</summary>
+        public List<ShipInstance> GetDockedShips(StationState station)
+            => station?.GetDockedShips() ?? new List<ShipInstance>();
+
+        /// <summary>Returns all incoming ships for the given station.</summary>
+        public List<ShipInstance> GetIncomingShips(StationState station)
+            => station?.GetIncomingShips() ?? new List<ShipInstance>();
+
+        /// <summary>
+        /// Player grants docking permission.  The ship is admitted and removed from
+        /// <see cref="PendingDecisions"/>.
+        /// </summary>
+        public void GrantDocking(string shipId, StationState station)
+        {
+            PendingDecisions.Remove(shipId);
+            AdmitShip(shipId, station);
+        }
+
+        /// <summary>
+        /// Player denies docking permission.  The ship is denied entry and removed from
+        /// <see cref="PendingDecisions"/>.
+        /// </summary>
+        public void DenyDocking(string shipId, StationState station)
+        {
+            PendingDecisions.Remove(shipId);
+            DenyShip(shipId, station);
+        }
+
+        /// <summary>
+        /// Player opens a negotiation with the incoming ship.  The ship is admitted
+        /// (it docks to allow talks) and removed from <see cref="PendingDecisions"/>.
+        /// A negotiation event is logged so the comms log reflects the interaction.
+        /// </summary>
+        public void NegotiateDocking(string shipId, StationState station)
+        {
+            PendingDecisions.Remove(shipId);
+            if (station.ships.TryGetValue(shipId, out var ship))
+                station.LogEvent($"Negotiation opened with {ship.name}.");
+            AdmitShip(shipId, station);
         }
 
         // ── Tick ──────────────────────────────────────────────────────────────
@@ -120,6 +169,7 @@ namespace Waystation.Systems
             var shipInstance = ShipInstance.Create(
                 inspectorTemplate.id, name, inspectorTemplate.role, "inspect", factionId, inspectorTemplate.threatLevel);
             station.AddShip(shipInstance);
+            PendingDecisions.Add(shipInstance.uid);
             station.LogEvent($"Inspection patrol inbound: {shipInstance.name}.");
             _eventSystem.QueueEvent("event.arrival_generic",
                 new Dictionary<string, object> { { "ship_uid", shipInstance.uid } });
@@ -134,6 +184,8 @@ namespace Waystation.Systems
             if (ship == null) return;
 
             station.AddShip(ship);
+            // Flag ship for player docking decision (UI-016).
+            PendingDecisions.Add(ship.uid);
             station.LogEvent(
                 $"Incoming: {ship.name} ({ship.role}, intent={ship.intent}, threat={ship.ThreatLabel()})");
             _eventSystem.QueueEvent("event.arrival_generic",
@@ -321,6 +373,9 @@ namespace Waystation.Systems
         public void DepartShip(string shipUid, StationState station)
         {
             if (!station.ships.TryGetValue(shipUid, out var ship)) return;
+
+            // Clean up pending decision entry if the ship departs without player action.
+            PendingDecisions.Remove(shipUid);
 
             if (ship.dockedAt != null && station.modules.TryGetValue(ship.dockedAt, out var dock))
                 dock.dockedShip = null;
