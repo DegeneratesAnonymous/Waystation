@@ -238,8 +238,9 @@ namespace Waystation.UI
                 {
                     _roomBonusEmptyLabel = new Label("No active room bonuses.");
                     _roomBonusEmptyLabel.AddToClassList("ws-station-overview__empty");
+                    _roomBonusEmptyLabel.AddToClassList("ws-text-dim");
                     _roomBonusEmptyLabel.style.fontSize = 11;
-                    _roomBonusEmptyLabel.style.color    = new Color(0.55f, 0.55f, 0.6f, 1f);
+                    _roomBonusEmptyLabel.style.opacity = 0.5f;
                 }
 
                 if (_roomBonusEmptyLabel.parent != _roomBonusSection)
@@ -267,8 +268,8 @@ namespace Waystation.UI
 
             if (moduleCount == 0)
             {
-                damageText  = "No modules";
-                damageColor = new Color(0.55f, 0.55f, 0.6f, 1f);
+                damageText  = "No damage";
+                damageColor = new Color(0.24f, 0.78f, 0.44f, 1f);   // green
             }
             else
             {
@@ -276,22 +277,22 @@ namespace Waystation.UI
                 if (avg <= 0f)
                 {
                     damageText  = "Nominal";
-                    damageColor = new Color(0.3f, 0.75f, 0.45f, 1f); // green
+                    damageColor = new Color(0.24f, 0.78f, 0.44f, 1f); // green
                 }
                 else if (avg < 0.3f)
                 {
                     damageText  = $"Minor damage ({avg:P0})";
-                    damageColor = new Color(0.8f, 0.75f, 0.2f, 1f);  // amber
+                    damageColor = new Color(0.86f, 0.66f, 0.16f, 1f); // amber
                 }
                 else if (avg < 0.7f)
                 {
                     damageText  = $"Moderate damage ({avg:P0})";
-                    damageColor = new Color(0.9f, 0.5f, 0.1f, 1f);   // orange
+                    damageColor = new Color(0.86f, 0.47f, 0.13f, 1f); // orange
                 }
                 else
                 {
                     damageText  = $"Critical damage ({avg:P0})";
-                    damageColor = new Color(0.85f, 0.2f, 0.2f, 1f);  // red
+                    damageColor = new Color(0.88f, 0.22f, 0.22f, 1f); // red
                 }
             }
 
@@ -315,8 +316,9 @@ namespace Waystation.UI
                 {
                     _deptEmptyLabel = new Label("No departments defined.");
                     _deptEmptyLabel.AddToClassList("ws-station-overview__empty");
+                    _deptEmptyLabel.AddToClassList("ws-text-dim");
                     _deptEmptyLabel.style.fontSize = 11;
-                    _deptEmptyLabel.style.color    = new Color(0.55f, 0.55f, 0.6f, 1f);
+                    _deptEmptyLabel.style.opacity = 0.5f;
                 }
 
                 if (_deptEmptyLabel.parent != _deptSection)
@@ -377,9 +379,9 @@ namespace Waystation.UI
         {
             var header = new Label(title);
             header.AddToClassList("ws-station-overview__section-header");
+            header.AddToClassList("ws-text-acc");
             header.style.fontSize                = 10;
-            header.style.color                   = new Color(0.5f, 0.55f, 0.65f, 1f);
-            header.style.marginTop               = 10;
+            header.style.marginTop               = 12;
             header.style.marginBottom            = 4;
             header.style.unityFontStyleAndWeight = FontStyle.Bold;
             parent.Add(header);
@@ -404,14 +406,14 @@ namespace Waystation.UI
             row.style.marginBottom  = 4;
 
             var keyLabel = new Label(key);
+            keyLabel.AddToClassList("ws-text-mid");
             keyLabel.style.fontSize       = 11;
-            keyLabel.style.color          = new Color(0.55f, 0.55f, 0.6f, 1f);
             keyLabel.style.flexGrow       = 1;
             keyLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
 
             var valLabel = new Label("-");
+            valLabel.AddToClassList("ws-text-bright");
             valLabel.style.fontSize       = 11;
-            valLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
             valLabel.style.unityTextAlign = TextAnchor.MiddleRight;
 
             row.Add(keyLabel);
@@ -448,15 +450,16 @@ namespace Waystation.UI
                 header.style.marginBottom  = 2;
 
                 var idLabel = new Label(resourceId.ToUpperInvariant());
+                idLabel.AddToClassList("ws-text-base");
                 idLabel.style.flexGrow       = 1;
                 idLabel.style.fontSize       = 11;
-                idLabel.style.color          = new Color(0.7f, 0.75f, 0.8f, 1f);
                 idLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
 
                 _valueLabel = new Label("-");
                 _valueLabel.AddToClassList("ws-station-overview__resource-value");
+                _valueLabel.AddToClassList("ws-text-bright");
                 _valueLabel.style.fontSize       = 11;
-                _valueLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
+                _valueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
                 _valueLabel.style.unityTextAlign = TextAnchor.MiddleRight;
                 _valueLabel.style.minWidth       = 48;
 
@@ -491,24 +494,24 @@ namespace Waystation.UI
                 if (Mathf.Approximately(rate, 0f))
                 {
                     _rateLabel.text        = "";
-                    _rateLabel.style.color = new Color(0.55f, 0.55f, 0.6f, 1f);
+                    _rateLabel.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
                 }
                 else if (rate > 0f)
                 {
                     _rateLabel.text        = "+" + rate.ToString("F1");
-                    _rateLabel.style.color = new Color(0.3f, 0.8f, 0.45f, 1f);  // green
+                    _rateLabel.style.color = new Color(0.24f, 0.78f, 0.44f, 1f); // green
                 }
                 else
                 {
                     _rateLabel.text        = rate.ToString("F1");
-                    _rateLabel.style.color = new Color(0.85f, 0.3f, 0.3f, 1f);  // red
+                    _rateLabel.style.color = new Color(0.88f, 0.22f, 0.22f, 1f); // red
                 }
 
                 // Warning / depleted tint on the row background.
                 if (isDepleted)
-                    Root.style.backgroundColor = new Color(0.25f, 0.05f, 0.05f, 0.35f);
+                    Root.style.backgroundColor = new Color(0.35f, 0.06f, 0.06f, 0.4f);
                 else if (isWarning)
-                    Root.style.backgroundColor = new Color(0.22f, 0.16f, 0.04f, 0.35f);
+                    Root.style.backgroundColor = new Color(0.35f, 0.24f, 0.03f, 0.4f);
                 else
                     Root.style.backgroundColor = new Color(0f, 0f, 0f, 0f);
             }
@@ -548,14 +551,14 @@ namespace Waystation.UI
 
                 _nameLabel = new Label();
                 _nameLabel.AddToClassList("ws-station-overview__bonus-name");
-                _nameLabel.style.flexGrow       = 1;
-                _nameLabel.style.fontSize       = 11;
-                _nameLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
+                _nameLabel.AddToClassList("ws-text-bright");
+                _nameLabel.style.flexGrow = 1;
+                _nameLabel.style.fontSize = 11;
 
                 _typeLabel = new Label();
                 _typeLabel.AddToClassList("ws-station-overview__bonus-type");
+                _typeLabel.AddToClassList("ws-text-green");
                 _typeLabel.style.fontSize       = 11;
-                _typeLabel.style.color          = new Color(0.45f, 0.8f, 0.55f, 1f);
                 _typeLabel.style.unityTextAlign = TextAnchor.MiddleRight;
                 _typeLabel.style.minWidth       = 80;
 
@@ -587,33 +590,27 @@ namespace Waystation.UI
             {
                 var btn = new Button();
                 btn.AddToClassList("ws-station-overview__dept-row");
-                btn.style.flexDirection     = FlexDirection.Row;
-                btn.style.alignItems        = Align.Center;
-                btn.style.backgroundColor   = new Color(0.16f, 0.16f, 0.20f, 1f);
-                btn.style.borderTopWidth    = 0;
-                btn.style.borderBottomWidth = 1;
-                btn.style.borderBottomColor = new Color(0.25f, 0.25f, 0.30f, 1f);
-                btn.style.borderLeftWidth   = 0;
-                btn.style.borderRightWidth  = 0;
-                btn.style.paddingTop        = 4;
-                btn.style.paddingBottom     = 4;
-                btn.style.paddingLeft       = 4;
-                btn.style.paddingRight      = 4;
-                btn.style.marginBottom      = 2;
+                btn.style.flexDirection  = FlexDirection.Row;
+                btn.style.alignItems     = Align.Center;
+                btn.style.paddingTop     = 5;
+                btn.style.paddingBottom  = 5;
+                btn.style.paddingLeft    = 6;
+                btn.style.paddingRight   = 6;
+                btn.style.marginBottom   = 2;
                 btn.RegisterCallback<ClickEvent>(_ => onClick?.Invoke());
                 Root = btn;
 
                 _nameLabel = new Label(initialName);
                 _nameLabel.AddToClassList("ws-station-overview__dept-name");
+                _nameLabel.AddToClassList("ws-text-bright");
                 _nameLabel.style.flexGrow       = 1;
                 _nameLabel.style.fontSize       = 11;
-                _nameLabel.style.color          = new Color(0.85f, 0.85f, 0.9f, 1f);
                 _nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
 
                 _crewLabel = new Label();
                 _crewLabel.AddToClassList("ws-station-overview__dept-crew");
+                _crewLabel.AddToClassList("ws-text-mid");
                 _crewLabel.style.fontSize       = 11;
-                _crewLabel.style.color          = new Color(0.65f, 0.65f, 0.70f, 1f);
                 _crewLabel.style.unityTextAlign = TextAnchor.MiddleRight;
                 _crewLabel.style.minWidth       = 56;
 
@@ -635,8 +632,8 @@ namespace Waystation.UI
                 _crewLabel.text  = crewCount + " crew";
                 _headLabel.text  = hasHead ? "\u2713 HEAD" : "\u2014 HEAD";
                 _headLabel.style.color = hasHead
-                    ? new Color(0.3f, 0.75f, 0.45f, 1f)   // green -- head assigned
-                    : new Color(0.6f, 0.35f, 0.35f, 1f);  // muted red -- unassigned
+                    ? new Color(0.24f, 0.78f, 0.44f, 1f)  // green
+                    : new Color(0.60f, 0.30f, 0.30f, 1f); // muted red
             }
         }
     }

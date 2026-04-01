@@ -43,6 +43,7 @@ namespace Waystation.UI
         private readonly Label         _locationLabel;
         private readonly Label         _timeLabel;
         private readonly Label         _dayNightLabel;
+        private readonly Label         _tickLabel;
         private readonly Button        _pauseButton;
         private readonly Button[]      _speedButtons;
         private readonly Label         _alertBadge;
@@ -69,39 +70,19 @@ namespace Waystation.UI
             if (styleSheet != null && !styleSheets.Contains(styleSheet))
                 styleSheets.Add(styleSheet);
 
-            // Apply basic inline styles to ensure visibility
             style.flexDirection = FlexDirection.Column;
             style.alignSelf = Align.Stretch;
-            style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 1f);
             style.paddingBottom = 0;
-            // Ensure top bar renders above the side panel's absolute positioning
             style.position = Position.Relative;
 
             // ── Bar row ───────────────────────────────────────────────────────
             var bar = new VisualElement();
             bar.AddToClassList("ws-top-bar__bar");
-            bar.style.flexDirection = FlexDirection.Row;
-            bar.style.alignItems = Align.Center;
-            bar.style.alignSelf = Align.Stretch;
-            bar.style.justifyContent = Justify.FlexStart;
-            bar.style.paddingLeft = 14;
-            bar.style.paddingRight = 14;
-            bar.style.paddingTop = 4;
-            bar.style.paddingBottom = 4;
-            bar.style.minHeight = 30;
-            bar.style.backgroundColor = new Color(0.08f, 0.08f, 0.11f, 1f);
-            bar.style.borderBottomWidth = 1;
-            bar.style.borderBottomColor = new Color(0.2f, 0.2f, 0.25f, 1f);
             Add(bar);
 
             // Location name
             _locationLabel = new Label("—");
             _locationLabel.AddToClassList("ws-top-bar__location");
-            _locationLabel.style.minWidth = 160;
-            _locationLabel.style.flexShrink = 0;
-            _locationLabel.style.color = new Color(0.9f, 0.9f, 0.95f, 1f);
-            _locationLabel.style.fontSize = 16;
-            _locationLabel.style.whiteSpace = WhiteSpace.NoWrap;
             bar.Add(_locationLabel);
 
             // Spacer — pushes the right group to the far right edge
@@ -120,16 +101,28 @@ namespace Waystation.UI
             // Time label
             _timeLabel = new Label("Day 1  00:00");
             _timeLabel.AddToClassList("ws-top-bar__time");
-            _timeLabel.style.color = new Color(0.7f, 0.7f, 0.75f, 1f);
-            _timeLabel.style.fontSize = 14;
-            _timeLabel.style.whiteSpace = WhiteSpace.NoWrap;
-            _timeLabel.style.marginRight = 16;
             _timeLabel.style.minWidth = 120;
             rightGroup.Add(_timeLabel);
 
-            // Day/Night label — created but not added to the hierarchy (hidden per design)
+            // Day/Night label
             _dayNightLabel = new Label("Day");
             _dayNightLabel.AddToClassList("ws-top-bar__day-night");
+
+            // Tick counter label
+            _tickLabel = new Label("tick 0");
+            _tickLabel.AddToClassList("ws-top-bar__tick");
+            _tickLabel.style.fontSize = 10;
+            _tickLabel.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+            _tickLabel.style.marginLeft = 8;
+            _tickLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            rightGroup.Add(_tickLabel);
+
+            // Day/Night label — now visible
+            _dayNightLabel.style.fontSize = 10;
+            _dayNightLabel.style.marginLeft = 8;
+            _dayNightLabel.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+            _dayNightLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            rightGroup.Add(_dayNightLabel);
 
             // Speed controls
             var speedGroup = new VisualElement();
@@ -159,14 +152,6 @@ namespace Waystation.UI
             _alertBadge = new Label("0");
             _alertBadge.AddToClassList("ws-top-bar__alert-badge");
             _alertBadge.style.display = DisplayStyle.None;
-            _alertBadge.style.minWidth = 20;
-            _alertBadge.style.minHeight = 20;
-            _alertBadge.style.paddingLeft = 4;
-            _alertBadge.style.paddingRight = 4;
-            _alertBadge.style.backgroundColor = new Color(0.8f, 0.2f, 0.2f, 1f);
-            _alertBadge.style.color = Color.white;
-            _alertBadge.style.fontSize = 10;
-            _alertBadge.style.unityTextAlign = TextAnchor.MiddleCenter;
             _alertBadge.RegisterCallback<ClickEvent>(_ => ToggleTray());
             bar.Add(_alertBadge);
 
@@ -174,21 +159,10 @@ namespace Waystation.UI
             _alertTray = new VisualElement();
             _alertTray.AddToClassList("ws-top-bar__alert-tray");
             _alertTray.style.display = DisplayStyle.None;
-            _alertTray.style.flexDirection = FlexDirection.Column;
-            _alertTray.style.backgroundColor = new Color(0.12f, 0.12f, 0.16f, 1f);
-            _alertTray.style.borderBottomWidth = 1;
-            _alertTray.style.borderBottomColor = new Color(0.2f, 0.2f, 0.25f, 1f);
-            _alertTray.style.maxHeight = 240;
-            _alertTray.style.overflow = Overflow.Hidden;
             Add(_alertTray);
 
             _alertTrayList = new VisualElement();
             _alertTrayList.AddToClassList("ws-top-bar__alert-tray-list");
-            _alertTrayList.style.flexDirection = FlexDirection.Column;
-            _alertTrayList.style.paddingLeft = 8;
-            _alertTrayList.style.paddingRight = 8;
-            _alertTrayList.style.paddingTop = 8;
-            _alertTrayList.style.paddingBottom = 8;
             _alertTray.Add(_alertTrayList);
         }
 
@@ -232,6 +206,7 @@ namespace Waystation.UI
 
             _timeLabel.text    = TimeSystem.TimeLabel(station);
             _dayNightLabel.text = TimeSystem.IsDayPhase(station) ? "Day" : "Night";
+            _tickLabel.text = "tick " + station.tick.ToString("N0");
 
             // Reflect pause / active-speed state each tick.
             RefreshSpeedButtons();
@@ -273,26 +248,9 @@ namespace Waystation.UI
 
         private static void StyleSpeedButton(Button btn)
         {
-            btn.style.minWidth = 36;
-            btn.style.height = 28;
-            btn.style.paddingTop = 0;
-            btn.style.paddingBottom = 0;
-            btn.style.paddingLeft = 6;
-            btn.style.paddingRight = 6;
-            btn.style.marginRight = 4;
-            btn.style.backgroundColor = new Color(0.15f, 0.15f, 0.2f, 1f);
-            btn.style.color = new Color(0.85f, 0.85f, 0.9f, 1f);
-            btn.style.fontSize = 14;
+            // Layout-only — colors/borders handled by .ws-top-bar__speed-btn USS class
+            btn.style.minWidth = 32;
             btn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            btn.style.borderTopWidth = 0;
-            btn.style.borderLeftWidth = 0;
-            btn.style.borderRightWidth = 0;
-            btn.style.borderBottomWidth = 1;
-            btn.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 1f);
-            btn.style.borderTopLeftRadius = 3;
-            btn.style.borderTopRightRadius = 3;
-            btn.style.borderBottomLeftRadius = 3;
-            btn.style.borderBottomRightRadius = 3;
         }
 
         private void OnPauseClicked()
@@ -484,12 +442,34 @@ namespace Waystation.UI
 
             bool paused = _gm.IsPaused;
             _pauseButton.EnableInClassList("ws-top-bar__speed-btn--active", paused);
+            // Inline fallback for pause
+            if (paused)
+            {
+                _pauseButton.style.backgroundColor = new Color(0.86f, 0.66f, 0.16f, 1f); // amber
+                _pauseButton.style.color = new Color(0.06f, 0.08f, 0.12f, 1f); // dark
+            }
+            else
+            {
+                _pauseButton.style.backgroundColor = new Color(0f, 0f, 0f, 0f); // transparent
+                _pauseButton.style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+            }
 
             for (int i = 0; i < SpeedPresets.Length; i++)
             {
                 bool active = !paused &&
                               Mathf.Approximately(_gm.SecondsPerTick, SpeedPresets[i].SecondsPerTick);
                 _speedButtons[i].EnableInClassList("ws-top-bar__speed-btn--active", active);
+                // Inline fallback for speed buttons
+                if (active)
+                {
+                    _speedButtons[i].style.backgroundColor = new Color(0.12f, 0.36f, 0.62f, 1f); // acc
+                    _speedButtons[i].style.color = new Color(0.06f, 0.08f, 0.12f, 1f); // dark
+                }
+                else
+                {
+                    _speedButtons[i].style.backgroundColor = new Color(0f, 0f, 0f, 0f); // transparent
+                    _speedButtons[i].style.color = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+                }
             }
         }
 

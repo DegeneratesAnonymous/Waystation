@@ -212,6 +212,10 @@ namespace Waystation.UI
             panelSettings.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
             panelSettings.match = 0.5f;
 
+            // Assign an empty ThemeStyleSheet to satisfy Unity's requirement and
+            // prevent the "No Theme Style Sheet" panic that breaks var() processing.
+            panelSettings.themeStyleSheet = ScriptableObject.CreateInstance<ThemeStyleSheet>();
+
             // Assign a default font — ScriptableObject.CreateInstance<PanelSettings>()
             // does not include one, so without this no text renders.
             var defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 12);
@@ -230,10 +234,23 @@ namespace Waystation.UI
             _uiDocument.rootVisualElement.style.fontSize = 14;
             _uiDocument.rootVisualElement.style.color = new Color(0.85f, 0.85f, 0.9f, 1f);
 
-            // Load the shared stylesheet so USS classes work for all panels.
-            var sheet = Resources.Load<StyleSheet>("UI/Styles/WaystationComponents");
-            if (sheet != null)
-                _uiDocument.rootVisualElement.styleSheets.Add(sheet);
+            // Load all stylesheets in dependency order so USS classes and
+            // var(--ws-*) custom properties work for all panels.
+            // Variables must be first so subsequent sheets can resolve var() refs.
+            string[] sheetPaths = {
+                "UI/Styles/WaystationVariables",
+                "UI/Styles/WaystationComponents",
+                "UI/Styles/Shared",
+                "UI/Styles/Typography",
+            };
+            foreach (var path in sheetPaths)
+            {
+                var sheet = Resources.Load<StyleSheet>(path);
+                if (sheet != null)
+                    _uiDocument.rootVisualElement.styleSheets.Add(sheet);
+                else
+                    Debug.LogWarning($"[WaystationHUDController] StyleSheet not found in Resources: {path}");
+            }
 
             Debug.Log("[WaystationHUDController] Created UIDocument + PanelSettings on HUD GameObject.");
             return _uiDocument;
@@ -560,7 +577,7 @@ namespace Waystation.UI
             _eventLog = new EventLogController();
             // Inset from the right by the side-panel tab strip width (56 px) so
             // the log bar doesn't overlap the tab icon column.
-            _eventLog.style.right = 56;
+            _eventLog.style.right = 52; // matches tab strip width
             _contentArea.Add(_eventLog);
         }
 

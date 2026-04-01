@@ -241,9 +241,9 @@ namespace Waystation.UI
                 row.style.paddingBottom  = 3;
                 row.style.paddingLeft    = 4;
                 row.style.paddingRight   = 4;
-                row.style.marginBottom   = 2;
+                row.style.marginBottom      = 2;
                 row.style.borderBottomWidth = 1;
-                row.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 0.6f);
+                row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f); // border-dark
 
                 var nameLabel = new Label(name.ToUpper());
                 nameLabel.AddToClassList("ws-build-panel__item-name");
@@ -341,10 +341,11 @@ namespace Waystation.UI
         {
             var lbl = new Label(text);
             lbl.AddToClassList("ws-build-panel__section-header");
-            lbl.style.fontSize     = 10;
-            lbl.style.opacity      = 0.6f;
-            lbl.style.marginBottom = 4;
-            lbl.style.marginTop    = 4;
+            lbl.AddToClassList("ws-text-acc");
+            lbl.style.fontSize                = 10;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.marginBottom            = 4;
+            lbl.style.marginTop               = 8;
             return lbl;
         }
 
@@ -373,8 +374,8 @@ namespace Waystation.UI
                 Root.style.paddingLeft    = 6;
                 Root.style.paddingRight   = 6;
                 Root.style.borderLeftWidth = 2;
-                Root.style.borderLeftColor = new Color(0.4f, 0.6f, 0.9f, 0.8f);
-                Root.style.backgroundColor = new Color(0.1f, 0.12f, 0.15f, 0.6f);
+                Root.style.borderLeftColor = new Color(0.24f, 0.55f, 0.86f, 1f); // acc
+                Root.style.backgroundColor = new Color(0.09f, 0.12f, 0.17f, 0.8f); // bg-deep
 
                 // ── Top row: name + material pip ──
                 var topRow = new VisualElement();
@@ -405,26 +406,22 @@ namespace Waystation.UI
                 // ── Progress bar ──
                 _progressTrack = new VisualElement();
                 _progressTrack.AddToClassList("ws-build-panel__progress-track");
-                _progressTrack.style.height          = 4;
-                _progressTrack.style.backgroundColor = new Color(0.15f, 0.15f, 0.2f, 1f);
-                _progressTrack.style.borderTopLeftRadius     = 2;
-                _progressTrack.style.borderTopRightRadius    = 2;
-                _progressTrack.style.borderBottomLeftRadius  = 2;
-                _progressTrack.style.borderBottomRightRadius = 2;
+                _progressTrack.style.height          = 6;
+                _progressTrack.style.backgroundColor = new Color(0.05f, 0.07f, 0.10f, 1f); // bg-deep
                 _progressTrack.style.overflow        = Overflow.Hidden;
                 Root.Add(_progressTrack);
 
                 _progressFill = new VisualElement();
                 _progressFill.AddToClassList("ws-build-panel__progress-fill");
-                _progressFill.style.height          = 4;
-                _progressFill.style.backgroundColor = new Color(0.3f, 0.7f, 0.3f, 1f);
+                _progressFill.style.height          = 6;
+                _progressFill.style.backgroundColor = new Color(0.24f, 0.78f, 0.44f, 1f); // green
                 _progressTrack.Add(_progressFill);
 
                 // ── Missing materials detail (hidden when sufficient) ──
                 _materialDetail = new Label();
                 _materialDetail.AddToClassList("ws-build-panel__queue-missing");
                 _materialDetail.style.fontSize  = 9;
-                _materialDetail.style.color     = new Color(0.9f, 0.4f, 0.3f, 1f);
+                _materialDetail.style.color     = new Color(0.88f, 0.22f, 0.22f, 1f); // red
                 _materialDetail.style.marginTop = 2;
                 _materialDetail.style.display   = DisplayStyle.None;
                 _materialDetail.style.whiteSpace = WhiteSpace.Normal;
