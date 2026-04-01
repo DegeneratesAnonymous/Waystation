@@ -95,6 +95,10 @@ namespace Waystation.UI
         private VisitorsSubPanelController   _visitorsSubPanel;
         // Tick counter for throttling visitors refreshes (every 5 ticks).
         private int _visitorsTickCounter;
+        // World → Trade sub-panel (UI-017).
+        private TradeSubPanelController      _tradeSubPanel;
+        // Tick counter for throttling trade refreshes (every 5 ticks).
+        private int _tradeTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -690,6 +694,7 @@ namespace Waystation.UI
                 _worldSubTabs.OnTabSelected += OnWorldSubTabSelected;
                 _worldSubTabs.AddTab("FACTIONS", "factions");
                 _worldSubTabs.AddTab("VISITORS", "visitors");
+                _worldSubTabs.AddTab("TRADE",    "trade");
 
                 _worldTabRoot.Add(_worldSubTabs);
                 _worldTabRoot.Add(_worldSubContent);
@@ -740,6 +745,17 @@ namespace Waystation.UI
 
                     if (_gm?.Station != null)
                         _visitorsSubPanel.Refresh(_gm.Station, _gm?.Visitors);
+                    break;
+
+                case "trade":
+                    if (_tradeSubPanel == null)
+                        _tradeSubPanel = new TradeSubPanelController();
+                    _tradeSubPanel.style.flexGrow = 1;
+                    _tradeSubPanel.style.height   = Length.Percent(100);
+                    _worldSubContent.Add(_tradeSubPanel);
+
+                    if (_gm?.Station != null)
+                        _tradeSubPanel.Refresh(_gm.Station, _gm?.Trade);
                     break;
             }
         }
@@ -892,6 +908,17 @@ namespace Waystation.UI
                 {
                     _visitorsTickCounter = 0;
                     _visitorsSubPanel.Refresh(station, _gm?.Visitors);
+                }
+            }
+
+            // Refresh the trade panel every 5 ticks to avoid GC churn.
+            if (_tradeSubPanel != null && worldTabActive && _worldSubTab == "trade")
+            {
+                _tradeTickCounter++;
+                if (_tradeTickCounter >= 5)
+                {
+                    _tradeTickCounter = 0;
+                    _tradeSubPanel.Refresh(station, _gm?.Trade);
                 }
             }
         }

@@ -317,10 +317,12 @@ namespace Waystation.Tests
         private ContentRegistry _registry;
         private GameObject      _registryGo;
         private TradeSystem     _trade;
+        private bool            _priorTradeStandingOrders;
 
         [SetUp]
         public void SetUp()
         {
+            _priorTradeStandingOrders = FeatureFlags.TradeStandingOrders;
             _registryGo = new GameObject("TradeStandingTestRegistry");
             _registry   = _registryGo.AddComponent<ContentRegistry>();
             _trade      = new TradeSystem(_registry);
@@ -331,7 +333,7 @@ namespace Waystation.Tests
         public void TearDown()
         {
             Object.DestroyImmediate(_registryGo);
-            FeatureFlags.TradeStandingOrders = true;
+            FeatureFlags.TradeStandingOrders = _priorTradeStandingOrders;
         }
 
         [Test]
@@ -485,6 +487,243 @@ namespace Waystation.Tests
 
             Assert.AreEqual(0, msgs.Count, "No standing orders should execute when flag is off.");
             Assert.AreEqual(1000f, station.GetResource("credits"), 0.1f);
+        }
+    }
+
+    // ── Standing order management API tests ──────────────────────────────────
+
+    [TestFixture]
+    public class TradeSystemManagementTests
+    {
+        private ContentRegistry _registry;
+        private GameObject      _registryGo;
+        private TradeSystem     _trade;
+        private bool            _priorTradeStandingOrders;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _priorTradeStandingOrders = FeatureFlags.TradeStandingOrders;
+            _registryGo = new GameObject("TradeManagementTestRegistry");
+            _registry   = _registryGo.AddComponent<ContentRegistry>();
+            _trade      = new TradeSystem(_registry);
+            FeatureFlags.TradeStandingOrders = true;
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            Object.DestroyImmediate(_registryGo);
+            FeatureFlags.TradeStandingOrders = _priorTradeStandingOrders;
+        }
+
+        // ── SetBuyOrder ───────────────────────────────────────────────────────
+
+        [Test]
+        public void SetBuyOrder_NewResource_AddsOrder()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetBuyOrder(station, "food", 6f, 20f);
+
+            Assert.AreEqual(1, station.standingBuyOrders.Count);
+            Assert.AreEqual("food", station.standingBuyOrders[0].resource);
+            Assert.AreEqual(6f,     station.standingBuyOrders[0].limitPrice, 0.001f);
+            Assert.AreEqual(20f,    station.standingBuyOrders[0].amount,     0.001f);
+        }
+
+        [Test]
+        public void SetBuyOrder_ExistingResource_UpdatesInPlace()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetBuyOrder(station, "food", 6f, 20f);
+            _trade.SetBuyOrder(station, "food", 8f, 30f);   // update
+
+            Assert.AreEqual(1, station.standingBuyOrders.Count,
+                "Upsert should not add a duplicate.");
+            Assert.AreEqual(8f,  station.standingBuyOrders[0].limitPrice, 0.001f);
+            Assert.AreEqual(30f, station.standingBuyOrders[0].amount,     0.001f);
+        }
+
+        // ── SetSellOrder ──────────────────────────────────────────────────────
+
+        [Test]
+        public void SetSellOrder_NewResource_AddsOrder()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetSellOrder(station, "parts", 5f, 15f);
+
+            Assert.AreEqual(1, station.standingSellOrders.Count);
+            Assert.AreEqual("parts", station.standingSellOrders[0].resource);
+            Assert.AreEqual(5f,      station.standingSellOrders[0].limitPrice, 0.001f);
+            Assert.AreEqual(15f,     station.standingSellOrders[0].amount,     0.001f);
+        }
+
+        [Test]
+        public void SetSellOrder_ExistingResource_UpdatesInPlace()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetSellOrder(station, "parts", 5f, 15f);
+            _trade.SetSellOrder(station, "parts", 7f, 25f);  // update
+
+            Assert.AreEqual(1, station.standingSellOrders.Count,
+                "Upsert should not add a duplicate.");
+            Assert.AreEqual(7f,  station.standingSellOrders[0].limitPrice, 0.001f);
+            Assert.AreEqual(25f, station.standingSellOrders[0].amount,     0.001f);
+        }
+
+        // ── RemoveBuyOrder ────────────────────────────────────────────────────
+
+        [Test]
+        public void RemoveBuyOrder_ExistingResource_RemovesOrder()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetBuyOrder(station, "food", 6f, 20f);
+            _trade.SetBuyOrder(station, "ice",  2f, 50f);
+
+            _trade.RemoveBuyOrder(station, "food");
+
+            Assert.AreEqual(1, station.standingBuyOrders.Count);
+            Assert.AreEqual("ice", station.standingBuyOrders[0].resource);
+        }
+
+        [Test]
+        public void RemoveBuyOrder_NoSuchResource_NoOp()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetBuyOrder(station, "food", 6f, 20f);
+
+            Assert.DoesNotThrow(() => _trade.RemoveBuyOrder(station, "parts"),
+                "Removing a non-existent order should not throw.");
+            Assert.AreEqual(1, station.standingBuyOrders.Count);
+        }
+
+        // ── RemoveSellOrder ───────────────────────────────────────────────────
+
+        [Test]
+        public void RemoveSellOrder_ExistingResource_RemovesOrder()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetSellOrder(station, "parts", 5f, 15f);
+            _trade.SetSellOrder(station, "food",  3f, 10f);
+
+            _trade.RemoveSellOrder(station, "parts");
+
+            Assert.AreEqual(1, station.standingSellOrders.Count);
+            Assert.AreEqual("food", station.standingSellOrders[0].resource);
+        }
+
+        // ── GetStandingOrders ─────────────────────────────────────────────────
+
+        [Test]
+        public void GetStandingOrders_ReturnsBothLists()
+        {
+            var station = TradeTestHelpers.MakeStation();
+            _trade.SetBuyOrder(station,  "food",  6f, 20f);
+            _trade.SetSellOrder(station, "parts", 5f, 10f);
+
+            var (buyOrders, sellOrders) = _trade.GetStandingOrders(station);
+
+            Assert.AreEqual(1, buyOrders.Count);
+            Assert.AreEqual(1, sellOrders.Count);
+            Assert.AreEqual("food",  buyOrders[0].resource);
+            Assert.AreEqual("parts", sellOrders[0].resource);
+        }
+
+        // ── GetTradeHistory ───────────────────────────────────────────────────
+
+        [Test]
+        public void GetTradeHistory_AfterPlayerBuy_RecordsEntry()
+        {
+            var station = TradeTestHelpers.MakeStation(credits: 500f, food: 0f);
+            var offer   = TradeTestHelpers.MakeOffer(resource: "food", sellPrice: 5f, available: 20f);
+
+            _trade.PlayerBuy(offer, "food", 10f, station);
+
+            var history = _trade.GetTradeHistory(station);
+            Assert.AreEqual(1, history.Count);
+            Assert.AreEqual("buy",   history[0].type);
+            Assert.AreEqual("food",  history[0].resource);
+            Assert.AreEqual(10f,     history[0].quantity,     0.1f);
+            Assert.AreEqual(50f,     history[0].totalValue,   0.1f);
+        }
+
+        [Test]
+        public void GetTradeHistory_AfterPlayerSell_RecordsEntry()
+        {
+            var station = TradeTestHelpers.MakeStation(credits: 0f, parts: 50f);
+            var offer   = TradeTestHelpers.MakeOffer(resource: "food", buyPrice: 3f, wants: 20f);
+
+            _trade.PlayerSell(offer, "parts", 10f, station);
+
+            var history = _trade.GetTradeHistory(station);
+            Assert.AreEqual(1, history.Count);
+            Assert.AreEqual("sell",  history[0].type);
+            Assert.AreEqual("parts", history[0].resource);
+            Assert.AreEqual(10f,     history[0].quantity,   0.1f);
+            Assert.AreEqual(30f,     history[0].totalValue, 0.1f);
+        }
+
+        [Test]
+        public void GetTradeHistory_AfterExecuteStandingOrders_RecordsEntry()
+        {
+            var station = TradeTestHelpers.MakeStation(credits: 1000f, food: 0f);
+            station.standingBuyOrders.Add(new StandingOrder
+                { resource = "food", limitPrice = 6f, amount = 10f });
+            var ship  = TradeTestHelpers.MakeShip();
+            var offer = new TradeOffer { shipUid = ship.uid, shipName = ship.name };
+            offer.lines.Add(new TradeLine { resource = "food", pricePerUnit = 5f, available = 20f });
+
+            _trade.ExecuteStandingOrders(ship, offer, station);
+
+            var history = _trade.GetTradeHistory(station);
+            Assert.AreEqual(1, history.Count);
+            Assert.AreEqual("buy",  history[0].type);
+            Assert.AreEqual("food", history[0].resource);
+            Assert.AreEqual(10f,    history[0].quantity,   0.1f);
+        }
+
+        [Test]
+        public void GetTradeHistory_RespectsLimit()
+        {
+            var station = TradeTestHelpers.MakeStation(credits: 50000f, food: 0f);
+            var ship    = TradeTestHelpers.MakeShip();
+
+            // Record 60 trades by executing buy orders repeatedly
+            for (int i = 0; i < 60; i++)
+            {
+                station.standingBuyOrders.Clear();
+                station.standingBuyOrders.Add(new StandingOrder
+                    { resource = "food", limitPrice = 6f, amount = 1f });
+                var offer = new TradeOffer { shipUid = ship.uid, shipName = ship.name };
+                offer.lines.Add(new TradeLine { resource = "food", pricePerUnit = 5f, available = 5f });
+                _trade.ExecuteStandingOrders(ship, offer, station);
+            }
+
+            var history = _trade.GetTradeHistory(station, limit: 50);
+            Assert.LessOrEqual(history.Count, 50, "GetTradeHistory should respect the limit.");
+        }
+
+        [Test]
+        public void GetTradeHistory_NewestFirst()
+        {
+            var station = TradeTestHelpers.MakeStation(credits: 1000f, food: 100f);
+
+            // First trade: buy food
+            var buyOffer = TradeTestHelpers.MakeOffer(resource: "food", sellPrice: 5f, available: 10f);
+            _trade.PlayerBuy(buyOffer, "food", 5f, station);
+
+            // Simulate tick advance to distinguish entries
+            station.tick = 10;
+
+            // Second trade: sell parts
+            var sellOffer = TradeTestHelpers.MakeOffer(resource: "food", buyPrice: 3f, wants: 10f);
+            _trade.PlayerSell(sellOffer, "parts", 5f, station);
+
+            var history = _trade.GetTradeHistory(station);
+            Assert.AreEqual(2, history.Count);
+            // Newest-first: last recorded (sell) is at index 0
+            Assert.AreEqual("sell", history[0].type, "Most recent trade should be at index 0.");
+            Assert.AreEqual("buy",  history[1].type, "Older trade should be at index 1.");
         }
     }
 }
