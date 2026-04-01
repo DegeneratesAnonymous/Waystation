@@ -321,5 +321,121 @@ namespace Waystation.Systems
             if (_registry.Jobs.TryGetValue(npc.currentJobId, out var job)) return job.displayName;
             return npc.currentJobId;
         }
+
+        /// <summary>
+        /// Returns all current crew NPC assignments grouped by task type.
+        /// Task types: Construction, Farming, Research, Medical, Hauling, Security,
+        /// Recreation, Idle.  Groups with zero members are not included.
+        /// </summary>
+        public Dictionary<string, List<NPCInstance>> GetCurrentAssignments(StationState station)
+        {
+            var result = new Dictionary<string, List<NPCInstance>>(StringComparer.Ordinal);
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew()) continue;
+                string taskType = ClassifyTaskType(npc.currentJobId);
+                if (!result.TryGetValue(taskType, out var list))
+                {
+                    list = new List<NPCInstance>();
+                    result[taskType] = list;
+                }
+                list.Add(npc);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Returns a human-readable task description for the given NPC, e.g.
+        /// "Guard Post in security_wing" or "Idle".
+        /// </summary>
+        public string GetTaskDescription(NPCInstance npc, StationState station)
+        {
+            if (npc.isSleeping) return "Sleeping";
+            if (npc.missionUid != null) return "On Mission";
+
+            if (!string.IsNullOrEmpty(npc.currentJobId))
+            {
+                if (_registry.Jobs.TryGetValue(npc.currentJobId, out var job))
+                {
+                    if (!string.IsNullOrEmpty(npc.jobModuleUid) &&
+                        station.modules.TryGetValue(npc.jobModuleUid, out var mod))
+                    {
+                        string loc = !string.IsNullOrEmpty(mod.displayName)
+                            ? mod.displayName
+                            : (!string.IsNullOrEmpty(mod.definitionId)
+                                ? mod.definitionId.Replace("_", " ")
+                                : string.Empty);
+                        if (!string.IsNullOrEmpty(loc))
+                            return $"{job.displayName} in {loc}";
+                    }
+                    return job.displayName;
+                }
+                // Unknown job id — show a cleaned label rather than "Idle"
+                return npc.currentJobId.Replace("job.", "").Replace("_", " ");
+            }
+
+            if (!string.IsNullOrEmpty(npc.currentTaskId))
+                return npc.currentTaskId.Replace("task.", "").Replace("_", " ");
+
+            return "Idle";
+        }
+
+        /// <summary>
+        /// Maps a job id to one of the canonical task-type group names used by
+        /// the Assignments sub-panel (UI-013).
+        /// </summary>
+        public static string ClassifyTaskType(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return "Idle";
+            switch (jobId)
+            {
+                case "job.guard_post":
+                case "job.patrol":
+                case "job.contraband_inspection":
+                    return "Security";
+
+                case "job.build":
+                case "job.repair":
+                case "job.module_maintenance":
+                case "job.power_management":
+                case "job.life_support":
+                case "job.refine":
+                case "job.craft":
+                    return "Construction";
+
+                case "job.research_industry":
+                case "job.research_exploration":
+                case "job.research_diplomacy":
+                case "job.research_security":
+                case "job.research_science":
+                    return "Research";
+
+                case "job.counselling":
+                case "job.medical_bay":
+                case "job.specimen_analysis":
+                case "job.haul_body":
+                    return "Medical";
+
+                case "job.haul":
+                case "job.dock_control":
+                case "job.visitor_intake":
+                case "job.resource_management":
+                    return "Hauling";
+
+                case "job.farming":
+                    return "Farming";
+
+                case "job.recreate":
+                    return "Recreation";
+
+                case "job.rest":
+                case "job.eat":
+                case "job.wander":
+                    return "Idle";
+
+                default:
+                    return "Idle";
+            }
+        }
     }
 }
