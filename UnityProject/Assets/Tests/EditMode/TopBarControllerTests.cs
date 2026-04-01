@@ -390,7 +390,7 @@ namespace Waystation.Tests
         public void SpeedButton1x_ActiveAt1x()
         {
             _gm.IsPaused       = false;
-            _gm.SecondsPerTick = 0.5f; // 1×
+            _gm.SecondsPerTick = 1.0f; // 1×
             _bar.RefreshSpeedButtons();
 
             Assert.IsFalse(_bar.PauseButtonActive);
@@ -403,7 +403,7 @@ namespace Waystation.Tests
         public void SpeedButton2x_ActiveAt2x()
         {
             _gm.IsPaused       = false;
-            _gm.SecondsPerTick = 0.25f; // 2×
+            _gm.SecondsPerTick = 0.5f; // 2×
             _bar.RefreshSpeedButtons();
 
             Assert.IsFalse(_bar.PauseButtonActive);
@@ -416,7 +416,7 @@ namespace Waystation.Tests
         public void SpeedButton3x_ActiveAt3x()
         {
             _gm.IsPaused       = false;
-            _gm.SecondsPerTick = 1f / 6f; // 3×
+            _gm.SecondsPerTick = 1f / 3f; // 3×
             _bar.RefreshSpeedButtons();
 
             Assert.IsFalse(_bar.PauseButtonActive);
@@ -507,7 +507,7 @@ namespace Waystation.Tests
     internal class StubGameManager : Waystation.UI.ITopBarGameManager
     {
         public bool  IsPaused       { get; set; } = true;
-        public float SecondsPerTick { get; set; } = 0.5f;
+        public float SecondsPerTick { get; set; } = 1.0f;
 
         public void SetSpeed(float ticksPerSecond)
         {

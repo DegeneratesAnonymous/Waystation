@@ -90,6 +90,7 @@ namespace Waystation.UI
         private readonly VisualElement     _tabStrip;
         private readonly Button[]          _tabButtons;
         private readonly VisualElement[]   _tabIcons;
+        private readonly Label[]           _tabLabels;
 
         // ── Public properties ─────────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ namespace Waystation.UI
             _mapSystem   = mapSystem;
             _tabButtons  = new Button[TabDefs.Length];
             _tabIcons    = new VisualElement[TabDefs.Length];
+            _tabLabels   = new Label[TabDefs.Length];
 
             AddToClassList("ws-side-panel");
 
@@ -131,10 +133,6 @@ namespace Waystation.UI
             // ── Drawer (left portion, slides horizontally) ─────────────────────
             _drawer = new DrawerPanel(DrawerPanel.Direction.Horizontal);
             _drawer.AddToClassList("ws-side-panel__drawer");
-            _drawer.style.width = 300;
-            _drawer.style.backgroundColor = new Color(0.12f, 0.12f, 0.16f, 0.95f);
-            _drawer.style.borderLeftWidth = 1;
-            _drawer.style.borderLeftColor = new Color(0.3f, 0.3f, 0.35f, 1f);
             _drawer.RegisterCallback<PointerEnterEvent>(_ => OnPointerEnter());
             _drawer.RegisterCallback<PointerLeaveEvent>(_ => OnPointerLeave());
             Add(_drawer);
@@ -142,16 +140,20 @@ namespace Waystation.UI
             // ── Tab strip (right column) ──────────────────────────────────────
             _tabStrip = new VisualElement();
             _tabStrip.AddToClassList("ws-side-panel__tab-strip");
-            _tabStrip.style.width = 56;
-            _tabStrip.style.flexDirection = FlexDirection.Column;
-            _tabStrip.style.alignItems = Align.Center;
-            _tabStrip.style.backgroundColor = new Color(0.14f, 0.14f, 0.18f, 1f);
-            _tabStrip.style.borderLeftWidth = 1;
-            _tabStrip.style.borderLeftColor = new Color(0.3f, 0.3f, 0.35f, 1f);
-            _tabStrip.style.paddingTop = 8;
-            _tabStrip.style.paddingBottom = 8;
             _tabStrip.RegisterCallback<PointerEnterEvent>(_ => OnPointerEnter());
             _tabStrip.RegisterCallback<PointerLeaveEvent>(_ => OnPointerLeave());
+
+            // Inline fallback layout — ensures the strip is visible and correctly
+            // sized even before USS custom properties resolve.
+            _tabStrip.style.width           = 52;
+            _tabStrip.style.flexDirection   = FlexDirection.Column;
+            _tabStrip.style.alignItems      = Align.Center;
+            _tabStrip.style.backgroundColor = new Color(0.09f, 0.11f, 0.18f, 1f);
+            _tabStrip.style.borderLeftWidth = 1;
+            _tabStrip.style.borderLeftColor = new Color(0.13f, 0.17f, 0.25f, 1f);
+            _tabStrip.style.paddingTop      = 6;
+            _tabStrip.style.paddingBottom   = 8;
+
             Add(_tabStrip);
 
             // ── Tab buttons ───────────────────────────────────────────────────
@@ -162,43 +164,51 @@ namespace Waystation.UI
 
                 var btn = new Button();
                 btn.AddToClassList("ws-side-panel__tab");
-                btn.style.width = 52;
-                btn.style.height = 52;
-                btn.style.backgroundColor = new Color(0.18f, 0.18f, 0.22f, 1f);
-                btn.style.borderTopWidth = 0;
+                btn.RegisterCallback<ClickEvent>(_ => OnTabClicked(TabDefs[capturedIndex].id));
+
+                // Inline fallback sizing — USS sets same values via custom property.
+                btn.style.width           = 52;
+                btn.style.height          = 52;
+                btn.style.flexDirection   = FlexDirection.Column;
+                btn.style.alignItems      = Align.Center;
+                btn.style.justifyContent  = Justify.Center;
+                btn.style.backgroundColor = StyleKeyword.Null; // let USS control normal/hover background
+                btn.style.borderTopWidth  = 0;
+                btn.style.borderRightWidth = 0;
                 btn.style.borderBottomWidth = 0;
                 btn.style.borderLeftWidth = 0;
-                btn.style.borderRightWidth = 0;
-                btn.style.borderTopLeftRadius = 4;
-                btn.style.borderTopRightRadius = 4;
-                btn.style.borderBottomLeftRadius = 4;
-                btn.style.borderBottomRightRadius = 4;
-                btn.style.flexDirection = FlexDirection.Column;
-                btn.style.alignItems = Align.Center;
-                btn.style.justifyContent = Justify.Center;
-                btn.style.flexShrink = 0;
-                btn.style.marginBottom = 2;
-                btn.RegisterCallback<ClickEvent>(_ => OnTabClicked(TabDefs[capturedIndex].id));
 
                 // Icon container (hosts inline SVG via VectorImage or placeholder)
                 var iconEl = new VisualElement();
                 iconEl.AddToClassList("ws-side-panel__tab-icon");
-                iconEl.style.width = 24;
-                iconEl.style.height = 24;
-                iconEl.style.alignItems = Align.Center;
-                iconEl.style.justifyContent = Justify.Center;
                 iconEl.tooltip = label;
-                SetSvgIcon(iconEl, svgPath);
+                SetSvgIcon(iconEl, svgPath, tabId);
                 btn.Add(iconEl);
 
-                // Label always visible so the tab strip is identifiable
+                // Label — hidden by default, shown on hover or when active.
+                // fontSize and display are left unset (StyleKeyword.Null) so USS
+                // (.ws-side-panel__tab-label) drives those values; only the colour
+                // fallback is applied inline.
                 var lbl = new Label(label);
                 lbl.AddToClassList("ws-side-panel__tab-label");
-                lbl.style.fontSize = 9;
-                lbl.style.color = new Color(0.8f, 0.8f, 0.85f, 1f);
+                lbl.style.fontSize       = StyleKeyword.Null; // let USS var(--ws-fs-section) apply
                 lbl.style.unityTextAlign = TextAnchor.MiddleCenter;
-                lbl.style.marginTop = 2;
+                lbl.style.color          = new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid fallback
+                lbl.style.marginTop      = 2;
+                lbl.style.display        = StyleKeyword.Null; // visibility controlled via USS class
                 btn.Add(lbl);
+
+                _tabLabels[i] = lbl;
+
+                Label capturedLabel = lbl;
+                btn.RegisterCallback<PointerEnterEvent>(_ => capturedLabel.style.display = DisplayStyle.Flex);
+                btn.RegisterCallback<PointerLeaveEvent>(_ =>
+                {
+                    // Keep label visible if this tab is active
+                    bool isActive = _activeTab.HasValue && TabDefs[capturedIndex].id == _activeTab.Value;
+                    if (!isActive)
+                        capturedLabel.style.display = StyleKeyword.Null; // let USS hide via display: none
+                });
 
                 _tabStrip.Add(btn);
                 _tabButtons[i] = btn;
@@ -357,28 +367,69 @@ namespace Waystation.UI
             {
                 bool active = _activeTab.HasValue && TabDefs[i].id == _activeTab.Value;
                 _tabButtons[i].EnableInClassList("ws-side-panel__tab--active", active);
+
+                // Inline fallback for active state.
+                // Inactive tabs clear inline styles so USS (incl. :hover) can drive them.
+                if (active)
+                {
+                    _tabButtons[i].style.backgroundColor = new Color(0.12f, 0.16f, 0.24f, 1f); // bg-select
+                    _tabButtons[i].style.borderLeftWidth = 2;
+                    _tabButtons[i].style.borderLeftColor = new Color(0.12f, 0.36f, 0.62f, 1f); // acc
+                }
+                else
+                {
+                    // Clear inline overrides so USS :hover background works for inactive tabs.
+                    _tabButtons[i].style.backgroundColor = StyleKeyword.Null;
+                    _tabButtons[i].style.borderLeftWidth = StyleKeyword.Null;
+                    _tabButtons[i].style.borderLeftColor = StyleKeyword.Null;
+                }
+
+                // Icon color: bright when active
+                var iconPlaceholder = _tabIcons[i]?.Q<Label>(className: "ws-side-panel__tab-icon-placeholder");
+                if (iconPlaceholder != null)
+                    iconPlaceholder.style.color = active
+                        ? new Color(0.39f, 0.75f, 1.00f, 1f) // acc-bright
+                        : new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
+
+                // Label: use the cached reference from construction; show/hide via USS class.
+                // active → inline Flex override; inactive → clear override so USS display: none applies.
+                var label = _tabLabels[i];
+                if (label != null)
+                {
+                    label.style.display = active ? DisplayStyle.Flex : StyleKeyword.Null;
+                    label.style.color = active
+                        ? new Color(0.39f, 0.75f, 1.00f, 1f)  // acc-bright
+                        : new Color(0.34f, 0.47f, 0.63f, 1f);  // text-mid
+                }
             }
         }
 
         // ── SVG icon helper ───────────────────────────────────────────────────
 
-        private static void SetSvgIcon(VisualElement el, string svgMarkup)
+        private static string TabUnicodeIcon(Tab tab) => tab switch
         {
-            // Preserve the raw SVG markup so a future VectorImage-based render path
-            // can reconstruct or bind an icon asset without changing the call site.
+            Tab.Station  => "⬡",
+            Tab.Crew     => "♦",
+            Tab.World    => "◎",
+            Tab.Research => "⚗",
+            Tab.Map      => "✦",
+            Tab.Fleet    => "▲",
+            Tab.Settings => "⚙",
+            _            => "●",
+        };
+
+        private static void SetSvgIcon(VisualElement el, string svgMarkup, Tab tab = Tab.Station)
+        {
             if (!string.IsNullOrEmpty(svgMarkup))
                 el.userData = svgMarkup;
 
-            // USS background-image with inline SVG is not supported in UI Toolkit.
-            // Until the VectorImage asset pipeline is wired up, add a simple visible
-            // placeholder so the tab strip is not blank in collapsed mode.
-            if (!string.IsNullOrEmpty(svgMarkup) && el.childCount == 0)
+            if (el.childCount == 0)
             {
-                var placeholder = new Label { text = "●" };
+                var placeholder = new Label { text = TabUnicodeIcon(tab) };
                 placeholder.AddToClassList("ws-side-panel__tab-icon-placeholder");
-                placeholder.style.color = new Color(0.7f, 0.75f, 0.8f, 1f);
-                placeholder.style.fontSize = 18;
+                placeholder.style.fontSize       = 16;
                 placeholder.style.unityTextAlign = TextAnchor.MiddleCenter;
+                placeholder.style.color          = new Color(0.34f, 0.47f, 0.63f, 1f);
                 el.Add(placeholder);
             }
         }

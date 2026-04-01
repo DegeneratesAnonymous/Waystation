@@ -231,7 +231,7 @@ namespace Waystation.UI
             row.style.paddingRight      = 6;
             row.style.marginBottom      = 2;
             row.style.borderBottomWidth = 1;
-            row.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 0.5f);
+            row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f); // border-dark
 
             // Store the type id on the row so ApplyFilter can use it.
             row.userData = room.assignedTypeId;
@@ -254,20 +254,16 @@ namespace Waystation.UI
             badge.style.paddingBottom = 2;
             badge.style.marginLeft    = 4;
             badge.style.marginRight   = 4;
-            badge.style.borderTopLeftRadius     = 3;
-            badge.style.borderTopRightRadius    = 3;
-            badge.style.borderBottomLeftRadius  = 3;
-            badge.style.borderBottomRightRadius = 3;
 
             if (assigned)
             {
-                badge.style.backgroundColor = new Color(0.2f, 0.45f, 0.6f, 0.6f);
-                badge.style.color           = new Color(0.8f, 0.92f, 1f, 1f);
+                badge.style.backgroundColor = new Color(0.12f, 0.29f, 0.50f, 0.8f); // acc-dim
+                badge.style.color           = new Color(0.39f, 0.75f, 1.00f, 1f);   // acc-bright
             }
             else
             {
-                badge.style.backgroundColor = new Color(0.3f, 0.3f, 0.32f, 0.35f);
-                badge.style.color           = new Color(0.6f, 0.6f, 0.65f, 0.7f);
+                badge.style.backgroundColor = new Color(0.13f, 0.17f, 0.22f, 0.8f); // bg-base
+                badge.style.color           = new Color(0.34f, 0.47f, 0.63f, 1f);   // text-mid
             }
 
             // NPC count

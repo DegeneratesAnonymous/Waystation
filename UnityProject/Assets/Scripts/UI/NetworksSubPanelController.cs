@@ -97,9 +97,10 @@ namespace Waystation.UI
 
             // ── Overlay section ────────────────────────────────────────────────
             var overlayLabel = new Label("OVERLAY");
-            overlayLabel.style.fontSize    = 10;
-            overlayLabel.style.opacity     = 0.6f;
-            overlayLabel.style.marginBottom = 4;
+            overlayLabel.AddToClassList("ws-text-acc");
+            overlayLabel.style.fontSize                = 10;
+            overlayLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            overlayLabel.style.marginBottom            = 4;
             Add(overlayLabel);
 
             _overlayStrip = new VisualElement();
@@ -116,9 +117,10 @@ namespace Waystation.UI
 
             // ── Health section ─────────────────────────────────────────────────
             var healthLabel = new Label("NETWORK HEALTH");
-            healthLabel.style.fontSize    = 10;
-            healthLabel.style.opacity     = 0.6f;
-            healthLabel.style.marginBottom = 4;
+            healthLabel.AddToClassList("ws-text-acc");
+            healthLabel.style.fontSize                = 10;
+            healthLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            healthLabel.style.marginBottom            = 4;
             Add(healthLabel);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -236,7 +238,7 @@ namespace Waystation.UI
             row.style.paddingRight      = 6;
             row.style.marginBottom      = 2;
             row.style.borderBottomWidth = 1;
-            row.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 0.5f);
+            row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f); // border-dark
 
             var nameLabel = new Label(displayName.ToUpper());
             nameLabel.AddToClassList(HealthNameClass);
@@ -262,16 +264,12 @@ namespace Waystation.UI
             statusLabel = new Label("HEALTHY");
             statusLabel.AddToClassList(HealthStatusClass);
             statusLabel.style.unityTextAlign          = TextAnchor.MiddleRight;
-            statusLabel.style.fontSize                = 9;
-            statusLabel.style.paddingLeft             = 4;
-            statusLabel.style.paddingRight            = 4;
-            statusLabel.style.paddingTop              = 2;
-            statusLabel.style.paddingBottom           = 2;
-            statusLabel.style.marginLeft              = 4;
-            statusLabel.style.borderTopLeftRadius     = 3;
-            statusLabel.style.borderTopRightRadius    = 3;
-            statusLabel.style.borderBottomLeftRadius  = 3;
-            statusLabel.style.borderBottomRightRadius = 3;
+            statusLabel.style.fontSize      = 9;
+            statusLabel.style.paddingLeft   = 5;
+            statusLabel.style.paddingRight  = 5;
+            statusLabel.style.paddingTop    = 2;
+            statusLabel.style.paddingBottom = 2;
+            statusLabel.style.marginLeft    = 4;
             ApplyStatusStyle(statusLabel, NetworkHealthStatus.Healthy);
             row.Add(statusLabel);
 
@@ -292,8 +290,8 @@ namespace Waystation.UI
 
                 // Amber warning colour on severed count when non-zero.
                 labels.severed.style.color = health.SeveredCount > 0
-                    ? new Color(1f, 0.6f, 0.2f, 1f)
-                    : new Color(0.65f, 0.65f, 0.7f, 0.7f);
+                    ? new Color(0.86f, 0.66f, 0.16f, 1f)  // amber
+                    : new Color(0.34f, 0.47f, 0.63f, 1f); // text-mid
 
                 labels.status.text = health.Status switch
                 {
@@ -314,16 +312,16 @@ namespace Waystation.UI
             switch (status)
             {
                 case NetworkHealthStatus.Healthy:
-                    label.style.backgroundColor = new Color(0.1f, 0.4f, 0.15f, 0.6f);
-                    label.style.color           = new Color(0.4f, 1f, 0.5f, 1f);
+                    label.style.backgroundColor = new Color(0.05f, 0.23f, 0.13f, 0.8f); // green-dim
+                    label.style.color           = new Color(0.24f, 0.78f, 0.44f, 1f);   // green
                     break;
                 case NetworkHealthStatus.Degraded:
-                    label.style.backgroundColor = new Color(0.45f, 0.3f, 0.05f, 0.6f);
-                    label.style.color           = new Color(1f, 0.75f, 0.2f, 1f);
+                    label.style.backgroundColor = new Color(0.35f, 0.24f, 0.03f, 0.8f); // amber-dim
+                    label.style.color           = new Color(0.86f, 0.66f, 0.16f, 1f);   // amber
                     break;
                 case NetworkHealthStatus.Severed:
-                    label.style.backgroundColor = new Color(0.45f, 0.1f, 0.1f, 0.6f);
-                    label.style.color           = new Color(1f, 0.35f, 0.35f, 1f);
+                    label.style.backgroundColor = new Color(0.35f, 0.06f, 0.06f, 0.8f); // red-dim
+                    label.style.color           = new Color(0.88f, 0.22f, 0.22f, 1f);   // red
                     break;
             }
         }

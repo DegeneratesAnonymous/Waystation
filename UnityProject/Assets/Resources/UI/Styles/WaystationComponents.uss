@@ -1,11 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    WaystationComponents.uss
    Shared component stylesheet — base styles for all reusable UI Toolkit
-   components. Import only this file in every panel USS file — it pulls
-   WaystationVariables.uss in automatically.
+   components. This file assumes WaystationVariables.uss has already been
+   loaded (WaystationHUDController loads stylesheets in dependency order).
 
-   Import order (one line is enough):
-     @import url('WaystationComponents.uss');
+   Recommended load order:
+     WaystationVariables.uss  ← must be first (defines all var(--ws-*))
+     WaystationComponents.uss ← this file
+     Shared.uss, Typography.uss
 
    Requirements: Unity 2023.1+ (var() support).
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -893,9 +895,10 @@
 }
 
 
-/* ── Tab label (always visible, brightens on hover/active) ──────────── */
+/* ── Tab label (hidden by default, shown on hover or when active) ────── */
 
 .ws-side-panel__tab-label {
+    display: none;
     font-size: var(--ws-fs-section);
     letter-spacing: var(--ws-ls-section);
     color: var(--ws-text-mid);
@@ -907,9 +910,11 @@
 }
 
 .ws-side-panel__tab:hover .ws-side-panel__tab-label {
+    display: flex;
     color: var(--ws-text-base);
 }
 
 .ws-side-panel__tab--active .ws-side-panel__tab-label {
+    display: flex;
     color: var(--ws-acc-bright);
 }

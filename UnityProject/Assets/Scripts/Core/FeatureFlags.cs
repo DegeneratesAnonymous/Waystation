@@ -152,14 +152,17 @@ namespace Waystation.Core
         ///     GameHUD.InBuildMode, and GameHUD.SelectCrewMember(); WaystationHUDController
         ///     writes to those statics directly.
         ///
-        /// When false (default during migration):
+        /// When true (current default):
+        ///   • WaystationHUDController is active; new UI Toolkit HUD is live.
+        ///   • Legacy IMGUI/uGUI HUD is not instantiated.
+        ///
+        /// When false:
         ///   • Legacy IMGUI/uGUI HUD renders unchanged — no regressions.
         ///   • UI Toolkit panels are not installed.
         ///
-        /// Set to true to opt in to the new UI Toolkit HUD; set to false to revert
-        /// to the legacy system at any point without data loss.
+        /// Set to false to revert to the legacy system at any point without data loss.
         /// </summary>
-        public static bool UseUIToolkitHUD = false;
+        public static bool UseUIToolkitHUD = true;
 
         /// <summary>
         /// Enables the full real-time asteroid mission execution system (WO-EXP-004):
