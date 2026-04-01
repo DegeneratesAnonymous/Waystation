@@ -584,6 +584,13 @@ namespace Waystation.UI
         // ── Update — sync placement state and mouse-over ──────────────────────
         private void Update()
         {
+            // Space bar toggles pause (fallback path if the UI button fails to register).
+            if (_ready && _gm != null && Input.GetKeyDown(KeyCode.Space))
+            {
+                _gm.IsPaused = !_gm.IsPaused;
+                _topBar?.RefreshSpeedButtons();
+            }
+
             // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
             GameHUD.InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
 

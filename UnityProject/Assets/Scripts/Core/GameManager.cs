@@ -142,8 +142,19 @@ namespace Waystation.Core
 
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
-        public bool         IsPaused { get; set; } = true;
         public bool         IsLoaded { get; private set; }
+
+        private bool _isPaused = true;
+        public bool IsPaused
+        {
+            get => _isPaused;
+            set
+            {
+                if (_isPaused == value) return;
+                _isPaused = value;
+                Time.timeScale = value ? 0f : 1f;
+            }
+        }
 
         // ── Events ────────────────────────────────────────────────────────────
         public event Action<StationState>    OnTick;
