@@ -237,7 +237,8 @@ namespace Waystation.Systems
 
         public (bool success, string message) PlayerBuy(TradeOffer offer, string resource,
                                                          float amount, StationState station,
-                                                         int negotiationSkill = 3)
+                                                         int negotiationSkill = 3,
+                                                         string shipFaction = null)
         {
             if (amount <= 0f)               return (false, "Amount must be greater than zero.");
             var line = offer.GetLine(resource);
@@ -258,6 +259,9 @@ namespace Waystation.Systems
             line.available -= amount;
             offer.traded[resource] = (offer.traded.ContainsKey(resource) ? offer.traded[resource] : 0f) + amount;
 
+            RecordTrade(station, station.tick, "buy", resource, amount, effectivePrice, totalCost,
+                        shipFaction, offer.shipName);
+
             string msg = $"Purchased {amount:F0} {resource} for {totalCost:F0} credits" +
                          (discount > 0f ? $" (negotiated {discount * 100f:F0}% off)" : "") + ".";
             station.LogEvent($"Trade: {msg}");
@@ -266,7 +270,8 @@ namespace Waystation.Systems
 
         public (bool success, string message) PlayerSell(TradeOffer offer, string resource,
                                                           float amount, StationState station,
-                                                          int negotiationSkill = 3)
+                                                          int negotiationSkill = 3,
+                                                          string shipFaction = null)
         {
             if (amount <= 0f)              return (false, "Amount must be greater than zero.");
             var line = offer.GetLine(resource);
@@ -286,6 +291,9 @@ namespace Waystation.Systems
             station.ModifyResource("credits", totalIncome);
             line.available += amount;
             offer.traded[resource] = (offer.traded.ContainsKey(resource) ? offer.traded[resource] : 0f) + amount;
+
+            RecordTrade(station, station.tick, "sell", resource, amount, effectivePrice, totalIncome,
+                        shipFaction, offer.shipName);
 
             string msg = $"Sold {amount:F0} {resource} for {totalIncome:F0} credits" +
                          (bonus > 0f ? $" (negotiated {bonus * 100f:F0}% premium)" : "") + ".";
@@ -333,6 +341,8 @@ namespace Waystation.Systems
                 string msg = $"Auto-bought {toBuy:F0} {order.resource} @ {line.pricePerUnit:F1}/unit " +
                              $"from {ship.name} for {totalCost:F0} credits.";
                 station.LogEvent($"Standing order: {msg}");
+                RecordTrade(station, station.tick, "buy", order.resource, toBuy, line.pricePerUnit,
+                            totalCost, ship.factionId, ship.name);
                 messages.Add(msg);
             }
 
@@ -358,6 +368,8 @@ namespace Waystation.Systems
                 string msg = $"Auto-sold {toSell:F0} {order.resource} @ {line.pricePerUnit:F1}/unit " +
                              $"to {ship.name} for {totalIncome:F0} credits.";
                 station.LogEvent($"Standing order: {msg}");
+                RecordTrade(station, station.tick, "sell", order.resource, toSell, line.pricePerUnit,
+                            totalIncome, ship.factionId, ship.name);
                 messages.Add(msg);
             }
 
@@ -382,6 +394,103 @@ namespace Waystation.Systems
                 if (skill > best) best = skill;
             }
             return best;
+        }
+
+        // ── Standing order management ─────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the station's standing buy and sell order lists.
+        /// </summary>
+        public (List<StandingOrder> buyOrders, List<StandingOrder> sellOrders)
+            GetStandingOrders(StationState station)
+            => (station.standingBuyOrders, station.standingSellOrders);
+
+        /// <summary>
+        /// Adds or updates the standing buy order for <paramref name="resource"/>.
+        /// If an order for the same resource already exists it is replaced in-place.
+        /// </summary>
+        public void SetBuyOrder(StationState station, string resource, float maxPrice, float maxQuantity)
+        {
+            for (int i = 0; i < station.standingBuyOrders.Count; i++)
+            {
+                if (station.standingBuyOrders[i].resource == resource)
+                {
+                    station.standingBuyOrders[i].limitPrice = maxPrice;
+                    station.standingBuyOrders[i].amount     = maxQuantity;
+                    return;
+                }
+            }
+            station.standingBuyOrders.Add(new StandingOrder
+                { resource = resource, limitPrice = maxPrice, amount = maxQuantity });
+        }
+
+        /// <summary>
+        /// Adds or updates the standing sell order for <paramref name="resource"/>.
+        /// If an order for the same resource already exists it is replaced in-place.
+        /// </summary>
+        public void SetSellOrder(StationState station, string resource, float minPrice, float maxQuantity)
+        {
+            for (int i = 0; i < station.standingSellOrders.Count; i++)
+            {
+                if (station.standingSellOrders[i].resource == resource)
+                {
+                    station.standingSellOrders[i].limitPrice = minPrice;
+                    station.standingSellOrders[i].amount     = maxQuantity;
+                    return;
+                }
+            }
+            station.standingSellOrders.Add(new StandingOrder
+                { resource = resource, limitPrice = minPrice, amount = maxQuantity });
+        }
+
+        /// <summary>Removes the standing buy order for <paramref name="resource"/>, if any.</summary>
+        public void RemoveBuyOrder(StationState station, string resource)
+        {
+            station.standingBuyOrders.RemoveAll(o => o.resource == resource);
+        }
+
+        /// <summary>Removes the standing sell order for <paramref name="resource"/>, if any.</summary>
+        public void RemoveSellOrder(StationState station, string resource)
+        {
+            station.standingSellOrders.RemoveAll(o => o.resource == resource);
+        }
+
+        // ── Trade history ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the most recent trade records, newest first.
+        /// </summary>
+        /// <param name="station">Station whose history to query.</param>
+        /// <param name="limit">Maximum number of records to return (default 50).</param>
+        public List<TradeRecord> GetTradeHistory(StationState station, int limit = 50)
+        {
+            var history = station.tradeHistory;
+            if (history.Count <= limit) return new List<TradeRecord>(history);
+            return history.GetRange(0, limit);
+        }
+
+        // ── Private helpers ───────────────────────────────────────────────────
+
+        private const int TradeHistoryMaxEntries = 200;
+
+        private static void RecordTrade(StationState station, int tick, string type,
+                                        string resource, float quantity, float pricePerUnit,
+                                        float totalValue, string faction, string shipName)
+        {
+            station.tradeHistory.Insert(0, new TradeRecord
+            {
+                tick         = tick,
+                type         = type,
+                resource     = resource,
+                quantity     = quantity,
+                pricePerUnit = pricePerUnit,
+                totalValue   = totalValue,
+                faction      = faction,
+                shipName     = shipName,
+            });
+            if (station.tradeHistory.Count > TradeHistoryMaxEntries)
+                station.tradeHistory.RemoveRange(TradeHistoryMaxEntries,
+                    station.tradeHistory.Count - TradeHistoryMaxEntries);
         }
     }
 }

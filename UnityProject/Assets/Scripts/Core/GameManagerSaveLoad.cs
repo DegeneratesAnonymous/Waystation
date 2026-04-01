@@ -69,6 +69,7 @@ namespace Waystation.Core
             data["farming_tasks"]   = SerializeAll(Station.farmingTasks,           SerializeFarmingTask);
             data["standing_buy_orders"]  = SerializeAll(Station.standingBuyOrders,  SerializeStandingOrder);
             data["standing_sell_orders"] = SerializeAll(Station.standingSellOrders, SerializeStandingOrder);
+            data["trade_history"]        = SerializeAll(Station.tradeHistory,        SerializeTradeRecord);
 
             // Workbench queues: foundationUid → list
             var wqOut = new Dictionary<string, object>();
@@ -270,6 +271,7 @@ namespace Waystation.Core
                 ReadObjList(data, "farming_tasks", d2 => { var t = DeserializeFarmingTask(d2); if (t != null) Station.farmingTasks.Add(t); });
                 ReadObjList(data, "standing_buy_orders",  d2 => { var o = DeserializeStandingOrder(d2); if (o != null) Station.standingBuyOrders.Add(o); });
                 ReadObjList(data, "standing_sell_orders", d2 => { var o = DeserializeStandingOrder(d2); if (o != null) Station.standingSellOrders.Add(o); });
+                ReadObjList(data, "trade_history",        d2 => { var r = DeserializeTradeRecord(d2);    if (r != null) Station.tradeHistory.Add(r); });
 
                 // Departments: override the defaults created by the constructor
                 if (data.TryGetValue("departments", out var deptsRaw) && deptsRaw is List<object> deptsList)
@@ -1102,6 +1104,10 @@ namespace Waystation.Core
         private static Dictionary<string, object> SerializeStandingOrder(StandingOrder so) => so == null ? null : new Dictionary<string, object>
             { { "resource", so.resource }, { "limit_price", so.limitPrice }, { "amount", so.amount } };
         private static StandingOrder DeserializeStandingOrder(Dictionary<string, object> d) => d == null ? null : new StandingOrder { resource = Str(d,"resource"), limitPrice = Flt(d,"limit_price"), amount = Flt(d,"amount") };
+
+        private static Dictionary<string, object> SerializeTradeRecord(TradeRecord r) => r == null ? null : new Dictionary<string, object>
+            { { "tick", r.tick }, { "type", r.type }, { "resource", r.resource }, { "quantity", r.quantity }, { "price_per_unit", r.pricePerUnit }, { "total_value", r.totalValue }, { "faction", r.faction }, { "ship_name", r.shipName } };
+        private static TradeRecord DeserializeTradeRecord(Dictionary<string, object> d) => d == null ? null : new TradeRecord { tick = Int(d,"tick"), type = Str(d,"type"), resource = Str(d,"resource"), quantity = Flt(d,"quantity"), pricePerUnit = Flt(d,"price_per_unit"), totalValue = Flt(d,"total_value"), faction = Str(d,"faction"), shipName = Str(d,"ship_name") };
 
         private static Dictionary<string, object> SerializeFactionContract(FactionContract fc) => fc == null ? null : new Dictionary<string, object>
             { { "contract_id", fc.contractId }, { "faction_id", fc.factionId }, { "credit_per_payment", fc.creditPerPayment }, { "payment_interval_ticks", fc.paymentIntervalTicks }, { "last_payment_tick", fc.lastPaymentTick }, { "description", fc.description } };

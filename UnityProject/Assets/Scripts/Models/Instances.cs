@@ -34,6 +34,43 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Trade Record — a single completed trade transaction in the history log
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Records one completed trade transaction for display in the Trade History log.
+    /// Appended by <see cref="Waystation.Systems.TradeSystem"/> whenever a buy or
+    /// sell transaction completes (manual or standing order).
+    /// </summary>
+    [Serializable]
+    public class TradeRecord
+    {
+        /// <summary>Station tick at which the trade occurred.</summary>
+        public int    tick;
+
+        /// <summary>"buy" (station purchased) or "sell" (station sold).</summary>
+        public string type;
+
+        /// <summary>Resource ID involved in the trade (e.g. "food", "parts").</summary>
+        public string resource;
+
+        /// <summary>Units exchanged.</summary>
+        public float  quantity;
+
+        /// <summary>Price per unit at time of trade.</summary>
+        public float  pricePerUnit;
+
+        /// <summary>Total credits exchanged.</summary>
+        public float  totalValue;
+
+        /// <summary>Faction ID of the trading ship (may be null or empty).</summary>
+        public string faction;
+
+        /// <summary>Display name of the trading ship.</summary>
+        public string shipName;
+    }
+
+    // -------------------------------------------------------------------------
     // Faction Contract — a periodic credit income agreement with a faction
     // -------------------------------------------------------------------------
 
@@ -2307,6 +2344,11 @@ namespace Waystation.Models
         // matching ship docks.  Managed via the trade manifest UI.
         public List<StandingOrder> standingBuyOrders  = new List<StandingOrder>();
         public List<StandingOrder> standingSellOrders = new List<StandingOrder>();
+
+        // ── Trade history ─────────────────────────────────────────────────────
+        // Ordered newest-first.  Capped at 200 entries by TradeSystem.
+        // UI shows the most recent 50.
+        public List<TradeRecord> tradeHistory = new List<TradeRecord>();
 
         // ── Faction contracts ─────────────────────────────────────────────────
         // Active agreements that pay periodic credit income.  Keyed by contractId.
