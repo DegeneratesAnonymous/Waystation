@@ -59,6 +59,12 @@ namespace Waystation.Systems
             { "patrol",    new List<(string,float)> { ("patrol",1.0f) } }
         };
 
+        // ── Pending docking decisions ─────────────────────────────────────────
+        // Ship UIDs that require an explicit player Grant / Deny / Negotiate decision
+        // before they are admitted.  Populated in ProcessIncoming and cleared by the
+        // three decision methods below.
+        public readonly HashSet<string> PendingDecisions = new HashSet<string>(StringComparer.Ordinal);
+
         public VisitorSystem(ContentRegistry registry, NPCSystem npcSystem,
                               EventSystem eventSystem, TradeSystem tradeSystem = null,
                               NPCTaskQueueManager taskQueue = null,
@@ -70,6 +76,49 @@ namespace Waystation.Systems
             _tradeSystem = tradeSystem;
             _taskQueue   = taskQueue;
             _inventorySystem = inventorySystem;
+        }
+
+        // ── Docking decision API (UI-016) ─────────────────────────────────────
+
+        /// <summary>Returns all docked ships for the given station.</summary>
+        public List<ShipInstance> GetDockedShips(StationState station)
+            => station?.GetDockedShips() ?? new List<ShipInstance>();
+
+        /// <summary>Returns all incoming ships for the given station.</summary>
+        public List<ShipInstance> GetIncomingShips(StationState station)
+            => station?.GetIncomingShips() ?? new List<ShipInstance>();
+
+        /// <summary>
+        /// Player grants docking permission.  Delegates to <see cref="AdmitShip"/> which
+        /// removes the ship from <see cref="PendingDecisions"/> on success.
+        /// Returns the <see cref="AdmitShip"/> result so callers know whether the ship
+        /// actually docked (false = no dock available; the pending prompt remains active).
+        /// </summary>
+        public bool GrantDocking(string shipId, StationState station)
+            => AdmitShip(shipId, station);
+
+        /// <summary>
+        /// Player denies docking permission.  Delegates to <see cref="DenyShip"/> which
+        /// removes the ship from <see cref="PendingDecisions"/>.
+        /// </summary>
+        public void DenyDocking(string shipId, StationState station)
+            => DenyShip(shipId, station);
+
+        /// <summary>
+        /// Player opens a negotiation with the incoming ship.  The ship is admitted
+        /// (it docks to allow talks).  <see cref="PendingDecisions"/> is cleared only if
+        /// docking succeeds.  A negotiation event is logged on successful admit.
+        /// Returns false if the station is null or no dock is available.
+        /// </summary>
+        public bool NegotiateDocking(string shipId, StationState station)
+        {
+            if (station == null) return false;
+            if (!AdmitShip(shipId, station)) return false;
+            if (station.ships.TryGetValue(shipId, out var ship))
+                station.LogEvent($"Negotiation opened with {ship.name}.");
+            else
+                Debug.LogWarning($"[VisitorSystem] NegotiateDocking: ship uid '{shipId}' not found after admit.");
+            return true;
         }
 
         // ── Tick ──────────────────────────────────────────────────────────────
@@ -120,6 +169,7 @@ namespace Waystation.Systems
             var shipInstance = ShipInstance.Create(
                 inspectorTemplate.id, name, inspectorTemplate.role, "inspect", factionId, inspectorTemplate.threatLevel);
             station.AddShip(shipInstance);
+            PendingDecisions.Add(shipInstance.uid);
             station.LogEvent($"Inspection patrol inbound: {shipInstance.name}.");
             _eventSystem.QueueEvent("event.arrival_generic",
                 new Dictionary<string, object> { { "ship_uid", shipInstance.uid } });
@@ -134,6 +184,8 @@ namespace Waystation.Systems
             if (ship == null) return;
 
             station.AddShip(ship);
+            // Flag ship for player docking decision (UI-016).
+            PendingDecisions.Add(ship.uid);
             station.LogEvent(
                 $"Incoming: {ship.name} ({ship.role}, intent={ship.intent}, threat={ship.ThreatLabel()})");
             _eventSystem.QueueEvent("event.arrival_generic",
@@ -231,6 +283,10 @@ namespace Waystation.Systems
             ship.status    = "docked";
             ship.dockedAt  = dock.uid;
             dock.dockedShip = shipUid;
+            // Clear the pending-decision entry now that the ship has successfully docked.
+            // This ensures the invariant holds regardless of whether the caller went through
+            // GrantDocking / NegotiateDocking or bypassed them (e.g. GameManager.AdmitShip).
+            PendingDecisions.Remove(shipUid);
             // Record a deterministic departure tick so TickDocked doesn't re-roll every tick.
             ship.plannedDepartureTick = station.tick +
                 UnityEngine.Random.Range(DockedDurationMin, DockedDurationMax + 1);
@@ -295,6 +351,11 @@ namespace Waystation.Systems
         {
             if (!station.ships.TryGetValue(shipUid, out var ship)) return;
 
+            // Always clear the pending-decision entry on denial, regardless of escalation.
+            // This ensures the invariant holds for all call paths (DenyDocking wrapper or
+            // legacy GameManager.DenyShip).
+            PendingDecisions.Remove(shipUid);
+
             bool willEscalate = false;
             if (_registry.Ships.TryGetValue(ship.templateId, out var template))
                 willEscalate = template.behaviorTags.Contains("hostile_if_denied") &&
@@ -321,6 +382,9 @@ namespace Waystation.Systems
         public void DepartShip(string shipUid, StationState station)
         {
             if (!station.ships.TryGetValue(shipUid, out var ship)) return;
+
+            // Clean up pending decision entry if the ship departs without player action.
+            PendingDecisions.Remove(shipUid);
 
             if (ship.dockedAt != null && station.modules.TryGetValue(ship.dockedAt, out var dock))
                 dock.dockedShip = null;

@@ -80,7 +80,7 @@ namespace Waystation.UI
         private int _crewSchedulesTickCounter;
 
         // World tab (UI-015)
-        // Active World sub-tab: "factions"
+        // Active World sub-tab: "factions" | "visitors"
         private string                       _worldSubTab    = "factions";
         private VisualElement                _worldTabRoot;
         private TabStrip                     _worldSubTabs;
@@ -89,6 +89,10 @@ namespace Waystation.UI
         private FactionsSubPanelController   _factionsSubPanel;
         // Tick counter for throttling factions refreshes (every 5 ticks).
         private int _factionsTickCounter;
+        // World → Visitors sub-panel (UI-016).
+        private VisitorsSubPanelController   _visitorsSubPanel;
+        // Tick counter for throttling visitors refreshes (every 5 ticks).
+        private int _visitorsTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -683,6 +687,7 @@ namespace Waystation.UI
                 _worldSubTabs = new TabStrip(TabStrip.Orientation.Horizontal);
                 _worldSubTabs.OnTabSelected += OnWorldSubTabSelected;
                 _worldSubTabs.AddTab("FACTIONS", "factions");
+                _worldSubTabs.AddTab("VISITORS", "visitors");
 
                 _worldTabRoot.Add(_worldSubTabs);
                 _worldTabRoot.Add(_worldSubContent);
@@ -717,6 +722,23 @@ namespace Waystation.UI
                     if (_gm?.Station != null)
                         _factionsSubPanel.Refresh(_gm.Station, _gm?.Factions);
                     break;
+
+                case "visitors":
+                    if (_visitorsSubPanel == null)
+                    {
+                        _visitorsSubPanel = new VisitorsSubPanelController();
+                        _visitorsSubPanel.OnShipRowClicked += OnVisitorShipRowClicked;
+                        _visitorsSubPanel.OnGrantDocking    = shipId => _gm?.Visitors?.GrantDocking(shipId, _gm.Station);
+                        _visitorsSubPanel.OnDenyDocking     = shipId => _gm?.Visitors?.DenyDocking(shipId, _gm.Station);
+                        _visitorsSubPanel.OnNegotiateDocking = shipId => _gm?.Visitors?.NegotiateDocking(shipId, _gm.Station);
+                    }
+                    _visitorsSubPanel.style.flexGrow = 1;
+                    _visitorsSubPanel.style.height   = Length.Percent(100);
+                    _worldSubContent.Add(_visitorsSubPanel);
+
+                    if (_gm?.Station != null)
+                        _visitorsSubPanel.Refresh(_gm.Station, _gm?.Visitors);
+                    break;
             }
         }
 
@@ -724,6 +746,13 @@ namespace Waystation.UI
         {
             // Faction Detail panel will be implemented in a separate Work Order (WO-UI-026).
             Debug.Log($"[WaystationHUDController] OpenFactionDetail: {factionId}");
+        }
+
+        private void OnVisitorShipRowClicked(string shipUid)
+        {
+            // Visiting Ship contextual panel will be implemented in a separate Work Order.
+            // For now, log the selection so callers have feedback.
+            Debug.Log($"[WaystationHUDController] OpenVisitorShipPanel: {shipUid}");
         }
 
         private void OnFactionRepThresholdCrossed(string factionId, float oldRep, float newRep)
@@ -850,6 +879,17 @@ namespace Waystation.UI
                 {
                     _factionsTickCounter = 0;
                     _factionsSubPanel.Refresh(station, _gm?.Factions);
+                }
+            }
+
+            // Refresh the visitors panel every 5 ticks to avoid GC churn.
+            if (_visitorsSubPanel != null && worldTabActive && _worldSubTab == "visitors")
+            {
+                _visitorsTickCounter++;
+                if (_visitorsTickCounter >= 5)
+                {
+                    _visitorsTickCounter = 0;
+                    _visitorsSubPanel.Refresh(station, _gm?.Visitors);
                 }
             }
         }
