@@ -454,5 +454,65 @@ namespace Waystation.Systems
                 return new List<WorkbenchQueueEntry>();
             return new List<WorkbenchQueueEntry>(queue);
         }
+
+        /// <summary>
+        /// Returns all recipes defined for this workbench type, including research-locked ones.
+        /// Used by the Workbench contextual panel to show every recipe with lock status.
+        /// </summary>
+        public List<RecipeDefinition> GetAllRecipesForWorkbench(string workbenchFoundationUid,
+                                                                StationState station)
+        {
+            if (!station.foundations.TryGetValue(workbenchFoundationUid, out var bench))
+                return new List<RecipeDefinition>();
+            if (!_registry.Buildables.TryGetValue(bench.buildableId, out var benchDef))
+                return new List<RecipeDefinition>();
+
+            var result = new List<RecipeDefinition>();
+            foreach (var recipe in _registry.Recipes.Values)
+            {
+                if (recipe.requiredWorkbenchType != benchDef.workbenchRoomType) continue;
+                result.Add(recipe);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Removes a "queued" entry from the workbench queue.
+        /// Returns true if the entry was found and removed; false otherwise.
+        /// Entries that are already "hauling" or "executing" cannot be removed.
+        /// </summary>
+        public bool RemoveFromQueue(string workbenchFoundationUid, string entryUid, StationState station)
+        {
+            if (!station.workbenchQueues.TryGetValue(workbenchFoundationUid, out var queue))
+                return false;
+            int index = queue.FindIndex(e => e.uid == entryUid);
+            if (index < 0) return false;
+            if (queue[index].status != "queued") return false;
+            queue.RemoveAt(index);
+            return true;
+        }
+
+        /// <summary>
+        /// Moves a "queued" entry one position up (direction = -1) or down (direction = +1)
+        /// in the workbench queue.  Entries that are "hauling" or "executing" cannot be
+        /// reordered.  Returns true if the move was applied.
+        /// </summary>
+        public bool MoveInQueue(string workbenchFoundationUid, string entryUid,
+                                int direction, StationState station)
+        {
+            if (!station.workbenchQueues.TryGetValue(workbenchFoundationUid, out var queue))
+                return false;
+            int index = queue.FindIndex(e => e.uid == entryUid);
+            if (index < 0) return false;
+            if (queue[index].status != "queued") return false;
+            int target = index + direction;
+            if (target < 0 || target >= queue.Count) return false;
+            // Cannot move into or past a non-queued (in-progress) entry.
+            if (queue[target].status != "queued") return false;
+            var tmp = queue[index];
+            queue[index]  = queue[target];
+            queue[target] = tmp;
+            return true;
+        }
     }
 }
