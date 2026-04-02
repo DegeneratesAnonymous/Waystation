@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Waystation.Core;
 using Waystation.Models;
 using Waystation.Systems;
 using Waystation.UI;
@@ -464,25 +465,46 @@ namespace Waystation.Tests
     [TestFixture]
     internal class RoomPanelNetworksTabTests
     {
-        private RoomPanelController  _panel;
-        private NetworkSystem        _networks;
+        private RoomPanelController    _panel;
+        private NetworkSystem          _networks;
+        private ContentRegistry        _registry;
+        private GameObject             _registryGo;
+        private UtilityNetworkManager  _utilityNetworks;
 
         [SetUp]
         public void SetUp()
         {
-            _panel    = new RoomPanelController();
-            _networks = new NetworkSystem(null);
+            _panel      = new RoomPanelController();
+            _registryGo = new UnityEngine.GameObject("RoomPanelNetworksTests_Registry");
+            _registry   = _registryGo.AddComponent<ContentRegistry>();
+
+            // Register minimal buildable definitions so GetNetworkType resolves correctly.
+            _registry.Buildables["buildable.electric_wire"] = new BuildableDefinition
+            {
+                id = "buildable.electric_wire", networkType = "electric", nodeRole = "conduit"
+            };
+            _registry.Buildables["buildable.pipe_segment"] = new BuildableDefinition
+            {
+                id = "buildable.pipe_segment", networkType = "pipe", nodeRole = "conduit"
+            };
+            _registry.Buildables["buildable.duct_segment"] = new BuildableDefinition
+            {
+                id = "buildable.duct_segment", networkType = "duct", nodeRole = "conduit"
+            };
+            _registry.Buildables["buildable.fuel_line"] = new BuildableDefinition
+            {
+                id = "buildable.fuel_line", networkType = "fuel", nodeRole = "conduit"
+            };
+
+            _networks        = new NetworkSystem(_registry);
+            _utilityNetworks = new UtilityNetworkManager(_registry, _networks);
         }
 
-        /// <summary>
-        /// Creates a UtilityNetworkManager that wraps a pre-configured NetworkSystem.
-        /// We test the panel against a minimal stub UtilityNetworkManager-like approach
-        /// by verifying the network status labels rendered in the Networks tab.
-        /// Since NetworkSystem.GetRoomConnectivity is public, we test it directly
-        /// and verify the panel renders the correct label text for each status.
-        /// </summary>
+        [TearDown]
+        public void TearDown() => UnityEngine.Object.DestroyImmediate(_registryGo);
+
         [Test]
-        public void NetworkStatus_NotConnected_ShowsNotConnectedLabel()
+        public void NetworkStatus_NotConnected_WhenNoConduitInRoom()
         {
             var station = RoomPanelTestHelpers.MakeStation();
             RoomPanelTestHelpers.RegisterRoomTile(station, 0, 0, "0_0");
@@ -502,7 +524,7 @@ namespace Waystation.Tests
             RoomPanelTestHelpers.RegisterRoomTile(station, 0, 0, "0_0");
 
             // Add a single electric conduit in the room's tile.
-            var f = RoomPanelTestHelpers.AddFoundation(station, "buildable.electric_wire", 0, 0);
+            var f   = RoomPanelTestHelpers.AddFoundation(station, "buildable.electric_wire", 0, 0);
             var net = RoomPanelTestHelpers.AddNetwork(station, "electric");
             RoomPanelTestHelpers.LinkToNetwork(station, f, net);
 
@@ -521,12 +543,12 @@ namespace Waystation.Tests
             RoomPanelTestHelpers.RegisterRoomTile(station, 0, 0, "0_0");
 
             // Add a duct conduit in room tile linked to one component.
-            var f1 = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 0, 0);
+            var f1   = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 0, 0);
             var net1 = RoomPanelTestHelpers.AddNetwork(station, "duct");
             RoomPanelTestHelpers.LinkToNetwork(station, f1, net1);
 
             // Add a second duct component elsewhere (different network = fragmented).
-            var f2 = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 5, 5);
+            var f2   = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 5, 5);
             var net2 = RoomPanelTestHelpers.AddNetwork(station, "duct");
             RoomPanelTestHelpers.LinkToNetwork(station, f2, net2);
             // f2 is NOT in the room tile, so room connectivity still finds f1.
@@ -568,7 +590,7 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void Networks_Panel_RendersStatusLabels()
+        public void Networks_Panel_RendersOneRowPerNetworkType()
         {
             // Full panel rendering test: ensure Networks tab produces one row per type.
             var station = RoomPanelTestHelpers.MakeStation();
@@ -583,31 +605,35 @@ namespace Waystation.Tests
         }
 
         [Test]
-        public void Networks_SeveredNetwork_RendersWithSeveredStatusClass()
+        public void Networks_SeveredDuct_PanelRendersWithSeveredStatusLabel()
         {
-            // Verify panel shows Severed styling when connectivity is Severed.
-            // We use a stub UtilityNetworkManager by testing via panel with
-            // a station that has a fragmented duct network.
+            // Verify the Networks tab renders the "Severed" label in warning colour when
+            // the duct network is fragmented (two components, no isolators).
             var station = RoomPanelTestHelpers.MakeStation();
             RoomPanelTestHelpers.RegisterRoomTile(station, 0, 0, "0_0");
 
-            // Add duct conduit in room tile.
-            var f1 = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 0, 0);
+            // Add duct conduit in room tile linked to one component.
+            var f1   = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 0, 0);
             var net1 = RoomPanelTestHelpers.AddNetwork(station, "duct");
             RoomPanelTestHelpers.LinkToNetwork(station, f1, net1);
 
-            // Second duct component makes network fragmented (Severed).
-            var f2 = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 5, 5);
+            // Second duct component elsewhere makes health → Severed.
+            var f2   = RoomPanelTestHelpers.AddFoundation(station, "buildable.duct_segment", 5, 5);
             var net2 = RoomPanelTestHelpers.AddNetwork(station, "duct");
             RoomPanelTestHelpers.LinkToNetwork(station, f2, net2);
 
-            // We need to pass a UtilityNetworkManager to the panel; since it's a concrete
-            // class wrapping NetworkSystem we can only test via the rendered label text.
-            // Use the NetworkSystem directly to verify status, then trust the panel renders it.
-            var ductStatus = _networks.GetRoomConnectivity(station, "0_0")
-                                      .Find(i => i.NetworkType == "duct");
-            Assert.AreEqual(RoomNetworkStatus.Severed, ductStatus.Status,
-                "Pre-condition: duct network must be Severed for this rendering test.");
+            // Render the panel with a real UtilityNetworkManager so connectivity resolves.
+            _panel.Refresh("0_0", station, null, null, null, _utilityNetworks);
+            _panel.SelectTab("networks");
+
+            // The Ducting row should contain a label with class ws-room-panel__status--severed.
+            var severedLabels = _panel
+                .Query<Label>(className: "ws-room-panel__status--severed")
+                .ToList();
+            Assert.AreEqual(1, severedLabels.Count,
+                "Exactly one status label should have the severed class (Ducting row).");
+            Assert.AreEqual("Severed", severedLabels[0].text,
+                "The severed label must read 'Severed'.");
         }
     }
 

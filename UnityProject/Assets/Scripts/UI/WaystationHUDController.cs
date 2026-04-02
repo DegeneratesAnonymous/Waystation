@@ -250,7 +250,10 @@ namespace Waystation.UI
             }
 
             if (_roomPanel != null)
-                _roomPanel.OnCloseRequested -= OnRoomPanelClosed;
+            {
+                _roomPanel.OnCloseRequested      -= OnRoomPanelClosed;
+                _roomPanel.OnWorkbenchRowClicked -= OnRoomPanelWorkbenchClicked;
+            }
 
             _networksSubPanel?.Detach();
 

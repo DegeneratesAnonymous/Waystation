@@ -137,6 +137,15 @@ namespace Waystation.UI
 
             Add(header);
 
+            // ── Tab content area ───────────────────────────────────────────────
+            // Construct _tabContent BEFORE AddTab calls to avoid a null ref:
+            // TabStrip.AddTab auto-selects the first tab and immediately fires
+            // OnTabSelected → RebuildActiveTab, which writes into _tabContent.
+            _tabContent = new ScrollView(ScrollViewMode.Vertical);
+            _tabContent.AddToClassList(TabContentClass);
+            _tabContent.style.flexGrow = 1;
+            _tabContent.style.overflow = Overflow.Hidden;
+
             // ── Tab strip ──────────────────────────────────────────────────────
             _tabs = new TabStrip(TabStrip.Orientation.Horizontal);
             _tabs.OnTabSelected += OnTabSelected;
@@ -144,13 +153,9 @@ namespace Waystation.UI
             _tabs.AddTab("ASSIGN TYPE",  "assign_type");
             _tabs.AddTab("CONTENTS",     "contents");
             _tabs.AddTab("NETWORKS",     "networks");
-            Add(_tabs);
 
-            // ── Tab content area ───────────────────────────────────────────────
-            _tabContent = new ScrollView(ScrollViewMode.Vertical);
-            _tabContent.AddToClassList(TabContentClass);
-            _tabContent.style.flexGrow = 1;
-            _tabContent.style.overflow = Overflow.Hidden;
+            // Add in visual order: tab strip above the content area.
+            Add(_tabs);
             Add(_tabContent);
         }
 
@@ -536,9 +541,8 @@ namespace Waystation.UI
             if (_rooms == null || _station == null || string.IsNullOrEmpty(_roomKey)) return;
             _rooms.AssignRoomType(_station, _roomKey, _pendingTypeId);
             // Switch to Overview so the badge update is visible immediately.
-            _activeTab = "overview";
+            // SelectTab fires OnTabSelected → sets _activeTab → RebuildActiveTab.
             _tabs?.SelectTab("overview");
-            RebuildActiveTab();
         }
 
         // ── Contents tab ───────────────────────────────────────────────────────
