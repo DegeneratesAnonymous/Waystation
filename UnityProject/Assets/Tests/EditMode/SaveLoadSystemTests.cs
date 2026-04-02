@@ -73,6 +73,84 @@ namespace Waystation.Tests
                 "Save version must be preserved through serialization round-trip.");
         }
 
+        // ── saved_at timestamp round-trip (UI-022) ────────────────────────────
+
+        [Test]
+        public void SavedAt_UtcTicks_RoundTrip()
+        {
+            // saved_at is stored as a UTC DateTime.Ticks string in BuildSaveData.
+            var now = new System.DateTime(2025, 6, 15, 10, 30, 0, System.DateTimeKind.Utc);
+            var data = new Dictionary<string, object>
+            {
+                { "station_name", "Ironfall Station" },
+                { "tick",         512 },
+                { "saved_at",     now.Ticks.ToString() },
+            };
+            var rt = RoundTrip(data);
+
+            Assert.AreEqual("Ironfall Station", rt["station_name"].ToString(),
+                "station_name must survive round-trip.");
+            Assert.AreEqual(512, System.Convert.ToInt32(rt["tick"]),
+                "tick must survive round-trip.");
+
+            Assert.IsTrue(long.TryParse(rt["saved_at"].ToString(), out long ticks),
+                "saved_at must be parseable as a long.");
+            var restored = new System.DateTime(ticks, System.DateTimeKind.Utc);
+            Assert.AreEqual(now, restored,
+                "Restored DateTime must equal the original UTC value.");
+        }
+
+        [Test]
+        public void SavedAt_MissingSavedAtKey_HandledGracefully()
+        {
+            // GetSaveSlotInfo must not throw when saved_at is absent (older save files).
+            var data = new Dictionary<string, object>
+            {
+                { "station_name", "OldStation" },
+                { "tick",         10 },
+                // no "saved_at" key — simulates a pre-UI-022 save file
+            };
+            var rt = RoundTrip(data);
+
+            bool hasSavedAt = rt.TryGetValue("saved_at", out var sa)
+                              && sa != null && !string.IsNullOrEmpty(sa.ToString());
+            Assert.IsFalse(hasSavedAt,
+                "Absent saved_at key must not appear after round-trip.");
+        }
+
+        // ── active_scenario_id round-trip (UI-022) ─────────────────────────────
+
+        [Test]
+        public void ActiveScenarioId_RoundTrip()
+        {
+            var data = new Dictionary<string, object>
+            {
+                { "station_name",       "TestStation" },
+                { "tick",               100 },
+                { "active_scenario_id", "scenario.standard_start" },
+            };
+            var rt = RoundTrip(data);
+
+            Assert.AreEqual("scenario.standard_start", rt["active_scenario_id"].ToString(),
+                "active_scenario_id must survive serialization round-trip.");
+        }
+
+        [Test]
+        public void ActiveScenarioId_EmptyString_RoundTrip()
+        {
+            // When no scenario is active, active_scenario_id is stored as "".
+            var data = new Dictionary<string, object>
+            {
+                { "station_name",       "FreeStation" },
+                { "tick",               5 },
+                { "active_scenario_id", string.Empty },
+            };
+            var rt = RoundTrip(data);
+
+            Assert.AreEqual(string.Empty, rt["active_scenario_id"].ToString(),
+                "Empty active_scenario_id must round-trip as empty string.");
+        }
+
         // ── Resources round-trip ─────────────────────────────────────────────
 
         [Test]

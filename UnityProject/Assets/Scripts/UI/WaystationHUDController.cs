@@ -127,6 +127,9 @@ namespace Waystation.UI
         // Tick counter for throttling shipyard refreshes (every 5 ticks).
         private int _shipyardTickCounter;
 
+        // Settings tab (UI-022)
+        private SettingsSubPanelController _settingsPanel;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -505,6 +508,10 @@ namespace Waystation.UI
             else if (tab == SidePanelController.Tab.Fleet)
             {
                 MountFleetPanel();
+            }
+            else if (tab == SidePanelController.Tab.Settings)
+            {
+                MountSettingsPanel();
             }
         }
 
@@ -1049,6 +1056,25 @@ namespace Waystation.UI
 
             if (_shipyardSubPanel != null && _fleetSubTab == "shipyard")
                 _shipyardSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+        }
+
+        // ── Settings tab mount (UI-022) ───────────────────────────────────────
+
+        /// <summary>
+        /// Creates (once) and mounts the Settings tab panel.
+        /// Re-mounts and refreshes with current state after drawer re-open.
+        /// </summary>
+        private void MountSettingsPanel()
+        {
+            if (_settingsPanel == null)
+                _settingsPanel = new SettingsSubPanelController();
+
+            _settingsPanel.style.flexGrow = 1;
+            _settingsPanel.style.height   = Length.Percent(100);
+            _sidePanel.DrawerContentRoot.Add(_settingsPanel);
+
+            // Refresh immediately with current game state.
+            _settingsPanel.Refresh(_gm?.Station, _gm, _gm?.Registry);
         }
 
         // ── Update — sync placement state and mouse-over ──────────────────────

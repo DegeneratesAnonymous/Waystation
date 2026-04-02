@@ -60,6 +60,26 @@ namespace Waystation.Core
 
         private bool _autosaveInProgress;
 
+        /// <summary>
+        /// ID of the scenario used when the current game was started via
+        /// <see cref="NewGame"/>, or empty if no scenario was selected.
+        /// Persisted in the save file and restored on load.
+        /// </summary>
+        public string ActiveScenarioId { get; private set; } = string.Empty;
+
+        // ── Slot-based save constants ─────────────────────────────────────────
+        /// <summary>
+        /// Number of manual save slots available to the player (not including the
+        /// autosave slot which uses a separate file).
+        /// </summary>
+        public const int SaveSlotCount = 5;
+
+        /// <summary>
+        /// Slot index used for the dedicated autosave file.
+        /// Pass to <see cref="GetSaveSlotInfo"/> to read autosave metadata.
+        /// </summary>
+        public const int AutosaveSlotIndex = 0;
+
         // ── System references ─────────────────────────────────────────────────
         public ContentRegistry      Registry          { get; private set; }
         public ResourceSystem       Resources         { get; private set; }
@@ -182,6 +202,13 @@ namespace Waystation.Core
 
         private void Start()
         {
+            // Load persisted settings from PlayerPrefs.
+            if (PlayerPrefs.HasKey("autosave_interval_ticks"))
+            {
+                int savedInterval = PlayerPrefs.GetInt("autosave_interval_ticks");
+                autosaveIntervalTicks = Mathf.Max(0, savedInterval);
+            }
+
             Registry = ContentRegistry.Instance ?? FindAnyObjectByType<ContentRegistry>();
             if (Registry == null)
             {
@@ -493,6 +520,10 @@ namespace Waystation.Core
             Station = new StationState(stationName);
             Station.solarSystem = SolarSystemGenerator.Generate(stationName, effectiveSeed);
             SetupStartingModules();
+
+            ActiveScenarioId = (FeatureFlags.ScenarioSelection && scenario != null)
+                ? scenario.id ?? string.Empty
+                : string.Empty;
 
             if (FeatureFlags.ScenarioSelection && scenario != null)
             {
@@ -1101,7 +1132,7 @@ namespace Waystation.Core
                 yield break;
             }
 
-            string path = Path.Combine(Application.persistentDataPath, saveFileName);
+            string path = SlotFilePath(AutosaveSlotIndex);
             var writeTask = Task.Run(() => File.WriteAllText(path, json));
             yield return new WaitUntil(() => writeTask.IsCompleted);
 
@@ -1166,6 +1197,172 @@ namespace Waystation.Core
             Debug.LogWarning($"[GameManager] LoadGame: {message}");
             OnLoadError?.Invoke(message);
         }
+
+        // ── Slot-based save / load ────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the save-file path for the given slot index.
+        /// Slot 0 is the autosave file; slots 1–<see cref="SaveSlotCount"/> are manual save slots.
+        /// </summary>
+        private string SlotFilePath(int slotIndex)
+        {
+            string filename = slotIndex == AutosaveSlotIndex
+                ? "waystation_autosave.json"
+                : $"waystation_save_slot{slotIndex}.json";
+            return Path.Combine(Application.persistentDataPath, filename);
+        }
+
+        /// <summary>
+        /// Saves the current game state to the specified manual save slot (1–<see cref="SaveSlotCount"/>).
+        /// Slot 0 (autosave) cannot be written by this method; use the autosave coroutine instead.
+        /// </summary>
+        public void SaveGame(int slotIndex)
+        {
+            if (slotIndex <= AutosaveSlotIndex || slotIndex > SaveSlotCount)
+            {
+                Debug.LogWarning($"[GameManager] SaveGame(slot): invalid slot index {slotIndex}. Use 1–{SaveSlotCount}.");
+                return;
+            }
+            if (Station == null) return;
+            string path = SlotFilePath(slotIndex);
+            try
+            {
+                var data = BuildSaveData();
+                string json = MiniJSON.Json.Serialize(data);
+                File.WriteAllText(path, json);
+                Log($"Game saved to slot {slotIndex}.");
+                Debug.Log($"[GameManager] Saved slot {slotIndex} to {path}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[GameManager] SaveGame(slot {slotIndex}) failed: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Loads the game state from the specified save slot.
+        /// Slot 0 loads the autosave; slots 1–<see cref="SaveSlotCount"/> load manual saves.
+        /// Fires <see cref="OnLoadError"/> on failure.
+        /// </summary>
+        public void LoadGame(int slotIndex)
+        {
+            if (slotIndex < AutosaveSlotIndex || slotIndex > SaveSlotCount)
+            {
+                RaiseLoadError($"Invalid save slot index {slotIndex}.");
+                return;
+            }
+
+            string path = SlotFilePath(slotIndex);
+            LastLoadError = string.Empty;
+
+            if (!File.Exists(path)) { RaiseLoadError($"No save file found in slot {slotIndex}."); return; }
+
+            string json;
+            try { json = File.ReadAllText(path); }
+            catch (Exception ex) { RaiseLoadError($"Could not read save slot {slotIndex}: {ex.Message}"); return; }
+
+            if (string.IsNullOrWhiteSpace(json)) { RaiseLoadError($"Save slot {slotIndex} is empty."); return; }
+
+            Dictionary<string, object> data;
+            try { data = MiniJSON.Json.Deserialize(json) as Dictionary<string, object>; }
+            catch (Exception ex) { RaiseLoadError($"Save slot {slotIndex} could not be parsed: {ex.Message}"); return; }
+
+            if (data == null) { RaiseLoadError($"Save slot {slotIndex} is corrupt or in an unexpected format."); return; }
+
+            int saveVersion = data.TryGetValue("version", out var vv) ? Convert.ToInt32(vv) : 0;
+            if (saveVersion > SaveVersion)
+                Debug.LogWarning($"[GameManager] Slot {slotIndex} save version {saveVersion} is newer than supported ({SaveVersion}).");
+
+            bool isFullSave = data.TryGetValue("full_save", out var fsv) && Convert.ToBoolean(fsv);
+            string stationName = data.TryGetValue("station_name", out var sn) ? sn?.ToString() : "Waystation";
+
+            try
+            {
+                ApplySaveData(data, isFullSave);
+            }
+            catch (Exception ex)
+            {
+                RaiseLoadError($"Save slot {slotIndex} could not be restored: {ex.Message}");
+                Debug.LogError($"[GameManager] LoadGame(slot {slotIndex}) failed: {ex}");
+                return;
+            }
+
+            Log($"Save loaded from slot {slotIndex}: '{stationName}' at tick {Station.tick}.");
+            IsPaused = false;
+            OnGameLoaded?.Invoke();
+            Debug.Log($"[GameManager] Loaded slot {slotIndex} from {path}");
+        }
+
+        /// <summary>
+        /// Deletes the save file for the given manual save slot (1–<see cref="SaveSlotCount"/>).
+        /// Slot 0 (autosave) cannot be deleted via this method.
+        /// </summary>
+        public void DeleteSaveSlot(int slotIndex)
+        {
+            if (slotIndex <= AutosaveSlotIndex || slotIndex > SaveSlotCount)
+            {
+                Debug.LogWarning($"[GameManager] DeleteSaveSlot: invalid slot index {slotIndex}.");
+                return;
+            }
+            string path = SlotFilePath(slotIndex);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                Debug.Log($"[GameManager] Deleted save slot {slotIndex}.");
+            }
+        }
+
+        /// <summary>
+        /// Returns metadata for the specified save slot, or null if the slot is empty.
+        /// Slot 0 returns autosave metadata; slots 1–<see cref="SaveSlotCount"/> return manual save metadata.
+        /// </summary>
+        public SaveSlotInfo GetSaveSlotInfo(int slotIndex)
+        {
+            if (slotIndex < AutosaveSlotIndex || slotIndex > SaveSlotCount) return null;
+            string path = SlotFilePath(slotIndex);
+            if (!File.Exists(path)) return null;
+
+            try
+            {
+                string json = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(json)) return null;
+                var data = MiniJSON.Json.Deserialize(json) as Dictionary<string, object>;
+                if (data == null) return null;
+
+                string stationName = data.TryGetValue("station_name", out var sn) ? sn?.ToString() : "Waystation";
+                int tick = data.TryGetValue("tick", out var t) ? Convert.ToInt32(t) : 0;
+                string savedAt = data.TryGetValue("saved_at", out var sa) ? sa?.ToString() : "";
+                long savedAtTicks = 0;
+                if (!string.IsNullOrEmpty(savedAt))
+                    long.TryParse(savedAt, out savedAtTicks);
+
+                return new SaveSlotInfo
+                {
+                    slotIndex    = slotIndex,
+                    stationName  = stationName,
+                    tick         = tick,
+                    savedAt      = savedAtTicks > 0 ? new DateTime(savedAtTicks, DateTimeKind.Utc) : (DateTime?)null,
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Sets and persists the autosave interval.
+        /// Pass 0 to disable autosave entirely.
+        /// </summary>
+        public void SetAutosaveInterval(int ticks)
+        {
+            autosaveIntervalTicks = Mathf.Max(0, ticks);
+            PlayerPrefs.SetInt("autosave_interval_ticks", autosaveIntervalTicks);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>Current autosave interval in ticks (0 = disabled).</summary>
+        public int AutosaveIntervalTicks => autosaveIntervalTicks;
 
         // ── Effect handlers (called by EventSystem) ───────────────────────────
 
