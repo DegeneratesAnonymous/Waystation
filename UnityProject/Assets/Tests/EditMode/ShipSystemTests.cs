@@ -1065,4 +1065,337 @@ namespace Waystation.Tests
                 "Normal visitor template must have fleetOnly=false.");
         }
     }
+
+    // =========================================================================
+    // Unit: GetAvailableBlueprints — research gate and blueprint listing (UI-021)
+    // =========================================================================
+
+    [TestFixture]
+    public class GetAvailableBlueprintsTests
+    {
+        private ContentRegistry _registry;
+        private ShipSystem      _system;
+        private StationState    _station;
+        private GameObject      _registryGo;
+
+        private static ShipTemplate BuildableScout(string researchPrereq = "") => new ShipTemplate
+        {
+            id                   = "ship.scout_vessel",
+            role                 = "scout",
+            fleetOnly            = true,
+            buildTimeTicks       = 240,
+            researchPrereq       = researchPrereq,
+            eligibleMissionTypes = new List<string> { "scout", "exploration" },
+        };
+
+        private static ShipTemplate BuildableMining() => new ShipTemplate
+        {
+            id                   = "ship.mining_barge",
+            role                 = "mining",
+            fleetOnly            = true,
+            buildTimeTicks       = 480,
+            eligibleMissionTypes = new List<string> { "mining", "asteroid" },
+        };
+
+        private static ShipTemplate NonBuildableVisitor() => new ShipTemplate
+        {
+            id        = "ship.visitor",
+            role      = "trader",
+            fleetOnly = false,
+            buildTimeTicks = 0,
+        };
+
+        [SetUp]
+        public void SetUp()
+        {
+            FeatureFlags.FleetManagement = true;
+            (_registry, _registryGo) = ShipTestHelpers.MakeRegistryWithShips(
+                BuildableScout(),
+                BuildableMining(),
+                NonBuildableVisitor());
+            _system  = new ShipSystem(_registry);
+            _station = ShipTestHelpers.MakeStation();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            FeatureFlags.FleetManagement = true;
+            Object.DestroyImmediate(_registryGo);
+        }
+
+        [Test]
+        public void GetAvailableBlueprints_ExcludesNonFleetOnlyTemplates()
+        {
+            var blueprints = _system.GetAvailableBlueprints(_station);
+            foreach (var (tmpl, _) in blueprints)
+                Assert.AreNotEqual("ship.visitor", tmpl.id,
+                    "Non-fleet-only templates must not appear in blueprints.");
+        }
+
+        [Test]
+        public void GetAvailableBlueprints_ExcludesNonBuildableTemplates()
+        {
+            var blueprints = _system.GetAvailableBlueprints(_station);
+            foreach (var (tmpl, _) in blueprints)
+                Assert.Greater(tmpl.buildTimeTicks, 0,
+                    "Blueprints with buildTimeTicks <= 0 must be excluded.");
+        }
+
+        [Test]
+        public void GetAvailableBlueprints_UnlockedWhenNoResearchPrereq()
+        {
+            var blueprints = _system.GetAvailableBlueprints(_station);
+            foreach (var (tmpl, locked) in blueprints)
+                if (tmpl.id == "ship.scout_vessel")
+                    Assert.IsFalse(locked, "Blueprint with no prereq must not be locked.");
+        }
+
+        [Test]
+        public void GetAvailableBlueprints_LockedWhenResearchPrereqNotMet()
+        {
+            var (reg, go) = ShipTestHelpers.MakeRegistryWithShips(
+                BuildableScout("tech.advanced_shipyard"));
+            var sys = new ShipSystem(reg);
+
+            // Station does not have the required tag.
+            var blueprints = sys.GetAvailableBlueprints(_station);
+            bool foundLocked = false;
+            foreach (var (tmpl, locked) in blueprints)
+                if (tmpl.id == "ship.scout_vessel") { foundLocked = locked; break; }
+
+            Object.DestroyImmediate(go);
+            Assert.IsTrue(foundLocked,
+                "Blueprint must be locked when research prerequisite is not met.");
+        }
+
+        [Test]
+        public void GetAvailableBlueprints_UnlockedWhenResearchPrereqMet()
+        {
+            var (reg, go) = ShipTestHelpers.MakeRegistryWithShips(
+                BuildableScout("tech.advanced_shipyard"));
+            var sys = new ShipSystem(reg);
+
+            // Grant the required research tag.
+            _station.SetTag("tech.advanced_shipyard");
+
+            var blueprints = sys.GetAvailableBlueprints(_station);
+            bool foundUnlocked = false;
+            foreach (var (tmpl, locked) in blueprints)
+                if (tmpl.id == "ship.scout_vessel") { foundUnlocked = !locked; break; }
+
+            Object.DestroyImmediate(go);
+            Assert.IsTrue(foundUnlocked,
+                "Blueprint must be unlocked when research prerequisite is met.");
+        }
+    }
+
+    // =========================================================================
+    // Unit: BeginConstruction — Shipyard build queue (UI-021)
+    // =========================================================================
+
+    [TestFixture]
+    public class BeginConstructionTests
+    {
+        private ContentRegistry _registry;
+        private ShipSystem      _system;
+        private StationState    _station;
+        private GameObject      _registryGo;
+
+        private static ShipTemplate ScoutBlueprint(string researchPrereq = "") => new ShipTemplate
+        {
+            id             = "ship.scout_vessel",
+            role           = "scout",
+            fleetOnly      = true,
+            buildTimeTicks = 240,
+            researchPrereq = researchPrereq,
+            buildMaterials = new Dictionary<string, int>
+            {
+                { "parts", 10 },
+            },
+        };
+
+        [SetUp]
+        public void SetUp()
+        {
+            FeatureFlags.FleetManagement = true;
+            (_registry, _registryGo) = ShipTestHelpers.MakeRegistryWithShips(ScoutBlueprint());
+            _system  = new ShipSystem(_registry);
+            _station = ShipTestHelpers.MakeStation(credits: 500f);
+            _station.resources["parts"] = 50f;
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            FeatureFlags.FleetManagement = true;
+            Object.DestroyImmediate(_registryGo);
+        }
+
+        [Test]
+        public void BeginConstruction_AddsEntryToShipConstructions()
+        {
+            var (ok, _, construction) = _system.BeginConstruction(
+                "ship.scout_vessel", "Pathfinder", _station);
+
+            Assert.IsTrue(ok, "BeginConstruction must succeed.");
+            Assert.IsNotNull(construction, "Construction instance must be non-null.");
+            Assert.IsTrue(_station.shipConstructions.ContainsKey(construction.uid),
+                "Construction must be present in station.shipConstructions.");
+        }
+
+        [Test]
+        public void BeginConstruction_DeductsMaterials()
+        {
+            float partsBefore = _station.resources["parts"];
+            _system.BeginConstruction("ship.scout_vessel", "Scout", _station);
+            float partsAfter = _station.resources["parts"];
+            Assert.AreEqual(partsBefore - 10f, partsAfter, 0.001f,
+                "Parts must be deducted on successful construction start.");
+        }
+
+        [Test]
+        public void BeginConstruction_MaterialsReadyFalseWhenInsufficient()
+        {
+            _station.resources["parts"] = 5f; // less than required 10
+            var (ok, _, construction) = _system.BeginConstruction(
+                "ship.scout_vessel", "Scout", _station);
+
+            Assert.IsTrue(ok, "BeginConstruction must still succeed (queued anyway).");
+            Assert.IsFalse(construction.materialsReady,
+                "materialsReady must be false when resources are insufficient.");
+        }
+
+        [Test]
+        public void BeginConstruction_FailsWhenResearchPrereqNotMet()
+        {
+            var (reg, go) = ShipTestHelpers.MakeRegistryWithShips(
+                ScoutBlueprint("tech.advanced_shipyard"));
+            var sys = new ShipSystem(reg);
+
+            var (ok, reason, _) = sys.BeginConstruction(
+                "ship.scout_vessel", "Scout", _station);
+
+            Object.DestroyImmediate(go);
+            Assert.IsFalse(ok, "BeginConstruction must fail when prereq is not met.");
+            Assert.IsNotNull(reason, "Failure reason must be provided.");
+        }
+
+        [Test]
+        public void BeginConstruction_SucceedsWhenResearchPrereqMet()
+        {
+            var (reg, go) = ShipTestHelpers.MakeRegistryWithShips(
+                ScoutBlueprint("tech.advanced_shipyard"));
+            var sys = new ShipSystem(reg);
+            _station.SetTag("tech.advanced_shipyard");
+
+            var (ok, _, _) = sys.BeginConstruction(
+                "ship.scout_vessel", "Scout", _station);
+
+            Object.DestroyImmediate(go);
+            Assert.IsTrue(ok, "BeginConstruction must succeed when research prereq is met.");
+        }
+
+        [Test]
+        public void Tick_CompletesConstructionAndAddsShipToFleet()
+        {
+            var (ok, _, construction) = _system.BeginConstruction(
+                "ship.scout_vessel", "Pathfinder", _station);
+            Assert.IsTrue(ok);
+
+            // Advance tick past endTick to trigger completion.
+            _station.tick = construction.endTick + 1;
+            _system.Tick(_station);
+
+            Assert.IsFalse(_station.shipConstructions.ContainsKey(construction.uid),
+                "Completed construction must be removed from shipConstructions.");
+            bool shipAdded = false;
+            foreach (var s in _station.ownedShips.Values)
+                if (s.name == "Pathfinder") { shipAdded = true; break; }
+            Assert.IsTrue(shipAdded,
+                "Ship must be added to ownedShips after construction completes.");
+        }
+    }
+
+    // =========================================================================
+    // Unit: mission type filter — Scout eligible missions (UI-021)
+    // =========================================================================
+
+    [TestFixture]
+    public class MissionTypeFilterTests
+    {
+        private ContentRegistry _registry;
+        private ShipSystem      _system;
+        private StationState    _station;
+        private GameObject      _registryGo;
+
+        [SetUp]
+        public void SetUp()
+        {
+            FeatureFlags.FleetManagement = true;
+            (_registry, _registryGo) = ShipTestHelpers.MakeRegistryWithShips(
+                ShipTestHelpers.ScoutTemplate(),
+                ShipTestHelpers.MiningTemplate());
+            _system  = new ShipSystem(_registry);
+            _station = ShipTestHelpers.MakeStation();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            FeatureFlags.FleetManagement = true;
+            Object.DestroyImmediate(_registryGo);
+        }
+
+        private OwnedShipInstance AddShipWithCrew(string templateId, string role)
+        {
+            var ship = OwnedShipInstance.Create(templateId, "Test Ship", role);
+            _station.ownedShips[ship.uid] = ship;
+            var npc = ShipTestHelpers.MakeCrew();
+            _station.npcs[npc.uid] = npc;
+            npc.assignedShipUid = ship.uid;
+            ship.crewUids.Add(npc.uid);
+            return ship;
+        }
+
+        [Test]
+        public void Scout_IsEligibleForScoutMission()
+        {
+            var ship = AddShipWithCrew("ship.scout_vessel", "scout");
+            Assert.IsTrue(_system.IsEligibleForMission(ship.uid, "scout", _station),
+                "Scout ship must be eligible for 'scout' mission.");
+        }
+
+        [Test]
+        public void Scout_IsEligibleForExplorationMission()
+        {
+            var ship = AddShipWithCrew("ship.scout_vessel", "scout");
+            Assert.IsTrue(_system.IsEligibleForMission(ship.uid, "exploration", _station),
+                "Scout ship must be eligible for 'exploration' mission.");
+        }
+
+        [Test]
+        public void Scout_NotEligibleForMiningMission()
+        {
+            var ship = AddShipWithCrew("ship.scout_vessel", "scout");
+            Assert.IsFalse(_system.IsEligibleForMission(ship.uid, "mining", _station),
+                "Scout ship must not be eligible for 'mining' mission.");
+        }
+
+        [Test]
+        public void Mining_EligibleForAsteroidMission()
+        {
+            var ship = AddShipWithCrew("ship.mining_barge", "mining");
+            Assert.IsTrue(_system.IsEligibleForMission(ship.uid, "asteroid", _station),
+                "Mining ship must be eligible for 'asteroid' mission.");
+        }
+
+        [Test]
+        public void Mining_NotEligibleForScoutMission()
+        {
+            var ship = AddShipWithCrew("ship.mining_barge", "mining");
+            Assert.IsFalse(_system.IsEligibleForMission(ship.uid, "scout", _station),
+                "Mining ship must not be eligible for 'scout' mission.");
+        }
+    }
 }

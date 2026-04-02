@@ -111,11 +111,21 @@ namespace Waystation.UI
         // Tick counter for throttling map refreshes (every 5 ticks).
         private int _mapTickCounter;
 
-        // Fleet tab (UI-020)
-        private VisualElement           _fleetTabRoot;
-        private FleetSubPanelController _fleetSubPanel;
+        // Fleet tab (UI-020 / UI-021)
+        // Active Fleet sub-tab: "overview" | "dispatch" | "shipyard"
+        private string                      _fleetSubTab    = "overview";
+        private VisualElement               _fleetTabRoot;
+        private TabStrip                    _fleetSubTabs;
+        private VisualElement               _fleetSubContent;
+        private FleetSubPanelController     _fleetSubPanel;
+        private DispatchSubPanelController  _dispatchSubPanel;
+        private ShipyardSubPanelController  _shipyardSubPanel;
         // Tick counter for throttling fleet refreshes (every 5 ticks).
         private int _fleetTickCounter;
+        // Tick counter for throttling dispatch refreshes (every 5 ticks).
+        private int _dispatchTickCounter;
+        // Tick counter for throttling shipyard refreshes (every 5 ticks).
+        private int _shipyardTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -222,6 +232,9 @@ namespace Waystation.UI
 
             if (_fleetSubPanel != null)
                 _fleetSubPanel.OnShipRowClicked -= OnFleetShipRowClicked;
+
+            if (_fleetSubTabs != null)
+                _fleetSubTabs.OnTabSelected -= OnFleetSubTabSelected;
 
             if (_gm?.Fleet != null)
                 _gm.Fleet.OnFleetChanged -= OnFleetChanged;
@@ -913,11 +926,12 @@ namespace Waystation.UI
             _contentArea.Add(_eventLog);
         }
 
-        // ── Fleet tab mount (UI-020) ──────────────────────────────────────────
+        // ── Fleet tab mount (UI-020 / UI-021) ────────────────────────────────
 
         /// <summary>
-        /// Creates (once) and mounts the Fleet tab root.
-        /// Re-mounts if the panel was unmounted and remounted.
+        /// Creates (once) and mounts the Fleet tab root with its Overview, Dispatch,
+        /// and Shipyard sub-tabs.  Re-mounts the previously active sub-tab if the
+        /// panel was unmounted and remounted.
         /// </summary>
         private void MountFleetPanel()
         {
@@ -929,18 +943,76 @@ namespace Waystation.UI
                 _fleetTabRoot.style.height        = Length.Percent(100);
                 _fleetTabRoot.style.overflow      = Overflow.Hidden;
 
-                _fleetSubPanel = new FleetSubPanelController();
-                _fleetSubPanel.style.flexGrow = 1;
-                _fleetSubPanel.style.height   = Length.Percent(100);
-                _fleetSubPanel.OnShipRowClicked += OnFleetShipRowClicked;
-                _fleetSubPanel.OnRescueDispatch  = OnFleetRescueDispatch;
-                _fleetTabRoot.Add(_fleetSubPanel);
+                // Create content area BEFORE tab strip so the first AddTab auto-select
+                // can safely populate it.
+                _fleetSubContent = new VisualElement();
+                _fleetSubContent.style.flexGrow = 1;
+                _fleetSubContent.style.overflow = Overflow.Hidden;
+
+                _fleetSubTabs = new TabStrip(TabStrip.Orientation.Horizontal);
+                _fleetSubTabs.OnTabSelected += OnFleetSubTabSelected;
+                _fleetSubTabs.AddTab("OVERVIEW",  "overview");
+                _fleetSubTabs.AddTab("DISPATCH",  "dispatch");
+                _fleetSubTabs.AddTab("SHIPYARD",  "shipyard");
+
+                _fleetTabRoot.Add(_fleetSubTabs);
+                _fleetTabRoot.Add(_fleetSubContent);
             }
 
             _sidePanel.DrawerContentRoot.Add(_fleetTabRoot);
 
-            if (_gm?.Station != null)
-                _fleetSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+            // Re-select the active sub-tab to restore content after the drawer was
+            // reopened (DrawerContentRoot.Clear() removes child elements).
+            OnFleetSubTabSelected(_fleetSubTab);
+        }
+
+        private void OnFleetSubTabSelected(string subTabId)
+        {
+            _fleetSubTab = subTabId;
+            _fleetSubContent?.Clear();
+
+            if (_fleetSubContent == null) return;
+
+            switch (subTabId)
+            {
+                case "overview":
+                    if (_fleetSubPanel == null)
+                    {
+                        _fleetSubPanel = new FleetSubPanelController();
+                        _fleetSubPanel.OnShipRowClicked += OnFleetShipRowClicked;
+                        _fleetSubPanel.OnRescueDispatch  = OnFleetRescueDispatch;
+                    }
+                    _fleetSubPanel.style.flexGrow = 1;
+                    _fleetSubPanel.style.height   = Length.Percent(100);
+                    _fleetSubContent.Add(_fleetSubPanel);
+
+                    if (_gm?.Station != null)
+                        _fleetSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+                    break;
+
+                case "dispatch":
+                    if (_dispatchSubPanel == null)
+                        _dispatchSubPanel = new DispatchSubPanelController();
+                    _dispatchSubPanel.style.flexGrow = 1;
+                    _dispatchSubPanel.style.height   = Length.Percent(100);
+                    _fleetSubContent.Add(_dispatchSubPanel);
+
+                    if (_gm?.Station != null)
+                        _dispatchSubPanel.Refresh(
+                            _gm.Station, _gm?.Fleet, _gm?.Map, _gm?.AsteroidMissions);
+                    break;
+
+                case "shipyard":
+                    if (_shipyardSubPanel == null)
+                        _shipyardSubPanel = new ShipyardSubPanelController();
+                    _shipyardSubPanel.style.flexGrow = 1;
+                    _shipyardSubPanel.style.height   = Length.Percent(100);
+                    _fleetSubContent.Add(_shipyardSubPanel);
+
+                    if (_gm?.Station != null)
+                        _shipyardSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+                    break;
+            }
         }
 
         private void OnFleetShipRowClicked(string shipUid)
@@ -952,16 +1024,31 @@ namespace Waystation.UI
 
         private void OnFleetRescueDispatch(string shipUid)
         {
-            // Dispatch sub-tab (WO-UI-021) is out of scope for this Work Order.
-            // Log for now so the callback path can be verified.
-            Debug.Log($"[WaystationHUDController] FleetRescueDispatch: {shipUid}");
+            // Switch to the Dispatch sub-tab pre-selecting the distressed ship.
+            _fleetSubTab = "dispatch";
+            _fleetSubTabs?.SelectTab("dispatch");
+            if (_dispatchSubPanel != null && _gm?.Station != null)
+            {
+                _dispatchSubPanel.Refresh(
+                    _gm.Station, _gm?.Fleet, _gm?.Map, _gm?.AsteroidMissions,
+                    preselectedShipUid: shipUid);
+            }
         }
 
         private void OnFleetChanged()
         {
             bool fleetTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Fleet;
-            if (_fleetSubPanel != null && fleetTabActive && _gm?.Station != null)
+            if (!fleetTabActive || _gm?.Station == null) return;
+
+            if (_fleetSubPanel != null && _fleetSubTab == "overview")
                 _fleetSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+
+            if (_dispatchSubPanel != null && _fleetSubTab == "dispatch")
+                _dispatchSubPanel.Refresh(
+                    _gm.Station, _gm?.Fleet, _gm?.Map, _gm?.AsteroidMissions);
+
+            if (_shipyardSubPanel != null && _fleetSubTab == "shipyard")
+                _shipyardSubPanel.Refresh(_gm.Station, _gm?.Fleet);
         }
 
         // ── Update — sync placement state and mouse-over ──────────────────────
@@ -1115,15 +1202,36 @@ namespace Waystation.UI
                 }
             }
 
-            // Refresh the fleet panel every 5 ticks to avoid GC churn.
+            // Refresh the fleet panels every 5 ticks to avoid GC churn.
             bool fleetTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Fleet;
-            if (_fleetSubPanel != null && fleetTabActive)
+            if (_fleetSubPanel != null && fleetTabActive && _fleetSubTab == "overview")
             {
                 _fleetTickCounter++;
                 if (_fleetTickCounter >= 5)
                 {
                     _fleetTickCounter = 0;
                     _fleetSubPanel.Refresh(station, _gm?.Fleet);
+                }
+            }
+
+            if (_dispatchSubPanel != null && fleetTabActive && _fleetSubTab == "dispatch")
+            {
+                _dispatchTickCounter++;
+                if (_dispatchTickCounter >= 5)
+                {
+                    _dispatchTickCounter = 0;
+                    _dispatchSubPanel.Refresh(
+                        station, _gm?.Fleet, _gm?.Map, _gm?.AsteroidMissions);
+                }
+            }
+
+            if (_shipyardSubPanel != null && fleetTabActive && _fleetSubTab == "shipyard")
+            {
+                _shipyardTickCounter++;
+                if (_shipyardTickCounter >= 5)
+                {
+                    _shipyardTickCounter = 0;
+                    _shipyardSubPanel.Refresh(station, _gm?.Fleet);
                 }
             }
         }

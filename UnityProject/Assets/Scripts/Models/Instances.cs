@@ -2121,6 +2121,52 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // ShipConstruction
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Represents a ship that is currently under construction at the Shipyard.
+    /// Created by <see cref="Waystation.Systems.ShipSystem.BeginConstruction"/>.
+    /// </summary>
+    [Serializable]
+    public class ShipConstruction
+    {
+        public string uid;
+        public string templateId;
+        public string shipName;
+
+        /// <summary>Tick at which construction was started.</summary>
+        public int startTick;
+
+        /// <summary>Tick at which construction will complete.</summary>
+        public int endTick;
+
+        /// <summary>0.0–1.0 progress fraction.</summary>
+        public float progressFraction;
+
+        /// <summary>
+        /// Whether all required materials were present when construction was queued.
+        /// UI shows a warning when false.
+        /// </summary>
+        public bool materialsReady;
+
+        public static ShipConstruction Create(string templateId, string shipName,
+                                              int startTick, int endTick, bool materialsReady)
+        {
+            return new ShipConstruction
+            {
+                uid             = Guid.NewGuid().ToString("N")[..8],
+                templateId      = templateId,
+                shipName        = shipName,
+                startTick       = startTick,
+                endTick         = endTick,
+                progressFraction = 0f,
+                materialsReady  = materialsReady,
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Station State
     // -------------------------------------------------------------------------
 
@@ -2148,6 +2194,11 @@ namespace Waystation.Models
         // Managed by ShipSystem. Distinct from visitor ShipInstances in `ships`.
         public Dictionary<string, OwnedShipInstance> ownedShips =
             new Dictionary<string, OwnedShipInstance>();
+
+        // Ships under construction at the Shipyard, keyed by ShipConstruction.uid.
+        // Managed by ShipSystem.BeginConstruction / Tick.
+        public Dictionary<string, ShipConstruction> shipConstructions =
+            new Dictionary<string, ShipConstruction>();
 
         // Faction reputation: factionId -> -100..100
         public Dictionary<string, float>  factionReputation = new Dictionary<string, float>();
