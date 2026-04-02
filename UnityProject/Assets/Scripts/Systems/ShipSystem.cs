@@ -356,7 +356,7 @@ namespace Waystation.Systems
 
             float damage  = 100f - ship.conditionPct;
             int   parts   = Mathf.CeilToInt(damage / 10f);
-            int   ticks   = Mathf.RoundToInt(damage * 5f);
+            int   ticks   = Mathf.CeilToInt(damage * 5f);
             return (parts, ticks);
         }
 
@@ -368,6 +368,18 @@ namespace Waystation.Systems
         public bool BeginRepair(string shipUid, StationState station, out string reason)
         {
             reason = null;
+
+            if (station == null)
+            {
+                reason = "Station is null.";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(shipUid))
+            {
+                reason = "Ship UID must not be null or empty.";
+                return false;
+            }
 
             if (!station.ownedShips.TryGetValue(shipUid, out var ship))
             {
@@ -387,9 +399,9 @@ namespace Waystation.Systems
                 return false;
             }
 
-            if (ship.status == "repairing")
+            if (ship.status != "docked")
             {
-                reason = $"Ship '{ship.name}' is already being repaired.";
+                reason = $"Ship '{ship.name}' must be docked to begin repairs (current status: {ship.status}).";
                 return false;
             }
 

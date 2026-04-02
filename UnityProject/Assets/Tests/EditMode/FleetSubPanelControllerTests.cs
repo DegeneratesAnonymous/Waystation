@@ -470,6 +470,34 @@ namespace Waystation.Tests
 
             Assert.IsFalse(hasRepair, "Destroyed ship detail must NOT show a 'Begin Repair' button.");
         }
+
+        [Test]
+        public void OnMissionDamagedShip_DoesNotShowRepairButton()
+        {
+            var ship = _shipSystem.AddShipToFleet("ship.scout_vessel", "Ranger", _station);
+            ship.damageState  = ShipDamageState.Moderate;
+            ship.conditionPct = 55f;
+            ship.status       = "on_mission"; // not docked — repair should be unavailable
+
+            _panel.Refresh(_station, _shipSystem);
+
+            var rows = _panel.Query(className: "ws-fleet-panel__ship-row").ToList();
+            if (rows.Count > 0)
+            {
+                using var evt = ClickEvent.GetPooled();
+                evt.target = rows[0];
+                rows[0].SendEvent(evt);
+            }
+
+            var buttons = _panel.Query<Button>().ToList();
+            bool hasRepair = false;
+            foreach (var btn in buttons)
+                if ((btn.text ?? "").Contains("Begin Repair"))
+                    hasRepair = true;
+
+            Assert.IsFalse(hasRepair,
+                "On-mission ship detail must NOT show a 'Begin Repair' button.");
+        }
     }
 
     // ── Ship Detail sub-panel: crew and mission history ───────────────────────
@@ -742,11 +770,49 @@ namespace Waystation.Tests
         {
             var ship = _system.AddShipToFleet("ship.scout_vessel", "Pathfinder", _station);
             _system.ApplyDamage(ship.uid, 30f, _station);
+            // First call succeeds — ship is docked with damage.
             _system.BeginRepair(ship.uid, _station, out _);
+            // Ship is now "repairing" (not "docked"), so second call must fail.
+            bool ok = _system.BeginRepair(ship.uid, _station, out string reason);
+
+            Assert.IsFalse(ok, "BeginRepair should fail if ship is already repairing (not docked).");
+            Assert.IsNotNull(reason);
+        }
+
+        [Test]
+        public void BeginRepair_OnMissionShip_ReturnsFalse()
+        {
+            var ship = _system.AddShipToFleet("ship.scout_vessel", "Pathfinder", _station);
+            _system.ApplyDamage(ship.uid, 30f, _station);
+            ship.status = "on_mission"; // override to simulate dispatched state
 
             bool ok = _system.BeginRepair(ship.uid, _station, out string reason);
 
-            Assert.IsFalse(ok, "BeginRepair should fail if ship is already repairing.");
+            Assert.IsFalse(ok, "BeginRepair should fail for an on-mission ship.");
+            Assert.IsNotNull(reason);
+        }
+
+        [Test]
+        public void BeginRepair_NullStation_ReturnsFalse()
+        {
+            bool ok = _system.BeginRepair("any-uid", null, out string reason);
+            Assert.IsFalse(ok);
+            Assert.IsNotNull(reason);
+        }
+
+        [Test]
+        public void BeginRepair_NullShipUid_ReturnsFalse()
+        {
+            bool ok = _system.BeginRepair(null, _station, out string reason);
+            Assert.IsFalse(ok);
+            Assert.IsNotNull(reason);
+        }
+
+        [Test]
+        public void BeginRepair_EmptyShipUid_ReturnsFalse()
+        {
+            bool ok = _system.BeginRepair("", _station, out string reason);
+            Assert.IsFalse(ok);
             Assert.IsNotNull(reason);
         }
 

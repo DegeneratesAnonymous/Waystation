@@ -192,7 +192,7 @@ namespace Waystation.UI
             row.style.marginBottom   = 2;
             row.style.borderBottomWidth = 1;
             row.style.borderBottomColor = new Color(0.15f, 0.20f, 0.28f, 1f);
-            row.style.cursor         = StyleKeyword.Null;
+            row.style.cursor         = new StyleCursor(StyleKeyword.Auto);
 
             bool selected = ship.uid == _selectedShipUid;
             if (selected)
@@ -516,10 +516,10 @@ namespace Waystation.UI
                 }
             }
 
-            // ── Repair button (if damaged and not destroyed) ──────────────────────
+            // ── Repair button (if docked, damaged, and not destroyed) ─────────────
             if (ship.damageState != ShipDamageState.Destroyed &&
                 ship.conditionPct < ShipSystem.DamageThresholdUndamaged &&
-                ship.status != "repairing")
+                ship.status == "docked")
             {
                 content.Add(BuildDetailSectionHeader("Repair",
                     new Color(0.90f, 0.65f, 0.30f, 1f)));
@@ -631,7 +631,10 @@ namespace Waystation.UI
             var result = new List<string>();
             if (_station == null || ship == null) return result;
 
-            string shipNameLower = (ship.name ?? "").ToLowerInvariant();
+            // Guard: an empty name would match every log entry.
+            if (string.IsNullOrEmpty(ship.name)) return result;
+
+            string shipNameLower = ship.name.ToLowerInvariant();
             int scanned = 0;
             // station.log is capped at 200; scan at most 200 entries.
             const int MaxScan = 200;
