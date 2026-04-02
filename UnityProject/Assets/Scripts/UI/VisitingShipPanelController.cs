@@ -227,7 +227,20 @@ namespace Waystation.UI
             _tabContent.Clear();
 
             if (_station == null || string.IsNullOrEmpty(_shipUid)) return;
-            if (!_station.ships.TryGetValue(_shipUid, out var ship)) return;
+
+            if (!_station.ships.TryGetValue(_shipUid, out var ship))
+            {
+                // Ship is no longer in the station state (departed or removed).
+                var missingLabel = new Label("Ship not found. It may have departed.");
+                missingLabel.style.paddingLeft    = 10;
+                missingLabel.style.paddingTop     = 20;
+                missingLabel.style.fontSize       = 12;
+                missingLabel.style.color          = new Color(0.55f, 0.60f, 0.70f, 1f);
+                missingLabel.style.whiteSpace     = WhiteSpace.Normal;
+                missingLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+                _tabContent.Add(missingLabel);
+                return;
+            }
 
             switch (_activeTab)
             {
@@ -514,7 +527,6 @@ namespace Waystation.UI
                              _visitorSystem.PendingDecisions.Contains(ship.uid);
 
             var section = new VisualElement();
-            section.style.padding = new StyleEnum<Align>(Align.Auto);
             section.style.paddingLeft   = 10;
             section.style.paddingRight  = 10;
             section.style.paddingTop    = 10;

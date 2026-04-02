@@ -359,7 +359,7 @@ namespace Waystation.UI
             float economic = 0f, military = 0.5f, populationMood = 0.5f, tenure = 0f;
             if (def != null && _station != null)
             {
-                float rep = _factionSystem?.GetReputation(_factionId, _station) ?? 0f;
+                float rep = _factionSystem?.GetReputation(_factionId, _station) ?? _station.GetFactionRep(_factionId);
                 economic      = Mathf.Clamp01((rep + 100f) / 200f);
                 populationMood = ComputePopulationMood(def);
                 tenure         = ComputeTenure(def);

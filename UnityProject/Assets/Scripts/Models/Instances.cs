@@ -2234,6 +2234,13 @@ namespace Waystation.Models
         public Dictionary<string, float>  factionReputation = new Dictionary<string, float>();
 
         // Per-faction reputation change log: factionId -> list of changes (newest-first, capped at 20).
+        //
+        // NOTE: GameManagerSaveLoad does not currently serialize/deserialize this dictionary.
+        // Reputation history is therefore NOT persisted across save/load and the per-faction
+        // change log will be cleared when a game is reloaded.  To add persistence, update
+        // GameManagerSaveLoad to include StationState.factionRepHistory (e.g. as a
+        // faction_rep_history map keyed by factionId, each containing a list of FactionRepChange
+        // entries).
         public Dictionary<string, List<FactionRepChange>> factionRepHistory =
             new Dictionary<string, List<FactionRepChange>>();
 

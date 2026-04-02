@@ -15,6 +15,7 @@
 //   * OnCloseRequested fires when close button is clicked
 
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UIElements;
