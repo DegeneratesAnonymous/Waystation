@@ -351,7 +351,7 @@ namespace Waystation.Systems
         /// </summary>
         public static (int partsCost, int estimatedTicks) GetRepairCost(OwnedShipInstance ship)
         {
-            if (ship == null || ship.conditionPct >= ShipSystem.DamageThresholdUndamaged)
+            if (ship == null || ship.conditionPct >= DamageThresholdUndamaged)
                 return (0, 0);
 
             float damage  = 100f - ship.conditionPct;

@@ -442,7 +442,7 @@ namespace Waystation.UI
                     crewName.style.color     = new Color(0.75f, 0.80f, 0.88f, 1f);
                     crewRow.Add(crewName);
 
-                    var crewClass = new Label(npc.npcClass ?? "");
+                    var crewClass = new Label(npc.classId ?? "");
                     crewClass.style.fontSize  = 9;
                     crewClass.style.color     = new Color(0.45f, 0.55f, 0.65f, 1f);
                     crewClass.style.marginLeft = 4;
@@ -623,6 +623,8 @@ namespace Waystation.UI
         /// <summary>
         /// Returns the last <paramref name="count"/> station log entries that mention
         /// the ship by name and relate to fleet operations.
+        /// station.log is newest-first and capped at 200 entries by StationState.LogEvent,
+        /// so this scan is always bounded.
         /// </summary>
         private List<string> GetMissionHistory(OwnedShipInstance ship, int count)
         {
@@ -630,10 +632,14 @@ namespace Waystation.UI
             if (_station == null || ship == null) return result;
 
             string shipNameLower = (ship.name ?? "").ToLowerInvariant();
+            int scanned = 0;
+            // station.log is capped at 200; scan at most 200 entries.
+            const int MaxScan = 200;
 
             foreach (var entry in _station.log)
             {
-                if (result.Count >= count) break;
+                if (result.Count >= count || scanned >= MaxScan) break;
+                scanned++;
 
                 string entryLower = (entry ?? "").ToLowerInvariant();
                 if (entryLower.Contains(shipNameLower) && IsFleetLogEntry(entry))
