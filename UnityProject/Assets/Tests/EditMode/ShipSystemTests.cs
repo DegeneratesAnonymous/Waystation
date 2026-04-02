@@ -1188,6 +1188,24 @@ namespace Waystation.Tests
             Assert.IsTrue(foundUnlocked,
                 "Blueprint must be unlocked when research prerequisite is met.");
         }
+
+        [Test]
+        public void GetAvailableBlueprints_NullStation_AllUnlocked()
+        {
+            var (reg, go) = ShipTestHelpers.MakeRegistryWithShips(
+                BuildableScout("tech.advanced_shipyard"));
+            var sys = new ShipSystem(reg);
+
+            // Passing null station must skip research gating entirely.
+            var blueprints = sys.GetAvailableBlueprints(null);
+            bool foundLocked = false;
+            foreach (var (tmpl, locked) in blueprints)
+                if (tmpl.id == "ship.scout_vessel") { foundLocked = locked; break; }
+
+            Object.DestroyImmediate(go);
+            Assert.IsFalse(foundLocked,
+                "All blueprints must be unlocked when station is null.");
+        }
     }
 
     // =========================================================================

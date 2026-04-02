@@ -207,22 +207,13 @@ namespace Waystation.UI
         {
             if (_fleet == null) return new List<string>();
 
-            // Look up the template to get eligible mission types.
-            // Use the ship's templateId if available, otherwise derive from role.
             var types = new List<string>();
             if (ship.templateId != null)
             {
-                // Directly check all ships to see which mission types this ship can do.
-                var candidateShips = _fleet.GetOwnedShips(_station);
-                foreach (var s in candidateShips)
-                {
-                    if (s.uid != ship.uid) continue;
-                    // Enumerate canonical mission types and check eligibility.
-                    foreach (var mt in AllKnownMissionTypes())
-                        if (_fleet.IsEligibleForMission(s.uid, mt, _station))
-                            types.Add(mt);
-                    break;
-                }
+                // Enumerate canonical mission types and check eligibility for this ship directly.
+                foreach (var mt in AllKnownMissionTypes())
+                    if (_fleet.IsEligibleForMission(ship.uid, mt, _station))
+                        types.Add(mt);
             }
 
             if (types.Count == 0)
@@ -537,42 +528,64 @@ namespace Waystation.UI
         {
             if (!CanDispatchNow(out _)) return;
 
-            // Always dispatch via ShipSystem.DispatchShipMission which handles ship
-            // status, crew locking, and mission lifecycle correctly.
-            // For asteroid-type missions with a POI selected, also dispatch via
-            // AsteroidMissionSystem to generate the asteroid map.
             bool poiSelected = !string.IsNullOrEmpty(_selectedPoiUid);
-            bool isAsteroid  = _selectedMissionType == "mining" || _selectedMissionType == "asteroid";
 
-            var (ok, reason, _) = _fleet.DispatchShipMission(
-                _selectedShipUid, _selectedMissionType,
-                DefaultDurationTicks(_selectedMissionType), _station);
+            // Determine whether the selected POI is an Asteroid — the mission system
+            // that should be used depends on the POI type, not just the mission type string.
+            bool poiIsAsteroid = poiSelected
+                && _station.pointsOfInterest.TryGetValue(_selectedPoiUid, out var selectedPoi)
+                && selectedPoi.poiType == "Asteroid";
 
-            if (!ok)
+            // Dispatch flow:
+            //   - Asteroid POI missions: AsteroidMissionSystem handles crew locking,
+            //     mission creation, and map generation in a single call.  The owned ship's
+            //     status is then updated manually so the Overview reflects "On Mission".
+            //   - All other missions: ShipSystem.DispatchShipMission handles ship
+            //     status, crew locking, and mission lifecycle.
+            if (poiIsAsteroid && _asteroidMissions != null)
             {
-                Debug.LogWarning($"[DispatchSubPanel] Dispatch failed: {reason}");
-                return;
-            }
-
-            // For asteroid missions with a selected POI, additionally generate the
-            // asteroid map via AsteroidMissionSystem.
-            if (poiSelected && isAsteroid && _asteroidMissions != null)
-            {
-                if (_station.ownedShips.TryGetValue(_selectedShipUid, out var shipRef))
+                if (!_station.ownedShips.TryGetValue(_selectedShipUid, out var shipRef))
                 {
-                    var crewList = new List<string>(shipRef.crewUids);
-                    var (asteroidOk, asteroidReason, _) =
-                        _asteroidMissions.DispatchAsteroidMission(
-                            _selectedPoiUid, crewList, _station);
-                    if (!asteroidOk)
-                        Debug.LogWarning(
-                            $"[DispatchSubPanel] Asteroid map generation failed: {asteroidReason}");
+                    Debug.LogWarning("[DispatchSubPanel] Selected ship not found for asteroid dispatch.");
+                    return;
+                }
+
+                var crewList = new List<string>(shipRef.crewUids);
+                var (asteroidOk, asteroidReason, asteroidMap) =
+                    _asteroidMissions.DispatchAsteroidMission(
+                        _selectedPoiUid, crewList, _station);
+
+                if (!asteroidOk)
+                {
+                    Debug.LogWarning($"[DispatchSubPanel] Asteroid dispatch failed: {asteroidReason}");
+                    return;
+                }
+
+                // Update the owned ship's status so the Overview shows "On Mission".
+                shipRef.status           = "on_mission";
+                shipRef.missionUid       = asteroidMap?.missionUid;
+                shipRef.missionType      = _selectedMissionType;
+                shipRef.missionStartTick = _station.tick;
+                shipRef.missionEndTick   = asteroidMap?.endTick
+                                           ?? (_station.tick + DefaultDurationTicks(_selectedMissionType));
+            }
+            else
+            {
+                // Generic missions (including non-POI asteroid/mining missions) use ShipSystem.
+                var (ok, reason, _) = _fleet.DispatchShipMission(
+                    _selectedShipUid, _selectedMissionType,
+                    DefaultDurationTicks(_selectedMissionType), _station);
+
+                if (!ok)
+                {
+                    Debug.LogWarning($"[DispatchSubPanel] Dispatch failed: {reason}");
+                    return;
                 }
             }
 
             // Reset selections after successful dispatch.
-            _selectedShipUid     = null;
-            _selectedPoiUid      = null;
+            _selectedShipUid = null;
+            _selectedPoiUid  = null;
             Rebuild();
         }
 

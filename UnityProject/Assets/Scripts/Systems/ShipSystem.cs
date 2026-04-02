@@ -350,7 +350,7 @@ namespace Waystation.Systems
         /// A blueprint is included when the template has <c>buildTimeTicks &gt; 0</c>
         /// (i.e. it is buildable) and it is fleet-only.
         /// The <paramref name="station"/> is used to check research prerequisites;
-        /// pass null to skip the research gate (all blueprints returned regardless).
+        /// pass null to skip the research gate (all blueprints returned as unlocked).
         /// Each entry indicates whether the blueprint is currently buildable or locked.
         /// </summary>
         public IReadOnlyList<(ShipTemplate template, bool locked)> GetAvailableBlueprints(
@@ -363,8 +363,17 @@ namespace Waystation.Systems
                 if (!template.fleetOnly) continue;
                 if (template.buildTimeTicks <= 0) continue;
 
-                bool locked = !string.IsNullOrEmpty(template.researchPrereq)
-                              && (station == null || !station.HasTag(template.researchPrereq));
+                // When station is null, skip research gating entirely (no blueprints locked).
+                bool locked;
+                if (station == null)
+                {
+                    locked = false;
+                }
+                else
+                {
+                    locked = !string.IsNullOrEmpty(template.researchPrereq)
+                             && !station.HasTag(template.researchPrereq);
+                }
                 result.Add((template, locked));
             }
             result.Sort((a, b) => string.CompareOrdinal(a.Item1.role, b.Item1.role));

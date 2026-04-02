@@ -2197,6 +2197,12 @@ namespace Waystation.Models
 
         // Ships under construction at the Shipyard, keyed by ShipConstruction.uid.
         // Managed by ShipSystem.BeginConstruction / Tick.
+        //
+        // NOTE: GameManagerSaveLoad does not currently serialize/deserialize this
+        // dictionary. In-progress ship constructions are therefore NOT persisted
+        // across save/load and the shipyard queue will be cleared when a game is
+        // reloaded. To add persistence, update GameManagerSaveLoad to include
+        // StationState.shipConstructions (e.g. as a ship_constructions list/dict).
         public Dictionary<string, ShipConstruction> shipConstructions =
             new Dictionary<string, ShipConstruction>();
 
