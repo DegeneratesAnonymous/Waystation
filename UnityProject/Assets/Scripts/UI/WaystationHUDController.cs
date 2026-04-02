@@ -106,6 +106,11 @@ namespace Waystation.UI
         // Tick counter for throttling research refreshes (every 5 ticks).
         private int _researchTickCounter;
 
+        // Map fullscreen overlay (UI-019)
+        private MapSubPanelController _mapSubPanel;
+        // Tick counter for throttling map refreshes (every 5 ticks).
+        private int _mapTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -176,9 +181,13 @@ namespace Waystation.UI
             // destroyed controller during scene teardown or reload.
             if (_sidePanel != null)
             {
-                _sidePanel.OnActiveTabChanged      -= OnSidePanelTabChanged;
+                _sidePanel.OnActiveTabChanged       -= OnSidePanelTabChanged;
                 _sidePanel.OnMapFullscreenRequested -= OnSidePanelMapFullscreen;
+                _sidePanel.OnMapFullscreenExited    -= OnSidePanelMapFullscreenExited;
             }
+
+            if (_mapSubPanel != null)
+                _mapSubPanel.OnCloseRequested -= OnMapSubPanelCloseRequested;
 
             if (_stationOverview != null)
                 _stationOverview.OnDepartmentRowClicked -= OnOverviewDepartmentClicked;
@@ -359,6 +368,9 @@ namespace Waystation.UI
             // Hook up the Map fullscreen callback to open SystemMapController
             _sidePanel.OnMapFullscreenRequested += OnSidePanelMapFullscreen;
 
+            // Hook up the Map fullscreen exit callback to hide the map panel.
+            _sidePanel.OnMapFullscreenExited += OnSidePanelMapFullscreenExited;
+
             // Mount / unmount panel content when the active tab changes.
             _sidePanel.OnActiveTabChanged += OnSidePanelTabChanged;
 
@@ -389,9 +401,42 @@ namespace Waystation.UI
 
         private void OnSidePanelMapFullscreen()
         {
-            // Delegate to the legacy system map open logic for now.
+            // Show the UI Toolkit map overlay (UI-019).
+            if (_mapSubPanel == null)
+            {
+                _mapSubPanel = new MapSubPanelController();
+                _mapSubPanel.OnCloseRequested += OnMapSubPanelCloseRequested;
+            }
+
+            // Refresh with current game state before showing.
+            if (_gm?.Station != null)
+                _mapSubPanel.Refresh(_gm.Station, _gm?.Map);
+
+            // Mount the overlay into the content area (above the side panel).
+            if (_mapSubPanel.parent == null)
+                _contentArea.Add(_mapSubPanel);
+
+            // Also open the legacy uGUI system map layer for orbital animation.
             var systemMap = FindFirstObjectByType<SystemMapController>();
             systemMap?.Open();
+        }
+
+        private void OnMapSubPanelCloseRequested()
+        {
+            // Let SidePanelController exit fullscreen (fires OnMapFullscreenExited).
+            _sidePanel?.HandleEscapeKey();
+        }
+
+        private void OnSidePanelMapFullscreenExited()
+        {
+            // Hide and unmount the map overlay.
+            if (_mapSubPanel != null && _mapSubPanel.parent != null)
+                _contentArea.Remove(_mapSubPanel);
+
+            // Close the legacy uGUI system map layer.
+            var systemMap = FindFirstObjectByType<SystemMapController>();
+            if (systemMap != null && SystemMapController.IsOpen)
+                systemMap.Close();
         }
 
         private void OnSidePanelTabChanged(SidePanelController.Tab? tab)
@@ -973,6 +1018,17 @@ namespace Waystation.UI
                 {
                     _researchTickCounter = 0;
                     _researchSubPanel.Refresh(station, _gm?.Research);
+                }
+            }
+
+            // Refresh the map panel every 5 ticks while it is mounted (map fullscreen active).
+            if (_mapSubPanel != null && _mapSubPanel.parent != null && _gm?.Map?.IsFullscreenActive == true)
+            {
+                _mapTickCounter++;
+                if (_mapTickCounter >= 5)
+                {
+                    _mapTickCounter = 0;
+                    _mapSubPanel.Refresh(station, _gm?.Map);
                 }
             }
         }

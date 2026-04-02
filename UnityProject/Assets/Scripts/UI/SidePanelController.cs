@@ -77,6 +77,12 @@ namespace Waystation.UI
         /// </summary>
         public event Action OnMapFullscreenRequested;
 
+        /// <summary>
+        /// Fired when full-screen map mode ends (via Escape key or close button).
+        /// Subscribe in WaystationHUDController to hide the MapSubPanelController.
+        /// </summary>
+        public event Action OnMapFullscreenExited;
+
         // ── State ─────────────────────────────────────────────────────────────
 
         private Tab? _activeTab;
@@ -277,6 +283,7 @@ namespace Waystation.UI
             {
                 _mapFullscreenActive = false;
                 _mapSystem?.ExitFullscreen();
+                OnMapFullscreenExited?.Invoke();
                 return true;
             }
 
