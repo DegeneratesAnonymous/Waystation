@@ -415,6 +415,49 @@ namespace Waystation.Systems
         }
 
         /// <summary>
+        /// Checks whether station storage holds enough input materials for a recipe.
+        /// Returns <see cref="MaterialStatus.Sufficient"/> when all quantities are met
+        /// (including when the recipe has no input materials),
+        /// <see cref="MaterialStatus.Partial"/> when at least one item is present but
+        /// at least one requirement is not fully met, and
+        /// <see cref="MaterialStatus.Missing"/> when none of the required items are available.
+        /// </summary>
+        public MaterialStatus CheckRecipeMaterials(StationState station, RecipeDefinition recipe)
+        {
+            if (recipe == null) return MaterialStatus.Missing;
+            if (recipe.inputMaterials == null || recipe.inputMaterials.Count == 0)
+                return MaterialStatus.Sufficient;
+
+            int  metCount   = 0;
+            int  totalReqs  = recipe.inputMaterials.Count;
+            bool anyPresent = false;
+
+            foreach (var kv in recipe.inputMaterials)
+            {
+                int have = GetItemCount(station, kv.Key);
+                if (have >= kv.Value)
+                    metCount++;
+                else if (have > 0)
+                    anyPresent = true;
+            }
+
+            if (metCount == totalReqs)   return MaterialStatus.Sufficient;
+            if (metCount > 0 || anyPresent) return MaterialStatus.Partial;
+            return MaterialStatus.Missing;
+        }
+
+        /// <summary>
+        /// Returns the <see cref="MaterialStatus"/> for a single item requirement.
+        /// </summary>
+        public MaterialStatus CheckSingleMaterial(StationState station, string itemId, int required)
+        {
+            int have = GetItemCount(station, itemId);
+            if (have >= required) return MaterialStatus.Sufficient;
+            if (have > 0)         return MaterialStatus.Partial;
+            return MaterialStatus.Missing;
+        }
+
+        /// <summary>
         /// Returns a dictionary of item IDs mapped to the shortfall quantity for
         /// each material required by <paramref name="buildableId"/> that is not fully
         /// covered by current station storage.  An empty dictionary means all

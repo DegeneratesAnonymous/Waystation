@@ -146,6 +146,13 @@ namespace Waystation.UI
         // Tick counter for throttling room panel refreshes (every 5 ticks).
         private int _roomPanelTickCounter;
 
+        // Workbench contextual panel (UI-025)
+        private WorkbenchPanelController _workbenchPanel;
+        // Foundation uid currently shown in the workbench panel, or null when closed.
+        private string _workbenchPanelFoundationUid;
+        // Tick counter for throttling workbench panel refreshes (every tick = 1).
+        private int _workbenchPanelTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -1313,6 +1320,14 @@ namespace Waystation.UI
                     RefreshRoomPanel(_roomPanelRoomId);
                 }
             }
+
+            // Refresh the workbench panel every tick while it is mounted (queue
+            // progress bar must update each game tick per acceptance criteria).
+            if (_workbenchPanel != null && _workbenchPanel.parent != null &&
+                !string.IsNullOrEmpty(_workbenchPanelFoundationUid))
+            {
+                RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -1482,8 +1497,54 @@ namespace Waystation.UI
 
         private void OnRoomPanelWorkbenchClicked(string foundationUid)
         {
-            // Placeholder: opens the Workbench contextual panel (future work item).
-            Debug.Log($"[WaystationHUDController] OpenWorkbenchPanel: {foundationUid}");
+            OpenWorkbenchPanelInternal(foundationUid);
+        }
+
+        // ── Workbench contextual panel (UI-025) ───────────────────────────────
+
+        /// <summary>
+        /// Opens or refreshes the Workbench contextual panel for the given foundation uid.
+        /// </summary>
+        private void OpenWorkbenchPanelInternal(string foundationUid)
+        {
+            if (string.IsNullOrEmpty(foundationUid)) return;
+            _workbenchPanelFoundationUid = foundationUid;
+            MountWorkbenchPanel();
+        }
+
+        private void MountWorkbenchPanel()
+        {
+            if (string.IsNullOrEmpty(_workbenchPanelFoundationUid)) return;
+
+            if (_workbenchPanel == null)
+            {
+                _workbenchPanel = new WorkbenchPanelController();
+                _workbenchPanel.OnCloseRequested += OnWorkbenchPanelClosed;
+            }
+
+            if (_workbenchPanel.parent == null)
+                _contentArea.Add(_workbenchPanel);
+
+            RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+        }
+
+        private void RefreshWorkbenchPanel(string foundationUid)
+        {
+            if (_workbenchPanel == null || _gm?.Station == null) return;
+            _workbenchPanel.Refresh(
+                foundationUid,
+                _gm.Station,
+                _gm.Registry,
+                _gm.Building,
+                _gm.Crafting,
+                _gm.Inventory);
+        }
+
+        private void OnWorkbenchPanelClosed()
+        {
+            _workbenchPanelFoundationUid = null;
+            if (_workbenchPanel?.parent != null)
+                _contentArea.Remove(_workbenchPanel);
         }
 
         // ── Crew Member contextual panel (UI-023) ─────────────────────────────
