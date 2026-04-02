@@ -26,6 +26,8 @@ namespace Waystation.Core
                 { "full_save",                        FeatureFlags.FullSaveLoad },
                 { "station_name",                     Station.stationName },
                 { "tick",                             Station.tick },
+                { "saved_at",                         DateTime.UtcNow.Ticks.ToString() },
+                { "active_scenario_id",               ActiveScenarioId ?? string.Empty },
                 { "rank_names",                       ToObjList(Station.rankNames) },
                 { "player_faction_color",             Station.playerFactionColor },
                 { "player_faction_color_secondary",   Station.playerFactionColorSecondary },
@@ -204,6 +206,8 @@ namespace Waystation.Core
             Station = new StationState(stationName);
 
             if (data.TryGetValue("tick", out var tick)) Station.tick = Convert.ToInt32(tick);
+
+            ActiveScenarioId = data.TryGetValue("active_scenario_id", out var asi) ? asi?.ToString() ?? string.Empty : string.Empty;
 
             ReadDict(data, "resources",             v => Station.resources[v.Key]            = Convert.ToSingle(v.Value));
             ReadDict(data, "faction_reputation",    v => Station.factionReputation[v.Key]    = Convert.ToSingle(v.Value));
