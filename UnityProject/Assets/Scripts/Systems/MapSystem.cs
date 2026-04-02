@@ -11,6 +11,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Waystation.Core;
 using Waystation.Models;
 
 namespace Waystation.Systems
@@ -112,7 +113,7 @@ namespace Waystation.Systems
             if (station == null) return false;
 
             // Dev telescope mode bypasses all progression gates for sector expansion.
-            bool telescopeMode = Waystation.UI.SystemMapController.TelescopeMode;
+            bool telescopeMode = FeatureFlags.TelescopeMode;
             if (!telescopeMode && station.explorationPoints < SectorUnlockPointCost) return false;
 
             float gx = GalaxyGenerator.HomeX + col * GalUnitPerCell;
@@ -145,6 +146,31 @@ namespace Waystation.Systems
             generated.discoveryState = SectorDiscoveryState.Detected;
             station.sectors[generated.uid] = generated;
             return true;
+        }
+
+        /// <summary>
+        /// Dev-only: ensures the home sector exists in <paramref name="station"/> when
+        /// <see cref="FeatureFlags.TelescopeMode"/> is active, so the sector chart has
+        /// something to display. No-op if telescope mode is off, station is null, or a
+        /// home sector already exists. Should be called once when the map view opens in
+        /// telescope mode rather than during repeated view rebuilds.
+        /// </summary>
+        public void EnsureHomeSectorForDev(StationState station)
+        {
+            if (!FeatureFlags.TelescopeMode || station == null) return;
+
+            var homeCoords = new Vector2(GalaxyGenerator.HomeX, GalaxyGenerator.HomeY);
+            foreach (var existing in station.sectors.Values)
+            {
+                if (Mathf.Approximately(existing.coordinates.x, homeCoords.x) &&
+                    Mathf.Approximately(existing.coordinates.y, homeCoords.y))
+                    return; // already present
+            }
+
+            var homeSector = GalaxyGenerator.GenerateSectorAtCoordinates(
+                station.galaxySeed, homeCoords, station);
+            homeSector.discoveryState = SectorDiscoveryState.Visited;
+            station.sectors[homeSector.uid] = homeSector;
         }
 
         /// <summary>Detection range in world units, based on complete antenna count.</summary>

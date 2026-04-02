@@ -193,7 +193,11 @@ namespace Waystation.UI
             style.backgroundColor = ColPanelBg;
 
             RegisterCallback<AttachToPanelEvent>(_ => IsOverlayOpen = true);
-            RegisterCallback<DetachFromPanelEvent>(_ => IsOverlayOpen = false);
+            RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                IsOverlayOpen = false;
+                StopOrbitVisualization();
+            });
 
             // Responsive font scaling: recompute _fontScale when panel width changes.
             RegisterCallback<GeometryChangedEvent>(evt =>
@@ -416,7 +420,11 @@ namespace Waystation.UI
             if (_currentView == MapLayer.System)
                 BuildSystemView();
             else
+            {
+                // Ensure a home sector exists for dev/telescope mode before building the sector view.
+                _map?.EnsureHomeSectorForDev(_station);
                 BuildSectorView();
+            }
             _isBuilding = false;
         }
 
@@ -1038,26 +1046,13 @@ namespace Waystation.UI
 
             if (_station == null || _station.sectors.Count == 0)
             {
-                if (SystemMapController.TelescopeMode && _station != null)
-                {
-                    // Telescope Mode: auto-generate home sector so the chart has something to display.
-                    var homeSector = GalaxyGenerator.GenerateSectorAtCoordinates(
-                        _station.galaxySeed,
-                        new Vector2(GalaxyGenerator.HomeX, GalaxyGenerator.HomeY),
-                        _station);
-                    homeSector.discoveryState = SectorDiscoveryState.Visited;
-                    _station.sectors[homeSector.uid] = homeSector;
-                }
-                else
-                {
-                    var empty = new Label("No sectors charted. Build an Interstellar Antenna to explore.");
-                    empty.AddToClassList(EmptyClass);
-                    empty.style.color     = ColTextMid;
-                    empty.style.marginTop = 40;
-                    root.Add(empty);
-                    _viewArea.Add(root);
-                    return;
-                }
+                var empty = new Label("No sectors charted. Build an Interstellar Antenna to explore.");
+                empty.AddToClassList(EmptyClass);
+                empty.style.color     = ColTextMid;
+                empty.style.marginTop = 40;
+                root.Add(empty);
+                _viewArea.Add(root);
+                return;
             }
 
             var hdr = new Label("SECTOR GRID");

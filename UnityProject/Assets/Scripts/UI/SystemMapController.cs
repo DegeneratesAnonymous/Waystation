@@ -128,8 +128,12 @@ namespace Waystation.UI
 
         // ── Static state ──────────────────────────────────────────────────
 
-        /// <summary>Bypass all research/equipment requirements (Dev Tools).</summary>
-        public static bool TelescopeMode { get; set; }
+        /// <summary>Bypass all research/equipment requirements (Dev Tools). Delegates to <see cref="Waystation.Core.FeatureFlags.TelescopeMode"/>.</summary>
+        public static bool TelescopeMode
+        {
+            get => Waystation.Core.FeatureFlags.TelescopeMode;
+            set => Waystation.Core.FeatureFlags.TelescopeMode = value;
+        }
         /// <summary>True while any map layer is visible — used to suppress station camera zoom.</summary>
         public static bool IsOpen        { get; private set; }
         // Lazily generated unit-circle sprite (white disc, anti-aliased)

@@ -358,7 +358,7 @@ namespace Waystation.UI
         {
             var wrapper = new VisualElement();
             wrapper.AddToClassList(RowClass);
-            wrapper.userData = data.itemType;  // used by ApplyFilter
+            wrapper.userData = data;  // used by ApplyFilter (category + totalQuantity)
             wrapper.style.flexDirection  = FlexDirection.Column;
             wrapper.style.marginBottom   = 2;
             wrapper.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f);
@@ -525,21 +525,13 @@ namespace Waystation.UI
                 if (!child.ClassListContains(RowClass)) continue;
 
                 bool visible = _activeFilter == null ||
-                               (child.userData is string cat && cat == _activeFilter);
+                               (child.userData is CargoItemRow rowData && rowData.itemType == _activeFilter);
                 child.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
 
                 if (!visible) continue;
                 visibleCount++;
-                if (child is VisualElement row && row.childCount > 0)
-                {
-                    // quantity label is on header row index 2 when layout is unchanged
-                    var header = row[0];
-                    if (header != null && header.childCount > 2 && header[2] is Label qtyLabel)
-                    {
-                        string txt = qtyLabel.text?.Replace("×", "");
-                        if (int.TryParse(txt, out int q)) totalQty += q;
-                    }
-                }
+                if (child.userData is CargoItemRow r)
+                    totalQty += r.totalQuantity;
             }
 
             _summaryLabel.text = _activeFilter == null

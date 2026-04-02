@@ -88,6 +88,7 @@ namespace Waystation.UI
         private void Update()
         {
             if (_stars == null) return;
+            if (SceneManager.GetActiveScene().name != "MainMenuScene") return;
             float maxDist = MaxDist();
             for (int i = 0; i < _stars.Length; i++)
             {

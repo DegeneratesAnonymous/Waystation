@@ -355,7 +355,9 @@ namespace Waystation.UI
 
                     row.RegisterCallback<ClickEvent>(_ =>
                     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                         Debug.Log($"[BuildSubPanel] Selected: {capturedCategoryId}/{capturedBuildableId}");
+#endif
                         OnBuildItemSelected?.Invoke(capturedCategoryId, capturedBuildableId);
                     });
 
