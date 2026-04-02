@@ -22,6 +22,7 @@
 //   Call DamageFoundation() to apply HP damage to a complete foundation.
 //   When HP reaches 0, pendingRepair is set and the repair pipeline runs:
 //   an engineer hauls the required materials and restores HP to maxHealth.
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waystation.Core;
@@ -141,6 +142,43 @@ namespace Waystation.Systems
         }
 
         // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all complete, non-structural (non-floor/wall/door) foundations
+        /// placed inside the given room.  Includes furniture and workbenches.
+        /// The returned list is a snapshot ordered by buildable id.
+        /// Returns an empty list when <paramref name="roomKey"/> is unknown.
+        /// </summary>
+        public List<FoundationInstance> GetRoomContents(StationState station, string roomKey)
+        {
+            if (station == null || string.IsNullOrEmpty(roomKey))
+                return new List<FoundationInstance>();
+
+            // Collect the tile keys that belong to this room.
+            var roomTileKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var kv in station.tileToRoomKey)
+                if (kv.Value == roomKey)
+                    roomTileKeys.Add(kv.Key);
+
+            var result = new List<FoundationInstance>();
+            foreach (var f in station.foundations.Values)
+            {
+                if (f.status != "complete") continue;
+                // Exclude floors, walls, and doors — these are structural, not contents.
+                if (f.buildableId.Contains("floor") ||
+                    f.buildableId.Contains("wall")  ||
+                    f.buildableId.Contains("door"))
+                    continue;
+
+                string tileKey = $"{f.tileCol}_{f.tileRow}";
+                if (roomTileKeys.Contains(tileKey))
+                    result.Add(f);
+            }
+
+            result.Sort((a, b) =>
+                string.Compare(a.buildableId, b.buildableId, System.StringComparison.Ordinal));
+            return result;
+        }
 
         /// <summary>
         /// Place a new foundation at the given tile position.

@@ -139,6 +139,13 @@ namespace Waystation.UI
         // Only the top-most panel (last in list) is shown; others are held in memory.
         private readonly List<string> _crewMemberStack = new List<string>();
 
+        // Room contextual panel (UI-024)
+        private RoomPanelController _roomPanel;
+        // Room key currently shown in the room panel, or null when closed.
+        private string _roomPanelRoomId;
+        // Tick counter for throttling room panel refreshes (every 5 ticks).
+        private int _roomPanelTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -241,6 +248,9 @@ namespace Waystation.UI
                 _crewMemberPanel.OnRelationshipRowClicked -= OnCrewMemberRelationshipRowClicked;
                 _crewMemberPanel.OnExpertiseSlotClicked  -= OnCrewMemberExpertiseSlotClicked;
             }
+
+            if (_roomPanel != null)
+                _roomPanel.OnCloseRequested -= OnRoomPanelClosed;
 
             _networksSubPanel?.Detach();
 
@@ -1288,6 +1298,18 @@ namespace Waystation.UI
                     RefreshCrewMemberPanel(_crewMemberStack[_crewMemberStack.Count - 1]);
                 }
             }
+
+            // Refresh the room panel every 5 ticks while it is mounted.
+            if (_roomPanel != null && _roomPanel.parent != null &&
+                !string.IsNullOrEmpty(_roomPanelRoomId))
+            {
+                _roomPanelTickCounter++;
+                if (_roomPanelTickCounter >= 5)
+                {
+                    _roomPanelTickCounter = 0;
+                    RefreshRoomPanel(_roomPanelRoomId);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -1367,6 +1389,13 @@ namespace Waystation.UI
             {
                 _roomsSubPanel.Refresh(_gm.Station, _gm.Rooms, _gm?.Registry);
             }
+
+            // Also refresh the room panel if it is open.
+            if (_roomPanel != null && _roomPanel.parent != null &&
+                !string.IsNullOrEmpty(_roomPanelRoomId) && _gm?.Station != null)
+            {
+                RefreshRoomPanel(_roomPanelRoomId);
+            }
         }
 
         // ── Cross-view public API ─────────────────────────────────────────────
@@ -1390,7 +1419,68 @@ namespace Waystation.UI
         private static void OpenRoomPanel(string roomId)
         {
             if (_instance == null || string.IsNullOrEmpty(roomId)) return;
-            Debug.Log($"[WaystationHUDController] OpenRoomPanel: {roomId}");
+            _instance.OpenRoomPanelInternal(roomId);
+        }
+
+        // ── Room contextual panel (UI-024) ────────────────────────────────────
+
+        /// <summary>
+        /// Opens or refreshes the Room contextual panel for the given room key.
+        /// Switches to the Station tab so the Rooms list remains visible.
+        /// </summary>
+        private void OpenRoomPanelInternal(string roomId)
+        {
+            if (string.IsNullOrEmpty(roomId)) return;
+
+            _roomPanelRoomId = roomId;
+
+            // Ensure the Station tab is open so the rooms list is visible behind the panel.
+            if (_sidePanel?.ActiveTab != SidePanelController.Tab.Station)
+                _sidePanel?.ActivateTab(SidePanelController.Tab.Station);
+
+            MountRoomPanel();
+        }
+
+        private void MountRoomPanel()
+        {
+            if (string.IsNullOrEmpty(_roomPanelRoomId)) return;
+
+            if (_roomPanel == null)
+            {
+                _roomPanel = new RoomPanelController();
+                _roomPanel.OnCloseRequested    += OnRoomPanelClosed;
+                _roomPanel.OnWorkbenchRowClicked += OnRoomPanelWorkbenchClicked;
+            }
+
+            if (_roomPanel.parent == null)
+                _contentArea.Add(_roomPanel);
+
+            RefreshRoomPanel(_roomPanelRoomId);
+        }
+
+        private void RefreshRoomPanel(string roomId)
+        {
+            if (_roomPanel == null || _gm?.Station == null) return;
+            _roomPanel.Refresh(
+                roomId,
+                _gm.Station,
+                _gm.Registry,
+                _gm.Rooms,
+                _gm.Building,
+                _gm.UtilityNetworks);
+        }
+
+        private void OnRoomPanelClosed()
+        {
+            _roomPanelRoomId = null;
+            if (_roomPanel?.parent != null)
+                _contentArea.Remove(_roomPanel);
+        }
+
+        private void OnRoomPanelWorkbenchClicked(string foundationUid)
+        {
+            // Placeholder: opens the Workbench contextual panel (future work item).
+            Debug.Log($"[WaystationHUDController] OpenWorkbenchPanel: {foundationUid}");
         }
 
         // ── Crew Member contextual panel (UI-023) ─────────────────────────────
