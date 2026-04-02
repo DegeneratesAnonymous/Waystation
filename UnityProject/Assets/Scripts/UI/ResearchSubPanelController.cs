@@ -242,6 +242,8 @@ namespace Waystation.UI
             }
 
             // ── Pan and zoom event handling ─────────────────────────────────
+            // Only pan when the drag starts on the graph background or the canvas
+            // directly (not on a node card), so node click events are not consumed.
 
             Vector2 dragStart    = Vector2.zero;
             Vector2 panAtDragStart = Vector2.zero;
@@ -259,6 +261,10 @@ namespace Waystation.UI
             graphArea.RegisterCallback<PointerDownEvent>(evt =>
             {
                 if (evt.button != 0) return;
+                // Only start dragging when the pointer hits the graph background or the
+                // canvas layer — not a node card.  This allows ClickEvent to propagate
+                // normally on node cards so selection works correctly.
+                if (evt.target != graphArea && evt.target != canvas) return;
                 dragging        = true;
                 dragStart       = evt.position;
                 panAtDragStart  = _panOffset[branch];
@@ -364,7 +370,19 @@ namespace Waystation.UI
             var usedCells = new HashSet<(int, int)>();
             int fallbackCol = 0, fallbackRow = 0;
 
-            foreach (var node in nodes)
+            // Sort deterministically so duplicate/fallback positions are assigned
+            // consistently across runs (row-major, then by id as tiebreak).
+            var sorted = new List<ResearchNodeDefinition>(nodes);
+            sorted.Sort((a, b) =>
+            {
+                int cmp = a.gridY.CompareTo(b.gridY);
+                if (cmp != 0) return cmp;
+                cmp = a.gridX.CompareTo(b.gridX);
+                if (cmp != 0) return cmp;
+                return string.Compare(a.id, b.id, StringComparison.Ordinal);
+            });
+
+            foreach (var node in sorted)
             {
                 int col = node.gridX;
                 int row = node.gridY;
