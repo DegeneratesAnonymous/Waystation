@@ -368,8 +368,7 @@ namespace Waystation.UI
 
             if (!readOnly)
             {
-                // SAVE button (disabled for autosave)
-                bool hasActiveMissions = HasActiveMissions();
+                // SAVE button — gates behind confirmation when slot is occupied.
                 var saveBtn = BuildActionButton("SAVE");
                 saveBtn.style.marginRight = 4;
                 saveBtn.clicked += () =>
@@ -390,7 +389,7 @@ namespace Waystation.UI
                 btnRow.Add(saveBtn);
             }
 
-            // LOAD button
+            // LOAD button — always gates behind confirmation to avoid accidental state loss.
             var loadBtn = BuildActionButton("LOAD");
             loadBtn.SetEnabled(!isEmpty);
             loadBtn.style.marginRight = 4;
@@ -398,19 +397,9 @@ namespace Waystation.UI
             {
                 loadBtn.clicked += () =>
                 {
-                    if (HasActiveMissions())
-                    {
-                        // Warn about active missions and confirm
-                        _pendingAction    = ConfirmAction.Load;
-                        _pendingSlotIndex = slotIndex;
-                        RebuildSubTab();
-                    }
-                    else
-                    {
-                        _pendingAction    = ConfirmAction.Load;
-                        _pendingSlotIndex = slotIndex;
-                        RebuildSubTab();
-                    }
+                    _pendingAction    = ConfirmAction.Load;
+                    _pendingSlotIndex = slotIndex;
+                    RebuildSubTab();
                 };
             }
             btnRow.Add(loadBtn);
