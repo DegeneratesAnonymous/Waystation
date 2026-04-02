@@ -321,6 +321,84 @@ namespace Waystation.Systems
             return true;
         }
 
+        // ── UI-020 additions ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fired whenever the fleet list or any owned ship's state changes.
+        /// WaystationHUDController subscribes to this to refresh the Fleet panel
+        /// without waiting for the next game tick.
+        /// </summary>
+        public event Action OnFleetChanged;
+
+        /// <summary>
+        /// Returns all owned ships as a read-only list, sorted by name.
+        /// Returns an empty list when <paramref name="station"/> is null.
+        /// </summary>
+        public IReadOnlyList<OwnedShipInstance> GetOwnedShips(StationState station)
+        {
+            if (station == null) return new List<OwnedShipInstance>();
+
+            var ships = new List<OwnedShipInstance>(station.ownedShips.Values);
+            ships.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            return ships;
+        }
+
+        /// <summary>
+        /// Calculates the repair cost for a ship based on its current condition.
+        /// Returns (partsCost, estimatedTicks).
+        /// One part is required per 10 % of hull damage; 5 ticks per 1 % of hull damage.
+        /// Returns (0, 0) when the ship is null or undamaged.
+        /// </summary>
+        public static (int partsCost, int estimatedTicks) GetRepairCost(OwnedShipInstance ship)
+        {
+            if (ship == null || ship.conditionPct >= ShipSystem.DamageThresholdUndamaged)
+                return (0, 0);
+
+            float damage  = 100f - ship.conditionPct;
+            int   parts   = Mathf.CeilToInt(damage / 10f);
+            int   ticks   = Mathf.RoundToInt(damage * 5f);
+            return (parts, ticks);
+        }
+
+        /// <summary>
+        /// Begins a repair job on a damaged ship, setting its status to "repairing"
+        /// and firing <see cref="OnFleetChanged"/>.
+        /// Returns false (with a reason string) if the repair cannot start.
+        /// </summary>
+        public bool BeginRepair(string shipUid, StationState station, out string reason)
+        {
+            reason = null;
+
+            if (!station.ownedShips.TryGetValue(shipUid, out var ship))
+            {
+                reason = $"Ship '{shipUid}' not found in fleet.";
+                return false;
+            }
+
+            if (ship.damageState == ShipDamageState.Destroyed)
+            {
+                reason = $"Ship '{ship.name}' is destroyed and cannot be repaired.";
+                return false;
+            }
+
+            if (ship.conditionPct >= DamageThresholdUndamaged)
+            {
+                reason = $"Ship '{ship.name}' is not damaged.";
+                return false;
+            }
+
+            if (ship.status == "repairing")
+            {
+                reason = $"Ship '{ship.name}' is already being repaired.";
+                return false;
+            }
+
+            ship.status = "repairing";
+            station.LogEvent($"Repair job started on '{ship.name}' — condition: {ship.conditionPct:F0}%.");
+            OnFleetChanged?.Invoke();
+            return true;
+        }
+
         /// <summary>
         /// Per-tick update: resolve fleet missions that have completed.
         /// </summary>
