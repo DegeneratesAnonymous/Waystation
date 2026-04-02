@@ -111,6 +111,12 @@ namespace Waystation.UI
         // Tick counter for throttling map refreshes (every 5 ticks).
         private int _mapTickCounter;
 
+        // Fleet tab (UI-020)
+        private VisualElement           _fleetTabRoot;
+        private FleetSubPanelController _fleetSubPanel;
+        // Tick counter for throttling fleet refreshes (every 5 ticks).
+        private int _fleetTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -213,6 +219,12 @@ namespace Waystation.UI
 
             if (_gm?.Rooms != null)
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
+
+            if (_fleetSubPanel != null)
+                _fleetSubPanel.OnShipRowClicked -= OnFleetShipRowClicked;
+
+            if (_gm?.Fleet != null)
+                _gm.Fleet.OnFleetChanged -= OnFleetChanged;
 
             if (_gm?.Factions != null)
                 _gm.Factions.OnFactionRepThresholdCrossed -= OnFactionRepThresholdCrossed;
@@ -476,6 +488,10 @@ namespace Waystation.UI
             else if (tab == SidePanelController.Tab.Research)
             {
                 MountResearchPanel();
+            }
+            else if (tab == SidePanelController.Tab.Fleet)
+            {
+                MountFleetPanel();
             }
         }
 
@@ -897,6 +913,57 @@ namespace Waystation.UI
             _contentArea.Add(_eventLog);
         }
 
+        // ── Fleet tab mount (UI-020) ──────────────────────────────────────────
+
+        /// <summary>
+        /// Creates (once) and mounts the Fleet tab root.
+        /// Re-mounts if the panel was unmounted and remounted.
+        /// </summary>
+        private void MountFleetPanel()
+        {
+            if (_fleetTabRoot == null)
+            {
+                _fleetTabRoot = new VisualElement();
+                _fleetTabRoot.style.flexDirection = FlexDirection.Column;
+                _fleetTabRoot.style.flexGrow      = 1;
+                _fleetTabRoot.style.height        = Length.Percent(100);
+                _fleetTabRoot.style.overflow      = Overflow.Hidden;
+
+                _fleetSubPanel = new FleetSubPanelController();
+                _fleetSubPanel.style.flexGrow = 1;
+                _fleetSubPanel.style.height   = Length.Percent(100);
+                _fleetSubPanel.OnShipRowClicked += OnFleetShipRowClicked;
+                _fleetSubPanel.OnRescueDispatch  = OnFleetRescueDispatch;
+                _fleetTabRoot.Add(_fleetSubPanel);
+            }
+
+            _sidePanel.DrawerContentRoot.Add(_fleetTabRoot);
+
+            if (_gm?.Station != null)
+                _fleetSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+        }
+
+        private void OnFleetShipRowClicked(string shipUid)
+        {
+            // Ship Detail sub-panel is shown inline by FleetSubPanelController.
+            // Log for diagnostic purposes.
+            Debug.Log($"[WaystationHUDController] FleetShipRowClicked: {shipUid}");
+        }
+
+        private void OnFleetRescueDispatch(string shipUid)
+        {
+            // Dispatch sub-tab (WO-UI-021) is out of scope for this Work Order.
+            // Log for now so the callback path can be verified.
+            Debug.Log($"[WaystationHUDController] FleetRescueDispatch: {shipUid}");
+        }
+
+        private void OnFleetChanged()
+        {
+            bool fleetTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Fleet;
+            if (_fleetSubPanel != null && fleetTabActive && _gm?.Station != null)
+                _fleetSubPanel.Refresh(_gm.Station, _gm?.Fleet);
+        }
+
         // ── Update — sync placement state and mouse-over ──────────────────────
         private void Update()
         {
@@ -1047,6 +1114,18 @@ namespace Waystation.UI
                     _mapSubPanel.Refresh(station, _gm?.Map);
                 }
             }
+
+            // Refresh the fleet panel every 5 ticks to avoid GC churn.
+            bool fleetTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Fleet;
+            if (_fleetSubPanel != null && fleetTabActive)
+            {
+                _fleetTickCounter++;
+                if (_fleetTickCounter >= 5)
+                {
+                    _fleetTickCounter = 0;
+                    _fleetSubPanel.Refresh(station, _gm?.Fleet);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -1075,6 +1154,16 @@ namespace Waystation.UI
             {
                 _gm.Rooms.OnLayoutChanged -= OnRoomLayoutChanged;
                 _gm.Rooms.OnLayoutChanged += OnRoomLayoutChanged;
+            }
+
+            // Subscribe to ShipSystem.OnFleetChanged so the Fleet panel refreshes
+            // immediately when fleet state changes (ship dispatched, repair started, etc.).
+            // Unsubscribe first to guard against double-subscription across
+            // multiple OnGameLoaded calls.
+            if (_gm?.Fleet != null)
+            {
+                _gm.Fleet.OnFleetChanged -= OnFleetChanged;
+                _gm.Fleet.OnFleetChanged += OnFleetChanged;
             }
 
             // Subscribe to FactionSystem.OnFactionRepThresholdCrossed so the
@@ -1159,6 +1248,11 @@ namespace Waystation.UI
         private static void OpenFleetPanel(string shipUid)
         {
             if (_instance == null) return;
+
+            // Ensure the Fleet tab is open.
+            if (_instance._sidePanel?.ActiveTab != SidePanelController.Tab.Fleet)
+                _instance._sidePanel?.ActivateTab(SidePanelController.Tab.Fleet);
+
             Debug.Log($"[WaystationHUDController] OpenFleetPanel: {shipUid}");
         }
 
