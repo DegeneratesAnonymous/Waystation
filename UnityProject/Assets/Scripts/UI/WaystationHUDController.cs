@@ -159,6 +159,14 @@ namespace Waystation.UI
         private string _factionDetailPanelId;
         // Tick counter for throttling faction detail panel refreshes (every 5 ticks).
         private int _factionDetailTickCounter;
+        // Workbench contextual panel (UI-025)
+        private WorkbenchPanelController _workbenchPanel;
+        // Foundation uid currently shown in the workbench panel, or null when closed.
+        private string _workbenchPanelFoundationUid;
+        // Tick counter for throttling workbench panel refreshes (5 ticks when Queue
+        // tab is not active; every tick when the Queue tab is active so the progress
+        // bar decrements smoothly).
+        private int _workbenchPanelTickCounter;
 
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
@@ -281,6 +289,8 @@ namespace Waystation.UI
 
             if (_factionDetailPanel != null)
                 _factionDetailPanel.OnCloseRequested -= OnFactionDetailPanelClosed;
+            if (_workbenchPanel != null)
+                _workbenchPanel.OnCloseRequested -= OnWorkbenchPanelClosed;
 
             _networksSubPanel?.Detach();
 
@@ -1359,6 +1369,27 @@ namespace Waystation.UI
                 {
                     _factionDetailTickCounter = 0;
                     RefreshFactionDetailPanel(_factionDetailPanelId);
+            // Refresh the workbench panel while it is mounted.
+            // When the Queue tab is active, refresh every tick so the progress bar
+            // decrements smoothly.  For other tabs, throttle to every 5 ticks to
+            // avoid rebuilding the recipe/status tree unnecessarily.
+            if (_workbenchPanel != null && _workbenchPanel.parent != null &&
+                !string.IsNullOrEmpty(_workbenchPanelFoundationUid))
+            {
+                bool queueTabActive = _workbenchPanel.ActiveTab == "queue";
+                if (queueTabActive)
+                {
+                    _workbenchPanelTickCounter = 0;
+                    RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+                }
+                else
+                {
+                    _workbenchPanelTickCounter++;
+                    if (_workbenchPanelTickCounter >= 5)
+                    {
+                        _workbenchPanelTickCounter = 0;
+                        RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+                    }
                 }
             }
         }
@@ -1530,8 +1561,53 @@ namespace Waystation.UI
 
         private void OnRoomPanelWorkbenchClicked(string foundationUid)
         {
-            // Placeholder: opens the Workbench contextual panel (future work item).
-            Debug.Log($"[WaystationHUDController] OpenWorkbenchPanel: {foundationUid}");
+            OpenWorkbenchPanelInternal(foundationUid);
+        }
+
+        // ── Workbench contextual panel (UI-025) ───────────────────────────────
+
+        /// <summary>
+        /// Opens or refreshes the Workbench contextual panel for the given foundation uid.
+        /// </summary>
+        private void OpenWorkbenchPanelInternal(string foundationUid)
+        {
+            if (string.IsNullOrEmpty(foundationUid)) return;
+            _workbenchPanelFoundationUid = foundationUid;
+            MountWorkbenchPanel();
+        }
+
+        private void MountWorkbenchPanel()
+        {
+            if (string.IsNullOrEmpty(_workbenchPanelFoundationUid)) return;
+
+            if (_workbenchPanel == null)
+            {
+                _workbenchPanel = new WorkbenchPanelController();
+                _workbenchPanel.OnCloseRequested += OnWorkbenchPanelClosed;
+            }
+
+            if (_workbenchPanel.parent == null)
+                _contentArea.Add(_workbenchPanel);
+
+            RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+        }
+
+        private void RefreshWorkbenchPanel(string foundationUid)
+        {
+            if (_workbenchPanel == null || _gm?.Station == null) return;
+            _workbenchPanel.Refresh(
+                foundationUid,
+                _gm.Station,
+                _gm.Registry,
+                _gm.Crafting,
+                _gm.Inventory);
+        }
+
+        private void OnWorkbenchPanelClosed()
+        {
+            _workbenchPanelFoundationUid = null;
+            if (_workbenchPanel?.parent != null)
+                _contentArea.Remove(_workbenchPanel);
         }
 
         // ── Visiting Ship contextual panel (UI-026) ───────────────────────────
