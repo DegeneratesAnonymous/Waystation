@@ -371,6 +371,65 @@ namespace Waystation.Systems
 
         // ── Queries ───────────────────────────────────────────────────────────
 
+        /// <summary>All node definitions in <paramref name="branch"/>, regardless of state.
+        /// Used by the Research UI to build the graph layout.
+        /// Returned in a stable row-major order (gridY → gridX → id) so the graph
+        /// renders consistently across runs regardless of registry dictionary ordering.</summary>
+        public ResearchNodeDefinition[] GetBranchData(ResearchBranch branch)
+        {
+            var list = new List<ResearchNodeDefinition>();
+            foreach (var node in _registry.ResearchNodes.Values)
+                if (node.branch == branch) list.Add(node);
+            list.Sort((a, b) =>
+            {
+                int cmp = a.gridY.CompareTo(b.gridY);
+                if (cmp != 0) return cmp;
+                cmp = a.gridX.CompareTo(b.gridX);
+                if (cmp != 0) return cmp;
+                return string.Compare(a.id, b.id, StringComparison.Ordinal);
+            });
+            return list.ToArray();
+        }
+
+        /// <summary>
+        /// NPCs in <paramref name="station"/> that are currently assigned to a research job
+        /// for <paramref name="branch"/>.  Used by the Research UI to display active
+        /// assignment indicators on the branch terminal node.
+        /// Returned sorted by name then uid so the indicator strip is stable across refreshes.
+        /// </summary>
+        public NPCInstance[] GetActiveAssignments(ResearchBranch branch, StationState station)
+        {
+            if (station == null) return Array.Empty<NPCInstance>();
+            var list = new List<NPCInstance>();
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew() || npc.currentJobId == null) continue;
+                if (JobBranch.TryGetValue(npc.currentJobId, out var b) && b == branch)
+                    list.Add(npc);
+            }
+            list.Sort((a, b) =>
+            {
+                var nameCompare = string.Compare(a?.name, b?.name, StringComparison.Ordinal);
+                if (nameCompare != 0) return nameCompare;
+                return string.Compare(a?.uid, b?.uid, StringComparison.Ordinal);
+            });
+            return list.ToArray();
+        }
+
+        /// <summary>
+        /// Returns true when the datachip produced by unlocking <paramref name="nodeId"/>
+        /// is physically present in a Data Storage Server and its unlock tags are active.
+        /// Returns false when the chip has been removed from server storage.
+        /// </summary>
+        public bool IsNodeChipActive(string nodeId, StationState station)
+        {
+            if (station?.research == null) return false;
+            if (!_registry.ResearchNodes.TryGetValue(nodeId, out var node)) return false;
+            foreach (var tag in node.unlockTags)
+                if (station.research.appliedUnlockTags.Contains(tag)) return true;
+            return false;
+        }
+
         /// <summary>Nodes in <paramref name="branch"/> that are not yet unlocked but whose
         /// prerequisites are all met (i.e. ready to research).</summary>
         public ResearchNodeDefinition[] GetAvailableNodes(ResearchBranch branch, StationState station)

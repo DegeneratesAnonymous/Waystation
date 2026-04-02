@@ -1232,6 +1232,10 @@ namespace Waystation.Models
         public int            pointCost    = 100;
         public List<string>   prerequisites = new List<string>();
         public List<string>   unlockTags    = new List<string>();
+        /// <summary>Column in the 2-D grid used to position this node in the Research graph.</summary>
+        public int            gridX        = 0;
+        /// <summary>Row in the 2-D grid used to position this node in the Research graph.</summary>
+        public int            gridY        = 0;
 
         public static ResearchNodeDefinition FromDict(Dictionary<string, object> raw)
         {
@@ -1241,6 +1245,8 @@ namespace Waystation.Models
                 displayName = raw.GetString("display_name", raw.GetString("id")),
                 description = raw.GetString("description", ""),
                 pointCost   = raw.GetInt("point_cost", 100),
+                gridX       = raw.GetInt("grid_x", 0),
+                gridY       = raw.GetInt("grid_y", 0),
             };
             b.branch    = Enum.TryParse<ResearchBranch>(   raw.GetString("branch"),    out var br) ? br : ResearchBranch.Science;
             b.subbranch = Enum.TryParse<ResearchSubbranch>(raw.GetString("subbranch"), out var sr) ? sr : ResearchSubbranch.Physics;
