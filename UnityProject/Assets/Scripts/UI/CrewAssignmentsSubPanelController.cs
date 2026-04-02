@@ -180,6 +180,8 @@ namespace Waystation.UI
         private readonly Dictionary<string, TaskGroup> _groups =
             new Dictionary<string, TaskGroup>(StringComparer.Ordinal);
 
+        private readonly Label _summaryLabel;
+
         private StationState _station;
         private JobSystem    _jobSystem;
 
@@ -195,6 +197,19 @@ namespace Waystation.UI
             style.paddingTop    = 8;
             style.paddingBottom = 8;
             style.overflow      = Overflow.Hidden;
+
+            var sectionLabel = new Label("TASK GROUPS");
+            sectionLabel.style.fontSize = 9;
+            sectionLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            sectionLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sectionLabel.style.marginBottom = 3;
+            Add(sectionLabel);
+
+            _summaryLabel = new Label("No assignments");
+            _summaryLabel.style.fontSize    = 9;
+            _summaryLabel.style.color       = new Color(0.34f, 0.47f, 0.63f, 1f);
+            _summaryLabel.style.marginBottom = 6;
+            Add(_summaryLabel);
 
             // Wrap all groups in a scrollable container.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -247,6 +262,9 @@ namespace Waystation.UI
                 bucket.Add(npc);
             }
 
+            int totalAssigned = 0;
+            int idleCount = 0;
+
             foreach (var taskType in TaskTypeOrder)
             {
                 assignments.TryGetValue(taskType, out var npcs);
@@ -259,6 +277,8 @@ namespace Waystation.UI
                 });
 
                 int count = npcs?.Count ?? 0;
+                totalAssigned += count;
+                if (taskType == "Idle") idleCount = count;
 
                 var group = _groups[taskType];
                 group.SetCount(count);
@@ -270,6 +290,8 @@ namespace Waystation.UI
                         group.Body.Add(BuildNpcRow(npc, station, jobSystem));
                 }
             }
+
+            _summaryLabel.text = $"{totalAssigned} crew tracked  |  {idleCount} idle";
         }
 
         // ── Row builder ────────────────────────────────────────────────────────
@@ -285,6 +307,7 @@ namespace Waystation.UI
             row.style.paddingLeft    = 6;
             row.style.paddingRight   = 6;
             row.style.marginBottom   = 1;
+            row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f);
             row.style.borderBottomWidth = 1;
             row.style.borderBottomColor = new Color(0.25f, 0.28f, 0.35f, 0.4f);
 
@@ -337,6 +360,11 @@ namespace Waystation.UI
                 Debug.Log($"[CrewAssignmentsPanel] NPC row clicked: {capturedUid}");
                 OnCrewRowClicked?.Invoke(capturedUid);
             });
+
+            row.RegisterCallback<PointerEnterEvent>(_ =>
+                row.style.backgroundColor = new Color(0.09f, 0.12f, 0.18f, 0.9f));
+            row.RegisterCallback<PointerLeaveEvent>(_ =>
+                row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f));
 
             return row;
         }

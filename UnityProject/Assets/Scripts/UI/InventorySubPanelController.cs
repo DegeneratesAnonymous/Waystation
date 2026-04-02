@@ -66,6 +66,8 @@ namespace Waystation.UI
 
         private readonly VisualElement _filterStrip;
         private readonly VisualElement _sortStrip;
+        private readonly Label         _summaryLabel;
+        private readonly VisualElement _columnHeader;
         private readonly VisualElement _itemList;
         private readonly Label         _emptyLabel;
 
@@ -104,6 +106,13 @@ namespace Waystation.UI
             style.overflow      = Overflow.Hidden;
 
             // ── Filter chip strip ──────────────────────────────────────────────
+            var filterLabel = new Label("CATEGORY FILTER");
+            filterLabel.style.fontSize = 9;
+            filterLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            filterLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            filterLabel.style.marginBottom = 3;
+            Add(filterLabel);
+
             _filterStrip = new VisualElement();
             _filterStrip.AddToClassList(FilterStripClass);
             _filterStrip.style.flexDirection = FlexDirection.Row;
@@ -112,6 +121,13 @@ namespace Waystation.UI
             Add(_filterStrip);
 
             // ── Sort strip ─────────────────────────────────────────────────────
+            var sortLabel = new Label("SORT");
+            sortLabel.style.fontSize = 9;
+            sortLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            sortLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sortLabel.style.marginBottom = 3;
+            Add(sortLabel);
+
             _sortStrip = new VisualElement();
             _sortStrip.AddToClassList(SortStripClass);
             _sortStrip.style.flexDirection = FlexDirection.Row;
@@ -122,6 +138,15 @@ namespace Waystation.UI
             AddSortButton(SortMode.Weight,   "WEIGHT");
             AddSortButton(SortMode.Category, "CATEGORY");
             UpdateSortButtonStyles();
+
+            _summaryLabel = new Label("0 item types");
+            _summaryLabel.style.fontSize    = 9;
+            _summaryLabel.style.color       = new Color(0.34f, 0.47f, 0.63f, 1f);
+            _summaryLabel.style.marginBottom = 4;
+            Add(_summaryLabel);
+
+            _columnHeader = BuildColumnHeader();
+            Add(_columnHeader);
 
             // ── Item list (scrollable) ─────────────────────────────────────────
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -333,9 +358,10 @@ namespace Waystation.UI
         {
             var wrapper = new VisualElement();
             wrapper.AddToClassList(RowClass);
-            wrapper.userData = data.itemType;  // used by ApplyFilter
+            wrapper.userData = data;  // used by ApplyFilter (category + totalQuantity)
             wrapper.style.flexDirection  = FlexDirection.Column;
             wrapper.style.marginBottom   = 2;
+            wrapper.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f);
             wrapper.style.borderBottomWidth = 1;
             wrapper.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 0.5f);
 
@@ -440,19 +466,77 @@ namespace Waystation.UI
                     ? DisplayStyle.Flex : DisplayStyle.None;
             });
 
+            header.RegisterCallback<PointerEnterEvent>(_ =>
+                wrapper.style.backgroundColor = new Color(0.09f, 0.12f, 0.18f, 0.9f));
+            header.RegisterCallback<PointerLeaveEvent>(_ =>
+                wrapper.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f));
+
             return wrapper;
+        }
+
+        private VisualElement BuildColumnHeader()
+        {
+            var header = new VisualElement();
+            header.style.flexDirection  = FlexDirection.Row;
+            header.style.alignItems     = Align.Center;
+            header.style.paddingLeft    = 6;
+            header.style.paddingRight   = 6;
+            header.style.paddingBottom  = 4;
+            header.style.borderBottomWidth = 1;
+            header.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f);
+            header.style.marginBottom   = 2;
+
+            var name = new Label("ITEM");
+            name.style.flexGrow = 1;
+            name.style.fontSize = 9;
+            name.style.color    = new Color(0.39f, 0.75f, 1.00f, 1f);
+            header.Add(name);
+
+            var type = new Label("TYPE");
+            type.style.fontSize   = 9;
+            type.style.color      = new Color(0.39f, 0.75f, 1.00f, 1f);
+            type.style.minWidth   = 64;
+            type.style.unityTextAlign = TextAnchor.MiddleCenter;
+            header.Add(type);
+
+            var qty = new Label("QTY");
+            qty.style.fontSize    = 9;
+            qty.style.color       = new Color(0.39f, 0.75f, 1.00f, 1f);
+            qty.style.minWidth    = 40;
+            qty.style.unityTextAlign = TextAnchor.MiddleRight;
+            header.Add(qty);
+
+            var weight = new Label("WEIGHT");
+            weight.style.fontSize    = 9;
+            weight.style.color       = new Color(0.39f, 0.75f, 1.00f, 1f);
+            weight.style.minWidth    = 56;
+            weight.style.unityTextAlign = TextAnchor.MiddleRight;
+            header.Add(weight);
+
+            return header;
         }
 
         private void ApplyFilter()
         {
+            int visibleCount = 0;
+            int totalQty = 0;
             foreach (var child in _itemList.Children())
             {
                 if (!child.ClassListContains(RowClass)) continue;
 
                 bool visible = _activeFilter == null ||
-                               (child.userData is string cat && cat == _activeFilter);
+                               (child.userData is CargoItemRow rowData && rowData.itemType == _activeFilter);
                 child.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+
+                if (!visible) continue;
+                visibleCount++;
+                if (child.userData is CargoItemRow r)
+                    totalQty += r.totalQuantity;
             }
+
+            _summaryLabel.text = _activeFilter == null
+                ? $"{visibleCount} item types  |  {totalQty} total units"
+                : $"{visibleCount} filtered types  |  {totalQty} total units";
         }
     }
 }

@@ -104,6 +104,7 @@ namespace Waystation.UI
         // ── UI references ─────────────────────────────────────────────────────
 
         private ListView _listView;
+        private Label _summaryLabel;
 
         // ── Constructor ───────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ namespace Waystation.UI
 
             _listView.itemsSource = _visibleNpcs;
             _listView.RefreshItems();
+            UpdateSummaryLabel();
         }
 
         // ── Slot cycling ──────────────────────────────────────────────────────
@@ -185,6 +187,7 @@ namespace Waystation.UI
             var toolbar = new VisualElement();
             toolbar.AddToClassList(ToolbarClass);
             toolbar.style.flexDirection = FlexDirection.Row;
+            toolbar.style.flexWrap      = Wrap.Wrap;
             toolbar.style.alignItems    = Align.Center;
             toolbar.style.paddingBottom = 6;
             toolbar.style.paddingTop    = 2;
@@ -198,7 +201,11 @@ namespace Waystation.UI
             var dropdown = new DropdownField(new List<string>(Templates), 0);
             dropdown.style.width       = 110;
             dropdown.style.marginRight = 8;
-            dropdown.RegisterValueChangedCallback(evt => _selectedTemplate = evt.newValue);
+            dropdown.RegisterValueChangedCallback(evt =>
+            {
+                _selectedTemplate = evt.newValue;
+                UpdateSummaryLabel();
+            });
             toolbar.Add(dropdown);
 
             var applyBtn = new Button(OnApplyTemplate) { text = "Apply" };
@@ -208,22 +215,44 @@ namespace Waystation.UI
             applyBtn.style.paddingBottom = 3;
             toolbar.Add(applyBtn);
 
+            _summaryLabel = new Label("0 crew | 0 selected");
+            _summaryLabel.style.fontSize = 9;
+            _summaryLabel.style.color = new Color(0.34f, 0.47f, 0.63f, 1f);
+            _summaryLabel.style.marginLeft = 8;
+            toolbar.Add(_summaryLabel);
+
             Add(toolbar);
         }
 
         private void BuildHeaderRow()
         {
+            var gridLabel = new Label("SCHEDULE GRID");
+            gridLabel.style.fontSize = 9;
+            gridLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            gridLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            gridLabel.style.marginBottom = 3;
+            Add(gridLabel);
+
             var header = new VisualElement();
             header.name = "schedule-header";
             header.AddToClassList(HeaderRowClass);
             header.style.flexDirection = FlexDirection.Row;
             header.style.alignItems    = Align.Center;
             header.style.marginBottom  = 2;
+            header.style.paddingBottom = 4;
+            header.style.borderBottomWidth = 1;
+            header.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f);
 
             // Blank spacer aligned with the left NPC-info column.
             var blank = new VisualElement();
             blank.style.width     = LeftColWidth;
             blank.style.flexShrink = 0;
+            var npcLabel = new Label("CREW");
+            npcLabel.style.fontSize = 9;
+            npcLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            npcLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            npcLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+            blank.Add(npcLabel);
             header.Add(blank);
 
             for (int t = 0; t < TickCount; t++)
@@ -285,6 +314,7 @@ namespace Waystation.UI
             row.style.alignItems    = Align.Center;
             row.style.height        = RowHeight;
             row.style.overflow      = Overflow.Hidden;
+            row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f);
 
             // ── Left NPC-info column ─────────────────────────────────────────
             var infoCol = new VisualElement();
@@ -471,6 +501,14 @@ namespace Waystation.UI
                 _selected.Add(uid);
             else
                 _selected.Remove(uid);
+
+            UpdateSummaryLabel();
+        }
+
+        private void UpdateSummaryLabel()
+        {
+            if (_summaryLabel == null) return;
+            _summaryLabel.text = $"{_visibleNpcs.Count} crew | {_selected.Count} selected | {_selectedTemplate}";
         }
 
         private NPCInstance FindNpc(string uid)

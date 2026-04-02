@@ -551,6 +551,14 @@ namespace Waystation.UI
 
         private void OnSidePanelTabChanged(SidePanelController.Tab? tab)
         {
+            // Research is rendered as a fullscreen overlay (like Map). Remove it
+            // whenever any other tab (or no tab) becomes active.
+            if (tab != SidePanelController.Tab.Research &&
+                _researchTabRoot != null && _researchTabRoot.parent != null)
+            {
+                _contentArea.Remove(_researchTabRoot);
+            }
+
             // Clear all drawer content before mounting the selected tab's panel.
             // This prevents content from stacking when multiple tabs are implemented.
             _sidePanel.DrawerContentRoot.Clear();
@@ -967,10 +975,16 @@ namespace Waystation.UI
             if (_researchTabRoot == null)
             {
                 _researchTabRoot = new VisualElement();
+                _researchTabRoot.style.position      = Position.Absolute;
+                _researchTabRoot.style.top           = 0;
+                _researchTabRoot.style.left          = 0;
+                _researchTabRoot.style.right         = 52; // keep side icon strip visible
+                _researchTabRoot.style.bottom        = 32; // keep event-log strip visible
                 _researchTabRoot.style.flexDirection = FlexDirection.Column;
-                _researchTabRoot.style.flexGrow      = 1;
-                _researchTabRoot.style.height        = Length.Percent(100);
                 _researchTabRoot.style.overflow      = Overflow.Hidden;
+                _researchTabRoot.style.backgroundColor = new Color(0.05f, 0.07f, 0.12f, 0.97f);
+                _researchTabRoot.style.borderLeftWidth = 1;
+                _researchTabRoot.style.borderLeftColor = new Color(0.13f, 0.17f, 0.25f, 1f);
 
                 // The research sub-panel handles its own internal branch tabs so
                 // we mount it once here and drive it via Refresh().
@@ -980,7 +994,8 @@ namespace Waystation.UI
                 _researchTabRoot.Add(_researchSubPanel);
             }
 
-            _sidePanel.DrawerContentRoot.Add(_researchTabRoot);
+            if (_researchTabRoot.parent == null)
+                _contentArea.Add(_researchTabRoot);
 
             // Refresh immediately with current game state.
             if (_gm?.Station != null)
@@ -1369,6 +1384,9 @@ namespace Waystation.UI
                 {
                     _factionDetailTickCounter = 0;
                     RefreshFactionDetailPanel(_factionDetailPanelId);
+                }
+            }
+
             // Refresh the workbench panel while it is mounted.
             // When the Queue tab is active, refresh every tick so the progress bar
             // decrements smoothly.  For other tabs, throttle to every 5 ticks to

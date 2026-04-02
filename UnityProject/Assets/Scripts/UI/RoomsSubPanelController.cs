@@ -61,6 +61,7 @@ namespace Waystation.UI
         // ── Child elements ─────────────────────────────────────────────────────
 
         private readonly VisualElement _filterStrip;
+        private readonly Label         _summaryLabel;
         private readonly VisualElement _roomList;
         private readonly Label         _emptyLabel;
 
@@ -91,12 +92,32 @@ namespace Waystation.UI
             style.overflow      = Overflow.Hidden;
 
             // ── Filter chip strip ──────────────────────────────────────────────
+            var filterLabel = new Label("ROOM FILTER");
+            filterLabel.style.fontSize = 9;
+            filterLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            filterLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            filterLabel.style.marginBottom = 3;
+            Add(filterLabel);
+
             _filterStrip = new VisualElement();
             _filterStrip.AddToClassList(FilterStripClass);
             _filterStrip.style.flexDirection = FlexDirection.Row;
             _filterStrip.style.flexWrap      = Wrap.Wrap;
             _filterStrip.style.marginBottom  = 6;
             Add(_filterStrip);
+
+            _summaryLabel = new Label("0 rooms");
+            _summaryLabel.style.fontSize    = 9;
+            _summaryLabel.style.color       = new Color(0.34f, 0.47f, 0.63f, 1f);
+            _summaryLabel.style.marginBottom = 6;
+            Add(_summaryLabel);
+
+            var listLabel = new Label("ROOM LIST");
+            listLabel.style.fontSize = 9;
+            listLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            listLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            listLabel.style.marginBottom = 3;
+            Add(listLabel);
 
             // ── Room list (scrollable) ─────────────────────────────────────────
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -230,6 +251,7 @@ namespace Waystation.UI
             row.style.paddingLeft       = 6;
             row.style.paddingRight      = 6;
             row.style.marginBottom      = 2;
+            row.style.backgroundColor   = new Color(0.06f, 0.08f, 0.12f, 0.65f);
             row.style.borderBottomWidth = 1;
             row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f); // border-dark
 
@@ -288,11 +310,17 @@ namespace Waystation.UI
                 OnRoomRowClicked?.Invoke(capturedRoomKey);
             });
 
+            row.RegisterCallback<PointerEnterEvent>(_ =>
+                row.style.backgroundColor = new Color(0.09f, 0.12f, 0.18f, 0.9f));
+            row.RegisterCallback<PointerLeaveEvent>(_ =>
+                row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f));
+
             return row;
         }
 
         private void ApplyFilter()
         {
+            int visibleCount = 0;
             foreach (var child in _roomList.Children())
             {
                 // Skip non-row elements (e.g. the empty label).
@@ -301,7 +329,12 @@ namespace Waystation.UI
                 bool visible = _activeFilter == null ||
                                (child.userData is string typeId && typeId == _activeFilter);
                 child.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+                if (visible) visibleCount++;
             }
+
+            _summaryLabel.text = _activeFilter == null
+                ? $"{_rooms.Count} room{(_rooms.Count == 1 ? "" : "s")}" 
+                : $"{visibleCount} of {_rooms.Count} rooms";
         }
     }
 }

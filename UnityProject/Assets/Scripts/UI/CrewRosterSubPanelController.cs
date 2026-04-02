@@ -84,6 +84,8 @@ namespace Waystation.UI
         private readonly DropdownField _moodDropdown;
         private readonly DropdownField _healthDropdown;
         private readonly VisualElement _sortStrip;
+        private readonly Label         _summaryLabel;
+        private readonly VisualElement _columnHeader;
         private readonly VisualElement _crewList;
         private readonly Label         _emptyLabel;
 
@@ -118,6 +120,13 @@ namespace Waystation.UI
             style.overflow      = Overflow.Hidden;
 
             // ── Filter row ─────────────────────────────────────────────────────
+            var filterLabel = new Label("FILTERS");
+            filterLabel.style.fontSize = 9;
+            filterLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            filterLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            filterLabel.style.marginBottom = 3;
+            Add(filterLabel);
+
             _filterRow = new VisualElement();
             _filterRow.AddToClassList(FilterRowClass);
             _filterRow.style.flexDirection  = FlexDirection.Row;
@@ -160,6 +169,13 @@ namespace Waystation.UI
             Add(_filterRow);
 
             // ── Sort strip ─────────────────────────────────────────────────────
+            var sortLabel = new Label("SORT");
+            sortLabel.style.fontSize = 9;
+            sortLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            sortLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sortLabel.style.marginBottom = 3;
+            Add(sortLabel);
+
             _sortStrip = new VisualElement();
             _sortStrip.AddToClassList(SortStripClass);
             _sortStrip.style.flexDirection = FlexDirection.Row;
@@ -178,6 +194,15 @@ namespace Waystation.UI
             }
             UpdateSortButtonStyles();
             Add(_sortStrip);
+
+            _summaryLabel = new Label("0 crew");
+            _summaryLabel.style.fontSize    = 9;
+            _summaryLabel.style.color       = new Color(0.34f, 0.47f, 0.63f, 1f);
+            _summaryLabel.style.marginBottom = 4;
+            Add(_summaryLabel);
+
+            _columnHeader = BuildColumnHeader();
+            Add(_columnHeader);
 
             // ── Crew list (scrollable) ─────────────────────────────────────────
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -293,6 +318,41 @@ namespace Waystation.UI
             ApplyFilterAndSort();
         }
 
+        private VisualElement BuildColumnHeader()
+        {
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems    = Align.Center;
+            header.style.paddingLeft   = 6;
+            header.style.paddingRight  = 6;
+            header.style.paddingBottom = 4;
+            header.style.borderBottomWidth = 1;
+            header.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f);
+            header.style.marginBottom  = 2;
+
+            var name = new Label("NAME / ACTIVITY");
+            name.style.flexGrow = 1;
+            name.style.fontSize = 9;
+            name.style.color    = new Color(0.39f, 0.75f, 1.00f, 1f);
+            header.Add(name);
+
+            var mood = new Label("MOOD");
+            mood.style.minWidth = 26;
+            mood.style.fontSize = 9;
+            mood.style.color    = new Color(0.39f, 0.75f, 1.00f, 1f);
+            mood.style.unityTextAlign = TextAnchor.MiddleCenter;
+            header.Add(mood);
+
+            var health = new Label("HP");
+            health.style.minWidth = 16;
+            health.style.fontSize = 9;
+            health.style.color    = new Color(0.39f, 0.75f, 1.00f, 1f);
+            health.style.unityTextAlign = TextAnchor.MiddleCenter;
+            header.Add(health);
+
+            return header;
+        }
+
         private VisualElement BuildCrewRow(NPCInstance npc)
         {
             var row = new VisualElement();
@@ -303,6 +363,7 @@ namespace Waystation.UI
             row.style.paddingBottom  = 4;
             row.style.paddingRight   = 6;
             row.style.marginBottom   = 2;
+            row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f);
             row.style.borderBottomWidth = 1;
             row.style.borderBottomColor = new Color(0.3f, 0.3f, 0.35f, 0.5f);
 
@@ -394,6 +455,11 @@ namespace Waystation.UI
                 OnCrewRowClicked?.Invoke(capturedUid);
             });
 
+            row.RegisterCallback<PointerEnterEvent>(_ =>
+                row.style.backgroundColor = new Color(0.09f, 0.12f, 0.18f, 0.9f));
+            row.RegisterCallback<PointerLeaveEvent>(_ =>
+                row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f));
+
             return row;
         }
 
@@ -421,9 +487,14 @@ namespace Waystation.UI
             _crewList.Clear();
             if (filtered.Count == 0)
             {
+                _summaryLabel.text = $"0 of {_crew.Count} crew";
                 _crewList.Add(_emptyLabel);
                 return;
             }
+
+            _summaryLabel.text = filtered.Count == _crew.Count
+                ? $"{filtered.Count} crew"
+                : $"{filtered.Count} of {_crew.Count} crew";
 
             foreach (var npc in filtered)
                 _crewList.Add(BuildCrewRow(npc));

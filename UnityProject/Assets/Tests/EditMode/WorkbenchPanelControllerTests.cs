@@ -362,14 +362,14 @@ namespace Waystation.Tests
         public void Refresh_NullState_DoesNotThrow()
         {
             Assert.DoesNotThrow(() =>
-                _panel.Refresh(null, null, null, null, null, null));
+                _panel.Refresh(null, null, null, null, null));
         }
 
         [Test]
         public void Refresh_ValidFoundationUid_NullDependencies_DoesNotThrow()
         {
             Assert.DoesNotThrow(() =>
-                _panel.Refresh("uid-1", null, null, null, null, null));
+                _panel.Refresh("uid-1", null, null, null, null));
         }
     }
 
@@ -398,7 +398,7 @@ namespace Waystation.Tests
         {
             // The test recipe has an unlock tag that is NOT active — it should be locked.
             var panel = new WorkbenchPanelController();
-            panel.Refresh(_bench.uid, _station, _registry, null, _crafting, _inventory);
+            panel.Refresh(_bench.uid, _station, _registry, _crafting, _inventory);
             panel.SelectTab("recipes");
 
             // Find the recipe rows.  Locked rows get pickingMode == Ignore.
@@ -425,7 +425,7 @@ namespace Waystation.Tests
             _station.SetTag(CraftingTestHelpers.UnlockTag);
 
             var panel = new WorkbenchPanelController();
-            panel.Refresh(_bench.uid, _station, _registry, null, _crafting, _inventory);
+            panel.Refresh(_bench.uid, _station, _registry, _crafting, _inventory);
             panel.SelectTab("recipes");
 
             var rows = panel.Query<VisualElement>(className: "ws-workbench-panel__recipe-row").ToList();

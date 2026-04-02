@@ -250,5 +250,13 @@ namespace Waystation.Core
         /// When false, SkillSystem falls back to the WO-NPC-004 flat-skill behaviour.
         /// </summary>
         public static bool UseNewSkillSystem = false;
+
+        /// <summary>
+        /// Dev-only telescope mode: bypasses all research/equipment requirements for
+        /// map exploration, sector unlocks, and orbital visualization.
+        /// When true, sectors can be expanded freely regardless of exploration points
+        /// or antenna research. Has no effect on saves or normal progression systems.
+        /// </summary>
+        public static bool TelescopeMode = false;
     }
 }

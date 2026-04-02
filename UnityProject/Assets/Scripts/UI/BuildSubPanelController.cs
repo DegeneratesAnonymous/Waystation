@@ -113,6 +113,9 @@ namespace Waystation.UI
         private readonly VisualElement _itemList;
         private readonly VisualElement _queueSection;
         private readonly Label         _queueEmptyLabel;
+        private readonly VisualElement _hoverDetailCard;
+        private readonly Label         _hoverTitleLabel;
+        private readonly Label         _hoverBodyLabel;
 
         // ── Per-category button references ─────────────────────────────────────
         private readonly Dictionary<string, Button> _catButtons =
@@ -124,6 +127,7 @@ namespace Waystation.UI
 
         // ── State ──────────────────────────────────────────────────────────────
         private string _activeCategory;
+        private ContentRegistry _registry;
 
         // ── Constructor ────────────────────────────────────────────────────────
 
@@ -153,10 +157,33 @@ namespace Waystation.UI
                 btn.AddToClassList("ws-build-panel__cat-btn");
                 btn.text = label;
                 btn.style.flexGrow    = 1;
+                btn.style.flexBasis   = 0;
+                btn.style.minWidth    = 94;
+                btn.style.minHeight   = 30;
                 btn.style.marginRight = 2;
                 btn.style.marginBottom = 2;
+                btn.style.paddingTop = 5;
+                btn.style.paddingBottom = 5;
+                btn.style.backgroundColor = new Color(0.10f, 0.14f, 0.20f, 0.95f);
+                btn.style.borderTopWidth = 1;
+                btn.style.borderRightWidth = 1;
+                btn.style.borderBottomWidth = 1;
+                btn.style.borderLeftWidth = 1;
+                btn.style.borderTopColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                btn.style.borderRightColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                btn.style.borderBottomColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                btn.style.borderLeftColor = new Color(0.16f, 0.22f, 0.32f, 1f);
                 string catId = id;  // capture for lambda
                 btn.RegisterCallback<ClickEvent>(_ => OnCategoryClicked(catId));
+                btn.RegisterCallback<PointerEnterEvent>(_ =>
+                    btn.style.backgroundColor = new Color(0.14f, 0.20f, 0.30f, 0.96f));
+                btn.RegisterCallback<PointerLeaveEvent>(_ =>
+                {
+                    bool isActive = _activeCategory == catId;
+                    btn.style.backgroundColor = isActive
+                        ? new Color(0.12f, 0.24f, 0.38f, 0.98f)
+                        : new Color(0.10f, 0.14f, 0.20f, 0.95f);
+                });
                 _catStrip.Add(btn);
                 _catButtons[id] = btn;
             }
@@ -171,6 +198,41 @@ namespace Waystation.UI
             _itemList = itemScroll.contentContainer;
             _itemList.AddToClassList("ws-build-panel__item-list");
             _itemList.style.flexDirection = FlexDirection.Column;
+
+            // Hover detail card (appears after a 2s hover over a buildable row).
+            _hoverDetailCard = new VisualElement();
+            _hoverDetailCard.style.position = Position.Absolute;
+            _hoverDetailCard.style.right = 8;
+            _hoverDetailCard.style.top = 56;
+            _hoverDetailCard.style.width = 260;
+            _hoverDetailCard.style.paddingLeft = 8;
+            _hoverDetailCard.style.paddingRight = 8;
+            _hoverDetailCard.style.paddingTop = 8;
+            _hoverDetailCard.style.paddingBottom = 8;
+            _hoverDetailCard.style.backgroundColor = new Color(0.05f, 0.08f, 0.13f, 0.96f);
+            _hoverDetailCard.style.borderTopWidth = 1;
+            _hoverDetailCard.style.borderRightWidth = 1;
+            _hoverDetailCard.style.borderBottomWidth = 1;
+            _hoverDetailCard.style.borderLeftWidth = 1;
+            _hoverDetailCard.style.borderTopColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _hoverDetailCard.style.borderRightColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _hoverDetailCard.style.borderBottomColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _hoverDetailCard.style.borderLeftColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _hoverDetailCard.style.display = DisplayStyle.None;
+
+            _hoverTitleLabel = new Label("BUILDABLE");
+            _hoverTitleLabel.style.fontSize = 10;
+            _hoverTitleLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            _hoverTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _hoverTitleLabel.style.marginBottom = 4;
+            _hoverDetailCard.Add(_hoverTitleLabel);
+
+            _hoverBodyLabel = new Label("");
+            _hoverBodyLabel.style.fontSize = 10;
+            _hoverBodyLabel.style.color = new Color(0.78f, 0.84f, 0.94f, 1f);
+            _hoverBodyLabel.style.whiteSpace = WhiteSpace.Normal;
+            _hoverDetailCard.Add(_hoverBodyLabel);
+            Add(_hoverDetailCard);
 
             // ── Queue section ──────────────────────────────────────────────────
             var queueHeader = BuildSectionHeader("CONSTRUCTION QUEUE");
@@ -200,6 +262,7 @@ namespace Waystation.UI
         public void Refresh(StationState station, BuildingSystem building,
                             InventorySystem inventory, ContentRegistry registry)
         {
+            _registry = registry;
             if (station == null || building == null) return;
             RefreshQueue(station, building, inventory, registry);
         }
@@ -210,25 +273,40 @@ namespace Waystation.UI
         {
             // Deselect all buttons
             foreach (var kv in _catButtons)
+            {
                 kv.Value.EnableInClassList("ws-build-panel__cat-btn--active", false);
+                kv.Value.style.backgroundColor = new Color(0.10f, 0.14f, 0.20f, 0.95f);
+                kv.Value.style.borderTopColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                kv.Value.style.borderRightColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                kv.Value.style.borderBottomColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                kv.Value.style.borderLeftColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+            }
 
             if (_activeCategory == categoryId)
             {
                 // Toggle off — collapse item list
                 _activeCategory = null;
                 _itemList.Clear();
+                HideBuildableHoverCard();
                 return;
             }
 
             _activeCategory = categoryId;
             _catButtons[categoryId].EnableInClassList("ws-build-panel__cat-btn--active", true);
+            _catButtons[categoryId].style.backgroundColor = new Color(0.12f, 0.24f, 0.38f, 0.98f);
+            _catButtons[categoryId].style.borderTopColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _catButtons[categoryId].style.borderRightColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _catButtons[categoryId].style.borderBottomColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+            _catButtons[categoryId].style.borderLeftColor = new Color(0.23f, 0.37f, 0.53f, 1f);
 
             PopulateItems(categoryId);
+            HideBuildableHoverCard();
         }
 
         private void PopulateItems(string categoryId)
         {
             _itemList.Clear();
+            HideBuildableHoverCard();
             if (!CategoryItems.TryGetValue(categoryId, out var items)) return;
 
             foreach (var (buildableId, name, cost) in items)
@@ -237,13 +315,22 @@ namespace Waystation.UI
                 row.AddToClassList("ws-build-panel__item-row");
                 row.style.flexDirection  = FlexDirection.Row;
                 row.style.justifyContent = Justify.SpaceBetween;
+                row.style.alignItems     = Align.Center;
+                row.style.minHeight      = 30;
                 row.style.paddingTop     = 3;
                 row.style.paddingBottom  = 3;
                 row.style.paddingLeft    = 4;
                 row.style.paddingRight   = 4;
                 row.style.marginBottom      = 2;
+                row.style.backgroundColor   = new Color(0.10f, 0.14f, 0.20f, 0.92f);
+                row.style.borderTopWidth    = 1;
+                row.style.borderRightWidth  = 1;
                 row.style.borderBottomWidth = 1;
-                row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f); // border-dark
+                row.style.borderLeftWidth   = 1;
+                row.style.borderTopColor    = new Color(0.16f, 0.22f, 0.32f, 1f);
+                row.style.borderRightColor  = new Color(0.16f, 0.22f, 0.32f, 1f);
+                row.style.borderBottomColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                row.style.borderLeftColor   = new Color(0.16f, 0.22f, 0.32f, 1f);
 
                 var nameLabel = new Label(name.ToUpper());
                 nameLabel.AddToClassList("ws-build-panel__item-name");
@@ -263,10 +350,43 @@ namespace Waystation.UI
                 {
                     string capturedBuildableId = buildableId;
                     string capturedCategoryId  = categoryId;
+                    bool hoverActive = false;
+                    IVisualElementScheduledItem hoverTimer = null;
+
                     row.RegisterCallback<ClickEvent>(_ =>
                     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                         Debug.Log($"[BuildSubPanel] Selected: {capturedCategoryId}/{capturedBuildableId}");
+#endif
                         OnBuildItemSelected?.Invoke(capturedCategoryId, capturedBuildableId);
+                    });
+
+                    row.RegisterCallback<PointerEnterEvent>(_ =>
+                    {
+                        row.style.backgroundColor = new Color(0.14f, 0.20f, 0.30f, 0.96f);
+                        row.style.borderTopColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+                        row.style.borderRightColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+                        row.style.borderBottomColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+                        row.style.borderLeftColor = new Color(0.23f, 0.37f, 0.53f, 1f);
+
+                        hoverActive = true;
+                        hoverTimer?.Pause();
+                        hoverTimer = row.schedule.Execute(() =>
+                        {
+                            if (!hoverActive) return;
+                            ShowBuildableHoverCard(capturedBuildableId, name, cost);
+                        }).StartingIn(2000);
+                    });
+                    row.RegisterCallback<PointerLeaveEvent>(_ =>
+                    {
+                        row.style.backgroundColor = new Color(0.10f, 0.14f, 0.20f, 0.92f);
+                        row.style.borderTopColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                        row.style.borderRightColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                        row.style.borderBottomColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                        row.style.borderLeftColor = new Color(0.16f, 0.22f, 0.32f, 1f);
+                        hoverActive = false;
+                        hoverTimer?.Pause();
+                        HideBuildableHoverCard();
                     });
                 }
                 else
@@ -276,6 +396,41 @@ namespace Waystation.UI
 
                 _itemList.Add(row);
             }
+        }
+
+        private void ShowBuildableHoverCard(string buildableId, string fallbackName, string cost)
+        {
+            string title = fallbackName.ToUpper();
+            string body = $"Cost: {cost}";
+
+            if (_registry != null && _registry.Buildables.TryGetValue(buildableId, out var defn))
+            {
+                title = (defn.displayName ?? fallbackName).ToUpper();
+                string desc = string.IsNullOrWhiteSpace(defn.description)
+                    ? "No description available."
+                    : defn.description;
+
+                string tags = (defn.requiredTags != null && defn.requiredTags.Count > 0)
+                    ? string.Join(", ", defn.requiredTags)
+                    : "None";
+
+                body =
+                    $"{desc}\n\n" +
+                    $"Build Time: {defn.buildTimeTicks} ticks\n" +
+                    $"Max Health: {defn.maxHealth}\n" +
+                    $"Network: {(string.IsNullOrEmpty(defn.networkType) ? "None" : defn.networkType)}\n" +
+                    $"Required Tags: {tags}\n" +
+                    $"Cost: {cost}";
+            }
+
+            _hoverTitleLabel.text = title;
+            _hoverBodyLabel.text = body;
+            _hoverDetailCard.style.display = DisplayStyle.Flex;
+        }
+
+        private void HideBuildableHoverCard()
+        {
+            _hoverDetailCard.style.display = DisplayStyle.None;
         }
 
         // ── Queue refresh ──────────────────────────────────────────────────────

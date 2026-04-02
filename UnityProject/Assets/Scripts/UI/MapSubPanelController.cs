@@ -76,6 +76,12 @@ namespace Waystation.UI
         private readonly ScrollView    _viewArea;
         private readonly VisualElement _detailSidebar;
 
+        /// <summary>
+        /// True while the UI Toolkit map overlay is attached to a panel.
+        /// Used by world-space renderers to suppress labels beneath fullscreen map.
+        /// </summary>
+        public static bool IsOverlayOpen { get; private set; }
+
         // ── State ──────────────────────────────────────────────────────────────
 
         private MapLayer     _currentView = MapLayer.System;
@@ -91,6 +97,51 @@ namespace Waystation.UI
         private int  _lastEp          = -1;
         private int  _lastSectorCount = -1;
         private bool _lastCanSector;
+
+        // System-view orbital visualization state.
+        private readonly List<OrbitVisual> _orbitVisuals = new List<OrbitVisual>();
+        private IVisualElementScheduledItem _orbitAnimator;
+        private VisualElement _orbitCanvas;
+        private VisualElement _orbitSelectionRing;
+        private float _orbitTime;
+        private int _selectedOrbitBodyIndex = -1;
+        private const float OrbitMotionSpeed = 2.8f;
+
+        private sealed class OrbitVisual
+        {
+            public int bodyIndex;
+            public VisualElement dot;
+            public float radius;
+            public float angularSpeed;
+            public float phase;
+            public float size;
+            public float currentCenterX;   // updated every animation tick
+            public float currentCenterY;
+        }
+
+        private sealed class MoonVisual
+        {
+            public OrbitVisual parent;
+            public VisualElement dot;
+            public float moonOrbitRadius;  // pixel radius around parent body center
+            public float angularSpeed;
+            public float phase;
+            public float size;
+        }
+
+        // ── Additional orbit / responsive state ───────────────────────────────
+        private float _orbitCenterX  = 260f;
+        private float _orbitCenterY  = 150f;
+        private float _fontScale     = 1.0f;
+        private bool  _isBuilding;
+        private const float ReferencePanelWidth  = 1600f;
+        private const float StationPhaseOffset   = 0.22f;
+        private readonly List<MoonVisual> _moonVisuals = new List<MoonVisual>();
+        private VisualElement _stationDot;
+        private int   _stationParentBodyIndex = -1;
+        private VisualElement _starDotEl;
+        private readonly List<(VisualElement ring, float radius)> _orbitRingEls
+            = new List<(VisualElement ring, float radius)>();
 
         // ── Events ────────────────────────────────────────────────────────────
 
@@ -114,7 +165,7 @@ namespace Waystation.UI
 
         // Background colours matching SystemMapController and the design spec.
         private static readonly Color ColToolbar     = new Color(0.09f, 0.11f, 0.18f, 0.96f);
-        private static readonly Color ColPanelBg     = new Color(0.05f, 0.07f, 0.12f, 0.97f);
+        private static readonly Color ColPanelBg     = new Color(0.05f, 0.07f, 0.12f, 1.00f);
         private static readonly Color ColDetailBg    = new Color(0.08f, 0.11f, 0.17f, 1.00f);
         private static readonly Color ColSectionHdr  = new Color(0.12f, 0.16f, 0.24f, 1.00f);
         private static readonly Color ColBodyRow     = new Color(0.10f, 0.14f, 0.22f, 1.00f);
@@ -140,6 +191,26 @@ namespace Waystation.UI
             style.bottom   = 0;
             style.flexDirection = FlexDirection.Column;
             style.backgroundColor = ColPanelBg;
+
+            RegisterCallback<AttachToPanelEvent>(_ => IsOverlayOpen = true);
+            RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                IsOverlayOpen = false;
+                StopOrbitVisualization();
+            });
+
+            // Responsive font scaling: recompute _fontScale when panel width changes.
+            RegisterCallback<GeometryChangedEvent>(evt =>
+            {
+                if (_isBuilding || evt.newRect.width < 100f) return;
+                float newScale = Mathf.Clamp(evt.newRect.width / ReferencePanelWidth, 0.65f, 1.30f);
+                if (Mathf.Abs(newScale - _fontScale) > 0.05f)
+                {
+                    _fontScale = newScale;
+                    if (_station != null && _map != null)
+                        RebuildView();
+                }
+            });
 
             // ── Toolbar ───────────────────────────────────────────────────────
             var toolbar = new VisualElement();
@@ -199,6 +270,7 @@ namespace Waystation.UI
             _contentRow.style.flexDirection = FlexDirection.Row;
             _contentRow.style.flexGrow      = 1;
             _contentRow.style.overflow      = Overflow.Hidden;
+            _contentRow.style.backgroundColor = ColPanelBg;
             Add(_contentRow);
 
             // View area (fills remaining width, left of detail sidebar)
@@ -236,12 +308,19 @@ namespace Waystation.UI
 
             // Update EP label (always cheap in-place update)
             int ep = station?.explorationPoints ?? 0;
-            _epLabel.text = $"✦ {ep} EP";
+            _epLabel.text = SystemMapController.TelescopeMode ? "✦ ∞ EP" : $"✦ {ep} EP";
 
             // Enable/disable Sector toggle based on map view level
-            bool canSector = map?.GetMapViewLevel(station) == MapViewLevel.Sector;
+            bool canSector = (map?.GetMapViewLevel(station) == MapViewLevel.Sector)
+                          || SystemMapController.TelescopeMode;
             _sectorBtn.SetEnabled(canSector);
-            _sectorBtn.tooltip = canSector ? "" : "Requires Sector Map research";
+            _sectorBtn.tooltip = canSector ? "" : "Requires Sector Map research (or DEV God-View).";
+
+            if (!canSector && _currentView == MapLayer.Sector)
+            {
+                _currentView = MapLayer.System;
+                RefreshToggleHighlights();
+            }
 
             // Only rebuild the view when data that affects the grid has changed.
             // EP-only changes (the most frequent tick path, e.g. Interstellar Antenna
@@ -295,6 +374,9 @@ namespace Waystation.UI
 
         private void SetView(MapLayer layer)
         {
+            if (layer == MapLayer.Sector && _sectorBtn != null && !_sectorBtn.enabledSelf)
+                return;
+
             _currentView = layer;
             RefreshToggleHighlights();
             HideDetailSidebar();
@@ -331,12 +413,19 @@ namespace Waystation.UI
 
         private void RebuildView()
         {
+            _isBuilding = true;
+            StopOrbitVisualization();
             _viewArea.Clear();
 
             if (_currentView == MapLayer.System)
                 BuildSystemView();
             else
+            {
+                // Ensure a home sector exists for dev/telescope mode before building the sector view.
+                _map?.EnsureHomeSectorForDev(_station);
                 BuildSectorView();
+            }
+            _isBuilding = false;
         }
 
         // ── System view ───────────────────────────────────────────────────────
@@ -364,19 +453,15 @@ namespace Waystation.UI
             // Star name header
             var starHeader = new Label($"{sys.systemName}  ·  {StarTypeLabel(sys.starType)}");
             starHeader.AddToClassList(SectionHeaderClass);
-            starHeader.style.fontSize       = 15;
+            starHeader.style.fontSize       = (int)(15 * _fontScale);
             starHeader.style.color          = ColAccentText;
             starHeader.style.marginBottom   = 12;
             starHeader.style.paddingTop     = 8;
             starHeader.style.paddingBottom  = 8;
             root.Add(starHeader);
 
-            // Note about uGUI orbital animation
-            var animNote = new Label("Orbital animation rendered by system map layer below.");
-            animNote.style.color     = ColTextMid;
-            animNote.style.fontSize  = 11;
-            animNote.style.marginBottom = 16;
-            root.Add(animNote);
+            // Pictorial orbital view for quick spatial readability.
+            root.Add(BuildOrbitVisualization(sys));
 
             // Orbital bodies section
             if (sys.bodies.Count > 0)
@@ -388,10 +473,14 @@ namespace Waystation.UI
                 {
                     var body = sys.bodies[i];
                     bool isStation = sys.stationOrbitIndex == i;
-                    var row = BuildBodyRow(body, isStation);
-                    int capturedIndex = i;
-                    row.RegisterCallback<ClickEvent>(_ => ShowBodyDetail(sys.bodies[capturedIndex], sys.stationOrbitIndex == capturedIndex));
+                    var row = BuildBodyRow(body, isStation, i, sys);
                     root.Add(row);
+                    // Moon sub-rows (indented under parent body)
+                    foreach (var moon in body.moons)
+                        root.Add(BuildMoonRow(moon));
+                    // Station sub-row shown below its host body
+                    if (isStation)
+                        root.Add(BuildStationSubRow());
                 }
             }
             else
@@ -432,7 +521,370 @@ namespace Waystation.UI
             _viewArea.Add(root);
         }
 
-        private VisualElement BuildBodyRow(SolarBody body, bool hasStation)
+        private VisualElement BuildOrbitVisualization(SolarSystemState sys)
+        {
+            _orbitVisuals.Clear();
+            _moonVisuals.Clear();
+            _orbitRingEls.Clear();
+            _starDotEl         = null;
+            _stationDot        = null;
+
+            if (_selectedOrbitBodyIndex >= sys.bodies.Count)
+                _selectedOrbitBodyIndex = -1;
+
+            var card = new VisualElement();
+            card.style.marginBottom = 16;
+            card.style.paddingTop   = 8;
+            card.style.paddingBottom = 8;
+            card.style.paddingLeft  = 8;
+            card.style.paddingRight = 8;
+            card.style.backgroundColor  = new Color(0.08f, 0.11f, 0.17f, 0.92f);
+            card.style.borderTopWidth    = 1;
+            card.style.borderRightWidth  = 1;
+            card.style.borderBottomWidth = 1;
+            card.style.borderLeftWidth   = 1;
+            card.style.borderTopColor    = ColDivider;
+            card.style.borderRightColor  = ColDivider;
+            card.style.borderBottomColor = ColDivider;
+            card.style.borderLeftColor   = ColDivider;
+
+            var title = new Label("SYSTEM ORRERY");
+            title.style.color = ColAccentText;
+            title.style.fontSize = (int)(11 * _fontScale);
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.marginBottom = 6;
+            card.Add(title);
+
+            _orbitCanvas = new VisualElement();
+            _orbitCanvas.style.position  = Position.Relative;
+            _orbitCanvas.style.alignSelf = Align.Stretch;   // fills card width
+            _orbitCanvas.style.height    = 280;
+            _orbitCanvas.style.minHeight = 280;
+            _orbitCanvas.style.backgroundColor  = new Color(0.03f, 0.05f, 0.09f, 0.94f);
+            _orbitCanvas.style.borderTopWidth    = 1;
+            _orbitCanvas.style.borderRightWidth  = 1;
+            _orbitCanvas.style.borderBottomWidth = 1;
+            _orbitCanvas.style.borderLeftWidth   = 1;
+            _orbitCanvas.style.borderTopColor    = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _orbitCanvas.style.borderRightColor  = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _orbitCanvas.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _orbitCanvas.style.borderLeftColor   = new Color(0.14f, 0.20f, 0.30f, 1f);
+            card.Add(_orbitCanvas);
+
+            // Height: canvas 280 + title ~24 + padding 16
+            card.style.height    = 320;
+            card.style.minHeight = 320;
+
+            // Defer orrery content build until the canvas has its real layout width.
+            var capturedSys  = sys;
+            bool orreryBuilt = false;
+            _orbitCanvas.RegisterCallback<GeometryChangedEvent>(evt =>
+            {
+                if (orreryBuilt || evt.newRect.width < 10f) return;
+                orreryBuilt    = true;
+                float cx = evt.newRect.width  * 0.5f;
+                float cy = evt.newRect.height * 0.5f;
+                _orbitCenterX  = cx;
+                _orbitCenterY  = cy;
+                BuildOrbitContent(capturedSys, cx, cy);
+                StartOrbitAnimation();
+            });
+
+            return card;
+        }
+
+        private void BuildOrbitContent(SolarSystemState sys, float centerX, float centerY)
+        {
+            if (_orbitCanvas == null) return;
+
+            // ── Star ─────────────────────────────────────────────────────────
+            float starSize = Mathf.Clamp(22f + sys.starSize * 3f, 22f, 34f);
+            var star = new VisualElement();
+            star.style.position = Position.Absolute;
+            star.style.width    = starSize;
+            star.style.height   = starSize;
+            star.style.borderTopLeftRadius     = starSize / 2f;
+            star.style.borderTopRightRadius    = starSize / 2f;
+            star.style.borderBottomLeftRadius  = starSize / 2f;
+            star.style.borderBottomRightRadius = starSize / 2f;
+            star.style.left = centerX - starSize / 2f;
+            star.style.top  = centerY - starSize / 2f;
+            if (!ColorUtility.TryParseHtmlString(sys.starColorHex, out Color starColor))
+                starColor = new Color(0.96f, 0.86f, 0.44f, 1f);
+            star.style.backgroundColor = starColor;
+            _orbitCanvas.Add(star);
+            _starDotEl = star;
+
+            // ── Orbital bodies ────────────────────────────────────────────────
+            int count = Mathf.Min(sys.bodies.Count, 9);
+            // Distribute radii proportionally: 12% of half-width for innermost,
+            // 88% for outermost — so orbits scale with the canvas size.
+            float halfW   = Mathf.Max(centerX, 60f);
+            float innerR  = halfW * 0.13f;
+            float outerR  = halfW * 0.87f;
+
+            for (int i = 0; i < count; i++)
+            {
+                var   body   = sys.bodies[i];
+                float radius = count == 1
+                    ? (innerR + outerR) * 0.5f
+                    : innerR + i * (outerR - innerR) / (count - 1f);
+
+                var ring = new VisualElement();
+                ring.style.position = Position.Absolute;
+                ring.style.left     = centerX - radius;
+                ring.style.top      = centerY - radius;
+                ring.style.width    = radius * 2f;
+                ring.style.height   = radius * 2f;
+                ring.style.borderTopLeftRadius     = radius;
+                ring.style.borderTopRightRadius    = radius;
+                ring.style.borderBottomLeftRadius  = radius;
+                ring.style.borderBottomRightRadius = radius;
+                ring.style.borderTopWidth    = 1;
+                ring.style.borderRightWidth  = 1;
+                ring.style.borderBottomWidth = 1;
+                ring.style.borderLeftWidth   = 1;
+                ring.style.borderTopColor    = new Color(0.18f, 0.25f, 0.36f, 0.75f);
+                ring.style.borderRightColor  = new Color(0.18f, 0.25f, 0.36f, 0.75f);
+                ring.style.borderBottomColor = new Color(0.18f, 0.25f, 0.36f, 0.75f);
+                ring.style.borderLeftColor   = new Color(0.18f, 0.25f, 0.36f, 0.75f);
+                _orbitCanvas.Add(ring);
+                _orbitRingEls.Add((ring, radius));
+
+                float bodySize = Mathf.Clamp(7f + body.size * 1.8f, 7f, 14f);
+                var dot = new VisualElement();
+                dot.style.position = Position.Absolute;
+                dot.style.width    = bodySize;
+                dot.style.height   = bodySize;
+                dot.style.borderTopLeftRadius     = bodySize / 2f;
+                dot.style.borderTopRightRadius    = bodySize / 2f;
+                dot.style.borderBottomLeftRadius  = bodySize / 2f;
+                dot.style.borderBottomRightRadius = bodySize / 2f;
+                if (!ColorUtility.TryParseHtmlString(body.colorHex, out Color bodyColor))
+                    bodyColor = new Color(0.62f, 0.68f, 0.76f, 1f);
+                dot.style.backgroundColor = bodyColor;
+
+                int capturedIdx = i;
+                dot.tooltip = body.name ?? BodyTypeLabel(body.bodyType);
+                dot.RegisterCallback<PointerEnterEvent>(_ =>
+                    dot.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f)));
+                dot.RegisterCallback<PointerLeaveEvent>(_ =>
+                    dot.style.scale = new Scale(new Vector3(1f, 1f, 1f)));
+                dot.RegisterCallback<ClickEvent>(_ =>
+                {
+                    if (capturedIdx >= 0 && capturedIdx < sys.bodies.Count)
+                    {
+                        SelectOrbitBody(capturedIdx);
+                        ShowBodyDetail(sys.bodies[capturedIdx], sys.stationOrbitIndex == capturedIdx);
+                    }
+                });
+                _orbitCanvas.Add(dot);
+
+                float angularSpeed = 0.25f + (1f / Mathf.Max(30f, body.orbitalPeriod)) * 20f;
+                var ov = new OrbitVisual
+                {
+                    bodyIndex    = i,
+                    dot          = dot,
+                    radius       = radius,
+                    angularSpeed = angularSpeed,
+                    phase        = body.initialPhase,
+                    size         = bodySize,
+                };
+                _orbitVisuals.Add(ov);
+
+                // ── Moons orbiting this body ──────────────────────────────────
+                float moonOrbitBaseR = bodySize * 1.5f + 9f;
+                for (int m = 0; m < Mathf.Min(body.moons.Count, 3); m++)
+                {
+                    var   moon     = body.moons[m];
+                    float moonSize = Mathf.Clamp(bodySize * 0.32f, 3f, 5f);
+                    var   moonDot  = new VisualElement();
+                    moonDot.style.position = Position.Absolute;
+                    moonDot.style.width    = moonSize;
+                    moonDot.style.height   = moonSize;
+                    moonDot.style.borderTopLeftRadius     = moonSize / 2f;
+                    moonDot.style.borderTopRightRadius    = moonSize / 2f;
+                    moonDot.style.borderBottomLeftRadius  = moonSize / 2f;
+                    moonDot.style.borderBottomRightRadius = moonSize / 2f;
+                    if (!ColorUtility.TryParseHtmlString(moon.colorHex, out Color moonCol))
+                        moonCol = new Color(0.62f, 0.62f, 0.62f, 1f);
+                    moonDot.style.backgroundColor = moonCol;
+                    moonDot.style.opacity         = 0.75f;
+                    moonDot.tooltip               = moon.name ?? "Moon";
+                    _orbitCanvas.Add(moonDot);
+                    _moonVisuals.Add(new MoonVisual
+                    {
+                        parent          = ov,
+                        dot             = moonDot,
+                        moonOrbitRadius = moonOrbitBaseR + m * 6f,
+                        angularSpeed    = 1.8f + m * 0.6f,
+                        phase           = moon.initialPhase,
+                        size            = moonSize,
+                    });
+                }
+            }
+
+            // ── Station: independent entity orbiting its host body ────────────
+            if (sys.stationOrbitIndex >= 0
+                && sys.stationOrbitIndex < sys.bodies.Count
+                && sys.stationOrbitIndex < _orbitVisuals.Count)
+            {
+                _stationParentBodyIndex = sys.stationOrbitIndex;
+                float hostSize = _orbitVisuals[sys.stationOrbitIndex].size;
+                float stSize   = 7f;
+                _stationDot = new VisualElement();
+                _stationDot.style.position = Position.Absolute;
+                _stationDot.style.width    = stSize;
+                _stationDot.style.height   = stSize;
+                // Diamond shape via 45° rotation
+                _stationDot.style.rotate = new Rotate(new Angle(45f, AngleUnit.Degree));
+                _stationDot.style.backgroundColor   = new Color(0.25f, 1.00f, 0.50f, 1f);
+                _stationDot.style.borderTopWidth    = 1;
+                _stationDot.style.borderRightWidth  = 1;
+                _stationDot.style.borderBottomWidth = 1;
+                _stationDot.style.borderLeftWidth   = 1;
+                _stationDot.style.borderTopColor    = new Color(0.60f, 1f, 0.70f, 0.8f);
+                _stationDot.style.borderRightColor  = new Color(0.60f, 1f, 0.70f, 0.8f);
+                _stationDot.style.borderBottomColor = new Color(0.60f, 1f, 0.70f, 0.8f);
+                _stationDot.style.borderLeftColor   = new Color(0.60f, 1f, 0.70f, 0.8f);
+                _stationDot.tooltip = "Your Station";
+                _orbitCanvas.Add(_stationDot);
+            }
+            else
+            {
+                _stationParentBodyIndex = -1;
+                _stationDot = null;
+            }
+
+            // ── Selection ring (rendered on top) ──────────────────────────────
+            _orbitSelectionRing = new VisualElement();
+            _orbitSelectionRing.style.position       = Position.Absolute;
+            _orbitSelectionRing.style.borderTopWidth    = 2;
+            _orbitSelectionRing.style.borderRightWidth  = 2;
+            _orbitSelectionRing.style.borderBottomWidth = 2;
+            _orbitSelectionRing.style.borderLeftWidth   = 2;
+            _orbitSelectionRing.style.borderTopColor    = new Color(1f, 1f, 1f, 0.95f);
+            _orbitSelectionRing.style.borderRightColor  = new Color(1f, 1f, 1f, 0.95f);
+            _orbitSelectionRing.style.borderBottomColor = new Color(1f, 1f, 1f, 0.95f);
+            _orbitSelectionRing.style.borderLeftColor   = new Color(1f, 1f, 1f, 0.95f);
+            _orbitSelectionRing.style.display = DisplayStyle.None;
+            _orbitCanvas.Add(_orbitSelectionRing);
+        }
+
+        private void StartOrbitAnimation()
+        {
+            _orbitTime = 0f;
+            _orbitAnimator = schedule.Execute(() =>
+            {
+                if (_orbitCanvas == null || _orbitCanvas.panel == null) return;
+
+                float dt = Mathf.Max(0.008f, Time.unscaledDeltaTime);
+                _orbitTime += dt * OrbitMotionSpeed;
+                float cx = _orbitCenterX;
+                float cy = _orbitCenterY;
+
+                // Animate main orbital bodies and record their screen centres.
+                foreach (var body in _orbitVisuals)
+                {
+                    float angle = body.phase + _orbitTime * body.angularSpeed;
+                    float x = cx + Mathf.Cos(angle) * body.radius - body.size * 0.5f;
+                    float y = cy + Mathf.Sin(angle) * body.radius - body.size * 0.5f;
+                    body.dot.style.left  = x;
+                    body.dot.style.top   = y;
+                    body.currentCenterX  = x + body.size * 0.5f;
+                    body.currentCenterY  = y + body.size * 0.5f;
+                }
+
+                // Animate moons orbiting their parent bodies.
+                foreach (var moon in _moonVisuals)
+                {
+                    float moonAngle = moon.phase + _orbitTime * moon.angularSpeed;
+                    float mx = moon.parent.currentCenterX
+                             + Mathf.Cos(moonAngle) * moon.moonOrbitRadius
+                             - moon.size * 0.5f;
+                    float my = moon.parent.currentCenterY
+                             + Mathf.Sin(moonAngle) * moon.moonOrbitRadius
+                             - moon.size * 0.5f;
+                    moon.dot.style.left = mx;
+                    moon.dot.style.top  = my;
+                }
+
+                // Animate station orbiting its host body.
+                if (_stationDot != null
+                    && _stationParentBodyIndex >= 0
+                    && _stationParentBodyIndex < _orbitVisuals.Count)
+                {
+                    var   host         = _orbitVisuals[_stationParentBodyIndex];
+                    float stOrbitR     = host.size * 1.5f + 10f;
+                    float stAngle      = _orbitTime * 2.1f + StationPhaseOffset;
+                    float sx = host.currentCenterX + Mathf.Cos(stAngle) * stOrbitR - 3.5f;
+                    float sy = host.currentCenterY + Mathf.Sin(stAngle) * stOrbitR - 3.5f;
+                    _stationDot.style.left = sx;
+                    _stationDot.style.top  = sy;
+                }
+
+                UpdateOrbitSelectionRing();
+            }).Every(33);
+        }
+
+        private void StopOrbitVisualization()
+        {
+            _orbitAnimator?.Pause();
+            _orbitAnimator = null;
+            _orbitVisuals.Clear();
+            _moonVisuals.Clear();
+            _orbitRingEls.Clear();
+            _stationDot             = null;
+            _stationParentBodyIndex = -1;
+            _starDotEl              = null;
+            _orbitSelectionRing     = null;
+            _orbitCanvas            = null;
+        }
+
+        private void SelectOrbitBody(int bodyIndex)
+        {
+            _selectedOrbitBodyIndex = bodyIndex;
+            UpdateOrbitSelectionRing();
+        }
+
+        private void UpdateOrbitSelectionRing()
+        {
+            if (_orbitSelectionRing == null)
+                return;
+
+            OrbitVisual selected = null;
+            foreach (var v in _orbitVisuals)
+            {
+                if (v.bodyIndex == _selectedOrbitBodyIndex)
+                {
+                    selected = v;
+                    break;
+                }
+            }
+
+            if (selected == null)
+            {
+                _orbitSelectionRing.style.display = DisplayStyle.None;
+                return;
+            }
+
+            // Compute position from orbital math (avoids resolvedStyle lag/bounce).
+            float angle  = selected.phase + _orbitTime * selected.angularSpeed;
+            float dotCx  = _orbitCenterX + Mathf.Cos(angle) * selected.radius;
+            float dotCy  = _orbitCenterY + Mathf.Sin(angle) * selected.radius;
+            float ringSize = selected.size + 10f;
+            _orbitSelectionRing.style.width  = ringSize;
+            _orbitSelectionRing.style.height = ringSize;
+            _orbitSelectionRing.style.left   = dotCx - ringSize * 0.5f;
+            _orbitSelectionRing.style.top    = dotCy - ringSize * 0.5f;
+            _orbitSelectionRing.style.borderTopLeftRadius     = ringSize * 0.5f;
+            _orbitSelectionRing.style.borderTopRightRadius    = ringSize * 0.5f;
+            _orbitSelectionRing.style.borderBottomLeftRadius  = ringSize * 0.5f;
+            _orbitSelectionRing.style.borderBottomRightRadius = ringSize * 0.5f;
+            _orbitSelectionRing.style.display = DisplayStyle.Flex;
+        }
+
+        private VisualElement BuildBodyRow(SolarBody body, bool hasStation, int bodyIndex, SolarSystemState sys)
         {
             var row = new VisualElement();
             row.AddToClassList(SystemBodyRowClass);
@@ -478,24 +930,111 @@ namespace Waystation.UI
             typeLabel.style.width = 100;
             row.Add(typeLabel);
 
-            // Station marker
-            if (hasStation)
-            {
-                var stationLbl = new Label("⬡ STATION");
-                stationLbl.style.color     = new Color(0.25f, 1.00f, 0.50f, 1f);
-                stationLbl.style.fontSize  = 10;
-                stationLbl.style.marginLeft = 6;
-                row.Add(stationLbl);
-            }
-
             // Hover highlight
             row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = ColBodyRowHov);
             row.RegisterCallback<PointerLeaveEvent>(_ => row.style.backgroundColor = ColBodyRow);
+
+            row.RegisterCallback<ClickEvent>(_ =>
+            {
+                SelectOrbitBody(bodyIndex);
+                ShowBodyDetail(body, sys.stationOrbitIndex == bodyIndex);
+            });
 
             return row;
         }
 
         // ── Sector view ───────────────────────────────────────────────────────
+
+            private VisualElement BuildMoonRow(SolarBody moon)
+            {
+                var row = new VisualElement();
+                row.style.flexDirection   = FlexDirection.Row;
+                row.style.alignItems      = Align.Center;
+                row.style.paddingLeft     = 26;
+                row.style.paddingTop      = 3;
+                row.style.paddingBottom   = 3;
+                row.style.paddingRight    = 8;
+                row.style.marginBottom    = 1;
+                row.style.backgroundColor = new Color(0.08f, 0.11f, 0.17f, 0.80f);
+                row.style.BorderRadius(2);
+
+                // Connector line ─
+                var connector = new VisualElement();
+                connector.style.width           = 10;
+                connector.style.height          = 1;
+                connector.style.backgroundColor = ColDivider;
+                connector.style.marginRight     = 6;
+                row.Add(connector);
+
+                var dot = new VisualElement();
+                dot.style.width  = 6;
+                dot.style.height = 6;
+                dot.style.minWidth               = 6;
+                dot.style.marginRight            = 6;
+                dot.style.borderTopLeftRadius    = 3;
+                dot.style.borderTopRightRadius   = 3;
+                dot.style.borderBottomLeftRadius = 3;
+                dot.style.borderBottomRightRadius = 3;
+                if (ColorUtility.TryParseHtmlString(moon.colorHex, out Color moonCol))
+                    dot.style.backgroundColor = moonCol;
+                else
+                    dot.style.backgroundColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+                row.Add(dot);
+
+                var nameLabel = new Label(moon.name ?? "Moon");
+                nameLabel.style.color   = new Color(0.60f, 0.70f, 0.80f, 1f);
+                nameLabel.style.flexGrow = 1;
+                nameLabel.style.fontSize = (int)(10 * _fontScale);
+                row.Add(nameLabel);
+
+                var typeLabel = new Label("Moon");
+                typeLabel.style.color    = ColTextMid;
+                typeLabel.style.fontSize = (int)(9 * _fontScale);
+                row.Add(typeLabel);
+
+                return row;
+            }
+
+            private VisualElement BuildStationSubRow()
+            {
+                var row = new VisualElement();
+                row.style.flexDirection   = FlexDirection.Row;
+                row.style.alignItems      = Align.Center;
+                row.style.paddingLeft     = 26;
+                row.style.paddingTop      = 3;
+                row.style.paddingBottom   = 3;
+                row.style.paddingRight    = 8;
+                row.style.marginBottom    = 1;
+                row.style.backgroundColor = new Color(0.07f, 0.14f, 0.10f, 0.70f);
+                row.style.BorderRadius(2);
+
+                // Connector line ─
+                var connector = new VisualElement();
+                connector.style.width           = 10;
+                connector.style.height          = 1;
+                connector.style.backgroundColor = new Color(0.25f, 1.00f, 0.50f, 0.4f);
+                connector.style.marginRight     = 6;
+                row.Add(connector);
+
+                // Diamond marker
+                var diamond = new VisualElement();
+                diamond.style.width               = 6;
+                diamond.style.height              = 6;
+                diamond.style.minWidth            = 6;
+                diamond.style.marginRight         = 6;
+                diamond.style.backgroundColor     = new Color(0.25f, 1.00f, 0.50f, 1f);
+                diamond.style.rotate              = new Rotate(new Angle(45f, AngleUnit.Degree));
+                row.Add(diamond);
+
+                var label = new Label("YOUR STATION");
+                label.style.color                   = new Color(0.25f, 1.00f, 0.50f, 1f);
+                label.style.flexGrow                = 1;
+                label.style.fontSize                = (int)(10 * _fontScale);
+                label.style.unityFontStyleAndWeight = FontStyle.Bold;
+                row.Add(label);
+
+                return row;
+            }
 
         private void BuildSectorView()
         {
@@ -525,6 +1064,8 @@ namespace Waystation.UI
             hdr.style.paddingBottom = 8;
             root.Add(hdr);
 
+            root.Add(BuildSectorStarChart(_station));
+
             // Layout sectors in a flex-wrap grid.
             var grid = new VisualElement();
             grid.AddToClassList(SectorGridClass);
@@ -551,6 +1092,184 @@ namespace Waystation.UI
             }
 
             _viewArea.Add(root);
+        }
+
+        private VisualElement BuildSectorStarChart(StationState station)
+        {
+            var card = new VisualElement();
+            card.style.height = 360;
+            card.style.minHeight = 360;
+            card.style.marginBottom = 12;
+            card.style.paddingTop = 8;
+            card.style.paddingBottom = 8;
+            card.style.paddingLeft = 8;
+            card.style.paddingRight = 8;
+            card.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.96f);
+            card.style.borderTopWidth = 1;
+            card.style.borderRightWidth = 1;
+            card.style.borderBottomWidth = 1;
+            card.style.borderLeftWidth = 1;
+            card.style.borderTopColor = ColDivider;
+            card.style.borderRightColor = ColDivider;
+            card.style.borderBottomColor = ColDivider;
+            card.style.borderLeftColor = ColDivider;
+
+            var title = new Label("SECTOR STAR CHART");
+            title.style.color = ColAccentText;
+            title.style.fontSize = 11;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.marginBottom = 6;
+            card.Add(title);
+
+            var canvas = new VisualElement();
+            canvas.style.position = Position.Relative;
+            canvas.style.height = 320;
+            canvas.style.backgroundColor = new Color(0.03f, 0.05f, 0.09f, 0.95f);
+            canvas.style.borderTopWidth = 1;
+            canvas.style.borderRightWidth = 1;
+            canvas.style.borderBottomWidth = 1;
+            canvas.style.borderLeftWidth = 1;
+            canvas.style.borderTopColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            canvas.style.borderRightColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            canvas.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            canvas.style.borderLeftColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            card.Add(canvas);
+
+            var sectors = new List<SectorData>(station.sectors.Values);
+            if (sectors.Count == 0) return card;
+
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+            foreach (var s in sectors)
+            {
+                if (s.coordinates.x < minX) minX = s.coordinates.x;
+                if (s.coordinates.x > maxX) maxX = s.coordinates.x;
+                if (s.coordinates.y < minY) minY = s.coordinates.y;
+                if (s.coordinates.y > maxY) maxY = s.coordinates.y;
+            }
+
+            float rangeX = Mathf.Max(1f, maxX - minX);
+            float rangeY = Mathf.Max(1f, maxY - minY);
+            const float pad = 18f;
+            const float plotW = 780f;
+            const float plotH = 284f;
+            canvas.style.width = plotW + pad * 2f;
+
+            var posMap = new Dictionary<string, Vector2>();
+            foreach (var s in sectors)
+            {
+                float nx = (s.coordinates.x - minX) / rangeX;
+                float ny = (s.coordinates.y - minY) / rangeY;
+                // Invert y for top-left UI coordinates.
+                float px = pad + nx * plotW;
+                float py = pad + (1f - ny) * plotH;
+                posMap[s.uid] = new Vector2(px, py);
+            }
+
+            // Draw subtle links between nearby discovered sectors.
+            var linkPairs = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var a in sectors)
+            {
+                if (a.discoveryState == SectorDiscoveryState.Uncharted) continue;
+                SectorData nearest = null;
+                float nearestDist = float.MaxValue;
+                foreach (var b in sectors)
+                {
+                    if (ReferenceEquals(a, b) || b.discoveryState == SectorDiscoveryState.Uncharted) continue;
+                    float d = Vector2.Distance(a.coordinates, b.coordinates);
+                    if (d < nearestDist)
+                    {
+                        nearestDist = d;
+                        nearest = b;
+                    }
+                }
+
+                if (nearest == null || nearestDist > 18f) continue;
+                string k1 = string.Compare(a.uid, nearest.uid, StringComparison.Ordinal) < 0
+                    ? a.uid + "|" + nearest.uid
+                    : nearest.uid + "|" + a.uid;
+                if (!linkPairs.Add(k1)) continue;
+
+                Vector2 p1 = posMap[a.uid];
+                Vector2 p2 = posMap[nearest.uid];
+                AddSectorLane(canvas, p1, p2);
+            }
+
+            foreach (var s in sectors)
+            {
+                Vector2 p = posMap[s.uid];
+                float size = s.discoveryState switch
+                {
+                    SectorDiscoveryState.Visited => 13f,
+                    SectorDiscoveryState.Detected => 10f,
+                    _ => 7f,
+                };
+
+                var node = new VisualElement();
+                node.style.position = Position.Absolute;
+                node.style.left = p.x - size * 0.5f;
+                node.style.top = p.y - size * 0.5f;
+                node.style.width = size;
+                node.style.height = size;
+                node.style.borderTopLeftRadius = size * 0.5f;
+                node.style.borderTopRightRadius = size * 0.5f;
+                node.style.borderBottomLeftRadius = size * 0.5f;
+                node.style.borderBottomRightRadius = size * 0.5f;
+                node.style.backgroundColor = s.discoveryState switch
+                {
+                    SectorDiscoveryState.Visited => new Color(0.25f, 0.80f, 0.45f, 1f),
+                    SectorDiscoveryState.Detected => new Color(0.39f, 0.75f, 1.00f, 0.92f),
+                    _ => new Color(0.36f, 0.40f, 0.48f, 0.60f),
+                };
+
+                string tooltipText = s.discoveryState == SectorDiscoveryState.Uncharted
+                    ? "Uncharted sector"
+                    : s.ShortCodeAndCoord();
+                node.tooltip = tooltipText;
+
+                if (s.discoveryState != SectorDiscoveryState.Uncharted)
+                {
+                    var captured = s;
+                    node.RegisterCallback<PointerEnterEvent>(_ =>
+                    {
+                        node.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f));
+                        node.style.backgroundColor = new Color(0.70f, 0.88f, 1.00f, 1f);
+                    });
+                    node.RegisterCallback<PointerLeaveEvent>(_ =>
+                    {
+                        node.style.scale = new Scale(new Vector3(1f, 1f, 1f));
+                        node.style.backgroundColor = captured.discoveryState == SectorDiscoveryState.Visited
+                            ? new Color(0.25f, 0.80f, 0.45f, 1f)
+                            : new Color(0.39f, 0.75f, 1.00f, 0.92f);
+                    });
+                    node.RegisterCallback<ClickEvent>(_ => ShowSectorDetail(captured));
+                }
+
+                canvas.Add(node);
+            }
+
+            return card;
+        }
+
+        private static void AddSectorLane(VisualElement parent, Vector2 a, Vector2 b)
+        {
+            Vector2 d = b - a;
+            float len = d.magnitude;
+            if (len < 2f) return;
+
+            float angle = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
+            var line = new VisualElement();
+            line.style.position = Position.Absolute;
+            line.style.left = a.x;
+            line.style.top = a.y;
+            line.style.width = len;
+            line.style.height = 1;
+            line.style.backgroundColor = new Color(0.30f, 0.48f, 0.68f, 0.34f);
+            line.style.transformOrigin = new TransformOrigin(0, 0, 0);
+            line.style.rotate = new Rotate(new Angle(angle, AngleUnit.Degree));
+            parent.Add(line);
         }
 
         private VisualElement BuildSectorBox(SectorData sector)
@@ -799,8 +1518,9 @@ namespace Waystation.UI
             // Unlock button for adjacent Uncharted sectors
             if (_map != null && _station != null)
             {
+                bool telescopeMode = SystemMapController.TelescopeMode;
                 int ep = _station.explorationPoints;
-                bool canAfford = ep >= MapSystem.SectorUnlockPointCost;
+                bool canAfford = telescopeMode || ep >= MapSystem.SectorUnlockPointCost;
 
                 body.Add(MakeDivider());
 
@@ -811,7 +1531,9 @@ namespace Waystation.UI
                 unlockHeader.style.marginBottom = 4;
                 body.Add(unlockHeader);
 
-                var unlockCostLabel = new Label($"Unlock adjacent sector: {MapSystem.SectorUnlockPointCost} EP");
+                var unlockCostLabel = new Label(telescopeMode
+                    ? "Telescope Mode active: unlock sectors without EP cost."
+                    : $"Unlock adjacent sector: {MapSystem.SectorUnlockPointCost} EP");
                 unlockCostLabel.style.color   = ColTextMid;
                 unlockCostLabel.style.fontSize = 11;
                 unlockCostLabel.style.marginBottom = 6;
@@ -840,7 +1562,9 @@ namespace Waystation.UI
                         Refresh(_station, _map);
                     }
                 });
-                unlockBtn.text = $"UNLOCK ADJACENT ({MapSystem.SectorUnlockPointCost} EP)";
+                unlockBtn.text = telescopeMode
+                    ? "UNLOCK ADJACENT (TELESCOPE)"
+                    : $"UNLOCK ADJACENT ({MapSystem.SectorUnlockPointCost} EP)";
                 unlockBtn.AddToClassList(UnlockBtnClass);
                 StyleActionButton(unlockBtn);
                 unlockBtn.SetEnabled(canAfford);

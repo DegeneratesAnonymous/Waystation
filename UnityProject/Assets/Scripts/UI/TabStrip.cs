@@ -88,6 +88,7 @@ namespace Waystation.UI
             var btn = new Button();
             btn.AddToClassList("ws-tab-strip__tab");
             btn.text = label;
+            btn.style.whiteSpace = WhiteSpace.NoWrap;
             btn.RegisterCallback<ClickEvent>(_ => SelectTab(id));
             Add(btn);
 

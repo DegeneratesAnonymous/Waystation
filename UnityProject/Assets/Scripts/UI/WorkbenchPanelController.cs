@@ -228,7 +228,8 @@ namespace Waystation.UI
                 return;
             }
 
-            _registry?.Buildables.TryGetValue(f.buildableId, out var benchDef);
+            BuildableDefinition benchDef = null;
+            _registry?.Buildables.TryGetValue(f.buildableId, out benchDef);
 
             // Building name and type
             AddSectionHeader(root, "WORKBENCH");
@@ -356,7 +357,8 @@ namespace Waystation.UI
             }
             else
             {
-                _registry?.Recipes.TryGetValue(activeEntry.recipeId, out var activeRecipe);
+                RecipeDefinition activeRecipe = null;
+                _registry?.Recipes.TryGetValue(activeEntry.recipeId, out activeRecipe);
                 var progressRow = new VisualElement();
                 progressRow.style.marginBottom = 8;
 
@@ -419,7 +421,8 @@ namespace Waystation.UI
                 for (int i = 0; i < pending.Count; i++)
                 {
                     var entry = pending[i];
-                    _registry?.Recipes.TryGetValue(entry.recipeId, out var recipe);
+                    RecipeDefinition recipe = null;
+                    _registry?.Recipes.TryGetValue(entry.recipeId, out recipe);
 
                     var row = new VisualElement();
                     row.AddToClassList(QueueRowClass);

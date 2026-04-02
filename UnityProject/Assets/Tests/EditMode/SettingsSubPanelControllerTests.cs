@@ -175,7 +175,7 @@ namespace Waystation.Tests
         public void TearDown()
         {
             if (File.Exists(_slotPath)) File.Delete(_slotPath);
-            if (_gmGo != null) Object.DestroyImmediate(_gmGo);
+            if (_gmGo != null) UnityEngine.Object.DestroyImmediate(_gmGo);
         }
 
         private void Click(Button btn)

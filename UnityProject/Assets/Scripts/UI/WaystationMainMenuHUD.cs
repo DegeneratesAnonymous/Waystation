@@ -64,20 +64,12 @@ namespace Waystation.UI
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
-        private bool _hasEnteredMainMenu = false;
-
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (scene.name == "MainMenuScene")
             {
-                _hasEnteredMainMenu = true;
-                return;
-            }
-            // Only self-destruct once we leave MainMenuScene (not on first-load when starting from GameScene)
-            if (_hasEnteredMainMenu)
-            {
-                SceneManager.sceneLoaded -= OnSceneLoaded;
-                Destroy(gameObject);
+                // Reset to main state each time the main menu is entered.
+                _state = MenuState.Main;
             }
         }
 
@@ -96,6 +88,7 @@ namespace Waystation.UI
         private void Update()
         {
             if (_stars == null) return;
+            if (SceneManager.GetActiveScene().name != "MainMenuScene") return;
             float maxDist = MaxDist();
             for (int i = 0; i < _stars.Length; i++)
             {
