@@ -187,7 +187,10 @@ namespace Waystation.UI
             }
 
             if (_mapSubPanel != null)
+            {
                 _mapSubPanel.OnCloseRequested -= OnMapSubPanelCloseRequested;
+                _mapSubPanel.OnSectorUnlocked -= OnMapSubPanelSectorUnlocked;
+            }
 
             if (_stationOverview != null)
                 _stationOverview.OnDepartmentRowClicked -= OnOverviewDepartmentClicked;
@@ -405,7 +408,8 @@ namespace Waystation.UI
             if (_mapSubPanel == null)
             {
                 _mapSubPanel = new MapSubPanelController();
-                _mapSubPanel.OnCloseRequested += OnMapSubPanelCloseRequested;
+                _mapSubPanel.OnCloseRequested  += OnMapSubPanelCloseRequested;
+                _mapSubPanel.OnSectorUnlocked  += OnMapSubPanelSectorUnlocked;
             }
 
             // Refresh with current game state before showing.
@@ -425,6 +429,18 @@ namespace Waystation.UI
         {
             // Let SidePanelController exit fullscreen (fires OnMapFullscreenExited).
             _sidePanel?.HandleEscapeKey();
+        }
+
+        /// <summary>
+        /// Called after <see cref="MapSystem.TryUnlockSector"/> succeeds.
+        /// Applies the same post-unlock side effects as the legacy
+        /// <see cref="SystemMapController"/> path, including
+        /// <see cref="FactionSystem.OnSectorUnlocked"/>.
+        /// </summary>
+        private void OnMapSubPanelSectorUnlocked(SectorData sector)
+        {
+            if (_gm?.Station == null || sector == null) return;
+            _gm.Factions?.OnSectorUnlocked(sector, _gm.Station);
         }
 
         private void OnSidePanelMapFullscreenExited()

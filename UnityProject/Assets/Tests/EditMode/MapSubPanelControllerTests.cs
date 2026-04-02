@@ -150,6 +150,41 @@ namespace Waystation.Tests
 
     // ── EP label ─────────────────────────────────────────────────────────────
 
+    // ── Refresh dirty-flag tests ──────────────────────────────────────────────
+
+    [TestFixture]
+    internal class MapSubPanelRefreshDirtyFlagTests
+    {
+        [Test]
+        public void Refresh_SameEpAndSectorCount_DoesNotThrow()
+        {
+            var station = new StationState("Map-Dirty");
+            station.explorationPoints = 20;
+            var panel = new MapSubPanelController();
+            panel.Refresh(station, null);  // first call: always rebuilds
+
+            // Second call with same data should skip full rebuild (no throw)
+            Assert.DoesNotThrow(() => panel.Refresh(station, null));
+        }
+
+        [Test]
+        public void Refresh_EpLabelAlwaysUpdates_EvenWithoutRebuild()
+        {
+            var station = new StationState("Map-EpOnly");
+            station.explorationPoints = 5;
+            var panel = new MapSubPanelController();
+            panel.Refresh(station, null);
+
+            // Change EP but leave sector count unchanged
+            station.explorationPoints = 99;
+            panel.Refresh(station, null);
+
+            var epLabel = panel.Q<Label>(className: "ws-map-panel__ep-label");
+            Assert.AreEqual("✦ 99 EP", epLabel.text,
+                "EP label must always update even when sector count is unchanged (no RebuildView).");
+        }
+    }
+
     [TestFixture]
     internal class MapSubPanelEpLabelTests
     {
@@ -160,9 +195,39 @@ namespace Waystation.Tests
             station.explorationPoints = 75;
             var panel = new MapSubPanelController();
 
-            // Refresh should update the EP label — we verify no exception is thrown
-            // and trust that the label text is set during construction/refresh.
-            Assert.DoesNotThrow(() => panel.Refresh(station, null));
+            panel.Refresh(station, null);
+
+            var epLabel = panel.Q<Label>(className: "ws-map-panel__ep-label");
+            Assert.IsNotNull(epLabel, "EP label must be present in the panel hierarchy.");
+            Assert.AreEqual("✦ 75 EP", epLabel.text,
+                "EP label text must reflect station.explorationPoints.");
+        }
+
+        [Test]
+        public void Refresh_UpdatesEpLabel_WhenEpChanges()
+        {
+            var station = new StationState("Map-EP2");
+            station.explorationPoints = 10;
+            var panel = new MapSubPanelController();
+            panel.Refresh(station, null);
+
+            station.explorationPoints = 35;
+            panel.Refresh(station, null);
+
+            var epLabel = panel.Q<Label>(className: "ws-map-panel__ep-label");
+            Assert.AreEqual("✦ 35 EP", epLabel.text,
+                "EP label must reflect the updated exploration points.");
+        }
+
+        [Test]
+        public void Refresh_WithNullStation_SetsEpLabelToZero()
+        {
+            var panel = new MapSubPanelController();
+            panel.Refresh(null, null);
+
+            var epLabel = panel.Q<Label>(className: "ws-map-panel__ep-label");
+            Assert.IsNotNull(epLabel);
+            Assert.AreEqual("✦ 0 EP", epLabel.text);
         }
     }
 

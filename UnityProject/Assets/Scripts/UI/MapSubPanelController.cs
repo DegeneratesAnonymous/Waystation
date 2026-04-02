@@ -11,9 +11,9 @@
 //     state (Uncharted = fog, Detected = dim blue, Visited = accent).
 //   • Detail sidebar: body detail or sector detail panel that slides in on click.
 //
-// Pressing Escape or clicking the close button fires OnCloseRequested; the
-// caller (WaystationHUDController) is responsible for calling
-// SidePanelController.HandleEscapeKey() which exits fullscreen on MapSystem.
+// Clicking the close button fires OnCloseRequested; the caller
+// (WaystationHUDController) is responsible for wiring Escape to
+// SidePanelController.HandleEscapeKey(), which exits fullscreen on MapSystem.
 //
 // Feature-flagged under FeatureFlags.UseUIToolkitHUD (panel mounts inside
 // WaystationHUDController which is itself gated by that flag).
@@ -82,6 +82,16 @@ namespace Waystation.UI
         private StationState _station;
         private MapSystem    _map;
 
+        // Currently selected sector for the detail sidebar.
+        // Stored so the sidebar can be re-populated after a sector unlock.
+        private SectorData   _selectedSector;
+
+        // Dirty-flag values: track last known state to skip full RebuildView()
+        // on EP-only tick updates (the most frequent Refresh() call path).
+        private int  _lastEp          = -1;
+        private int  _lastSectorCount = -1;
+        private bool _lastCanSector;
+
         // ── Events ────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -90,6 +100,15 @@ namespace Waystation.UI
         /// exit fullscreen mode on the MapSystem and fire <see cref="SidePanelController.OnMapFullscreenExited"/>.
         /// </summary>
         public event Action OnCloseRequested;
+
+        /// <summary>
+        /// Fired after <see cref="MapSystem.TryUnlockSector"/> succeeds, passing the
+        /// newly generated <see cref="SectorData"/>.  Subscribe in
+        /// <c>WaystationHUDController</c> to call
+        /// <c>FactionSystem.OnSectorUnlocked(sector, station)</c> and any other
+        /// post-unlock side effects that the legacy path applies.
+        /// </summary>
+        public event Action<SectorData> OnSectorUnlocked;
 
         // ── Colour constants ──────────────────────────────────────────────────
 
@@ -215,7 +234,7 @@ namespace Waystation.UI
             _station = station;
             _map     = map;
 
-            // Update EP label
+            // Update EP label (always cheap in-place update)
             int ep = station?.explorationPoints ?? 0;
             _epLabel.text = $"✦ {ep} EP";
 
@@ -224,8 +243,27 @@ namespace Waystation.UI
             _sectorBtn.SetEnabled(canSector);
             _sectorBtn.tooltip = canSector ? "" : "Requires Sector Map research";
 
-            // Rebuild the visible view
-            RebuildView();
+            // Only rebuild the view when data that affects the grid has changed.
+            // EP-only changes (the most frequent tick path, e.g. Interstellar Antenna
+            // producing 1 EP per tick) skip the full rebuild to avoid allocation churn.
+            int sectorCount = station?.sectors.Count ?? 0;
+            bool needsRebuild = sectorCount != _lastSectorCount
+                             || canSector   != _lastCanSector
+                             || _lastEp     == -1;   // always rebuild on first Refresh
+
+            _lastEp          = ep;
+            _lastSectorCount = sectorCount;
+            _lastCanSector   = canSector;
+
+            if (needsRebuild)
+            {
+                RebuildView();
+
+                // Re-populate the detail sidebar when it was already open and the
+                // grid data has changed (e.g. after a sector unlock).
+                if (_selectedSector != null)
+                    ShowSectorDetail(_selectedSector);
+            }
         }
 
         // ── Sector state colour (static — testable without instance) ──────────
@@ -690,6 +728,10 @@ namespace Waystation.UI
 
         private void ShowSectorDetail(SectorData sector)
         {
+            // Remember the selected sector so Refresh() can re-populate the sidebar
+            // if grid data changes (e.g. after EP income or a sector unlock).
+            _selectedSector = sector;
+
             _detailSidebar.Clear();
             _detailSidebar.style.display = DisplayStyle.Flex;
 
@@ -779,19 +821,24 @@ namespace Waystation.UI
                 var unlockBtn = new Button(() =>
                 {
                     if (_map == null || _station == null) return;
-                    // Attempt to unlock a sector adjacent to this one
+                    // Attempt to unlock a sector adjacent to this one, trying all four
+                    // cardinal directions and capturing the newly generated sector.
                     int col = Mathf.RoundToInt(
-                        (capturedSector.coordinates.x - GalaxyGenerator.HomeX) / 3.0f);
+                        (capturedSector.coordinates.x - GalaxyGenerator.HomeX) / MapSystem.GalUnitPerCell);
                     int row = Mathf.RoundToInt(
-                        (capturedSector.coordinates.y - GalaxyGenerator.HomeY) / 3.0f);
-                    // Try all four adjacent cells until one succeeds
-                    bool unlocked =
-                        _map.TryUnlockSector(_station, col + 1, row) ||
-                        _map.TryUnlockSector(_station, col - 1, row) ||
-                        _map.TryUnlockSector(_station, col, row + 1) ||
-                        _map.TryUnlockSector(_station, col, row - 1);
-                    if (unlocked)
-                        Refresh(_station, _map);  // rebuild to reflect changes
+                        (capturedSector.coordinates.y - GalaxyGenerator.HomeY) / MapSystem.GalUnitPerCell);
+
+                    SectorData newSector = TryUnlockAdjacentAndGetSector(col, row);
+                    if (newSector != null)
+                    {
+                        // Notify subscribers (e.g. WaystationHUDController → FactionSystem)
+                        OnSectorUnlocked?.Invoke(newSector);
+                        // Refresh detects the increased sector count via dirty check and
+                        // rebuilds the grid; it also re-populates the detail sidebar for
+                        // the currently selected sector (_selectedSector) so the EP
+                        // balance and Unlock button state are up-to-date.
+                        Refresh(_station, _map);
+                    }
                 });
                 unlockBtn.text = $"UNLOCK ADJACENT ({MapSystem.SectorUnlockPointCost} EP)";
                 unlockBtn.AddToClassList(UnlockBtnClass);
@@ -803,10 +850,37 @@ namespace Waystation.UI
             }
         }
 
+        /// <summary>
+        /// Tries all four cardinal neighbours of the given grid cell and returns the
+        /// <see cref="SectorData"/> of the first one successfully unlocked, or
+        /// <c>null</c> if no adjacent cell could be unlocked.
+        /// </summary>
+        private SectorData TryUnlockAdjacentAndGetSector(int col, int row)
+        {
+            int[] dc = {  1, -1,  0,  0 };
+            int[] dr = {  0,  0,  1, -1 };
+            for (int i = 0; i < 4; i++)
+            {
+                int nc = col + dc[i];
+                int nr = row + dr[i];
+                if (!_map.TryUnlockSector(_station, nc, nr)) continue;
+
+                // Find the newly generated sector by its grid coordinates.
+                float gx = GalaxyGenerator.HomeX + nc * MapSystem.GalUnitPerCell;
+                float gy = GalaxyGenerator.HomeY + nr * MapSystem.GalUnitPerCell;
+                foreach (var sec in _station.sectors.Values)
+                    if (Mathf.Approximately(sec.coordinates.x, gx) &&
+                        Mathf.Approximately(sec.coordinates.y, gy))
+                        return sec;
+            }
+            return null;
+        }
+
         // ── Detail sidebar close ──────────────────────────────────────────────
 
         private void HideDetailSidebar()
         {
+            _selectedSector = null;
             _detailSidebar.style.display = DisplayStyle.None;
             _detailSidebar.Clear();
         }

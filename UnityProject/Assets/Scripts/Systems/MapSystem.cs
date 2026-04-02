@@ -21,7 +21,7 @@ namespace Waystation.Systems
         private const float AntennaBonus = 150f;
         private const int ExplorationPointsPerInterstellarAntenna = 1;
         public const int SectorUnlockPointCost = 25;
-        private const float GalUnitPerCell = 3.0f;
+        public const float GalUnitPerCell = 3.0f;
 
         // POIs are spread across a 2× detection radius; only those within range
         // are discovered and stored.  This makes discovery meaningful.
