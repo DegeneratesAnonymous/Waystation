@@ -201,6 +201,53 @@ namespace Waystation.Systems
             => MergeAllFactions(_registry.Factions, station);
 
         /// <summary>
+        /// Returns the faction definition for the given faction ID, or null if not found.
+        /// Searches both registry and procedurally-generated factions.
+        /// </summary>
+        public FactionDefinition GetFaction(string factionId, StationState station)
+        {
+            if (string.IsNullOrEmpty(factionId) || station == null) return null;
+            var all = GetAllFactions(station);
+            return all.TryGetValue(factionId, out var def) ? def : null;
+        }
+
+        /// <summary>
+        /// Returns the player's current reputation with the given faction (−100 to +100).
+        /// </summary>
+        public float GetReputation(string factionId, StationState station)
+            => station?.GetFactionRep(factionId) ?? 0f;
+
+        /// <summary>
+        /// Returns all active contracts the station holds with the given faction.
+        /// </summary>
+        public List<FactionContract> GetContracts(string factionId, StationState station)
+        {
+            var result = new List<FactionContract>();
+            if (station == null || string.IsNullOrEmpty(factionId)) return result;
+            foreach (var kv in station.factionContracts)
+            {
+                if (kv.Value != null &&
+                    string.Equals(kv.Value.factionId, factionId, StringComparison.Ordinal))
+                    result.Add(kv.Value);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Returns the last <paramref name="count"/> reputation change entries for the
+        /// given faction (newest-first).  Returns an empty list when no changes have been
+        /// recorded or the station is null.
+        /// </summary>
+        public List<FactionRepChange> GetRepHistory(string factionId, StationState station, int count = 5)
+        {
+            if (station == null || string.IsNullOrEmpty(factionId)) return new List<FactionRepChange>();
+            if (!station.factionRepHistory.TryGetValue(factionId, out var log))
+                return new List<FactionRepChange>();
+            int take = Mathf.Min(count, log.Count);
+            return log.GetRange(0, take);
+        }
+
+        /// <summary>
         /// Merges <paramref name="registryFactions"/> with <paramref name="station"/>.generatedFactions.
         /// Generated factions take precedence on ID collision.
         /// Exposed as a static helper so tests can exercise the merge logic without

@@ -704,6 +704,27 @@ namespace Waystation.Models
     }
 
     // -------------------------------------------------------------------------
+    // Faction Reputation Change — one entry in the per-faction change log
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Records a single reputation change event for a faction.
+    /// Stored in <see cref="StationState.factionRepHistory"/> (newest-first, capped at 20).
+    /// </summary>
+    [Serializable]
+    public class FactionRepChange
+    {
+        /// <summary>Game tick at which the change occurred.</summary>
+        public int    tick;
+
+        /// <summary>Delta applied (positive = gain, negative = loss).</summary>
+        public float  delta;
+
+        /// <summary>Resulting reputation value after the change.</summary>
+        public float  resultingRep;
+    }
+
+    // -------------------------------------------------------------------------
     // Ability Scores
     // -------------------------------------------------------------------------
 
@@ -2212,6 +2233,10 @@ namespace Waystation.Models
         // Faction reputation: factionId -> -100..100
         public Dictionary<string, float>  factionReputation = new Dictionary<string, float>();
 
+        // Per-faction reputation change log: factionId -> list of changes (newest-first, capped at 20).
+        public Dictionary<string, List<FactionRepChange>> factionRepHistory =
+            new Dictionary<string, List<FactionRepChange>>();
+
         // Active state tags on the station
         public HashSet<string>            activeTags  = new HashSet<string>();
 
@@ -2495,8 +2520,22 @@ namespace Waystation.Models
         public float ModifyFactionRep(string factionId, float delta)
         {
             float current = GetFactionRep(factionId);
-            factionReputation[factionId] = Mathf.Clamp(current + delta, -100f, 100f);
-            return factionReputation[factionId];
+            float next = Mathf.Clamp(current + delta, -100f, 100f);
+            factionReputation[factionId] = next;
+
+            // Record the change in the history log (newest-first, cap at 20).
+            if (!factionRepHistory.ContainsKey(factionId))
+                factionRepHistory[factionId] = new List<FactionRepChange>();
+            var log = factionRepHistory[factionId];
+            log.Insert(0, new FactionRepChange
+            {
+                tick         = tick,
+                delta        = next - current,
+                resultingRep = next,
+            });
+            if (log.Count > 20) log.RemoveAt(log.Count - 1);
+
+            return next;
         }
 
         // -- Queries ----------------------------------------------------------

@@ -146,6 +146,20 @@ namespace Waystation.UI
         // Tick counter for throttling room panel refreshes (every 5 ticks).
         private int _roomPanelTickCounter;
 
+        // Visiting Ship contextual panel (UI-026)
+        private VisitingShipPanelController _visitingShipPanel;
+        // Ship uid currently shown in the visiting ship panel, or null when closed.
+        private string _visitingShipPanelUid;
+        // Tick counter for throttling visiting ship panel refreshes (every 5 ticks).
+        private int _visitingShipTickCounter;
+
+        // Faction Detail contextual panel (UI-026)
+        private FactionDetailPanelController _factionDetailPanel;
+        // Faction id currently shown in the faction detail panel, or null when closed.
+        private string _factionDetailPanelId;
+        // Tick counter for throttling faction detail panel refreshes (every 5 ticks).
+        private int _factionDetailTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -254,6 +268,19 @@ namespace Waystation.UI
                 _roomPanel.OnCloseRequested      -= OnRoomPanelClosed;
                 _roomPanel.OnWorkbenchRowClicked -= OnRoomPanelWorkbenchClicked;
             }
+
+            if (_visitingShipPanel != null)
+            {
+                _visitingShipPanel.OnCloseRequested   -= OnVisitingShipPanelClosed;
+                _visitingShipPanel.OnGrantDocking      -= OnVisitingShipGrantDocking;
+                _visitingShipPanel.OnDenyDocking       -= OnVisitingShipDenyDocking;
+                _visitingShipPanel.OnNegotiateDocking  -= OnVisitingShipNegotiateDocking;
+                _visitingShipPanel.OnRequestDeparture  -= OnVisitingShipRequestDeparture;
+                _visitingShipPanel.OnOpenTradeManifest -= OnVisitingShipOpenTradeManifest;
+            }
+
+            if (_factionDetailPanel != null)
+                _factionDetailPanel.OnCloseRequested -= OnFactionDetailPanelClosed;
 
             _networksSubPanel?.Detach();
 
@@ -898,15 +925,12 @@ namespace Waystation.UI
 
         private void OnFactionRowClicked(string factionId)
         {
-            // Faction Detail panel will be implemented in a separate Work Order (WO-UI-026).
-            Debug.Log($"[WaystationHUDController] OpenFactionDetail: {factionId}");
+            OpenFactionDetailPanelInternal(factionId);
         }
 
         private void OnVisitorShipRowClicked(string shipUid)
         {
-            // Visiting Ship contextual panel will be implemented in a separate Work Order.
-            // For now, log the selection so callers have feedback.
-            Debug.Log($"[WaystationHUDController] OpenVisitorShipPanel: {shipUid}");
+            OpenVisitingShipPanelInternal(shipUid);
         }
 
         private void OnFactionRepThresholdCrossed(string factionId, float oldRep, float newRep)
@@ -1313,6 +1337,30 @@ namespace Waystation.UI
                     RefreshRoomPanel(_roomPanelRoomId);
                 }
             }
+
+            // Refresh the visiting ship panel every 5 ticks while it is mounted.
+            if (_visitingShipPanel != null && _visitingShipPanel.parent != null &&
+                !string.IsNullOrEmpty(_visitingShipPanelUid))
+            {
+                _visitingShipTickCounter++;
+                if (_visitingShipTickCounter >= 5)
+                {
+                    _visitingShipTickCounter = 0;
+                    RefreshVisitingShipPanel(_visitingShipPanelUid);
+                }
+            }
+
+            // Refresh the faction detail panel every 5 ticks while it is mounted.
+            if (_factionDetailPanel != null && _factionDetailPanel.parent != null &&
+                !string.IsNullOrEmpty(_factionDetailPanelId))
+            {
+                _factionDetailTickCounter++;
+                if (_factionDetailTickCounter >= 5)
+                {
+                    _factionDetailTickCounter = 0;
+                    RefreshFactionDetailPanel(_factionDetailPanelId);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -1484,6 +1532,149 @@ namespace Waystation.UI
         {
             // Placeholder: opens the Workbench contextual panel (future work item).
             Debug.Log($"[WaystationHUDController] OpenWorkbenchPanel: {foundationUid}");
+        }
+
+        // ── Visiting Ship contextual panel (UI-026) ───────────────────────────
+
+        /// <summary>
+        /// Opens or refreshes the Visiting Ship contextual panel for the given ship uid.
+        /// Ensures the World → Visitors tab is visible behind the panel.
+        /// </summary>
+        private void OpenVisitingShipPanelInternal(string shipUid)
+        {
+            if (string.IsNullOrEmpty(shipUid)) return;
+
+            _visitingShipPanelUid = shipUid;
+
+            // Ensure the World tab is open so the visitors list is visible behind the panel.
+            if (_sidePanel?.ActiveTab != SidePanelController.Tab.World)
+                _sidePanel?.ActivateTab(SidePanelController.Tab.World);
+
+            MountVisitingShipPanel();
+        }
+
+        private void MountVisitingShipPanel()
+        {
+            if (string.IsNullOrEmpty(_visitingShipPanelUid)) return;
+
+            if (_visitingShipPanel == null)
+            {
+                _visitingShipPanel = new VisitingShipPanelController();
+                _visitingShipPanel.OnCloseRequested   += OnVisitingShipPanelClosed;
+                _visitingShipPanel.OnGrantDocking      += OnVisitingShipGrantDocking;
+                _visitingShipPanel.OnDenyDocking       += OnVisitingShipDenyDocking;
+                _visitingShipPanel.OnNegotiateDocking  += OnVisitingShipNegotiateDocking;
+                _visitingShipPanel.OnRequestDeparture  += OnVisitingShipRequestDeparture;
+                _visitingShipPanel.OnOpenTradeManifest += OnVisitingShipOpenTradeManifest;
+            }
+
+            if (_visitingShipPanel.parent == null)
+                _contentArea.Add(_visitingShipPanel);
+
+            RefreshVisitingShipPanel(_visitingShipPanelUid);
+        }
+
+        private void RefreshVisitingShipPanel(string shipUid)
+        {
+            if (_visitingShipPanel == null || _gm?.Station == null) return;
+            _visitingShipPanel.Refresh(shipUid, _gm.Station, _gm.Visitors, _gm.Factions);
+        }
+
+        private void OnVisitingShipPanelClosed()
+        {
+            _visitingShipPanelUid = null;
+            if (_visitingShipPanel?.parent != null)
+                _contentArea.Remove(_visitingShipPanel);
+        }
+
+        private void OnVisitingShipGrantDocking(string shipUid)
+        {
+            _gm?.Visitors?.GrantDocking(shipUid, _gm.Station);
+            if (!string.IsNullOrEmpty(_visitingShipPanelUid))
+                RefreshVisitingShipPanel(_visitingShipPanelUid);
+            // Refresh the visitors list too.
+            if (_visitorsSubPanel != null && _gm?.Station != null)
+                _visitorsSubPanel.Refresh(_gm.Station, _gm?.Visitors);
+        }
+
+        private void OnVisitingShipDenyDocking(string shipUid)
+        {
+            _gm?.Visitors?.DenyDocking(shipUid, _gm.Station);
+            // Ship may have been removed — close the panel.
+            OnVisitingShipPanelClosed();
+            if (_visitorsSubPanel != null && _gm?.Station != null)
+                _visitorsSubPanel.Refresh(_gm.Station, _gm?.Visitors);
+        }
+
+        private void OnVisitingShipNegotiateDocking(string shipUid)
+        {
+            _gm?.Visitors?.NegotiateDocking(shipUid, _gm.Station);
+            if (!string.IsNullOrEmpty(_visitingShipPanelUid))
+                RefreshVisitingShipPanel(_visitingShipPanelUid);
+            if (_visitorsSubPanel != null && _gm?.Station != null)
+                _visitorsSubPanel.Refresh(_gm.Station, _gm?.Visitors);
+        }
+
+        private void OnVisitingShipRequestDeparture(string shipUid)
+        {
+            _gm?.Visitors?.DepartShip(shipUid, _gm.Station);
+            OnVisitingShipPanelClosed();
+            if (_visitorsSubPanel != null && _gm?.Station != null)
+                _visitorsSubPanel.Refresh(_gm.Station, _gm?.Visitors);
+        }
+
+        private void OnVisitingShipOpenTradeManifest(string shipUid)
+        {
+            // Trade Negotiation modal is event-driven — log for now.
+            Debug.Log($"[WaystationHUDController] OpenTradeManifest: {shipUid}");
+        }
+
+        // ── Faction Detail contextual panel (UI-026) ──────────────────────────
+
+        /// <summary>
+        /// Opens or refreshes the Faction Detail contextual panel for the given faction id.
+        /// Ensures the World → Factions tab is visible behind the panel.
+        /// </summary>
+        private void OpenFactionDetailPanelInternal(string factionId)
+        {
+            if (string.IsNullOrEmpty(factionId)) return;
+
+            _factionDetailPanelId = factionId;
+
+            // Ensure the World tab is open so the factions list is visible behind the panel.
+            if (_sidePanel?.ActiveTab != SidePanelController.Tab.World)
+                _sidePanel?.ActivateTab(SidePanelController.Tab.World);
+
+            MountFactionDetailPanel();
+        }
+
+        private void MountFactionDetailPanel()
+        {
+            if (string.IsNullOrEmpty(_factionDetailPanelId)) return;
+
+            if (_factionDetailPanel == null)
+            {
+                _factionDetailPanel = new FactionDetailPanelController();
+                _factionDetailPanel.OnCloseRequested += OnFactionDetailPanelClosed;
+            }
+
+            if (_factionDetailPanel.parent == null)
+                _contentArea.Add(_factionDetailPanel);
+
+            RefreshFactionDetailPanel(_factionDetailPanelId);
+        }
+
+        private void RefreshFactionDetailPanel(string factionId)
+        {
+            if (_factionDetailPanel == null || _gm?.Station == null) return;
+            _factionDetailPanel.Refresh(factionId, _gm.Station, _gm.Factions, _gm.FactionHistory);
+        }
+
+        private void OnFactionDetailPanelClosed()
+        {
+            _factionDetailPanelId = null;
+            if (_factionDetailPanel?.parent != null)
+                _contentArea.Remove(_factionDetailPanel);
         }
 
         // ── Crew Member contextual panel (UI-023) ─────────────────────────────
