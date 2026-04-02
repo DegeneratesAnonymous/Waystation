@@ -100,6 +100,12 @@ namespace Waystation.UI
         // Tick counter for throttling trade refreshes (every 5 ticks).
         private int _tradeTickCounter;
 
+        // Research tab (UI-018)
+        private VisualElement                 _researchTabRoot;
+        private ResearchSubPanelController    _researchSubPanel;
+        // Tick counter for throttling research refreshes (every 5 ticks).
+        private int _researchTickCounter;
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -405,6 +411,10 @@ namespace Waystation.UI
             else if (tab == SidePanelController.Tab.World)
             {
                 MountWorldPanel();
+            }
+            else if (tab == SidePanelController.Tab.Research)
+            {
+                MountResearchPanel();
             }
         }
 
@@ -785,6 +795,38 @@ namespace Waystation.UI
             }
         }
 
+        // ── Research tab mount / sub-tab switching (UI-018) ───────────────────
+
+        /// <summary>
+        /// Creates (once) and mounts the Research tab root with its five branch sub-tabs.
+        /// Re-mounts the previously active sub-tab if the panel was unmounted and
+        /// remounted.
+        /// </summary>
+        private void MountResearchPanel()
+        {
+            if (_researchTabRoot == null)
+            {
+                _researchTabRoot = new VisualElement();
+                _researchTabRoot.style.flexDirection = FlexDirection.Column;
+                _researchTabRoot.style.flexGrow      = 1;
+                _researchTabRoot.style.height        = Length.Percent(100);
+                _researchTabRoot.style.overflow      = Overflow.Hidden;
+
+                // The research sub-panel handles its own internal branch tabs so
+                // we mount it once here and drive it via Refresh().
+                _researchSubPanel = new ResearchSubPanelController();
+                _researchSubPanel.style.flexGrow = 1;
+                _researchSubPanel.style.height   = Length.Percent(100);
+                _researchTabRoot.Add(_researchSubPanel);
+            }
+
+            _sidePanel.DrawerContentRoot.Add(_researchTabRoot);
+
+            // Refresh immediately with current game state.
+            if (_gm?.Station != null)
+                _researchSubPanel.Refresh(_gm.Station, _gm?.Research);
+        }
+
         private void BuildEventLog()
         {
             _eventLog = new EventLogController();
@@ -919,6 +961,18 @@ namespace Waystation.UI
                 {
                     _tradeTickCounter = 0;
                     _tradeSubPanel.Refresh(station, _gm?.Trade);
+                }
+            }
+
+            // Refresh the research panel every 5 ticks to avoid GC churn.
+            bool researchTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Research;
+            if (_researchSubPanel != null && researchTabActive)
+            {
+                _researchTickCounter++;
+                if (_researchTickCounter >= 5)
+                {
+                    _researchTickCounter = 0;
+                    _researchSubPanel.Refresh(station, _gm?.Research);
                 }
             }
         }
