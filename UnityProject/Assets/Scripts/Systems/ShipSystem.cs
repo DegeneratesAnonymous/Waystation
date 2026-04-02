@@ -407,22 +407,25 @@ namespace Waystation.Systems
                 return (false,
                     $"Research prerequisite '{template.researchPrereq}' not met.", null);
 
-            // Deduct materials and record whether all were available.
+            // Pre-check whether all required materials are available.
             bool materialsReady = true;
+            foreach (var kv in template.buildMaterials)
+            {
+                if (!station.resources.TryGetValue(kv.Key, out float available) ||
+                    available < kv.Value)
+                {
+                    materialsReady = false;
+                    break;
+                }
+            }
+
+            // Deduct available materials (best-effort: deduct what is present).
             foreach (var kv in template.buildMaterials)
             {
                 string resource = kv.Key;
                 float  required = kv.Value;
-
-                if (!station.resources.TryGetValue(resource, out float available) ||
-                    available < required)
-                {
-                    materialsReady = false;
-                }
-                else
-                {
-                    station.resources[resource] = available - required;
-                }
+                if (station.resources.TryGetValue(resource, out float available))
+                    station.resources[resource] = UnityEngine.Mathf.Max(0f, available - required);
             }
 
             string name = string.IsNullOrWhiteSpace(shipName) ? template.id : shipName;

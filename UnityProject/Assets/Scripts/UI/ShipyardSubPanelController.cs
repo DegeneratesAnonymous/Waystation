@@ -327,7 +327,7 @@ namespace Waystation.UI
             // Ship name text field.
             var nameField = new TextField("Ship name:");
             nameField.value = string.IsNullOrEmpty(_pendingShipName)
-                ? _selectedTemplateId.Replace("ship.", "").Replace("_", " ")
+                ? DefaultShipName(_selectedTemplateId)
                 : _pendingShipName;
             nameField.style.marginBottom = 4;
             nameField.RegisterValueChangedCallback(evt => _pendingShipName = evt.newValue);
@@ -400,7 +400,7 @@ namespace Waystation.UI
             if (string.IsNullOrEmpty(_selectedTemplateId)) return;
 
             string shipName = string.IsNullOrWhiteSpace(_pendingShipName)
-                ? _selectedTemplateId.Replace("ship.", "").Replace("_", " ")
+                ? DefaultShipName(_selectedTemplateId)
                 : _pendingShipName;
 
             var (ok, reason, _) = _fleet.BeginConstruction(_selectedTemplateId, shipName, _station);
@@ -418,6 +418,9 @@ namespace Waystation.UI
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        private static string DefaultShipName(string templateId)
+            => templateId.Replace("ship.", "").Replace("_", " ");
 
         private void AddEmpty(string text)
         {
