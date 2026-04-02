@@ -132,6 +132,13 @@ namespace Waystation.Systems
             => _networks.GetNetworkHealth(station, networkType);
 
         /// <summary>
+        /// Returns per-network-type connectivity status for all tiles in the given room.
+        /// Used by the Room contextual panel Networks tab (UI-024).
+        /// </summary>
+        public List<RoomNetworkInfo> GetRoomConnectivity(StationState station, string roomKey)
+            => _networks.GetRoomConnectivity(station, roomKey);
+
+        /// <summary>
         /// Returns the aggregate battery charge level [0, 1] across all electrical networks.
         /// Returns 0 if there is no battery storage capacity.
         /// </summary>
@@ -187,6 +194,31 @@ namespace Waystation.Systems
 
             return data;
         }
+    }
+
+    // ── Room network connectivity ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Connectivity of a single network type to a specific room.
+    /// </summary>
+    public enum RoomNetworkStatus
+    {
+        /// <summary>No conduit of this type is present in any tile of the room.</summary>
+        NotConnected,
+        /// <summary>At least one conduit of this type is in the room and the network is healthy.</summary>
+        Connected,
+        /// <summary>At least one conduit is present but the network is fragmented (Degraded or Severed).</summary>
+        Severed,
+    }
+
+    /// <summary>
+    /// Per-network-type connectivity status for a room, used by the Room contextual panel.
+    /// </summary>
+    public class RoomNetworkInfo
+    {
+        /// <summary>"electric" | "pipe" | "duct" | "fuel"</summary>
+        public string NetworkType;
+        public RoomNetworkStatus Status;
     }
 
     // ── Network health summary ─────────────────────────────────────────────────

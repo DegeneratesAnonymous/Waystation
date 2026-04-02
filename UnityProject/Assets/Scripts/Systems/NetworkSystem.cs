@@ -252,6 +252,72 @@ namespace Waystation.Systems
         // ── Health summary ────────────────────────────────────────────────────
 
         /// <summary>
+        /// Returns per-network-type connectivity for all tiles that belong to the given room.
+        /// Each entry covers one network type (electric, pipe, duct, fuel).
+        /// Status:
+        ///   NotConnected — no complete conduit of that type sits in any room tile.
+        ///   Connected    — at least one conduit is present and its network is healthy.
+        ///   Severed      — at least one conduit is present but the network is fragmented.
+        /// </summary>
+        public List<RoomNetworkInfo> GetRoomConnectivity(StationState station, string roomKey)
+        {
+            var result = new List<RoomNetworkInfo>(4);
+            var networkTypes = new[] { "electric", "pipe", "duct", "fuel" };
+
+            if (station == null || string.IsNullOrEmpty(roomKey))
+            {
+                foreach (var t in networkTypes)
+                    result.Add(new RoomNetworkInfo { NetworkType = t, Status = RoomNetworkStatus.NotConnected });
+                return result;
+            }
+
+            // Collect tile keys for this room.
+            var roomTileKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var kv in station.tileToRoomKey)
+                if (kv.Value == roomKey)
+                    roomTileKeys.Add(kv.Key);
+
+            foreach (var netType in networkTypes)
+            {
+                // Find the first complete foundation in the room belonging to a network of this type.
+                NetworkInstance foundNetwork = null;
+                foreach (var f in station.foundations.Values)
+                {
+                    if (f.status != "complete") continue;
+                    if (GetNetworkType(f) != netType) continue;
+                    if (f.networkId == null) continue;
+
+                    string tileKey = $"{f.tileCol}_{f.tileRow}";
+                    if (!roomTileKeys.Contains(tileKey)) continue;
+
+                    if (station.networks.TryGetValue(f.networkId, out var net))
+                    {
+                        foundNetwork = net;
+                        break;
+                    }
+                }
+
+                RoomNetworkStatus status;
+                if (foundNetwork == null)
+                {
+                    status = RoomNetworkStatus.NotConnected;
+                }
+                else
+                {
+                    // Check station-wide health of this network type.
+                    var health = GetNetworkHealth(station, netType);
+                    status = health.Status == NetworkHealthStatus.Healthy
+                        ? RoomNetworkStatus.Connected
+                        : RoomNetworkStatus.Severed;
+                }
+
+                result.Add(new RoomNetworkInfo { NetworkType = netType, Status = status });
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// Returns an aggregated health summary for all networks of the given type.
         /// ConnectedNodes = total member foundation count across all networks of this type.
         /// SeveredCount   = number of closed isolators of this type that are actively
