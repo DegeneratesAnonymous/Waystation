@@ -13,6 +13,7 @@
 // as described in WO-UI-002 onwards.
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
@@ -130,6 +131,14 @@ namespace Waystation.UI
         // Settings tab (UI-022)
         private SettingsSubPanelController _settingsPanel;
 
+        // Crew Member contextual panel (UI-023)
+        private CrewMemberPanelController _crewMemberPanel;
+        // Tick counter for throttling crew member panel refreshes (every 5 ticks).
+        private int _crewMemberTickCounter;
+        // Stack of open crew member panel NPC uids (for stacking behaviour).
+        // Only the top-most panel (last in list) is shown; others are held in memory.
+        private readonly List<string> _crewMemberStack = new List<string>();
+
         // Top bar (WO-UI-004)
         private TopBarController _topBar;
 
@@ -225,6 +234,13 @@ namespace Waystation.UI
 
             if (_crewAssignmentsPanel != null)
                 _crewAssignmentsPanel.OnCrewRowClicked -= OnCrewAssignmentsRowClicked;
+
+            if (_crewMemberPanel != null)
+            {
+                _crewMemberPanel.OnCloseRequested        -= OnCrewMemberPanelClosed;
+                _crewMemberPanel.OnRelationshipRowClicked -= OnCrewMemberRelationshipRowClicked;
+                _crewMemberPanel.OnExpertiseSlotClicked  -= OnCrewMemberExpertiseSlotClicked;
+            }
 
             _networksSubPanel?.Detach();
 
@@ -1260,6 +1276,18 @@ namespace Waystation.UI
                     _shipyardSubPanel.Refresh(station, _gm?.Fleet);
                 }
             }
+
+            // Refresh the crew member panel every 5 ticks while it is mounted.
+            if (_crewMemberPanel != null && _crewMemberPanel.parent != null &&
+                _crewMemberStack.Count > 0)
+            {
+                _crewMemberTickCounter++;
+                if (_crewMemberTickCounter >= 5)
+                {
+                    _crewMemberTickCounter = 0;
+                    RefreshCrewMemberPanel(_crewMemberStack[_crewMemberStack.Count - 1]);
+                }
+            }
         }
 
         private void OnNewEvent(PendingEvent pending)
@@ -1345,20 +1373,18 @@ namespace Waystation.UI
 
         /// <summary>
         /// Called by GameHUD.SelectCrewMember when UseUIToolkitHUD is true.
-        /// Ensures the Crew tab is open so the roster is visible.
-        /// Crew Detail contextual panel navigation will be implemented in a future Work Order.
+        /// Opens the Crew Member contextual panel for the given NPC uid.
+        /// Ensures the Crew tab is open so the roster remains visible behind the panel.
         /// </summary>
         internal static void SelectCrewMemberInternal(string npcUid)
         {
             if (_instance == null || string.IsNullOrEmpty(npcUid)) return;
 
-            // Ensure the Crew tab is open and the Roster sub-tab is active.
+            // Ensure the Crew tab is open so the roster is visible.
             if (_instance._sidePanel?.ActiveTab != SidePanelController.Tab.Crew)
                 _instance._sidePanel?.ActivateTab(SidePanelController.Tab.Crew);
 
-            // Crew Detail panel will be implemented in a future Work Order.
-            // For now, log the selection so callers have feedback.
-            Debug.Log($"[WaystationHUDController] SelectCrewMember: {npcUid}");
+            _instance.OpenCrewMemberPanel(npcUid);
         }
 
         private static void OpenRoomPanel(string roomId)
@@ -1366,6 +1392,113 @@ namespace Waystation.UI
             if (_instance == null || string.IsNullOrEmpty(roomId)) return;
             Debug.Log($"[WaystationHUDController] OpenRoomPanel: {roomId}");
         }
+
+        // ── Crew Member contextual panel (UI-023) ─────────────────────────────
+
+        /// <summary>
+        /// Opens or refreshes the Crew Member contextual panel for the given NPC uid.
+        /// Stacks: if the NPC is not already the top of the stack, pushes it.
+        /// </summary>
+        private void OpenCrewMemberPanel(string npcUid)
+        {
+            if (string.IsNullOrEmpty(npcUid)) return;
+
+            // Push to stack (avoid duplicates adjacent to each other).
+            if (_crewMemberStack.Count == 0 || _crewMemberStack[_crewMemberStack.Count - 1] != npcUid)
+                _crewMemberStack.Add(npcUid);
+
+            MountCrewMemberPanel();
+        }
+
+        /// <summary>
+        /// Creates (if needed) and mounts the crew member panel, then refreshes it
+        /// with the NPC uid at the top of the stack.
+        /// </summary>
+        private void MountCrewMemberPanel()
+        {
+            if (_crewMemberStack.Count == 0) return;
+            string npcUid = _crewMemberStack[_crewMemberStack.Count - 1];
+
+            if (_crewMemberPanel == null)
+            {
+                _crewMemberPanel = new CrewMemberPanelController();
+                _crewMemberPanel.OnCloseRequested        += OnCrewMemberPanelClosed;
+                _crewMemberPanel.OnRelationshipRowClicked += OnCrewMemberRelationshipRowClicked;
+                _crewMemberPanel.OnExpertiseSlotClicked  += OnCrewMemberExpertiseSlotClicked;
+            }
+
+            if (_crewMemberPanel.parent == null)
+                _contentArea.Add(_crewMemberPanel);
+
+            RefreshCrewMemberPanel(npcUid);
+        }
+
+        private void RefreshCrewMemberPanel(string npcUid)
+        {
+            if (_crewMemberPanel == null || _gm?.Station == null) return;
+
+            _gm.Station.npcs.TryGetValue(npcUid, out var npc);
+            _crewMemberPanel.Refresh(
+                npc,
+                _gm.Station,
+                _gm.Registry,
+                _gm.Skills,
+                _gm.Inventory,
+                _gm.Traits);
+        }
+
+        private void OnCrewMemberPanelClosed()
+        {
+            if (_crewMemberStack.Count > 0)
+                _crewMemberStack.RemoveAt(_crewMemberStack.Count - 1);
+
+            if (_crewMemberStack.Count > 0)
+            {
+                // Re-show the previous NPC in the stack.
+                RefreshCrewMemberPanel(_crewMemberStack[_crewMemberStack.Count - 1]);
+            }
+            else
+            {
+                // No more stacked panels — unmount.
+                if (_crewMemberPanel?.parent != null)
+                    _contentArea.Remove(_crewMemberPanel);
+            }
+        }
+
+        private void OnCrewMemberRelationshipRowClicked(string otherNpcUid)
+        {
+            OpenCrewMemberPanel(otherNpcUid);
+        }
+
+        private void OnCrewMemberExpertiseSlotClicked(string npcUid, string skillId)
+        {
+            if (_gm?.Station == null || !_gm.Station.npcs.TryGetValue(npcUid, out var npc)) return;
+
+            // Build and show the expertise slot unlock modal.
+            var prompt = new ExpertiseSlotPrompt();
+
+            var selectableExpertise = _gm.Skills?.GetSelectableExpertise(npc, showAll: false)
+                ?? new List<ExpertiseDefinition>();
+
+            // Filter to expertise relevant to this skill (or unbound expertise if skill is empty).
+            foreach (var expDef in selectableExpertise)
+            {
+                if (string.IsNullOrEmpty(expDef.requiredSkillId) || expDef.requiredSkillId == skillId)
+                    prompt.AddExpertiseOption(expDef.expertiseId, expDef.displayName ?? expDef.expertiseId,
+                        expDef.description ?? "");
+            }
+
+            prompt.OnConfirmed += expertiseId =>
+            {
+                _gm.Skills?.ChooseExpertise(npc, expertiseId, _gm.Station);
+                // Refresh the panel to reflect the new choice.
+                RefreshCrewMemberPanel(npcUid);
+            };
+
+            _contentArea.Add(prompt);
+            prompt.Show();
+        }
+
 
         private static void OpenNetworkOverlay()
         {

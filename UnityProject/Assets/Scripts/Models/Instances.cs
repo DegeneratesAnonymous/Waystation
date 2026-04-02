@@ -840,6 +840,9 @@ namespace Waystation.Models
         public string classId;
         public string subclassId;
 
+        /// <summary>Optional backstory text shown in the History tab of the Crew Member panel.</summary>
+        public string backstory = "";
+
         // Derived skills (rolled from template ranges at spawn)
         public Dictionary<string, int>   skills   = new Dictionary<string, int>();
         public List<string>              traits   = new List<string>();
