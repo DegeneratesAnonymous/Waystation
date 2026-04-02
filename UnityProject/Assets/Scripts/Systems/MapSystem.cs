@@ -110,7 +110,10 @@ namespace Waystation.Systems
         public bool TryUnlockSector(StationState station, int col, int row)
         {
             if (station == null) return false;
-            if (station.explorationPoints < SectorUnlockPointCost) return false;
+
+            // Dev telescope mode bypasses all progression gates for sector expansion.
+            bool telescopeMode = Waystation.UI.SystemMapController.TelescopeMode;
+            if (!telescopeMode && station.explorationPoints < SectorUnlockPointCost) return false;
 
             float gx = GalaxyGenerator.HomeX + col * GalUnitPerCell;
             float gy = GalaxyGenerator.HomeY + row * GalUnitPerCell;
@@ -133,9 +136,10 @@ namespace Waystation.Systems
                     break;
                 }
             }
-            if (!adjacentToKnown) return false;
+            if (!telescopeMode && !adjacentToKnown) return false;
 
-            station.explorationPoints -= SectorUnlockPointCost;
+            if (!telescopeMode)
+                station.explorationPoints -= SectorUnlockPointCost;
             var generated = GalaxyGenerator.GenerateSectorAtCoordinates(
                 station.galaxySeed, new Vector2(gx, gy), station);
             generated.discoveryState = SectorDiscoveryState.Detected;

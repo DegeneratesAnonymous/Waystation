@@ -96,6 +96,13 @@ namespace Waystation.UI
             style.paddingBottom = 8;
             style.overflow      = Overflow.Hidden;
 
+            var sectionLabel = new Label("DEPARTMENT DIRECTORY");
+            sectionLabel.style.fontSize = 9;
+            sectionLabel.style.color = new Color(0.39f, 0.75f, 1.00f, 1f);
+            sectionLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sectionLabel.style.marginBottom = 3;
+            Add(sectionLabel);
+
             // ── Toolbar: "New Department" button ───────────────────────────────
             _toolbar = new VisualElement();
             _toolbar.AddToClassList(ToolbarClass);
@@ -223,6 +230,13 @@ namespace Waystation.UI
             row.AddToClassList(RowClass);
             row.style.flexDirection  = FlexDirection.Column;
             row.style.marginBottom   = 4;
+            row.style.paddingLeft    = 2;
+            row.style.paddingRight   = 2;
+            row.style.paddingTop     = 4;
+            row.style.paddingBottom  = 4;
+            row.style.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0.65f);
+            row.style.borderBottomWidth = 1;
+            row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f);
 
             // ── Main body ──────────────────────────────────────────────────────
             var body = new VisualElement();
@@ -260,6 +274,7 @@ namespace Waystation.UI
                 var nameLabel = new Label(dept.name);
                 nameLabel.AddToClassList(NameLabelClass);
                 nameLabel.style.flexGrow   = 1;
+                nameLabel.style.minWidth   = 0;
                 nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
                 nameLabel.RegisterCallback<MouseDownEvent>(evt =>
                 {
@@ -271,22 +286,6 @@ namespace Waystation.UI
                 });
                 body.Add(nameLabel);
             }
-
-            // Crew count
-            int crewCount = CountCrewInDept(dept.uid);
-            var crewMeta = new Label($"{crewCount} crew");
-            crewMeta.AddToClassList(MetaLabelClass);
-            crewMeta.style.marginRight = 6;
-            crewMeta.style.opacity     = 0.6f;
-            body.Add(crewMeta);
-
-            // Lead NPC name
-            string leadName = GetLeadName(dept);
-            var leadMeta = new Label(leadName);
-            leadMeta.AddToClassList(MetaLabelClass);
-            leadMeta.style.marginRight = 8;
-            leadMeta.style.opacity     = 0.7f;
-            body.Add(leadMeta);
 
             // Colour button
             var colourBtn = new Button(() =>
@@ -326,6 +325,30 @@ namespace Waystation.UI
             }
 
             row.Add(body);
+
+            // ── Meta row (counts + lead) ───────────────────────────────────
+            var metaRow = new VisualElement();
+            metaRow.style.flexDirection = FlexDirection.Row;
+            metaRow.style.flexWrap      = Wrap.Wrap;
+            metaRow.style.alignItems    = Align.Center;
+            metaRow.style.paddingLeft   = 20;
+            metaRow.style.marginTop     = 2;
+            metaRow.style.marginBottom  = 2;
+
+            int crewCount = CountCrewInDept(dept.uid);
+            var crewMeta = new Label($"{crewCount} crew");
+            crewMeta.AddToClassList(MetaLabelClass);
+            crewMeta.style.marginRight = 10;
+            crewMeta.style.opacity     = 0.65f;
+            metaRow.Add(crewMeta);
+
+            string leadName = GetLeadName(dept);
+            var leadMeta = new Label($"Lead: {leadName}");
+            leadMeta.AddToClassList(MetaLabelClass);
+            leadMeta.style.opacity = 0.75f;
+            metaRow.Add(leadMeta);
+
+            row.Add(metaRow);
 
             // ── Head appointment dropdown ─────────────────────────────────────
             row.Add(BuildHeadDropdownRow(dept));
@@ -427,6 +450,7 @@ namespace Waystation.UI
         {
             var row = new VisualElement();
             row.style.flexDirection  = FlexDirection.Row;
+            row.style.flexWrap       = Wrap.Wrap;
             row.style.alignItems     = Align.Center;
             row.style.paddingLeft    = 20;
             row.style.marginBottom   = 2;
@@ -478,7 +502,7 @@ namespace Waystation.UI
             var dropdown = new DropdownField(choices,
                 choices.Contains(currentLeadDisplay) ? currentLeadDisplay : "None");
             dropdown.style.flexGrow  = 1;
-            dropdown.style.minWidth  = 80;
+            dropdown.style.minWidth  = 140;
             dropdown.RegisterValueChangedCallback(evt =>
             {
                 if (_deptSystem == null || _station == null) return;

@@ -357,14 +357,6 @@ namespace Waystation.UI
 
             if (ship == null) return;
 
-            // Retrieve template for extra info.
-            ShipTemplate template = null;
-            if (_ships != null)
-            {
-                // Access template via ContentRegistry is not available here;
-                // we use what's on the ship instance directly.
-            }
-
             // ── Header: "SHIP DETAIL — <ship name>" ──────────────────────────────
             var header = new VisualElement();
             header.style.flexDirection  = FlexDirection.Row;
@@ -537,7 +529,7 @@ namespace Waystation.UI
                 ApplyActionButtonStyle(repairBtn, new Color(0.90f, 0.65f, 0.25f, 1f));
                 repairBtn.style.marginTop = 4;
                 string capturedUid = ship.uid;
-                repairBtn.RegisterCallback<ClickEvent>(_ =>
+                repairBtn.RegisterCallback<ClickEvent>(e =>
                 {
                     if (_station == null || _ships == null) return;
                     _ships.BeginRepair(capturedUid, _station, out _);
@@ -655,7 +647,7 @@ namespace Waystation.UI
         /// <summary>
         /// Returns true when the log message relates to a fleet operation.
         /// </summary>
-        internal static bool IsFleetLogEntry(string message)
+        public static bool IsFleetLogEntry(string message)
         {
             if (string.IsNullOrEmpty(message)) return false;
             string m = message.ToLowerInvariant();

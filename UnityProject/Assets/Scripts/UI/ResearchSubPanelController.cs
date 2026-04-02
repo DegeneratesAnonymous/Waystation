@@ -129,22 +129,33 @@ namespace Waystation.UI
                 _zoomScale[branch]  = 1f;
             }
 
-            // Branch sub-tab strip (horizontal).
-            _branchTabs = new TabStrip(TabStrip.Orientation.Horizontal);
-            _branchTabs.OnTabSelected += OnBranchTabSelected;
-            _branchTabs.AddTab("INDUSTRY",    ResearchBranch.Industry.ToString());
-            _branchTabs.AddTab("EXPLORATION", ResearchBranch.Exploration.ToString());
-            _branchTabs.AddTab("DIPLOMACY",   ResearchBranch.Diplomacy.ToString());
-            _branchTabs.AddTab("SECURITY",    ResearchBranch.Security.ToString());
-            _branchTabs.AddTab("SCIENCE",     ResearchBranch.Science.ToString());
-            Add(_branchTabs);
-
             // Content area for the currently-active branch graph.
             _branchContent = new VisualElement();
             _branchContent.AddToClassList(BranchContentClass);
             _branchContent.style.flexGrow = 1;
             _branchContent.style.overflow = Overflow.Hidden;
+
+            // Branch sub-tab strip (horizontal).
+            // Add _branchContent before AddTab(), because AddTab() auto-selects
+            // the first tab and fires OnTabSelected immediately.
+            _branchTabs = new TabStrip(TabStrip.Orientation.Horizontal);
+            _branchTabs.OnTabSelected += OnBranchTabSelected;
+            ConfigureBranchTabButton(_branchTabs.AddTab("INDUSTRY",    ResearchBranch.Industry.ToString()));
+            ConfigureBranchTabButton(_branchTabs.AddTab("EXPLORATION", ResearchBranch.Exploration.ToString()));
+            ConfigureBranchTabButton(_branchTabs.AddTab("DIPLOMACY",   ResearchBranch.Diplomacy.ToString()));
+            ConfigureBranchTabButton(_branchTabs.AddTab("SECURITY",    ResearchBranch.Security.ToString()));
+            ConfigureBranchTabButton(_branchTabs.AddTab("SCIENCE",     ResearchBranch.Science.ToString()));
+            Add(_branchTabs);
             Add(_branchContent);
+        }
+
+        private static void ConfigureBranchTabButton(Button button)
+        {
+            button.style.flexGrow = 1;
+            button.style.flexBasis = 0;
+            button.style.minWidth = 0;
+            button.style.whiteSpace = WhiteSpace.NoWrap;
+            button.style.unityTextAlign = TextAnchor.MiddleCenter;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -275,8 +286,8 @@ namespace Waystation.UI
             graphArea.RegisterCallback<PointerMoveEvent>(evt =>
             {
                 if (!dragging) return;
-                var delta          = evt.position - dragStart;
-                _panOffset[branch] = panAtDragStart + new Vector2(delta.x, delta.y);
+                var delta          = (Vector2)evt.position - dragStart;
+                _panOffset[branch] = panAtDragStart + delta;
                 ApplyTransform(canvas, branch);
                 evt.StopPropagation();
             });

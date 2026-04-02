@@ -202,6 +202,7 @@
 .ws-tab-strip {
     flex-direction: row;
     align-items: stretch;
+    justify-content: space-between;
     gap: 1px;
     border-bottom-width: 1px;
     border-bottom-color: var(--ws-border-mid);
@@ -219,13 +220,17 @@
     background-color: rgba(0, 0, 0, 0);
     border-width: 0;
     border-radius: var(--ws-radius);
-    padding: var(--ws-space-sm) var(--ws-space-lg);
+    padding: var(--ws-space-sm) var(--ws-space-md);
     color: var(--ws-text-mid);
     font-size: var(--ws-fs-btn);
-    letter-spacing: var(--ws-ls-btn);
+    letter-spacing: 0.8px;
     -unity-text-align: middle-center;
-    cursor: link;
-    flex-shrink: 0;
+    cursor: default;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
     transition-property: color, background-color;
     transition-duration: 0.14s;
     transition-timing-function: ease;
@@ -368,7 +373,7 @@
     border-color: var(--ws-border-dark);
     border-width: 1px;
     gap: var(--ws-space-md);
-    cursor: link;
+    cursor: default;
     transition-property: background-color, border-color;
     transition-duration: 0.14s;
 }
@@ -472,7 +477,7 @@
     letter-spacing: var(--ws-ls-btn);
     padding: var(--ws-space-sm) var(--ws-space-lg);
     -unity-text-align: middle-center;
-    cursor: link;
+    cursor: default;
     transition-property: background-color, border-color, color;
     transition-duration: 0.08s;
     transition-timing-function: ease;
@@ -743,7 +748,7 @@
     color: var(--ws-text-mid);
     transition-property: background-color, border-color, color;
     transition-duration: 0.08s;
-    cursor: link;
+    cursor: default;
 }
 
 .ws-top-bar__speed-btn:hover {
@@ -786,7 +791,7 @@
     font-size: var(--ws-fs-badge);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
-    cursor: link;
+    cursor: default;
     flex-shrink: 0;
     letter-spacing: 0.4px;
     transition-property: background-color;
@@ -864,7 +869,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    cursor: link;
+    cursor: default;
     flex-shrink: 0;
     overflow: visible;
     transition-property: background-color;
@@ -913,3 +918,5 @@
 .ws-side-panel__tab--active .ws-side-panel__tab-label {
     color: var(--ws-acc-bright);
 }
+
+

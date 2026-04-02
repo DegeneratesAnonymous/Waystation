@@ -167,7 +167,7 @@
 
     /* ── Side panel dimensions ──────────────────────────────────────────── */
     /* --ws-drawer-width: width of the content drawer that slides out        */
-    --ws-drawer-width: 420px;
+   --ws-drawer-width: 520px;
     /* --ws-side-panel-tab-width: width of the right-edge icon tab strip     */
     --ws-side-panel-tab-width: 52px;
 

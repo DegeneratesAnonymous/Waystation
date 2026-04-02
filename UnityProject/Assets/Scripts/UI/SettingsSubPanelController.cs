@@ -17,11 +17,13 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using Waystation.Core;
 using Waystation.Models;
+using Waystation.Systems;
 
 namespace Waystation.UI
 {
@@ -44,6 +46,7 @@ namespace Waystation.UI
         private const string SubTabGame      = "game";
         private const string SubTabSaveLoad  = "saveload";
         private const string SubTabScenarios = "scenarios";
+        private const string SubTabDev       = "dev";
 
         // ── Internal state ────────────────────────────────────────────────────
 
@@ -81,6 +84,7 @@ namespace Waystation.UI
             _subTabs.AddTab("GAME",      SubTabGame);
             _subTabs.AddTab("SAVE/LOAD", SubTabSaveLoad);
             _subTabs.AddTab("SCENARIOS", SubTabScenarios);
+            _subTabs.AddTab("DEV",       SubTabDev);
 
             Add(_subTabs);
             Add(_subContent);
@@ -131,7 +135,115 @@ namespace Waystation.UI
                 case SubTabGame:      BuildGameTab(root);      break;
                 case SubTabSaveLoad:  BuildSaveLoadTab(root);  break;
                 case SubTabScenarios: BuildScenariosTab(root); break;
+                case SubTabDev:       BuildDevTab(root);       break;
             }
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // ── Dev sub-tab ──────────────────────────────────────────────────────
+        // ═════════════════════════════════════════════════════════════════════
+
+        private void BuildDevTab(VisualElement root)
+        {
+            root.Add(BuildSectionHeader("RUNTIME TOOLS"));
+
+            bool freeBuild = BuildingSystem.DevMode;
+            var freeBuildBtn = BuildActionButton(
+                freeBuild ? "FREE BUILD: ON" : "FREE BUILD: OFF",
+                danger: false
+            );
+            freeBuildBtn.clicked += () =>
+            {
+                BuildingSystem.DevMode = !BuildingSystem.DevMode;
+                RebuildSubTab();
+            };
+            root.Add(freeBuildBtn);
+
+            bool telescopeMode = SystemMapController.TelescopeMode;
+            var telescopeBtn = BuildActionButton(
+                telescopeMode ? "TELESCOPE MODE: ON" : "TELESCOPE MODE: OFF",
+                danger: false
+            );
+            telescopeBtn.clicked += () =>
+            {
+                SystemMapController.TelescopeMode = !SystemMapController.TelescopeMode;
+                RebuildSubTab();
+            };
+            root.Add(telescopeBtn);
+
+            var tradeShipBtn = BuildActionButton("CALL TRADE SHIP", danger: false);
+            tradeShipBtn.clicked += () =>
+            {
+                if (_gm?.Visitors != null && _station != null)
+                    _gm.Visitors.SpawnTradeShip(_station);
+            };
+            root.Add(tradeShipBtn);
+
+            root.Add(BuildSectionHeader("SPAWN"));
+
+            var spawnCrewBtn = BuildActionButton("SPAWN CREW NPC", danger: false);
+            spawnCrewBtn.clicked += () =>
+            {
+                if (_gm?.Npcs == null || _station == null) return;
+                string templateId = PickNpcTemplate(preferCrew: true);
+                if (string.IsNullOrEmpty(templateId)) return;
+                var npc = _gm.Npcs.SpawnCrewMember(templateId);
+                if (npc != null) _station.AddNpc(npc);
+            };
+            root.Add(spawnCrewBtn);
+
+            var spawnVisitorBtn = BuildActionButton("SPAWN VISITOR NPC", danger: false);
+            spawnVisitorBtn.clicked += () =>
+            {
+                if (_gm?.Npcs == null || _station == null) return;
+                string templateId = PickNpcTemplate(preferCrew: false);
+                if (string.IsNullOrEmpty(templateId)) return;
+                var npc = _gm.Npcs.SpawnVisitor(templateId);
+                if (npc != null) _station.AddNpc(npc);
+            };
+            root.Add(spawnVisitorBtn);
+
+            root.Add(BuildSectionHeader("EVENTS"));
+
+            var queueEventBtn = BuildActionButton("QUEUE RANDOM EVENT", danger: false);
+            queueEventBtn.clicked += () =>
+            {
+                if (_gm?.Events == null || _registry?.Events == null || _registry.Events.Count == 0)
+                    return;
+
+                var eventIds = new List<string>(_registry.Events.Keys);
+                eventIds.Sort(StringComparer.Ordinal);
+                string eventId = eventIds[UnityEngine.Random.Range(0, eventIds.Count)];
+                _gm.Events.QueueEvent(eventId);
+                _station?.LogEvent($"[DEV] Queued event: {eventId}");
+            };
+            root.Add(queueEventBtn);
+
+            var tip = BuildEmptyLabel(
+                "Tip: Telescope Mode bypasses map research and sector unlock cost gates. " +
+                "Use Map tab to view and expand sectors immediately."
+            );
+            tip.style.marginTop = 6;
+            root.Add(tip);
+        }
+
+        private string PickNpcTemplate(bool preferCrew)
+        {
+            if (_gm?.Npcs == null) return null;
+
+            var templates = _gm.Npcs.AvailableTemplateIds?.ToList();
+            if (templates == null || templates.Count == 0) return null;
+
+            templates.Sort(StringComparer.Ordinal);
+            string preferredPrefix = preferCrew ? "npc.crew" : "npc.visitor";
+
+            foreach (string id in templates)
+            {
+                if (id.StartsWith(preferredPrefix, StringComparison.OrdinalIgnoreCase))
+                    return id;
+            }
+
+            return templates[0];
         }
 
         // ═════════════════════════════════════════════════════════════════════

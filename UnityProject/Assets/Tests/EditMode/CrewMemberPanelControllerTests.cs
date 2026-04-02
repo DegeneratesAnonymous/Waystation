@@ -290,8 +290,8 @@ namespace Waystation.Tests
 
             var rec = new RelationshipRecord
             {
-                npcUid1              = npc1Uid < npc2Uid ? npc1Uid : npc2Uid,
-                npcUid2              = npc1Uid < npc2Uid ? npc2Uid : npc1Uid,
+                npcUid1              = string.CompareOrdinal(npc1Uid, npc2Uid) < 0 ? npc1Uid : npc2Uid,
+                npcUid2              = string.CompareOrdinal(npc1Uid, npc2Uid) < 0 ? npc2Uid : npc1Uid,
                 affinityScore        = 25f,
                 relationshipType     = RelationshipType.Friend,
                 lastInteractionTick  = lastInteractionTick,

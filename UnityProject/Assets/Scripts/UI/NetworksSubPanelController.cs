@@ -62,6 +62,7 @@ namespace Waystation.UI
         // ── Child elements ─────────────────────────────────────────────────────
 
         private readonly VisualElement _overlayStrip;
+        private readonly Label         _summaryLabel;
         private readonly VisualElement _healthList;
 
         // Overlay button refs keyed by OverlayMode.
@@ -107,6 +108,9 @@ namespace Waystation.UI
             _overlayStrip.AddToClassList(OverlayStripClass);
             _overlayStrip.style.flexDirection = FlexDirection.Row;
             _overlayStrip.style.flexWrap      = Wrap.Wrap;
+            _overlayStrip.style.paddingBottom = 6;
+            _overlayStrip.style.borderBottomWidth = 1;
+            _overlayStrip.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f);
             _overlayStrip.style.marginBottom  = 12;
             Add(_overlayStrip);
 
@@ -122,6 +126,12 @@ namespace Waystation.UI
             healthLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             healthLabel.style.marginBottom            = 4;
             Add(healthLabel);
+
+            _summaryLabel = new Label("No network data");
+            _summaryLabel.style.fontSize    = 9;
+            _summaryLabel.style.color       = new Color(0.34f, 0.47f, 0.63f, 1f);
+            _summaryLabel.style.marginBottom = 6;
+            Add(_summaryLabel);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
@@ -237,6 +247,7 @@ namespace Waystation.UI
             row.style.paddingLeft       = 6;
             row.style.paddingRight      = 6;
             row.style.marginBottom      = 2;
+            row.style.backgroundColor   = new Color(0.06f, 0.08f, 0.12f, 0.65f);
             row.style.borderBottomWidth = 1;
             row.style.borderBottomColor = new Color(0.09f, 0.12f, 0.17f, 1f); // border-dark
 
@@ -280,11 +291,16 @@ namespace Waystation.UI
         {
             if (station == null || manager == null) return;
 
+            int totalNodes = 0;
+            int totalSevered = 0;
+
             foreach (var (_, _, netType, _) in s_Networks)
             {
                 if (!_healthLabels.TryGetValue(netType, out var labels)) continue;
 
                 var health = manager.GetNetworkHealth(station, netType);
+                totalNodes += health.ConnectedNodes;
+                totalSevered += health.SeveredCount;
                 labels.nodes.text   = $"{health.ConnectedNodes} node{(health.ConnectedNodes != 1 ? "s" : "")}";
                 labels.severed.text = $"{health.SeveredCount} sev";
 
@@ -305,6 +321,10 @@ namespace Waystation.UI
                 if (netType == "electric" && _batteryMeter != null)
                     _batteryMeter.SetValue(manager.GetBatteryLevel(station));
             }
+
+            _summaryLabel.text = totalSevered > 0
+                ? $"{totalNodes} nodes | {totalSevered} severed links"
+                : $"{totalNodes} nodes | all links healthy";
         }
 
         private static void ApplyStatusStyle(Label label, NetworkHealthStatus status)

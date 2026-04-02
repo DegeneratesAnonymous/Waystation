@@ -145,6 +145,12 @@ namespace Waystation.UI
 
             Add(header);
 
+            // ── Tab content area (must exist before AddTab fires OnTabSelected) ──
+            _tabContent = new ScrollView(ScrollViewMode.Vertical);
+            _tabContent.AddToClassList(TabContentClass);
+            _tabContent.style.flexGrow = 1;
+            _tabContent.style.overflow = Overflow.Hidden;
+
             // ── Tab strip ──────────────────────────────────────────────────────
             _tabs = new TabStrip(TabStrip.Orientation.Horizontal);
             _tabs.OnTabSelected += OnTabSelected;
@@ -154,12 +160,6 @@ namespace Waystation.UI
             _tabs.AddTab("INVENTORY", "inventory");
             _tabs.AddTab("HISTORY",   "history");
             Add(_tabs);
-
-            // ── Tab content area ───────────────────────────────────────────────
-            _tabContent = new ScrollView(ScrollViewMode.Vertical);
-            _tabContent.AddToClassList(TabContentClass);
-            _tabContent.style.flexGrow = 1;
-            _tabContent.style.overflow = Overflow.Hidden;
             Add(_tabContent);
         }
 
