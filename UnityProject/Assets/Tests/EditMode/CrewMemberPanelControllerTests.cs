@@ -258,10 +258,12 @@ namespace Waystation.Tests
         [Test]
         public void RelationshipWithinDecayWarning_ShowsAmberWarning()
         {
-            // Decay threshold = 7 * 96 = 672 ticks. Warning within 24 ticks of that.
+            // Decay threshold = 7 * 96 = 672 ticks. Warning fires within 24 ticks of threshold.
+            // Set lastTick so that ticksSinceLastInteraction = decayThreshold - 10 = 662,
+            // which is >= (decayThreshold - 24) = 648 → warning should show.
             int decayThreshold = RelationshipRegistry.DecayIntervalTicks;
-            int currentTick    = decayThreshold + 10;
-            int lastTick       = currentTick - (decayThreshold - 10); // 10 ticks before threshold
+            int currentTick    = decayThreshold + 10; // e.g. 682
+            int lastTick       = currentTick - decayThreshold + 10; // 20 (662 ticks ago)
 
             var station = MakeStationWithRelationship("npc-a", "npc-b", currentTick, lastTick);
             var npc = station.npcs["npc-a"];

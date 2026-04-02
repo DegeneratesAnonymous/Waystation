@@ -528,6 +528,8 @@ namespace Waystation.UI
             }
 
             // Expertise slot pips
+            // Integer division is intentional: floors to the number of complete multiples
+            // of SlotEverySkillLevels (4) reached, so level 7 yields 1 slot, level 8 yields 2.
             int slotsEarned  = inst.Level / SkillSystem.SlotEverySkillLevels;
             int slotsChosen  = 0;
             if (_npc.chosenExpertise != null && _registry?.Expertises != null)
