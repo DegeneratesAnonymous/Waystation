@@ -602,7 +602,6 @@ namespace Waystation.UI
                 string capturedUid = f.uid;
                 row.RegisterCallback<ClickEvent>(_ =>
                     OnWorkbenchRowClicked?.Invoke(capturedUid));
-                row.style.cursor = new Cursor(); // shows pointer-style cursor
 
                 root.Add(row);
             }
