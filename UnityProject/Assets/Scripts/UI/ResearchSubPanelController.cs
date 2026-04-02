@@ -371,7 +371,7 @@ namespace Waystation.UI
 
                 // If this cell is already taken (two nodes share the same grid coord),
                 // find the next free cell scanning rows then columns.
-                if (map.Count > 0 && usedCells.Contains((col, row)))
+                if (usedCells.Contains((col, row)))
                 {
                     while (usedCells.Contains((fallbackCol, fallbackRow)))
                     {
@@ -900,7 +900,7 @@ namespace Waystation.UI
             int space = name.LastIndexOf(' ');
             return space > 0 && space < name.Length - 1
                 ? $"{name[0]}{name[space + 1]}"
-                : name[..1];
+                : name.Length > 0 ? name[..1] : "?";
         }
     }
 }
