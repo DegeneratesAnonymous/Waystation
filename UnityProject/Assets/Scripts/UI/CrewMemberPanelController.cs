@@ -190,13 +190,11 @@ namespace Waystation.UI
             _inventory   = inventory;
             _traits      = traits;
 
-            if (npc == null) return;
-
-            // Update the header name.
+            // Update the header name (or clear it if no NPC is selected).
             var nameLabel = this.Q<Label>("npc-name");
-            if (nameLabel != null) nameLabel.text = npc.name ?? "Unknown";
+            if (nameLabel != null) nameLabel.text = npc?.name ?? "—";
 
-            // Rebuild the active tab content.
+            // Rebuild the active tab content (will show empty state if npc is null).
             RebuildActiveTab();
         }
 
@@ -212,7 +210,14 @@ namespace Waystation.UI
         {
             _tabContent.contentContainer.Clear();
 
-            if (_npc == null) return;
+            if (_npc == null)
+            {
+                var empty = MakeEmptyLabel("No crew member selected.");
+                empty.style.paddingLeft = 10;
+                empty.style.paddingTop  = 10;
+                _tabContent.contentContainer.Add(empty);
+                return;
+            }
 
             switch (_activeTab)
             {
@@ -304,11 +309,21 @@ namespace Waystation.UI
             // ── Needs ──────────────────────────────────────────────────────────
             AddSectionHeader(root, "NEEDS");
 
-            AddNeedBar(root, "Sleep",       _npc.sleepNeed?.value ?? 100f,       false);
-            AddNeedBar(root, "Hunger",      _npc.hungerNeed?.value ?? 100f,      false);
-            AddNeedBar(root, "Thirst",      _npc.thirstNeed?.value ?? 100f,      false);
-            AddNeedBar(root, "Recreation",  _npc.recreationNeed?.value ?? 100f,  false);
-            AddNeedBar(root, "Social",      _npc.socialNeed?.value ?? 50f,       false);
+            // Crisis thresholds: <=10% for Sleep/Thirst/Social (no dedicated inCrisis field),
+            // <=HungerMalnourishThr for Hunger, isBurntOut for Recreation,
+            // inCrisis field for Hygiene.
+            const float LowNeedCrisisThreshold = 10f;
+            bool sleepCrisis      = (_npc.sleepNeed?.value      ?? 100f) <= LowNeedCrisisThreshold;
+            bool hungerCrisis     = (_npc.hungerNeed?.value     ?? 100f) <= NeedSystem.HungerMalnourishThr;
+            bool thirstCrisis     = (_npc.thirstNeed?.value     ?? 100f) <= LowNeedCrisisThreshold;
+            bool recreationCrisis = _npc.recreationNeed?.isBurntOut ?? false;
+            bool socialCrisis     = (_npc.socialNeed?.value     ?? 50f)  <= LowNeedCrisisThreshold;
+
+            AddNeedBar(root, "Sleep",       _npc.sleepNeed?.value ?? 100f,       sleepCrisis);
+            AddNeedBar(root, "Hunger",      _npc.hungerNeed?.value ?? 100f,      hungerCrisis);
+            AddNeedBar(root, "Thirst",      _npc.thirstNeed?.value ?? 100f,      thirstCrisis);
+            AddNeedBar(root, "Recreation",  _npc.recreationNeed?.value ?? 100f,  recreationCrisis);
+            AddNeedBar(root, "Social",      _npc.socialNeed?.value ?? 50f,       socialCrisis);
             AddNeedBar(root, "Hygiene",     _npc.hygieneNeed?.value ?? 100f,     _npc.hygieneNeed?.inCrisis ?? false);
 
             // Mood (old float axis, 0–1 → 0–100)
@@ -608,13 +623,20 @@ namespace Waystation.UI
 
                 row.Add(pipRow);
 
-                // Clicking the skill row with a pending pip fires the modal
+                // Clicking the skill row with a pending pip fires the modal.
+                // Guard against double-invocation when clicking on a child element
+                // (e.g., the pending expertise pip) by only handling clicks whose
+                // direct target is the row itself.
                 if (hasPendingSlot)
                 {
                     string capturedSkillId = inst.skillId;
                     string capturedNpcUid  = _npc.uid;
-                    row.RegisterCallback<ClickEvent>(_ =>
-                        OnExpertiseSlotClicked?.Invoke(capturedNpcUid, capturedSkillId));
+                    row.RegisterCallback<ClickEvent>(evt =>
+                    {
+                        if (evt.target != row)
+                            return;
+                        OnExpertiseSlotClicked?.Invoke(capturedNpcUid, capturedSkillId);
+                    });
                 }
             }
 

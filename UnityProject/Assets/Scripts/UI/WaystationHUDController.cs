@@ -1493,6 +1493,18 @@ namespace Waystation.UI
                 _gm.Skills?.ChooseExpertise(npc, expertiseId, _gm.Station);
                 // Refresh the panel to reflect the new choice.
                 RefreshCrewMemberPanel(npcUid);
+
+                // Remove the prompt from the content area after confirmation
+                // to avoid leaking UI elements and lingering event handlers.
+                if (prompt.parent == _contentArea)
+                    _contentArea.Remove(prompt);
+            };
+
+            // Also clean up when the prompt is hidden (e.g., on cancel/backdrop click).
+            prompt.OnHidden += () =>
+            {
+                if (prompt.parent == _contentArea)
+                    _contentArea.Remove(prompt);
             };
 
             _contentArea.Add(prompt);

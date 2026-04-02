@@ -132,6 +132,45 @@ namespace Waystation.Tests
             Assert.GreaterOrEqual(crisisElements.Count, 1,
                 "A crisis indicator should appear when injuries >= 5.");
         }
+
+        [Test]
+        public void HungerCrisis_ValueAtMalnourishThreshold_ShowsCrisisIndicator()
+        {
+            var npc = CrewMemberPanelTestHelpers.MakeCrewNpc();
+            npc.hungerNeed.value = NeedSystem.HungerMalnourishThr; // exactly 10 (at threshold)
+
+            _panel.Refresh(npc, null, null, null, null, null);
+
+            var crisisElements = _panel.Query<Label>(className: "ws-crew-member-panel__crisis-indicator").ToList();
+            Assert.GreaterOrEqual(crisisElements.Count, 1,
+                "A crisis indicator should appear when hunger is at the malnourish threshold.");
+        }
+
+        [Test]
+        public void SleepCrisis_VeryLowValue_ShowsCrisisIndicator()
+        {
+            var npc = CrewMemberPanelTestHelpers.MakeCrewNpc();
+            npc.sleepNeed.value = 5f; // well below the 10 crisis threshold
+
+            _panel.Refresh(npc, null, null, null, null, null);
+
+            var crisisElements = _panel.Query<Label>(className: "ws-crew-member-panel__crisis-indicator").ToList();
+            Assert.GreaterOrEqual(crisisElements.Count, 1,
+                "A crisis indicator should appear when sleep value is critically low.");
+        }
+
+        [Test]
+        public void RecreationCrisis_BurntOut_ShowsCrisisIndicator()
+        {
+            var npc = CrewMemberPanelTestHelpers.MakeCrewNpc();
+            npc.recreationNeed.isBurntOut = true;
+
+            _panel.Refresh(npc, null, null, null, null, null);
+
+            var crisisElements = _panel.Query<Label>(className: "ws-crew-member-panel__crisis-indicator").ToList();
+            Assert.GreaterOrEqual(crisisElements.Count, 1,
+                "A crisis indicator should appear when the NPC is burnt out.");
+        }
     }
 
     // ── Skills tab — expertise slot pips ──────────────────────────────────────
@@ -203,9 +242,15 @@ namespace Waystation.Tests
             _panel.Refresh(npc, null, null, null, null, null);
             _panel.SelectTab("skills");
 
+            int invokeCount    = 0;
             string receivedNpcUid  = null;
             string receivedSkillId = null;
-            _panel.OnExpertiseSlotClicked += (uid, sid) => { receivedNpcUid = uid; receivedSkillId = sid; };
+            _panel.OnExpertiseSlotClicked += (uid, sid) =>
+            {
+                invokeCount++;
+                receivedNpcUid  = uid;
+                receivedSkillId = sid;
+            };
 
             var pendingPips = _panel.Query<VisualElement>(
                 className: "ws-crew-member-panel__expertise-pip--pending").ToList();
@@ -215,6 +260,7 @@ namespace Waystation.Tests
             evt.target = pendingPips[0];
             pendingPips[0].SendEvent(evt);
 
+            Assert.AreEqual(1, invokeCount, "OnExpertiseSlotClicked should fire exactly once.");
             Assert.AreEqual(npc.uid,        receivedNpcUid,  "Event should carry the NPC uid.");
             Assert.AreEqual("skill.surgery", receivedSkillId, "Event should carry the skill id.");
         }
@@ -424,18 +470,22 @@ namespace Waystation.Tests
             var npc = CrewMemberPanelTestHelpers.MakeCrewNpc();
             npc.backstory = "A veteran of the outer belt mining wars.";
 
-            // Switch to history tab manually via OnTabSelected
-            // We exercise by checking after Refresh (which defaults to vitals).
-            // Since Refresh calls RebuildActiveTab with the current active tab,
-            // we need to trigger the history tab.
             _panel.Refresh(npc, null, null, null, null, null);
+            _panel.SelectTab("history");
 
-            // The panel defaults to vitals; access history content by calling
-            // a second refresh after selecting the history tab internally.
-            // In tests, we can query for any Label containing the backstory text.
-            // Here we just verify the backstory string field is correctly stored on the NPC.
-            Assert.AreEqual("A veteran of the outer belt mining wars.", npc.backstory,
-                "Backstory field should be stored on NPCInstance.");
+            // The history tab should render the backstory text as a Label.
+            var labels = _panel.Query<Label>().ToList();
+            bool found = false;
+            foreach (var lbl in labels)
+            {
+                if (lbl.text == npc.backstory)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            Assert.IsTrue(found,
+                "The backstory text should be rendered as a Label in the History tab.");
         }
 
         [Test]

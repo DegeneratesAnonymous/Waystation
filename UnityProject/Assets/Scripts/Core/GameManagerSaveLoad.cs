@@ -449,6 +449,7 @@ namespace Waystation.Core
                 { "proximity_work_modifier_expires_at",   n.proximityWorkModifierExpiresAtTick },
                 { "expertise_modifier",                   n.expertiseModifier },
                 { "ability_score_points",                 n.abilityScorePoints },
+                { "backstory",                            n.backstory ?? "" },
             };
 
             // Collections
@@ -575,6 +576,7 @@ namespace Waystation.Core
                 proximityWorkModifierExpiresAtTick = Int(d, "proximity_work_modifier_expires_at", -1),
                 expertiseModifier  = Flt(d, "expertise_modifier", 1f),
                 abilityScorePoints = Int(d, "ability_score_points"),
+                backstory          = Str(d, "backstory") ?? "",
             };
 
             if (Enum.TryParse(Str(d, "life_stage") ?? "Adult", out LifeStage ls)) n.lifeStage = ls;
