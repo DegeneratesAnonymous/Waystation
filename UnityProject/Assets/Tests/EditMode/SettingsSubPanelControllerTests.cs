@@ -3,11 +3,12 @@
 //
 // Tests cover:
 //   * Refresh with null station/gm/registry does not throw
-//   * Save to occupied slot gates behind confirmation (ConfirmAction.Save pending)
-//   * Delete slot gates behind confirmation (ConfirmAction.Delete pending)
-//   * Cancelling a pending action clears the gate
-//   * Slot info round-trip: saved_at and station_name serialization
-//   * SetAutosaveInterval clamps negative values to 0
+//   * Sub-tab navigation via ClickEvent
+//   * Save to occupied slot gates behind confirmation prompt (via ClickEvent + file)
+//   * Load slot gates behind confirmation prompt (via ClickEvent + file)
+//   * Delete slot gates behind confirmation prompt (via ClickEvent + file)
+//   * Cancelling a pending action clears the gate (via ClickEvent on CANCEL button)
+//   * SaveSlotCount / AutosaveSlotIndex constants meet spec
 
 using System;
 using System.Collections.Generic;
@@ -45,94 +46,80 @@ namespace Waystation.Tests
         }
     }
 
-    // ── Save slot info round-trip ──────────────────────────────────────────────
+    // ── Sub-tab navigation ─────────────────────────────────────────────────────
 
     [TestFixture]
-    internal class SaveSlotInfoSerializationTests
+    internal class SettingsSubTabNavigationTests
     {
-        /// <summary>
-        /// Verifies that <c>saved_at</c> (UTC DateTime ticks serialised as string)
-        /// and <c>station_name</c> survive a MiniJSON round-trip.
-        /// This mirrors the GetSaveSlotInfo parsing logic in GameManager.
-        /// </summary>
-        [Test]
-        public void SavedAt_RoundTrip_UtcTicks()
+        private SettingsSubPanelController _panel;
+
+        private static readonly System.Reflection.FieldInfo FieldActiveSubTab =
+            typeof(SettingsSubPanelController).GetField(
+                "_activeSubTab",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        [SetUp]
+        public void SetUp()
         {
-            var now = new DateTime(2025, 6, 15, 10, 30, 0, DateTimeKind.Utc);
-            var data = new Dictionary<string, object>
-            {
-                { "station_name", "Ironfall Station" },
-                { "tick",         512 },
-                { "saved_at",     now.Ticks.ToString() },
-            };
+            _panel = new SettingsSubPanelController();
+            Assert.IsNotNull(FieldActiveSubTab, "_activeSubTab field must exist");
+        }
 
-            string json = MiniJSON.Json.Serialize(data);
-            var rt = MiniJSON.Json.Deserialize(json) as Dictionary<string, object>;
-
-            Assert.IsNotNull(rt, "Deserialized dict must not be null");
-            Assert.AreEqual("Ironfall Station", rt["station_name"].ToString(),
-                "station_name must survive round-trip.");
-            Assert.AreEqual(512, Convert.ToInt32(rt["tick"]),
-                "tick must survive round-trip.");
-
-            string savedAtStr = rt["saved_at"].ToString();
-            Assert.IsTrue(long.TryParse(savedAtStr, out long ticks),
-                "saved_at must be parseable as long");
-            var restored = new DateTime(ticks, DateTimeKind.Utc);
-            Assert.AreEqual(now, restored,
-                "Restored DateTime must equal the original.");
+        private void ClickTab(string label)
+        {
+            var btn = _panel.Query<Button>().Where(b => b.text == label).First();
+            Assert.IsNotNull(btn, $"Tab button '{label}' must exist in the panel.");
+            using var evt = ClickEvent.GetPooled();
+            evt.target = btn;
+            btn.SendEvent(evt);
         }
 
         [Test]
-        public void ActiveScenarioId_RoundTrip()
+        public void DefaultActiveTab_IsGame()
         {
-            var data = new Dictionary<string, object>
-            {
-                { "active_scenario_id", "scenario.standard_start" },
-                { "station_name",       "TestStation" },
-                { "tick",               100 },
-            };
-
-            string json = MiniJSON.Json.Serialize(data);
-            var rt = MiniJSON.Json.Deserialize(json) as Dictionary<string, object>;
-
-            Assert.IsNotNull(rt);
-            Assert.AreEqual("scenario.standard_start", rt["active_scenario_id"].ToString(),
-                "active_scenario_id must survive round-trip.");
+            _panel.Refresh(null, null, null);
+            string active = (string)FieldActiveSubTab.GetValue(_panel);
+            Assert.AreEqual("game", active, "Panel must start on the GAME sub-tab.");
         }
 
         [Test]
-        public void EmptySavedAt_HandledGracefully()
+        public void ClickSaveLoadTab_ActivatesSaveLoadSubTab()
         {
-            var data = new Dictionary<string, object>
-            {
-                { "station_name", "TestStation" },
-                { "tick",         10 },
-                // no "saved_at" key
-            };
+            _panel.Refresh(null, null, null);
+            ClickTab("SAVE/LOAD");
+            string active = (string)FieldActiveSubTab.GetValue(_panel);
+            Assert.AreEqual("saveload", active, "Clicking SAVE/LOAD tab must activate saveload sub-tab.");
+        }
 
-            string json = MiniJSON.Json.Serialize(data);
-            var rt = MiniJSON.Json.Deserialize(json) as Dictionary<string, object>;
+        [Test]
+        public void ClickScenariosTab_ActivatesScenariosSubTab()
+        {
+            _panel.Refresh(null, null, null);
+            ClickTab("SCENARIOS");
+            string active = (string)FieldActiveSubTab.GetValue(_panel);
+            Assert.AreEqual("scenarios", active, "Clicking SCENARIOS tab must activate scenarios sub-tab.");
+        }
 
-            // GetSaveSlotInfo checks for "saved_at" and falls back gracefully.
-            bool hasSavedAt = rt.TryGetValue("saved_at", out var sa) && sa != null && !string.IsNullOrEmpty(sa.ToString());
-            Assert.IsFalse(hasSavedAt,
-                "Missing saved_at key should not cause an error.");
+        [Test]
+        public void ClickGameTab_ReturnsToGameSubTab()
+        {
+            _panel.Refresh(null, null, null);
+            ClickTab("SCENARIOS");
+            ClickTab("GAME");
+            string active = (string)FieldActiveSubTab.GetValue(_panel);
+            Assert.AreEqual("game", active, "Clicking GAME tab must restore game sub-tab.");
         }
     }
 
-    // ── Confirmation gate: save overwrite ────────────────────────────────────
+    // ── Confirmation gate tests via ClickEvent ─────────────────────────────────
+    //
+    // These tests write a real save file to Application.persistentDataPath (slot 1)
+    // and create a minimal GameManager component so the Save/Load panel renders with
+    // an occupied slot, then exercise the button handlers via ClickEvent.
 
     [TestFixture]
     internal class SettingsConfirmationGateTests
     {
-        // These tests verify that the Settings panel's pending-action gate
-        // prevents accidental saves and deletes.  The gate is implemented as
-        // private _pendingAction / _pendingSlotIndex state in
-        // SettingsSubPanelController, inspected via reflection.
-
-        private SettingsSubPanelController _panel;
-
         private static readonly System.Reflection.FieldInfo FieldPendingAction =
             typeof(SettingsSubPanelController).GetField(
                 "_pendingAction",
@@ -143,113 +130,143 @@ namespace Waystation.Tests
                 "_pendingSlotIndex",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-        // ConfirmAction enum — mirrored here to avoid exposing it.
-        // Values: None=0, Save=1, Load=2, Delete=3, MainMenu=4
+        // ConfirmAction enum — mirrors the private enum in SettingsSubPanelController.
         private enum ConfirmAction { None, Save, Load, Delete, MainMenu }
+
+        private string _slotPath;
+        private GameObject _gmGo;
+        private GameManager _gm;
+        private SettingsSubPanelController _panel;
 
         [SetUp]
         public void SetUp()
         {
-            _panel = new SettingsSubPanelController();
+            Assert.IsNotNull(FieldPendingAction,  "_pendingAction field must exist");
+            Assert.IsNotNull(FieldPendingSlot,    "_pendingSlotIndex field must exist");
 
-            // Verify reflection worked.
-            Assert.IsNotNull(FieldPendingAction,
-                "_pendingAction field must exist on SettingsSubPanelController");
-            Assert.IsNotNull(FieldPendingSlot,
-                "_pendingSlotIndex field must exist on SettingsSubPanelController");
+            // Write a minimal valid save file so slot 1 appears occupied.
+            _slotPath = Path.Combine(
+                Application.persistentDataPath, "waystation_save_slot1.json");
+            var fakeData = new Dictionary<string, object>
+            {
+                { "station_name", "GateTestStation" },
+                { "tick",         99 },
+                { "saved_at",     DateTime.UtcNow.Ticks.ToString() },
+            };
+            File.WriteAllText(_slotPath, MiniJSON.Json.Serialize(fakeData));
+
+            // Create a minimal GameManager so GetSaveSlotInfo can read the file.
+            _gmGo  = new GameObject("GM_GateTest");
+            _gm    = _gmGo.AddComponent<GameManager>();
+
+            // Build and refresh the panel on the SAVE/LOAD sub-tab.
+            _panel = new SettingsSubPanelController();
+            _panel.Refresh(new StationState("GateTestStation"), _gm, null);
+
+            // Navigate to the SAVE/LOAD sub-tab via ClickEvent.
+            var tabBtn = _panel.Query<Button>().Where(b => b.text == "SAVE/LOAD").First();
+            Assert.IsNotNull(tabBtn, "SAVE/LOAD tab button must exist.");
+            using var tabEvt = ClickEvent.GetPooled();
+            tabEvt.target = tabBtn;
+            tabBtn.SendEvent(tabEvt);
         }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (File.Exists(_slotPath)) File.Delete(_slotPath);
+            if (_gmGo != null) Object.DestroyImmediate(_gmGo);
+        }
+
+        private void Click(Button btn)
+        {
+            using var e = ClickEvent.GetPooled();
+            e.target = btn;
+            btn.SendEvent(e);
+        }
+
+        private int PendingAction => (int)FieldPendingAction.GetValue(_panel);
+        private int PendingSlot   => (int)FieldPendingSlot.GetValue(_panel);
+
+        // ── Save overwrite gate ────────────────────────────────────────────────
+
+        [Test]
+        public void ClickSave_OnOccupiedSlot_EntersSavePending()
+        {
+            // Slot 1 has a file, so the first SAVE button should gate.
+            var saveBtn = _panel.Query<Button>().Where(b => b.text == "SAVE").First();
+            Assert.IsNotNull(saveBtn, "SAVE button must exist for slot 1.");
+
+            Click(saveBtn);
+
+            Assert.AreEqual((int)ConfirmAction.Save, PendingAction,
+                "Clicking SAVE on an occupied slot must enter Save pending state.");
+            Assert.AreEqual(1, PendingSlot,
+                "Pending slot index must be 1.");
+        }
+
+        [Test]
+        public void ClickSave_OccupiedSlot_ThenCancel_ClearsPending()
+        {
+            var saveBtn = _panel.Query<Button>().Where(b => b.text == "SAVE").First();
+            Click(saveBtn); // enters pending, rebuilds UI
+
+            // After rebuild the confirmation row is visible; find CANCEL.
+            var cancelBtn = _panel.Query<Button>().Where(b => b.text == "CANCEL").First();
+            Assert.IsNotNull(cancelBtn, "CANCEL button must appear in confirmation row.");
+            Click(cancelBtn);
+
+            Assert.AreEqual((int)ConfirmAction.None, PendingAction,
+                "Pressing CANCEL must clear the pending action.");
+            Assert.AreEqual(-1, PendingSlot,
+                "Pending slot must reset to -1 after cancel.");
+        }
+
+        // ── Load gate ─────────────────────────────────────────────────────────
+
+        [Test]
+        public void ClickLoad_OnOccupiedSlot_EntersLoadPending()
+        {
+            // The LOAD button for slot 1 should be enabled (file exists).
+            var loadBtn = _panel.Query<Button>().Where(b => b.text == "LOAD").First();
+            Assert.IsNotNull(loadBtn, "LOAD button must exist.");
+            Assert.IsTrue(loadBtn.enabledSelf, "LOAD must be enabled for occupied slot 1.");
+
+            Click(loadBtn);
+
+            Assert.AreEqual((int)ConfirmAction.Load, PendingAction,
+                "Clicking LOAD on an occupied slot must enter Load pending state.");
+            Assert.AreEqual(1, PendingSlot,
+                "Pending slot index must be 1.");
+        }
+
+        // ── Delete gate ────────────────────────────────────────────────────────
+
+        [Test]
+        public void ClickDelete_OnOccupiedSlot_EntersDeletePending()
+        {
+            // DELETE button only appears when slot is occupied.
+            var deleteBtn = _panel.Query<Button>().Where(b => b.text == "DELETE").First();
+            Assert.IsNotNull(deleteBtn, "DELETE button must exist for occupied slot 1.");
+
+            Click(deleteBtn);
+
+            Assert.AreEqual((int)ConfirmAction.Delete, PendingAction,
+                "Clicking DELETE on an occupied slot must enter Delete pending state.");
+            Assert.AreEqual(1, PendingSlot,
+                "Pending slot index must be 1.");
+        }
+
+        // ── Initial state ──────────────────────────────────────────────────────
 
         [Test]
         public void InitialState_NoPendingAction()
         {
-            int pending = (int)FieldPendingAction.GetValue(_panel);
-            Assert.AreEqual((int)ConfirmAction.None, pending,
-                "Panel must start with no pending action.");
-        }
-
-        [Test]
-        public void InitialState_NoPendingSlot()
-        {
-            int slot = (int)FieldPendingSlot.GetValue(_panel);
-            Assert.AreEqual(-1, slot,
-                "Panel must start with no pending slot index.");
-        }
-
-        /// <summary>
-        /// Simulates clicking SAVE on a slot that already has data.
-        /// The panel should enter ConfirmAction.Save state rather than
-        /// immediately calling SaveGame.
-        /// </summary>
-        [Test]
-        public void SaveOccupiedSlot_GatesOnPendingConfirmation()
-        {
-            // Set pending action directly via reflection to simulate the gate.
-            FieldPendingAction.SetValue(_panel, (int)ConfirmAction.Save);
-            FieldPendingSlot.SetValue(_panel, 1);
-
-            int pendingAfter = (int)FieldPendingAction.GetValue(_panel);
-            int slotAfter    = (int)FieldPendingSlot.GetValue(_panel);
-
-            Assert.AreEqual((int)ConfirmAction.Save, pendingAfter,
-                "Pending action must be Save after clicking save on occupied slot.");
-            Assert.AreEqual(1, slotAfter,
-                "Pending slot must match the clicked slot index.");
-        }
-
-        /// <summary>
-        /// Simulates clicking DELETE on a slot.  The panel should enter
-        /// ConfirmAction.Delete state rather than immediately deleting.
-        /// </summary>
-        [Test]
-        public void DeleteSlot_GatesOnPendingConfirmation()
-        {
-            FieldPendingAction.SetValue(_panel, (int)ConfirmAction.Delete);
-            FieldPendingSlot.SetValue(_panel, 3);
-
-            int pendingAfter = (int)FieldPendingAction.GetValue(_panel);
-            int slotAfter    = (int)FieldPendingSlot.GetValue(_panel);
-
-            Assert.AreEqual((int)ConfirmAction.Delete, pendingAfter,
-                "Pending action must be Delete after clicking delete.");
-            Assert.AreEqual(3, slotAfter,
-                "Pending slot must match the clicked slot index.");
-        }
-
-        /// <summary>
-        /// Simulates pressing CANCEL on the confirmation prompt.
-        /// The pending state must be cleared so the action is not executed.
-        /// </summary>
-        [Test]
-        public void Cancel_ClearsPendingAction()
-        {
-            // Arrange: set a pending action.
-            FieldPendingAction.SetValue(_panel, (int)ConfirmAction.Delete);
-            FieldPendingSlot.SetValue(_panel, 2);
-
-            // Act: simulate cancel (clear the gate).
-            FieldPendingAction.SetValue(_panel, (int)ConfirmAction.None);
-            FieldPendingSlot.SetValue(_panel, -1);
-
-            // Assert.
-            int pendingAfter = (int)FieldPendingAction.GetValue(_panel);
-            int slotAfter    = (int)FieldPendingSlot.GetValue(_panel);
-
-            Assert.AreEqual((int)ConfirmAction.None, pendingAfter,
-                "Pending action must be cleared after cancel.");
-            Assert.AreEqual(-1, slotAfter,
-                "Pending slot must be reset to -1 after cancel.");
-        }
-
-        [Test]
-        public void LoadSlot_GatesOnPendingConfirmation()
-        {
-            FieldPendingAction.SetValue(_panel, (int)ConfirmAction.Load);
-            FieldPendingSlot.SetValue(_panel, 2);
-
-            Assert.AreEqual((int)ConfirmAction.Load, (int)FieldPendingAction.GetValue(_panel),
-                "Pending action must be Load after clicking load.");
-            Assert.AreEqual(2, (int)FieldPendingSlot.GetValue(_panel),
-                "Pending slot must match slot 2.");
+            // After navigating to save/load, no action should be pending.
+            Assert.AreEqual((int)ConfirmAction.None, PendingAction,
+                "Panel must have no pending action on first render.");
+            Assert.AreEqual(-1, PendingSlot,
+                "Panel must have no pending slot on first render.");
         }
     }
 
@@ -275,9 +292,9 @@ namespace Waystation.Tests
         [Test]
         public void AutosaveSlotIndex_NotInManualSlotRange()
         {
-            // Manual slots are 1..SaveSlotCount; 0 must not overlap.
             Assert.IsTrue(GameManager.AutosaveSlotIndex < 1,
                 "Autosave slot (0) must be below the manual save range (1..).");
         }
     }
 }
+

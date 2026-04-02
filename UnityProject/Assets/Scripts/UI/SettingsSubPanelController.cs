@@ -243,11 +243,7 @@ namespace Waystation.UI
             {
                 root.Add(BuildConfirmRow(
                     "Return to main menu? Unsaved progress will be lost.",
-                    onConfirm: () =>
-                    {
-                        _gm?.SaveGame(); // save to default slot before leaving
-                        SceneManager.LoadScene("MainMenuScene");
-                    },
+                    onConfirm: () => SceneManager.LoadScene("MainMenuScene"),
                     onCancel: () => { _pendingAction = ConfirmAction.None; RebuildSubTab(); }
                 ));
             }
@@ -419,8 +415,8 @@ namespace Waystation.UI
 
             card.Add(btnRow);
 
-            // Active-missions warning banner
-            if (!readOnly && HasActiveMissions())
+            // Active-missions warning banner — only relevant when slot has data and can be loaded.
+            if (!readOnly && !isEmpty && HasActiveMissions())
             {
                 var warnLbl = new Label("⚠ Active missions — loading will interrupt them.");
                 warnLbl.style.color    = new Color(0.85f, 0.65f, 0.15f, 1f);

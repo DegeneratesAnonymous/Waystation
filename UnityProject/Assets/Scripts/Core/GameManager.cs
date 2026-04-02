@@ -204,7 +204,10 @@ namespace Waystation.Core
         {
             // Load persisted settings from PlayerPrefs.
             if (PlayerPrefs.HasKey("autosave_interval_ticks"))
-                autosaveIntervalTicks = PlayerPrefs.GetInt("autosave_interval_ticks");
+            {
+                int savedInterval = PlayerPrefs.GetInt("autosave_interval_ticks");
+                autosaveIntervalTicks = Mathf.Max(0, savedInterval);
+            }
 
             Registry = ContentRegistry.Instance ?? FindAnyObjectByType<ContentRegistry>();
             if (Registry == null)

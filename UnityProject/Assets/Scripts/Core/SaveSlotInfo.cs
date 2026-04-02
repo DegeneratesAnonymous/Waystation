@@ -6,8 +6,8 @@ using System;
 namespace Waystation.Core
 {
     /// <summary>
-    /// Read-only snapshot of metadata stored in a save slot file.
-    /// Returned by <see cref="GameManager.GetSaveSlotInfo"/>.
+    /// Metadata record populated by <see cref="GameManager.GetSaveSlotInfo"/>.
+    /// Contains lightweight information read from a save slot file for display purposes.
     /// </summary>
     public class SaveSlotInfo
     {
