@@ -150,7 +150,9 @@ namespace Waystation.UI
         private WorkbenchPanelController _workbenchPanel;
         // Foundation uid currently shown in the workbench panel, or null when closed.
         private string _workbenchPanelFoundationUid;
-        // Tick counter for throttling workbench panel refreshes (every tick = 1).
+        // Tick counter for throttling workbench panel refreshes (5 ticks when Queue
+        // tab is not active; every tick when the Queue tab is active so the progress
+        // bar decrements smoothly).
         private int _workbenchPanelTickCounter;
 
         // Top bar (WO-UI-004)
@@ -261,6 +263,9 @@ namespace Waystation.UI
                 _roomPanel.OnCloseRequested      -= OnRoomPanelClosed;
                 _roomPanel.OnWorkbenchRowClicked -= OnRoomPanelWorkbenchClicked;
             }
+
+            if (_workbenchPanel != null)
+                _workbenchPanel.OnCloseRequested -= OnWorkbenchPanelClosed;
 
             _networksSubPanel?.Detach();
 
@@ -1321,12 +1326,28 @@ namespace Waystation.UI
                 }
             }
 
-            // Refresh the workbench panel every tick while it is mounted (queue
-            // progress bar must update each game tick per acceptance criteria).
+            // Refresh the workbench panel while it is mounted.
+            // When the Queue tab is active, refresh every tick so the progress bar
+            // decrements smoothly.  For other tabs, throttle to every 5 ticks to
+            // avoid rebuilding the recipe/status tree unnecessarily.
             if (_workbenchPanel != null && _workbenchPanel.parent != null &&
                 !string.IsNullOrEmpty(_workbenchPanelFoundationUid))
             {
-                RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+                bool queueTabActive = _workbenchPanel.ActiveTab == "queue";
+                if (queueTabActive)
+                {
+                    _workbenchPanelTickCounter = 0;
+                    RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+                }
+                else
+                {
+                    _workbenchPanelTickCounter++;
+                    if (_workbenchPanelTickCounter >= 5)
+                    {
+                        _workbenchPanelTickCounter = 0;
+                        RefreshWorkbenchPanel(_workbenchPanelFoundationUid);
+                    }
+                }
             }
         }
 
@@ -1535,7 +1556,6 @@ namespace Waystation.UI
                 foundationUid,
                 _gm.Station,
                 _gm.Registry,
-                _gm.Building,
                 _gm.Crafting,
                 _gm.Inventory);
         }

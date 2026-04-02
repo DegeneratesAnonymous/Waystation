@@ -16,7 +16,7 @@
 // Opened from world workbench click or from Room panel → Contents tab via
 //   WaystationHUDController.OpenWorkbenchPanel(foundationUid).
 //
-// Data is pushed via Refresh(foundationUid, station, registry, building, crafting, inventory).
+// Data is pushed via Refresh(foundationUid, station, registry, crafting, inventory).
 // Feature-flagged under FeatureFlags.UseUIToolkitHUD.
 
 using System;
@@ -64,7 +64,6 @@ namespace Waystation.UI
         private string          _foundationUid;
         private StationState    _station;
         private ContentRegistry _registry;
-        private BuildingSystem  _building;
         private CraftingSystem  _crafting;
         private InventorySystem _inventory;
 
@@ -141,6 +140,9 @@ namespace Waystation.UI
 
         // ── Public API ─────────────────────────────────────────────────────────
 
+        /// <summary>Gets the currently active tab id.</summary>
+        public string ActiveTab => _activeTab;
+
         /// <summary>
         /// Programmatically selects a tab by id.
         /// Valid ids: "status" | "queue" | "recipes".
@@ -155,14 +157,12 @@ namespace Waystation.UI
             string          foundationUid,
             StationState    station,
             ContentRegistry registry,
-            BuildingSystem  building,
             CraftingSystem  crafting,
             InventorySystem inventory)
         {
             _foundationUid = foundationUid;
             _station       = station;
             _registry      = registry;
-            _building      = building;
             _crafting      = crafting;
             _inventory     = inventory;
 
@@ -310,7 +310,10 @@ namespace Waystation.UI
                 npcName.style.fontSize = 12;
                 npcRow.Add(npcName);
 
-                string action = string.IsNullOrEmpty(npc.currentTaskId) ? "Working" : npc.currentTaskId;
+                string action =
+                    !string.IsNullOrEmpty(npc.currentTaskId) ? npc.currentTaskId :
+                    !string.IsNullOrEmpty(npc.currentJobId)  ? npc.currentJobId  :
+                    "Idle";
                 var actionLabel = new Label(action);
                 actionLabel.style.fontSize = 11;
                 actionLabel.style.color    = new Color(0.55f, 0.55f, 0.65f);
@@ -647,7 +650,7 @@ namespace Waystation.UI
             track.style.marginBottom = 2;
 
             var fill_ = new VisualElement();
-            fill_.style.height  = StyleKeyword.Auto;
+            fill_.style.height  = new StyleLength(new Length(100f, LengthUnit.Percent));
             fill_.style.width   = new StyleLength(new Length(Mathf.Clamp01(fill) * 100f, LengthUnit.Percent));
             fill_.style.backgroundColor = color;
             track.Add(fill_);
