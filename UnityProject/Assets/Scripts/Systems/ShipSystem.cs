@@ -343,6 +343,115 @@ namespace Waystation.Systems
             return ships;
         }
 
+        // ── UI-021 additions ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all ship blueprints available for construction.
+        /// A blueprint is included when the template has <c>buildTimeTicks &gt; 0</c>
+        /// (i.e. it is buildable) and it is fleet-only.
+        /// The <paramref name="station"/> is used to check research prerequisites;
+        /// pass null to skip the research gate (all blueprints returned as unlocked).
+        /// Each entry indicates whether the blueprint is currently buildable or locked.
+        /// </summary>
+        public IReadOnlyList<(ShipTemplate template, bool locked)> GetAvailableBlueprints(
+            StationState station)
+        {
+            var result = new List<(ShipTemplate, bool)>();
+            if (_registry == null) return result;
+            foreach (var template in _registry.Ships.Values)
+            {
+                if (!template.fleetOnly) continue;
+                if (template.buildTimeTicks <= 0) continue;
+
+                // When station is null, skip research gating entirely (no blueprints locked).
+                bool locked;
+                if (station == null)
+                {
+                    locked = false;
+                }
+                else
+                {
+                    locked = !string.IsNullOrEmpty(template.researchPrereq)
+                             && !station.HasTag(template.researchPrereq);
+                }
+                result.Add((template, locked));
+            }
+            result.Sort((a, b) => string.CompareOrdinal(a.Item1.role, b.Item1.role));
+            return result;
+        }
+
+        /// <summary>
+        /// Begin construction of a ship from a blueprint.
+        /// Validates that the blueprint exists and is not research-locked.
+        /// Deducts build materials from station resources (best-effort; marks
+        /// <see cref="ShipConstruction.materialsReady"/> false when any material
+        /// is insufficient).
+        /// On success, adds a <see cref="ShipConstruction"/> to
+        /// <c>station.shipConstructions</c> and fires <see cref="OnFleetChanged"/>.
+        /// Returns <c>(ok, reason, construction)</c>.
+        /// </summary>
+        public (bool ok, string reason, ShipConstruction construction) BeginConstruction(
+            string templateId, string shipName, StationState station)
+        {
+            if (!FeatureFlags.FleetManagement)
+                return (false, "Fleet management is disabled.", null);
+
+            if (station == null)
+                return (false, "Station is null.", null);
+
+            if (string.IsNullOrEmpty(templateId))
+                return (false, "Template ID must not be null or empty.", null);
+
+            if (_registry == null)
+                return (false, "Content registry is unavailable.", null);
+
+            if (!_registry.Ships.TryGetValue(templateId, out var template))
+                return (false, $"Unknown ship template '{templateId}'.", null);
+
+            if (template.buildTimeTicks <= 0)
+                return (false, $"Ship template '{templateId}' is not buildable.", null);
+
+            if (!string.IsNullOrEmpty(template.researchPrereq) &&
+                !station.HasTag(template.researchPrereq))
+                return (false,
+                    $"Research prerequisite '{template.researchPrereq}' not met.", null);
+
+            // Pre-check whether all required materials are available.
+            bool materialsReady = true;
+            foreach (var kv in template.buildMaterials)
+            {
+                if (!station.resources.TryGetValue(kv.Key, out float available) ||
+                    available < kv.Value)
+                {
+                    materialsReady = false;
+                    break;
+                }
+            }
+
+            // Deduct available materials (best-effort: deduct what is present).
+            foreach (var kv in template.buildMaterials)
+            {
+                string resource = kv.Key;
+                float  required = kv.Value;
+                if (station.resources.TryGetValue(resource, out float available))
+                    station.resources[resource] = UnityEngine.Mathf.Max(0f, available - required);
+            }
+
+            string name = string.IsNullOrWhiteSpace(shipName) ? template.id : shipName;
+            var construction = ShipConstruction.Create(
+                templateId, name,
+                station.tick, station.tick + template.buildTimeTicks,
+                materialsReady);
+
+            station.shipConstructions[construction.uid] = construction;
+            station.LogEvent(
+                $"Construction of '{name}' ({template.role}) started " +
+                $"({template.buildTimeTicks} ticks).");
+
+            OnFleetChanged?.Invoke();
+            return (true, null, construction);
+        }
+
         /// <summary>
         /// Calculates the repair cost for a ship based on its current condition.
         /// Returns (partsCost, estimatedTicks).
@@ -412,7 +521,8 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Per-tick update: resolve fleet missions that have completed.
+        /// Per-tick update: resolve fleet missions that have completed,
+        /// and update construction progress.
         /// </summary>
         public void Tick(StationState station)
         {
@@ -426,6 +536,26 @@ namespace Waystation.Systems
                 {
                     ResolveMission(ship, station);
                 }
+            }
+
+            // Update construction progress and finalise completed builds.
+            var completedConstructions = new List<string>();
+            foreach (var kv in station.shipConstructions)
+            {
+                var c = kv.Value;
+                int span = c.endTick - c.startTick;
+                c.progressFraction = span <= 0 ? 1f
+                    : Mathf.Clamp01((float)(station.tick - c.startTick) / span);
+
+                if (station.tick >= c.endTick)
+                    completedConstructions.Add(kv.Key);
+            }
+
+            foreach (var uid in completedConstructions)
+            {
+                var c = station.shipConstructions[uid];
+                station.shipConstructions.Remove(uid);
+                AddShipToFleet(c.templateId, c.shipName, station);
             }
         }
 

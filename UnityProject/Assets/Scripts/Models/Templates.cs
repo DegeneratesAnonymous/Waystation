@@ -252,6 +252,9 @@ namespace Waystation.Models
         // When true, this template is reserved for player fleet use only and must
         // not appear in VisitorSystem's random arrival selection.
         public bool  fleetOnly             = false;
+        // Research tag that must be unlocked (via StationState.HasTag) before this
+        // blueprint appears as buildable.  Empty string means no research required.
+        public string researchPrereq       = "";
 
         public static ShipTemplate FromDict(Dictionary<string, object> raw)
         {
@@ -271,6 +274,7 @@ namespace Waystation.Models
                 crewCapacity     = raw.GetInt("crew_capacity", 0),
                 buildTimeTicks   = raw.GetInt("build_time_ticks", 0),
                 fleetOnly        = raw.GetBool("fleet_only", false),
+                researchPrereq   = raw.GetString("research_prereq", ""),
             };
             foreach (var s in raw.GetStringList("faction_restrictions"))    t.factionRestrictions.Add(s);
             foreach (var s in raw.GetStringList("behavior_tags"))           t.behaviorTags.Add(s);
