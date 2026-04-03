@@ -20,6 +20,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Waystation.Models;
@@ -112,6 +113,7 @@ namespace Waystation.UI
         private VisualElement _orbitHoverRing;
         private VisualElement _dashedOrbitOverlay;  // Painter2D layer for dashed moon/station orbits
         private VisualElement _routeLineOverlay;    // Painter2D layer for dashed route lines
+        private VisualElement _routeEndpointRing;    // ring shown on last route waypoint dot
         private float _orbitTime;
         private int _selectedOrbitBodyIndex = -1;
         private int _hoverOrbitBodyIndex = -1;
@@ -176,6 +178,7 @@ namespace Waystation.UI
             public float angle;         // radians at selection time
             public Vector2 positionLY;  // for systems (sector view)
             public Vector2 viewportPos; // pixel position relative to chart viewport (for route lines)
+            public VisualElement dotElement; // sector dot element (for dynamic position recomputation)
             public bool isSystem;       // true = LY scale, false = AU scale
         }
         private const float ReferencePanelWidth  = 1600f;
@@ -1255,12 +1258,9 @@ namespace Waystation.UI
                         var a = _routeWaypoints[i - 1];
                         var b = _routeWaypoints[i];
                         if (a.isSystem || b.isSystem) continue;
-                        // Compute positions from orbital data relative to orbit center.
-                        float ax = _orbitCenterX + Mathf.Cos(a.angle) * FindRadiusForAU(a.orbitalRadius);
-                        float ay = _orbitCenterY + Mathf.Sin(a.angle) * FindRadiusForAU(a.orbitalRadius);
-                        float bx = _orbitCenterX + Mathf.Cos(b.angle) * FindRadiusForAU(b.orbitalRadius);
-                        float by = _orbitCenterY + Mathf.Sin(b.angle) * FindRadiusForAU(b.orbitalRadius);
-                        DrawDashedLine(painter, ax, ay, bx, by, 6f, 4f);
+                        var aPos = RouteBodyPos(a);
+                        var bPos = RouteBodyPos(b);
+                        DrawDashedLine(painter, aPos.x, aPos.y, bPos.x, bPos.y, 6f, 4f);
                     }
                 }
             };
@@ -1969,6 +1969,34 @@ namespace Waystation.UI
             return bestRadius;
         }
 
+        /// <summary>
+        /// Compute the canvas position of a route waypoint body using the matching
+        /// OrbitVisual's elliptical parameters.
+        /// </summary>
+        private Vector2 RouteBodyPos(RouteWaypoint wp)
+        {
+            float bestDist = float.MaxValue;
+            OrbitVisual match = null;
+            var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+            foreach (var ov in _orbitVisuals)
+            {
+                if (sys == null || ov.bodyIndex >= sys.bodies.Count) continue;
+                float diff = Mathf.Abs(sys.bodies[ov.bodyIndex].orbitalRadius - wp.orbitalRadius);
+                if (diff < bestDist)
+                {
+                    bestDist = diff;
+                    match = ov;
+                }
+            }
+            if (match != null)
+                return EllipticalPos(_orbitCenterX, _orbitCenterY, match.radius,
+                    match.eccentricity, match.periapsisAngle, wp.angle);
+            // Fallback to circular.
+            return new Vector2(
+                _orbitCenterX + Mathf.Cos(wp.angle) * 60f,
+                _orbitCenterY + Mathf.Sin(wp.angle) * 60f);
+        }
+
         private VisualElement BuildBodyRow(SolarBody body, bool hasStation, int bodyIndex, SolarSystemState sys)
         {
             var row = new VisualElement();
@@ -2579,6 +2607,7 @@ namespace Waystation.UI
                 if (Mathf.Abs(zoom - _sectorZoom) < 0.001f) return;
                 _sectorZoom = zoom;
                 ApplySectorWorldTransform();
+                _routeLineOverlay?.MarkDirtyRepaint();
                 evt.StopPropagation();
             });
             _sectorChartViewport.RegisterCallback<PointerDownEvent>(evt =>
@@ -2595,6 +2624,7 @@ namespace Waystation.UI
                 Vector2 delta = (Vector2)evt.position - _sectorPanStartMouse;
                 _sectorPan = _sectorPanStartOffset + delta;
                 ApplySectorWorldTransform();
+                _routeLineOverlay?.MarkDirtyRepaint();
             });
             _sectorChartViewport.RegisterCallback<PointerUpEvent>(evt =>
             {
@@ -2819,21 +2849,11 @@ namespace Waystation.UI
                 {
                     if (_routePlotterActive)
                     {
-                        // Compute viewport-relative position for route line drawing.
-                        Vector2 vpPos = Vector2.zero;
-                        if (_sectorChartViewport != null)
-                        {
-                            var dotBound = dot.worldBound;
-                            var vpBound = _sectorChartViewport.worldBound;
-                            vpPos = new Vector2(
-                                dotBound.center.x - vpBound.x,
-                                dotBound.center.y - vpBound.y);
-                        }
                         AddRouteWaypoint(new RouteWaypoint
                         {
                             name = capturedNeighbor.systemName,
                             positionLY = capturedNeighbor.positionLY,
-                            viewportPos = vpPos,
+                            dotElement = dot,
                             isSystem = true,
                         });
                         return;
@@ -3499,7 +3519,7 @@ namespace Waystation.UI
                 _routeLineOverlay.pickingMode = PickingMode.Ignore;
                 _routeLineOverlay.generateVisualContent += ctx =>
                 {
-                    if (_routeWaypoints.Count < 2) return;
+                    if (_routeWaypoints.Count < 2 || _sectorChartViewport == null) return;
                     var painter = ctx.painter2D;
                     painter.lineWidth = 1.2f;
                     painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.50f);
@@ -3509,8 +3529,13 @@ namespace Waystation.UI
                         var wa = _routeWaypoints[ri - 1];
                         var wb = _routeWaypoints[ri];
                         if (!wa.isSystem || !wb.isSystem) continue;
-                        DrawDashedLine(painter, wa.viewportPos.x, wa.viewportPos.y,
-                                               wb.viewportPos.x, wb.viewportPos.y, 6f, 4f);
+                        var pa = wa.dotElement != null && wa.dotElement.panel != null
+                            ? (Vector2)_routeLineOverlay.WorldToLocal(wa.dotElement.worldBound.center)
+                            : wa.viewportPos;
+                        var pb = wb.dotElement != null && wb.dotElement.panel != null
+                            ? (Vector2)_routeLineOverlay.WorldToLocal(wb.dotElement.worldBound.center)
+                            : wb.viewportPos;
+                        DrawDashedLine(painter, pa.x, pa.y, pb.x, pb.y, 6f, 4f);
                     }
                 };
                 _sectorChartViewport.Add(_routeLineOverlay);
@@ -3558,6 +3583,7 @@ namespace Waystation.UI
             {
                 _routeWaypoints.Clear();
                 UpdateRouteOverlay();
+                UpdateRouteEndpointRing();
                 _routeLineOverlay?.MarkDirtyRepaint();
                 _dashedOrbitOverlay?.MarkDirtyRepaint();
             }) { text = "Clear" };
@@ -3643,6 +3669,53 @@ namespace Waystation.UI
             footer.Add(totalValue);
 
             _routeOverlay.Add(footer);
+
+            // "Send Ship" button — greyed out unless a player ship is docked.
+            var sendShipBtn = new Button() { text = "Send Ship" };
+            sendShipBtn.name = "RouteSendShipBtn";
+            sendShipBtn.style.marginLeft = 8;
+            sendShipBtn.style.marginRight = 8;
+            sendShipBtn.style.marginTop = 0;
+            sendShipBtn.style.marginBottom = 8;
+            sendShipBtn.style.paddingTop = 6;
+            sendShipBtn.style.paddingBottom = 6;
+            sendShipBtn.style.paddingLeft = 0;
+            sendShipBtn.style.paddingRight = 0;
+            sendShipBtn.style.fontSize = Fs(11);
+            sendShipBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sendShipBtn.style.letterSpacing = 0.5f;
+            sendShipBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            sendShipBtn.style.borderTopWidth = 1;
+            sendShipBtn.style.borderRightWidth = 1;
+            sendShipBtn.style.borderBottomWidth = 1;
+            sendShipBtn.style.borderLeftWidth = 1;
+            sendShipBtn.style.borderTopColor = ColDivider;
+            sendShipBtn.style.borderRightColor = ColDivider;
+            sendShipBtn.style.borderBottomColor = ColDivider;
+            sendShipBtn.style.borderLeftColor = ColAccent;
+            sendShipBtn.style.borderLeftWidth = 2;
+            sendShipBtn.style.borderTopLeftRadius = 2;
+            sendShipBtn.style.borderTopRightRadius = 2;
+            sendShipBtn.style.borderBottomLeftRadius = 2;
+            sendShipBtn.style.borderBottomRightRadius = 2;
+            sendShipBtn.style.display = DisplayStyle.None;
+
+            bool hasDockedShip = _station != null &&
+                _station.ownedShips.Values.Any(s => s.status == "docked");
+            if (hasDockedShip)
+            {
+                sendShipBtn.style.backgroundColor = new Color(0.22f, 0.24f, 0.31f, 1f);
+                sendShipBtn.style.color = ColTextBright;
+                sendShipBtn.SetEnabled(true);
+            }
+            else
+            {
+                sendShipBtn.style.backgroundColor = new Color(0.15f, 0.16f, 0.22f, 1f);
+                sendShipBtn.style.color = new Color(0.34f, 0.37f, 0.45f, 0.6f);
+                sendShipBtn.SetEnabled(false);
+            }
+
+            _routeOverlay.Add(sendShipBtn);
         }
 
         private void HideRouteOverlay()
@@ -3657,14 +3730,88 @@ namespace Waystation.UI
                 _routeLineOverlay.RemoveFromHierarchy();
                 _routeLineOverlay = null;
             }
+            ClearRouteEndpointRing();
         }
 
         private void AddRouteWaypoint(RouteWaypoint wp)
         {
             _routeWaypoints.Add(wp);
             UpdateRouteOverlay();
+            UpdateRouteEndpointRing();
             _routeLineOverlay?.MarkDirtyRepaint();
             _dashedOrbitOverlay?.MarkDirtyRepaint();
+        }
+
+        private void ClearRouteEndpointRing()
+        {
+            if (_routeEndpointRing != null)
+            {
+                _routeEndpointRing.RemoveFromHierarchy();
+                _routeEndpointRing = null;
+            }
+        }
+
+        private void UpdateRouteEndpointRing()
+        {
+            ClearRouteEndpointRing();
+            if (_routeWaypoints.Count == 0) return;
+
+            var last = _routeWaypoints[_routeWaypoints.Count - 1];
+
+            bool hasDockedShip = _station != null &&
+                _station.ownedShips.Values.Any(s => s.status == "docked");
+
+            Color ringColor = hasDockedShip
+                ? new Color(0.19f, 0.63f, 0.31f, 1f)   // green — reachable
+                : new Color(0.78f, 0.19f, 0.19f, 1f);  // red — unreachable
+
+            // Determine the target dot: sector view stores it directly;
+            // system view must look up the matching OrbitVisual dot.
+            VisualElement targetDot = last.dotElement;
+            if (targetDot == null && !last.isSystem)
+            {
+                // System view: find the OrbitVisual whose body orbital radius matches.
+                var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+                float bestDist = float.MaxValue;
+                OrbitVisual match = null;
+                foreach (var ov in _orbitVisuals)
+                {
+                    if (sys == null || ov.bodyIndex >= sys.bodies.Count) continue;
+                    float diff = Mathf.Abs(sys.bodies[ov.bodyIndex].orbitalRadius - last.orbitalRadius);
+                    if (diff < bestDist)
+                    {
+                        bestDist = diff;
+                        match = ov;
+                    }
+                }
+                if (match != null) targetDot = match.dot;
+            }
+
+            if (targetDot == null || targetDot.parent == null) return;
+
+            float pad = 3f;
+
+            _routeEndpointRing = new VisualElement();
+            _routeEndpointRing.pickingMode = PickingMode.Ignore;
+            _routeEndpointRing.style.position = Position.Absolute;
+            _routeEndpointRing.style.left = -pad;
+            _routeEndpointRing.style.top  = -pad;
+            _routeEndpointRing.style.right = -pad;
+            _routeEndpointRing.style.bottom = -pad;
+            _routeEndpointRing.style.borderTopLeftRadius     = Length.Percent(50);
+            _routeEndpointRing.style.borderTopRightRadius    = Length.Percent(50);
+            _routeEndpointRing.style.borderBottomLeftRadius  = Length.Percent(50);
+            _routeEndpointRing.style.borderBottomRightRadius = Length.Percent(50);
+            _routeEndpointRing.style.borderTopWidth    = 1;
+            _routeEndpointRing.style.borderRightWidth  = 1;
+            _routeEndpointRing.style.borderBottomWidth = 1;
+            _routeEndpointRing.style.borderLeftWidth   = 1;
+            _routeEndpointRing.style.borderTopColor    = ringColor;
+            _routeEndpointRing.style.borderRightColor  = ringColor;
+            _routeEndpointRing.style.borderBottomColor = ringColor;
+            _routeEndpointRing.style.borderLeftColor   = ringColor;
+
+            targetDot.Add(_routeEndpointRing);
         }
 
         private void UpdateRouteOverlay()
@@ -3682,6 +3829,26 @@ namespace Waystation.UI
             if (instruction != null) instruction.style.display = hasWaypoints ? DisplayStyle.None : DisplayStyle.Flex;
             scroll.style.display = hasWaypoints ? DisplayStyle.Flex : DisplayStyle.None;
             if (footer != null) footer.style.display = _routeWaypoints.Count >= 2 ? DisplayStyle.Flex : DisplayStyle.None;
+
+            var sendBtn = _routeOverlay.Q("RouteSendShipBtn");
+            if (sendBtn != null)
+            {
+                sendBtn.style.display = _routeWaypoints.Count >= 2 ? DisplayStyle.Flex : DisplayStyle.None;
+                bool hasDockedShip = _station != null &&
+                    _station.ownedShips.Values.Any(s => s.status == "docked");
+                if (hasDockedShip)
+                {
+                    sendBtn.style.backgroundColor = new Color(0.22f, 0.24f, 0.31f, 1f);
+                    sendBtn.style.color = ColTextBright;
+                    sendBtn.SetEnabled(true);
+                }
+                else
+                {
+                    sendBtn.style.backgroundColor = new Color(0.15f, 0.16f, 0.22f, 1f);
+                    sendBtn.style.color = new Color(0.34f, 0.37f, 0.45f, 0.6f);
+                    sendBtn.SetEnabled(false);
+                }
+            }
 
             scroll.Clear();
 
@@ -3736,6 +3903,7 @@ namespace Waystation.UI
                     {
                         _routeWaypoints.RemoveAt(capturedIndex);
                         UpdateRouteOverlay();
+                        UpdateRouteEndpointRing();
                         _routeLineOverlay?.MarkDirtyRepaint();
                         _dashedOrbitOverlay?.MarkDirtyRepaint();
                     }
