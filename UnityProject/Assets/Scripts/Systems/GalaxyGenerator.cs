@@ -177,6 +177,7 @@ namespace Waystation.Systems
                 codes:       homeCodes,
                 properName:  "The Cradle");
             homeData.discoveryState = SectorDiscoveryState.Visited;
+            SectorGenerator.PopulateSectorFields(homeData, seed);
             station.sectors[homeData.uid] = homeData;
 
             // ── Step 2: Poisson disc placement for remaining sectors ───────────
@@ -212,6 +213,7 @@ namespace Waystation.Systems
                     properName:  name);
                 sectorData.systemDensity = AssignSystemDensity(rng);
                 sectorData.modifier      = AssignModifier(rng);
+                SectorGenerator.PopulateSectorFields(sectorData, seed);
 
                 positions.Add(candidate);
                 station.sectors[sectorData.uid] = sectorData;
@@ -245,6 +247,7 @@ namespace Waystation.Systems
                             properName:  name);
                         sectorData.systemDensity = AssignSystemDensity(rng);
                         sectorData.modifier      = AssignModifier(rng);
+                        SectorGenerator.PopulateSectorFields(sectorData, seed);
                         positions.Add(candidate);
                         station.sectors[sectorData.uid] = sectorData;
                         index++;
@@ -279,6 +282,7 @@ namespace Waystation.Systems
                 properName:  name);
             sectorData.systemDensity = AssignSystemDensity(rng);
             sectorData.modifier      = AssignModifier(rng);
+            SectorGenerator.PopulateSectorFields(sectorData, seed);
             return sectorData;
         }
 

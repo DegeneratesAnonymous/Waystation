@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Waystation.Models
 {
-    public enum StarType  { RedDwarf, YellowDwarf, BlueGiant, OrangeSubgiant, WhiteDwarf }
+    public enum StarType  { RedDwarf, YellowDwarf, BlueGiant, OrangeSubgiant, WhiteDwarf, NeutronStar, BlackHole, ProtoStar, YoungStar }
     public enum BodyType  { RockyPlanet, GasGiant, IcePlanet, AsteroidBelt }
     public enum MapLayer  { System, Sector, Galaxy }
 
