@@ -940,6 +940,10 @@ namespace Waystation.Models
         public bool   isSleeping    = false;
         public string missionUid    = null;   // null when not on an away mission
 
+        // Personal task queue — job IDs this NPC has been assigned via the hierarchy
+        // distributor. Depth is capped by DerivedStatSystem.GetQueueDepth (Memory).
+        public List<string> personalTaskQueue = new List<string>();
+
         // Fleet management: uid of the OwnedShipInstance this NPC is permanently assigned to.
         // Null when not assigned to any player-owned ship.
         // When set alongside missionUid, the NPC is on a fleet mission and needs continue to deplete.

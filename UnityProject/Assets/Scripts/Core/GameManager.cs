@@ -151,6 +151,9 @@ namespace Waystation.Core
         public DepartmentRegistry       DeptRegistry  { get; private set; }
         public DepartmentSystem         Departments   { get; private set; }
 
+        // ── Hierarchy distribution (WO-JOB-002) ──────────────────────────────────────────────
+        public HierarchyDistributor     Hierarchy     { get; private set; }
+
         // ── Economy system ─────────────────────────────────────────────────────────────────────
         public EconomySystem            Economy       { get; private set; }
 
@@ -499,6 +502,9 @@ namespace Waystation.Core
             DeptRegistry = new DepartmentRegistry();
             Departments  = new DepartmentSystem();
 
+            // Hierarchy distribution (WO-JOB-002) — push-channel task distribution
+            Hierarchy = new HierarchyDistributor(Registry, DeptRegistry);
+
             // Wire DepartmentRegistry colour-change events → DepartmentSystem so that
             // the rendering layer (via Departments.OnNpcsNeedColourResolve) can re-apply
             // DeptColour shader bindings within the same tick as the colour change.
@@ -830,6 +836,9 @@ namespace Waystation.Core
             // before JobSystem assigns them a fallback wander task.
             if (FeatureFlags.NpcCounselling)
                 Counselling?.Tick(Station);
+            // Push-channel distribution: populate personal task queues before JobSystem
+            // picks jobs so NPCs can consume queued tasks within the same tick.
+            Hierarchy?.Tick(Station);
             Jobs.Tick(Station);
             Factions.Tick(Station);
             Inventory.Tick(Station);

@@ -1,7 +1,8 @@
 // Job System — NPC maintenance and work loops.
 // Crew members follow a per-NPC 24-slot schedule (Work/Rest/Recreation).
-// Department membership pre-filters the job pool; cross-department fallback
-// applies when no eligible department job is available.
+// Job eligibility is determined by task tag intersection: each job has task_tags,
+// and an NPC's department restricts which jobs (and therefore which tags) they
+// can perform.  Unassigned NPCs bypass the job filter (wildcard behaviour).
 // Crisis NPCs (mood < 20) are immediately switched to recreational tasks.
 using System;
 using System.Collections.Generic;
@@ -21,7 +22,7 @@ namespace Waystation.Systems
         private const float  HungerCritical  = 0.25f;
         private const float  RestCritical    = 0.20f;
 
-        // Class → preferred day-phase jobs (in priority order)
+        // Class → preferred day-phase jobs — legacy fallback when UseJobTaskFilter is disabled.
         private static readonly Dictionary<string, List<string>> ClassDayJobs =
             new Dictionary<string, List<string>>
         {
@@ -30,6 +31,10 @@ namespace Waystation.Systems
             { "class.operations",  new List<string> { "job.dock_control", "job.visitor_intake", "job.resource_management", "job.haul", "job.research_exploration", "job.research_diplomacy", "job.research_security", "job.research_science" } },
             { "class.farming",     new List<string> { "job.farming" } }
         };
+
+        /// <summary>When true, job assignment uses department task-tag intersection.
+        /// When false, falls back to the legacy ClassDayJobs mapping.</summary>
+        public static bool UseJobTaskFilter = true;
 
         // Category priority for wander fallback: lower index = preferred
         private static readonly string[] WanderCategoryPriority =
@@ -123,16 +128,106 @@ namespace Waystation.Systems
             }
 
             // slot == ScheduleSlot.Work — proceed with normal assignment
-            // ── Department pre-filter ─────────────────────────────────────────
-            // Build the candidate list from class defaults first.
+
+            if (UseJobTaskFilter)
+            {
+                AssignJobByTagFilter(npc, station);
+            }
+            else
+            {
+                AssignJobByClassLegacy(npc, station);
+            }
+        }
+
+        /// <summary>
+        /// New tag-filter-based job assignment (WO-JOB-001).
+        /// Builds the candidate pool from the NPC's department allowedJobs.
+        /// Unassigned NPCs can take any registered day-phase job.
+        /// </summary>
+        private void AssignJobByTagFilter(NPCInstance npc, StationState station)
+        {
+            // Determine department (if any)
+            Department dept = null;
+            if (!string.IsNullOrEmpty(npc.departmentId))
+            {
+                foreach (var d in station.departments)
+                {
+                    if (d.uid == npc.departmentId) { dept = d; break; }
+                }
+            }
+
+            // Build candidate list: check personal task queue first
+            if (npc.personalTaskQueue != null && npc.personalTaskQueue.Count > 0)
+            {
+                string queuedJob = npc.personalTaskQueue[0];
+                if (_registry.Jobs.ContainsKey(queuedJob))
+                {
+                    npc.personalTaskQueue.RemoveAt(0);
+                    SetJob(npc, queuedJob, station);
+                    if (npc.jobModuleUid != null) return;
+                    // No module found — fall through to general pool
+                }
+            }
+
+            // Build eligible job pool
+            var pool = new List<string>();
+            if (dept != null && dept.allowedJobs.Count > 0)
+            {
+                // Department-constrained: only jobs from the department's allowedJobs
+                foreach (var jobId in dept.allowedJobs)
+                {
+                    if (!_registry.Jobs.TryGetValue(jobId, out var jobDef)) continue;
+                    // Skip night-only jobs during work hours and vice versa
+                    if (jobDef.phase == "night") continue;
+                    pool.Add(jobId);
+                }
+            }
+            else
+            {
+                // Unassigned NPC — eligible for all registered day/any jobs
+                foreach (var kv in _registry.Jobs)
+                {
+                    if (kv.Value.phase == "night") continue;
+                    // Skip universal jobs (rest, eat, recreate, wander) from the work pool
+                    if (kv.Key == RestJob || kv.Key == EatJob || kv.Key == RecreateJob
+                        || kv.Key == "job.wander") continue;
+                    pool.Add(kv.Key);
+                }
+            }
+
+            // Respect per-NPC work assignments if set
+            if (station.workAssignments.TryGetValue(npc.uid, out var assigned) &&
+                assigned != null && assigned.Count > 0)
+            {
+                var filtered = new List<string>();
+                foreach (var j in pool)
+                    if (assigned.Contains(j)) filtered.Add(j);
+                if (filtered.Count > 0) pool = filtered;
+            }
+
+            if (pool.Count > 0)
+            {
+                string jobId = pool[UnityEngine.Random.Range(0, pool.Count)];
+                SetJob(npc, jobId, station);
+                if (npc.jobModuleUid == null)
+                    SetWander(npc, station);
+                return;
+            }
+
+            SetWander(npc, station);
+        }
+
+        /// <summary>
+        /// Legacy class-based job assignment. Used when UseJobTaskFilter is false.
+        /// </summary>
+        private void AssignJobByClassLegacy(NPCInstance npc, StationState station)
+        {
             if (!ClassDayJobs.TryGetValue(npc.classId, out var classCandidates))
             {
-                // No class match → wander
                 SetWander(npc, station);
                 return;
             }
 
-            // Respect per-NPC work assignments if set
             List<string> allowed = null;
             if (station.workAssignments.TryGetValue(npc.uid, out var assigned) &&
                 assigned != null && assigned.Count > 0)
@@ -140,15 +235,11 @@ namespace Waystation.Systems
                 allowed = new List<string>();
                 foreach (var j in classCandidates)
                     if (assigned.Contains(j)) allowed.Add(j);
-                if (allowed.Count == 0) allowed = null; // no overlap → use all class candidates
+                if (allowed.Count == 0) allowed = null;
             }
 
             var classPool = allowed ?? classCandidates;
 
-            // Department pre-filter: if the NPC belongs to a department, prefer
-            // jobs that appear in that department's allowedJobs list AND are also
-            // in the class candidate pool.  Fall back to the full class pool if no
-            // intersection is found.
             List<string> pool = classPool;
             if (!string.IsNullOrEmpty(npc.departmentId))
             {
@@ -164,8 +255,7 @@ namespace Waystation.Systems
                     foreach (var j in classPool)
                         if (dept.allowedJobs.Contains(j)) deptPool.Add(j);
                     if (deptPool.Count > 0)
-                        pool = deptPool;   // department jobs take priority
-                    // else fall through to full classPool (cross-department fallback)
+                        pool = deptPool;
                 }
             }
 
@@ -177,13 +267,11 @@ namespace Waystation.Systems
             {
                 string jobId = available[UnityEngine.Random.Range(0, available.Count)];
                 SetJob(npc, jobId, station);
-                // If no suitable module was found, fall back to wandering
                 if (npc.jobModuleUid == null)
                     SetWander(npc, station);
                 return;
             }
 
-            // No available jobs for this class/department — wander
             SetWander(npc, station);
         }
 
