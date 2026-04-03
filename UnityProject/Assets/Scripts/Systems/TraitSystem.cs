@@ -112,6 +112,9 @@ namespace Waystation.Systems
                 EvaluateAcquisition(npc, station.tick);
             }
             TickLineages(station);
+
+            // Resonant passive tick — mood bleed from Emotional Expression +3 NPCs
+            if (_axisDefs.Count > 0) TickResonantBleed(station);
         }
 
         // ── Condition Pressure API ────────────────────────────────────────────
@@ -357,6 +360,9 @@ namespace Waystation.Systems
                 if (!npc.IsCrew()) continue;
                 if (npc.statusTags.Contains("dead")) continue;
                 RegisterConditionPressure(npc, TraitConditionCategory.WitnessDeath, 3f);
+                // 12-axis: witnessing death pushes Emotional Expression toward empathy (+)
+                if (FeatureFlags.UseFullTraitSystem)
+                    AddPressure(npc, "emotional_expression", 3f);
             }
             station.LogEvent($"Crew death witnessed by station. Trauma pressure applied.");
         }
@@ -369,6 +375,9 @@ namespace Waystation.Systems
         {
             if (!FeatureFlags.NpcTraits) return;
             RegisterConditionPressure(npc, TraitConditionCategory.ExtendedCombat, 2f);
+            // 12-axis: extended combat pushes Aggression toward aggressive (+)
+            if (FeatureFlags.UseFullTraitSystem)
+                AddPressure(npc, "aggression", 2f);
         }
 
         /// <summary>
@@ -379,6 +388,9 @@ namespace Waystation.Systems
         {
             if (!FeatureFlags.NpcTraits) return;
             RegisterConditionPressure(mentee, TraitConditionCategory.LongTermMentoring, 2f);
+            // 12-axis: mentoring pushes Intellectual Curiosity toward curious (+)
+            if (FeatureFlags.UseFullTraitSystem)
+                AddPressure(mentee, "intellectual_curiosity", 2f);
         }
 
         /// <summary>
@@ -582,5 +594,330 @@ namespace Waystation.Systems
             if (newTrait != null)
                 TryAddTrait(npc, newTrait, currentTick);
         }
+
+        // ── Axis Trait Definitions (loaded from JSON) ─────────────────────────
+        private readonly Dictionary<string, List<AxisTraitDef>> _axisDefs = new Dictionary<string, List<AxisTraitDef>>();
+        private readonly List<CompatibilityEntry> _compatMatrix = new List<CompatibilityEntry>();
+
+        public struct AxisTraitDef
+        {
+            public string id;
+            public string displayName;
+            public string description;
+            public string axisId;
+            public int stage;
+            public Dictionary<string, float> modifiers;
+            public string passiveEffect; // e.g. "mood_bleed" for Resonant
+            public bool subterfugeConcealmentImpossible;
+        }
+
+        public struct CompatibilityEntry
+        {
+            public string axisA;
+            public string axisB;
+            public float positivePositive;
+            public float positiveNegative;
+            public float negativePositive;
+            public float negativeNegative;
+            public string specialEvent;
+        }
+
+        public void LoadAxisData(string traitDefsJson, string compatMatrixJson)
+        {
+            // Parse trait definitions
+            var defs = MiniJSON.Json.Deserialize(traitDefsJson) as List<object>;
+            if (defs != null)
+            {
+                foreach (var obj in defs)
+                {
+                    if (obj is not Dictionary<string, object> d) continue;
+                    var def = new AxisTraitDef
+                    {
+                        id = d.GetString("id"),
+                        displayName = d.GetString("display_name", d.GetString("id")),
+                        description = d.GetString("description", ""),
+                        axisId = d.GetString("axis_id"),
+                        stage = d.GetInt("stage"),
+                        modifiers = new Dictionary<string, float>(),
+                        passiveEffect = d.ContainsKey("passive_effect") ? d.GetString("passive_effect") : null,
+                        subterfugeConcealmentImpossible = d.GetBool("subterfuge_concealment_impossible")
+                    };
+                    if (d.ContainsKey("modifiers") && d["modifiers"] is Dictionary<string, object> mods)
+                    {
+                        foreach (var kv in mods)
+                        {
+                            if (kv.Value is double dv) def.modifiers[kv.Key] = (float)dv;
+                            else if (kv.Value is long lv) def.modifiers[kv.Key] = lv;
+                            else if (kv.Value is bool bv) def.modifiers[kv.Key] = bv ? 1f : 0f;
+                        }
+                    }
+                    if (!_axisDefs.ContainsKey(def.axisId))
+                        _axisDefs[def.axisId] = new List<AxisTraitDef>();
+                    _axisDefs[def.axisId].Add(def);
+                }
+            }
+
+            // Parse compatibility matrix
+            var matrix = MiniJSON.Json.Deserialize(compatMatrixJson) as List<object>;
+            if (matrix != null)
+            {
+                foreach (var obj in matrix)
+                {
+                    if (obj is not Dictionary<string, object> d) continue;
+                    _compatMatrix.Add(new CompatibilityEntry
+                    {
+                        axisA = d.GetString("axis_a"),
+                        axisB = d.GetString("axis_b"),
+                        positivePositive = d.GetFloat("positive_positive"),
+                        positiveNegative = d.GetFloat("positive_negative"),
+                        negativePositive = d.GetFloat("negative_positive"),
+                        negativeNegative = d.GetFloat("negative_negative"),
+                        specialEvent = d.ContainsKey("special_event") && d["special_event"] != null ? d.GetString("special_event") : null,
+                    });
+                }
+            }
+        }
+
+        // ── Axis Pressure System ──────────────────────────────────────────────
+
+        /// Pressure thresholds per stage (absolute value).
+        /// Stage ±3 = 3 pts, ±2 = 5, ±1 = 7, 0 = 10.
+        private static int GetPressureThreshold(int stage)
+        {
+            int abs = Math.Abs(stage);
+            return abs switch { 3 => 3, 2 => 5, 1 => 7, _ => 10 };
+        }
+
+        /// <summary>
+        /// Adds pressure on an axis for an NPC. Positive amount pushes toward +3,
+        /// negative amount pushes toward -3.
+        /// </summary>
+        public void AddPressure(NPCInstance npc, string axisId, float amount)
+        {
+            if (!FeatureFlags.NpcTraits) return;
+            var profile = npc.GetOrCreateTraitProfile();
+            var state = GetOrCreateAxisState(profile, axisId);
+
+            if (amount > 0f)
+                state.positivePressure += amount;
+            else if (amount < 0f)
+                state.negativePressure += -amount; // store as positive value
+
+            // Cancel opposing pressures
+            float cancel = Mathf.Min(state.positivePressure, state.negativePressure);
+            if (cancel > 0f)
+            {
+                state.positivePressure -= cancel;
+                state.negativePressure -= cancel;
+            }
+
+            // Check threshold for shifts
+            int threshold = GetPressureThreshold(state.currentStage);
+
+            if (state.positivePressure >= threshold && state.currentStage < 3)
+            {
+                state.currentStage++;
+                state.positivePressure = 0f;
+                state.negativePressure = 0f;
+            }
+            else if (state.negativePressure >= threshold && state.currentStage > -3)
+            {
+                state.currentStage--;
+                state.positivePressure = 0f;
+                state.negativePressure = 0f;
+            }
+        }
+
+        private static AxisState GetOrCreateAxisState(NpcTraitProfile profile, string axisId)
+        {
+            foreach (var s in profile.axisStates)
+                if (s.axisId == axisId) return s;
+            var ns = new AxisState { axisId = axisId, currentStage = 0 };
+            profile.axisStates.Add(ns);
+            return ns;
+        }
+
+        /// <summary>
+        /// Returns trait compatibility between two NPCs. Positive = harmony, negative = friction.
+        /// Sums all matching axis-pair modifiers from compatibility matrix, scaled by stage.
+        /// </summary>
+        public float GetCompatibility(NPCInstance npcA, NPCInstance npcB)
+        {
+            var profileA = npcA.traitProfile;
+            var profileB = npcB.traitProfile;
+            if (profileA == null || profileB == null) return 0f;
+
+            float total = 0f;
+
+            foreach (var entry in _compatMatrix)
+            {
+                var stateA_axisA = FindAxisState(profileA, entry.axisA);
+                var stateA_axisB = FindAxisState(profileA, entry.axisB);
+                var stateB_axisA = FindAxisState(profileB, entry.axisA);
+                var stateB_axisB = FindAxisState(profileB, entry.axisB);
+
+                // NPC A on axis_a, NPC B on axis_b
+                total += ComputePairModifier(entry, stateA_axisA?.currentStage ?? 0, stateB_axisB?.currentStage ?? 0);
+
+                // NPC A on axis_b, NPC B on axis_a (only if axes differ to avoid double count)
+                if (entry.axisA != entry.axisB)
+                    total += ComputePairModifier(entry, stateB_axisA?.currentStage ?? 0, stateA_axisB?.currentStage ?? 0);
+            }
+
+            return total;
+        }
+
+        private static float ComputePairModifier(CompatibilityEntry entry, int stageA, int stageB)
+        {
+            if (stageA == 0 || stageB == 0) return 0f;
+
+            bool posA = stageA > 0;
+            bool posB = stageB > 0;
+
+            float baseModifier;
+            if (posA && posB) baseModifier = entry.positivePositive;
+            else if (posA && !posB) baseModifier = entry.positiveNegative;
+            else if (!posA && posB) baseModifier = entry.negativePositive;
+            else baseModifier = entry.negativeNegative;
+
+            float scaling = (Math.Abs(stageA) / 3f) * (Math.Abs(stageB) / 3f);
+            return baseModifier * scaling;
+        }
+
+        private static AxisState FindAxisState(NpcTraitProfile profile, string axisId)
+        {
+            foreach (var s in profile.axisStates)
+                if (s.axisId == axisId) return s;
+            return null;
+        }
+
+        /// <summary>
+        /// Aggregates all active trait modifiers for an NPC based on their axis states.
+        /// </summary>
+        public TraitModifierSet GetTraitModifiers(NPCInstance npc)
+        {
+            var result = TraitModifierSet.Default();
+            var profile = npc.traitProfile;
+            if (profile == null) return result;
+
+            foreach (var state in profile.axisStates)
+            {
+                if (state.currentStage == 0) continue;
+                var traitDef = FindAxisTraitDef(state.axisId, state.currentStage);
+                if (traitDef.id == null) continue;
+
+                foreach (var kv in traitDef.modifiers)
+                {
+                    switch (kv.Key)
+                    {
+                        case "mood_recovery_mult": result.MoodRecoveryMult *= kv.Value; break;
+                        case "mood_floor_delta": result.MoodFloorDelta += kv.Value; break;
+                        case "work_speed_mult": result.WorkSpeedMult *= kv.Value; break;
+                        case "all_xp_mult": result.AllXpMult *= kv.Value; break;
+                        case "tension_accumulation_mult": result.TensionAccumulationMult *= kv.Value; break;
+                        case "relationship_gain_mult": result.RelationshipGainMult *= kv.Value; break;
+                        case "social_need_depletion_mult": result.SocialNeedDepletionMult *= kv.Value; break;
+                        case "sanity_recovery_mult": result.SanityRecoveryMult *= kv.Value; break;
+                        case "injury_risk_mult": result.InjuryRiskMult *= kv.Value; break;
+                        case "illness_recovery_mult": result.IllnessRecoveryMult *= kv.Value; break;
+                        case "combat_xp_mult": result.CombatXpMult *= kv.Value; break;
+                        case "departure_threshold_mult": result.DepartureThresholdMult *= kv.Value; break;
+                        case "science_xp_mult": result.ScienceXpMult *= kv.Value; break;
+                        case "conditioning_xp_mult": result.ConditioningXpMult *= kv.Value; break;
+                        case "manipulation_quality_bonus": result.ManipulationQualityBonus += kv.Value; break;
+                        case "articulation_quality_bonus": result.ArticulationQualityBonus += kv.Value; break;
+                        case "trust_gain_mult": result.TrustGainMult *= kv.Value; break;
+                        case "hostile_conversation_immune": if (kv.Value > 0) result.HostileConversationImmune = true; break;
+                        case "faction_recruitment_immune": if (kv.Value > 0) result.FactionRecruitmentImmune = true; break;
+                    }
+                }
+
+                if (traitDef.subterfugeConcealmentImpossible)
+                    result.SubterfugeConcealmentImpossible = true;
+            }
+
+            return result;
+        }
+
+        private AxisTraitDef FindAxisTraitDef(string axisId, int stage)
+        {
+            if (_axisDefs.TryGetValue(axisId, out var list))
+            {
+                foreach (var d in list)
+                    if (d.stage == stage) return d;
+            }
+            return default;
+        }
+
+        /// <summary>
+        /// Resonant passive tick: mood bleed to nearby NPCs.
+        /// Called from the main Tick method when axis data is loaded.
+        /// </summary>
+        private void TickResonantBleed(StationState station)
+        {
+            foreach (var npc in station.npcs.Values)
+            {
+                if (!npc.IsCrew()) continue;
+                var profile = npc.traitProfile;
+                if (profile == null) continue;
+
+                var emExState = FindAxisState(profile, "emotional_expression");
+                if (emExState == null || emExState.currentStage != 3) continue;
+
+                // This NPC is Resonant — bleed mood to nearby NPCs
+                float moodBleed = npc.moodScore > 50f ? 2f : -2f;
+
+                foreach (var other in station.npcs.Values)
+                {
+                    if (other.uid == npc.uid) continue;
+                    if (!other.IsCrew()) continue;
+
+                    int dist = SpatialHelpers.TileDistance(npc.tileCol, npc.tileRow, other.tileCol, other.tileRow);
+                    if (dist > 3) continue;
+
+                    float strength = dist <= 1 ? 1f : 0.5f;
+                    _mood?.PushModifier(other,
+                        $"resonant_bleed_{npc.uid}",
+                        moodBleed * strength,
+                        5, station.tick, "trait_passive");
+                }
+            }
+        }
+    }
+
+    public struct TraitModifierSet
+    {
+        public float MoodRecoveryMult;
+        public float MoodFloorDelta;
+        public float WorkSpeedMult;
+        public float AllXpMult;
+        public float TensionAccumulationMult;
+        public float RelationshipGainMult;
+        public float SocialNeedDepletionMult;
+        public float SanityRecoveryMult;
+        public float InjuryRiskMult;
+        public float IllnessRecoveryMult;
+        public float CombatXpMult;
+        public float DepartureThresholdMult;
+        public float ScienceXpMult;
+        public float ConditioningXpMult;
+        public float ManipulationQualityBonus;
+        public float ArticulationQualityBonus;
+        public float TrustGainMult;
+        public bool HostileConversationImmune;
+        public bool FactionRecruitmentImmune;
+        public bool SubterfugeConcealmentImpossible;
+        public bool SubterfugeBypassImpossible;
+        public bool AllMoraleModifiersImmune;
+
+        public static TraitModifierSet Default() => new TraitModifierSet
+        {
+            MoodRecoveryMult = 1f, WorkSpeedMult = 1f, AllXpMult = 1f,
+            TensionAccumulationMult = 1f, RelationshipGainMult = 1f,
+            SocialNeedDepletionMult = 1f, SanityRecoveryMult = 1f,
+            InjuryRiskMult = 1f, IllnessRecoveryMult = 1f,
+            CombatXpMult = 1f, DepartureThresholdMult = 1f,
+            ScienceXpMult = 1f, ConditioningXpMult = 1f, TrustGainMult = 1f,
+        };
     }
 }

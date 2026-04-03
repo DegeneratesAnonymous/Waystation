@@ -1,0 +1,456 @@
+{
+  "_comment": "Trait compatibility matrix for NPC interaction quality modifiers. Used by TraitSystem.GetCompatibility(npcA, npcB). Modifier scaled at runtime by (abs(stage_a)/3.0) * (abs(stage_b)/3.0). Values range -0.6 to +0.5.",
+  "_schema_version": "1.0",
+  "pairs": [
+    {
+      "axis_a": "disposition",
+      "axis_b": "courage",
+      "positive_positive": 0.3,
+      "positive_negative": -0.2,
+      "negative_positive": -0.2,
+      "negative_negative": 0.4,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "emotional_expression",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "ambition",
+      "positive_positive": 0.4,
+      "positive_negative": -0.1,
+      "negative_positive": -0.3,
+      "negative_negative": -0.4,
+      "special_event": null
+    },
+    {
+      "axis_a": "honesty",
+      "axis_b": "subterfuge",
+      "positive_positive": -0.6,
+      "positive_negative": 0.3,
+      "negative_positive": 0.2,
+      "negative_negative": -0.1,
+      "special_event": "public_confrontation_possible"
+    },
+    {
+      "axis_a": "loyalty",
+      "axis_b": "honesty",
+      "positive_positive": 0.4,
+      "positive_negative": -0.3,
+      "negative_positive": -0.3,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "loyalty",
+      "axis_b": "subterfuge",
+      "positive_positive": -0.3,
+      "positive_negative": 0.2,
+      "negative_positive": 0.3,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "loyalty",
+      "axis_b": "loyalty",
+      "positive_positive": 0.4,
+      "positive_negative": -0.6,
+      "negative_positive": -0.6,
+      "negative_negative": -0.3,
+      "special_event": "station_loyalty_event"
+    },
+    {
+      "axis_a": "spirituality",
+      "axis_b": "disposition",
+      "positive_positive": 0.2,
+      "positive_negative": -0.4,
+      "negative_positive": 0.1,
+      "negative_negative": -0.2,
+      "special_event": "crisis_of_faith_possible"
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "sociability",
+      "positive_positive": 0.4,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": 0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "physicality",
+      "positive_positive": 0.4,
+      "positive_negative": 0.0,
+      "negative_positive": -0.1,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "intellectual_drive",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": -0.4,
+      "special_event": null
+    },
+    {
+      "axis_a": "ambition",
+      "axis_b": "loyalty",
+      "positive_positive": 0.3,
+      "positive_negative": -0.4,
+      "negative_positive": 0.1,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "subterfuge",
+      "axis_b": "sociability",
+      "positive_positive": 0.2,
+      "positive_negative": -0.3,
+      "negative_positive": 0.1,
+      "negative_negative": 0.0,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "sociability",
+      "positive_positive": 0.4,
+      "positive_negative": -0.1,
+      "negative_positive": -0.1,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "loyalty",
+      "positive_positive": 0.5,
+      "positive_negative": -0.2,
+      "negative_positive": 0.1,
+      "negative_negative": -0.5,
+      "special_event": null
+    },
+    {
+      "axis_a": "honesty",
+      "axis_b": "sociability",
+      "positive_positive": 0.3,
+      "positive_negative": 0.0,
+      "negative_positive": -0.3,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "physicality",
+      "positive_positive": 0.4,
+      "positive_negative": 0.0,
+      "negative_positive": -0.2,
+      "negative_negative": -0.5,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "courage",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": 0.0,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "spirituality",
+      "axis_b": "loyalty",
+      "positive_positive": 0.3,
+      "positive_negative": -0.3,
+      "negative_positive": 0.0,
+      "negative_negative": 0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "ambition",
+      "axis_b": "intellectual_drive",
+      "positive_positive": 0.3,
+      "positive_negative": -0.3,
+      "negative_positive": -0.1,
+      "negative_negative": -0.5,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "sociability",
+      "positive_positive": 0.3,
+      "positive_negative": 0.0,
+      "negative_positive": -0.2,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "work_ethic",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": -0.1,
+      "negative_negative": -0.5,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "loyalty",
+      "positive_positive": 0.4,
+      "positive_negative": -0.3,
+      "negative_positive": 0.0,
+      "negative_negative": -0.4,
+      "special_event": null
+    },
+    {
+      "axis_a": "subterfuge",
+      "axis_b": "ambition",
+      "positive_positive": 0.2,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": 0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "honesty",
+      "axis_b": "honesty",
+      "positive_positive": 0.5,
+      "positive_negative": -0.5,
+      "negative_positive": -0.5,
+      "negative_negative": 0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "honesty",
+      "positive_positive": 0.2,
+      "positive_negative": -0.2,
+      "negative_positive": -0.1,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "subterfuge",
+      "positive_positive": 0.0,
+      "positive_negative": 0.2,
+      "negative_positive": -0.2,
+      "negative_negative": 0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "loyalty",
+      "positive_positive": 0.3,
+      "positive_negative": -0.2,
+      "negative_positive": 0.0,
+      "negative_negative": -0.4,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "ambition",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "intellectual_drive",
+      "positive_positive": 0.2,
+      "positive_negative": -0.1,
+      "negative_positive": -0.1,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "disposition",
+      "axis_b": "physicality",
+      "positive_positive": 0.2,
+      "positive_negative": 0.0,
+      "negative_positive": -0.1,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "ambition",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "work_ethic",
+      "positive_positive": 0.2,
+      "positive_negative": -0.1,
+      "negative_positive": 0.0,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "honesty",
+      "positive_positive": 0.3,
+      "positive_negative": -0.2,
+      "negative_positive": 0.0,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "subterfuge",
+      "positive_positive": 0.1,
+      "positive_negative": 0.1,
+      "negative_positive": -0.2,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "sociability",
+      "positive_positive": 0.2,
+      "positive_negative": 0.0,
+      "negative_positive": -0.1,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "intellectual_drive",
+      "positive_positive": 0.2,
+      "positive_negative": -0.1,
+      "negative_positive": 0.0,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "courage",
+      "axis_b": "spirituality",
+      "positive_positive": 0.2,
+      "positive_negative": 0.0,
+      "negative_positive": 0.1,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "work_ethic",
+      "positive_positive": 0.2,
+      "positive_negative": -0.2,
+      "negative_positive": 0.1,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "honesty",
+      "positive_positive": 0.3,
+      "positive_negative": -0.3,
+      "negative_positive": 0.0,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "subterfuge",
+      "positive_positive": -0.2,
+      "positive_negative": 0.2,
+      "negative_positive": 0.1,
+      "negative_negative": 0.0,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "ambition",
+      "positive_positive": 0.3,
+      "positive_negative": -0.2,
+      "negative_positive": -0.1,
+      "negative_negative": -0.2,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "physicality",
+      "positive_positive": 0.2,
+      "positive_negative": -0.1,
+      "negative_positive": 0.0,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "intellectual_drive",
+      "positive_positive": 0.3,
+      "positive_negative": -0.3,
+      "negative_positive": 0.0,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "emotional_expression",
+      "axis_b": "spirituality",
+      "positive_positive": 0.3,
+      "positive_negative": -0.1,
+      "negative_positive": -0.2,
+      "negative_negative": 0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "honesty",
+      "positive_positive": 0.2,
+      "positive_negative": -0.1,
+      "negative_positive": -0.1,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "subterfuge",
+      "positive_positive": 0.1,
+      "positive_negative": 0.1,
+      "negative_positive": -0.2,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "loyalty",
+      "positive_positive": 0.3,
+      "positive_negative": -0.2,
+      "negative_positive": -0.1,
+      "negative_negative": -0.3,
+      "special_event": null
+    },
+    {
+      "axis_a": "work_ethic",
+      "axis_b": "spirituality",
+      "positive_positive": 0.2,
+      "positive_negative": 0.0,
+      "negative_positive": -0.2,
+      "negative_negative": -0.1,
+      "special_event": null
+    },
+    {
+      "axis_a": "honesty",
+      "axis_b": "ambition",
+      "positive_positive": 0.2,
+      "positive_negative": 0.0,
+      "negative_positive": -0.3,
+      "negative_negative": -0.1,
+      "special_event": null
+    }
+  ]
+}

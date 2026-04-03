@@ -121,6 +121,10 @@ namespace Waystation.Systems
             npc.skills     = RollSkills(template);
             npc.traits     = traits;
             npc.factionId  = PickFaction(template);
+
+            // 12-axis trait system: seed 3 random axes at ±1 or ±2 starting stage (WO-NPC-015)
+            if (FeatureFlags.UseFullTraitSystem)
+                SeedAxisStates(npc);
             npc.statusTags = statusTags != null ? new List<string>(statusTags) : new List<string>();
 
             if (overrides != null)
@@ -444,6 +448,48 @@ namespace Waystation.Systems
             foreach (var kv in template.skillRanges)
                 skills[kv.Key] = UnityEngine.Random.Range(kv.Value.min, kv.Value.max + 1);
             return skills;
+        }
+
+        // ── 12-axis trait axis seeding (WO-NPC-015) ────────────────────────
+
+        /// <summary>12-axis IDs for random generation seeding.</summary>
+        private static readonly string[] AxisIds = {
+            "honesty", "aggression", "sociability", "emotional_expression",
+            "intellectual_curiosity", "loyalty", "ambition", "spirituality",
+            "disposition", "self_reliance", "subterfuge", "humor"
+        };
+
+        /// <summary>
+        /// Seeds 3 random axes at ±1 or ±2 starting stage on a newly generated NPC.
+        /// No axis starts at ±3 (extreme stages are earned through gameplay).
+        /// </summary>
+        private void SeedAxisStates(NPCInstance npc)
+        {
+            var profile = npc.GetOrCreateTraitProfile();
+            if (profile.axisStates == null)
+                profile.axisStates = new System.Collections.Generic.List<Waystation.Models.AxisState>();
+
+            // Pick 3 unique axes
+            var available = new System.Collections.Generic.List<string>(AxisIds);
+            int count = Mathf.Min(3, available.Count);
+            for (int i = 0; i < count; i++)
+            {
+                int idx = UnityEngine.Random.Range(0, available.Count);
+                string axisId = available[idx];
+                available.RemoveAt(idx);
+
+                // Random stage: ±1 or ±2 (never 0 or ±3)
+                int stage = UnityEngine.Random.Range(1, 3); // 1 or 2
+                if (UnityEngine.Random.value < 0.5f) stage = -stage;
+
+                profile.axisStates.Add(new Waystation.Models.AxisState
+                {
+                    axisId = axisId,
+                    currentStage = stage,
+                    positivePressure = 0f,
+                    negativePressure = 0f
+                });
+            }
         }
 
         private List<string> PickTraits(NPCTemplate template, int count = 2)

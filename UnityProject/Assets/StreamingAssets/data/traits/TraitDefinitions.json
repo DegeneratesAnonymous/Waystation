@@ -1,0 +1,821 @@
+[
+  {
+    "id": "trait_nihilistic",
+    "display_name": "Nihilistic",
+    "description": "Believes nothing aboard this station—or anywhere else—truly matters.",
+    "axis_id": "disposition",
+    "stage": -3,
+    "modifiers": {
+      "mood_floor_delta": -15,
+      "mood_recovery_mult": 0.7,
+      "departure_threshold_mult": 0.8,
+      "sanity_recovery_mult": 0.8
+    }
+  },
+  {
+    "id": "trait_pessimistic",
+    "display_name": "Pessimistic",
+    "description": "Expects the worst outcome and is rarely surprised when it arrives.",
+    "axis_id": "disposition",
+    "stage": -2,
+    "modifiers": {
+      "mood_floor_delta": -10,
+      "mood_recovery_mult": 0.8
+    }
+  },
+  {
+    "id": "trait_gloomy",
+    "display_name": "Gloomy",
+    "description": "Carries a quiet melancholy that colors even good days grey.",
+    "axis_id": "disposition",
+    "stage": -1,
+    "modifiers": {
+      "mood_floor_delta": -5,
+      "mood_recovery_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_upbeat",
+    "display_name": "Upbeat",
+    "description": "Finds a silver lining in most situations, even out on the rim.",
+    "axis_id": "disposition",
+    "stage": 1,
+    "modifiers": {
+      "mood_floor_delta": 5,
+      "mood_recovery_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_optimistic",
+    "display_name": "Optimistic",
+    "description": "Sees the best in every situation. Improved mood baseline.",
+    "axis_id": "disposition",
+    "stage": 2,
+    "modifiers": {
+      "mood_floor_delta": 10,
+      "mood_recovery_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_idealistic",
+    "display_name": "Idealistic",
+    "description": "Radiates unwavering faith in a brighter future, lifting spirits station-wide.",
+    "axis_id": "disposition",
+    "stage": 3,
+    "modifiers": {
+      "mood_floor_delta": 15,
+      "mood_recovery_mult": 1.2,
+      "relationship_gain_mult": 1.1
+    }
+  },
+
+  {
+    "id": "trait_cowardly",
+    "display_name": "Cowardly",
+    "description": "Paralyzed by danger; will flee at the first sign of threat.",
+    "axis_id": "courage",
+    "stage": -3,
+    "modifiers": {
+      "tension_accumulation_mult": 1.5,
+      "injury_risk_mult": 0.8,
+      "combat_xp_mult": 0.7
+    }
+  },
+  {
+    "id": "trait_timid",
+    "display_name": "Timid",
+    "description": "Shrinks from confrontation and avoids risky assignments.",
+    "axis_id": "courage",
+    "stage": -2,
+    "modifiers": {
+      "tension_accumulation_mult": 1.3,
+      "combat_xp_mult": 0.85
+    }
+  },
+  {
+    "id": "trait_cautious",
+    "display_name": "Cautious",
+    "description": "Prefers measured approaches and double-checks airlock seals.",
+    "axis_id": "courage",
+    "stage": -1,
+    "modifiers": {
+      "tension_accumulation_mult": 1.1,
+      "injury_risk_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_brave",
+    "display_name": "Brave",
+    "description": "Steps forward when others hesitate. Keeps cool under pressure.",
+    "axis_id": "courage",
+    "stage": 1,
+    "modifiers": {
+      "tension_accumulation_mult": 0.9,
+      "combat_xp_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_fearless",
+    "display_name": "Fearless",
+    "description": "Danger barely registers. Charges into hull breaches without flinching.",
+    "axis_id": "courage",
+    "stage": 2,
+    "modifiers": {
+      "tension_accumulation_mult": 0.75,
+      "combat_xp_mult": 1.2
+    }
+  },
+  {
+    "id": "trait_reckless",
+    "display_name": "Reckless",
+    "description": "Treats mortal peril as a minor inconvenience—often to everyone's detriment.",
+    "axis_id": "courage",
+    "stage": 3,
+    "modifiers": {
+      "tension_accumulation_mult": 0.6,
+      "injury_risk_mult": 1.3,
+      "combat_xp_mult": 1.3
+    }
+  },
+
+  {
+    "id": "trait_slothful",
+    "display_name": "Slothful",
+    "description": "Avoids labor with an almost impressive dedication to inactivity.",
+    "axis_id": "work_ethic",
+    "stage": -3,
+    "modifiers": {
+      "work_speed_mult": 0.7,
+      "all_xp_mult": 0.85
+    }
+  },
+  {
+    "id": "trait_lazy",
+    "display_name": "Lazy",
+    "description": "Does the bare minimum and takes long breaks between tasks.",
+    "axis_id": "work_ethic",
+    "stage": -2,
+    "modifiers": {
+      "work_speed_mult": 0.8,
+      "all_xp_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_leisurely",
+    "display_name": "Leisurely",
+    "description": "Works at a relaxed pace, preferring comfort over urgency.",
+    "axis_id": "work_ethic",
+    "stage": -1,
+    "modifiers": {
+      "work_speed_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_diligent",
+    "display_name": "Diligent",
+    "description": "Maintains a steady, reliable work rhythm shift after shift.",
+    "axis_id": "work_ethic",
+    "stage": 1,
+    "modifiers": {
+      "work_speed_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_industrious",
+    "display_name": "Industrious",
+    "description": "Attacks every task list with focused energy and rarely idles.",
+    "axis_id": "work_ethic",
+    "stage": 2,
+    "modifiers": {
+      "work_speed_mult": 1.2,
+      "all_xp_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_tireless",
+    "display_name": "Tireless",
+    "description": "Works like a machine that forgot it has an off switch.",
+    "axis_id": "work_ethic",
+    "stage": 3,
+    "modifiers": {
+      "work_speed_mult": 1.3,
+      "all_xp_mult": 1.1
+    }
+  },
+
+  {
+    "id": "trait_deceitful",
+    "display_name": "Deceitful",
+    "description": "Lies as naturally as breathing recycled air. Trust is a foreign concept.",
+    "axis_id": "honesty",
+    "stage": -3,
+    "modifiers": {
+      "manipulation_quality_bonus": 0.2,
+      "trust_gain_mult": 0.7
+    }
+  },
+  {
+    "id": "trait_manipulative",
+    "display_name": "Manipulative",
+    "description": "Bends conversations and situations to serve hidden agendas.",
+    "axis_id": "honesty",
+    "stage": -2,
+    "modifiers": {
+      "manipulation_quality_bonus": 0.1,
+      "trust_gain_mult": 0.8
+    }
+  },
+  {
+    "id": "trait_shrewd",
+    "display_name": "Shrewd",
+    "description": "Economical with the truth; reveals only what serves a purpose.",
+    "axis_id": "honesty",
+    "stage": -1,
+    "modifiers": {
+      "manipulation_quality_bonus": 0.05,
+      "trust_gain_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_forthright",
+    "display_name": "Forthright",
+    "description": "Speaks plainly and prefers straight answers over diplomacy.",
+    "axis_id": "honesty",
+    "stage": 1,
+    "modifiers": {
+      "trust_gain_mult": 1.1,
+      "articulation_quality_bonus": 0.05
+    }
+  },
+  {
+    "id": "trait_truthful",
+    "display_name": "Truthful",
+    "description": "Has a firm commitment to honesty that others find reassuring.",
+    "axis_id": "honesty",
+    "stage": 2,
+    "modifiers": {
+      "trust_gain_mult": 1.2,
+      "articulation_quality_bonus": 0.1
+    }
+  },
+  {
+    "id": "trait_radically_honest",
+    "display_name": "Radically Honest",
+    "description": "Incapable of deception—every thought is broadcast unfiltered.",
+    "axis_id": "honesty",
+    "stage": 3,
+    "modifiers": {
+      "trust_gain_mult": 1.3,
+      "articulation_quality_bonus": 0.15
+    },
+    "subterfuge_concealment_impossible": true
+  },
+
+  {
+    "id": "trait_treacherous",
+    "display_name": "Treacherous",
+    "description": "Allegiance is a tool to be discarded the moment it stops being useful.",
+    "axis_id": "loyalty",
+    "stage": -3,
+    "modifiers": {
+      "departure_threshold_mult": 0.7,
+      "relationship_gain_mult": 0.8
+    }
+  },
+  {
+    "id": "trait_disloyal",
+    "display_name": "Disloyal",
+    "description": "Keeps one eye on the exit and the other on better opportunities.",
+    "axis_id": "loyalty",
+    "stage": -2,
+    "modifiers": {
+      "departure_threshold_mult": 0.8,
+      "relationship_gain_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_self_interested",
+    "display_name": "Self-Interested",
+    "description": "Looks out for number one first; loyalty is conditional on benefit.",
+    "axis_id": "loyalty",
+    "stage": -1,
+    "modifiers": {
+      "departure_threshold_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_dedicated",
+    "display_name": "Dedicated",
+    "description": "Stands by commitments and pulls through even when things get rough.",
+    "axis_id": "loyalty",
+    "stage": 1,
+    "modifiers": {
+      "departure_threshold_mult": 1.1,
+      "relationship_gain_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_devoted",
+    "display_name": "Devoted",
+    "description": "Deeply committed to the station and its crew, through thick and thin.",
+    "axis_id": "loyalty",
+    "stage": 2,
+    "modifiers": {
+      "departure_threshold_mult": 1.2,
+      "relationship_gain_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_fanatical",
+    "display_name": "Fanatical",
+    "description": "Loyalty so fierce it borders on obsession—will never voluntarily leave.",
+    "axis_id": "loyalty",
+    "stage": 3,
+    "modifiers": {
+      "departure_threshold_mult": 1.4,
+      "relationship_gain_mult": 1.15,
+      "faction_recruitment_immune": true
+    }
+  },
+
+  {
+    "id": "trait_detached",
+    "display_name": "Detached",
+    "description": "Emotionally distant, as if observing life through reinforced glass.",
+    "axis_id": "emotional_expression",
+    "stage": -3,
+    "modifiers": {
+      "social_need_depletion_mult": 0.7,
+      "relationship_gain_mult": 0.7,
+      "tension_accumulation_mult": 0.8
+    }
+  },
+  {
+    "id": "trait_stoic",
+    "display_name": "Stoic",
+    "description": "Keeps feelings locked down tight, even during station emergencies.",
+    "axis_id": "emotional_expression",
+    "stage": -2,
+    "modifiers": {
+      "social_need_depletion_mult": 0.8,
+      "relationship_gain_mult": 0.85,
+      "tension_accumulation_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_reserved",
+    "display_name": "Reserved",
+    "description": "Quiet and measured; shares feelings sparingly and on their own terms.",
+    "axis_id": "emotional_expression",
+    "stage": -1,
+    "modifiers": {
+      "social_need_depletion_mult": 0.9,
+      "relationship_gain_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_expressive",
+    "display_name": "Expressive",
+    "description": "Wears every emotion openly—everyone knows exactly how they feel.",
+    "axis_id": "emotional_expression",
+    "stage": 1,
+    "modifiers": {
+      "social_need_depletion_mult": 1.1,
+      "relationship_gain_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_passionate",
+    "display_name": "Passionate",
+    "description": "Feels everything intensely, from joy to fury, and lets everyone know it.",
+    "axis_id": "emotional_expression",
+    "stage": 2,
+    "modifiers": {
+      "social_need_depletion_mult": 1.2,
+      "relationship_gain_mult": 1.15,
+      "tension_accumulation_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_resonant",
+    "display_name": "Resonant",
+    "description": "Emotional state radiates outward, influencing the mood of everyone nearby.",
+    "axis_id": "emotional_expression",
+    "stage": 3,
+    "modifiers": {
+      "social_need_depletion_mult": 1.3,
+      "relationship_gain_mult": 1.2
+    },
+    "passive_effect": "mood_bleed"
+  },
+
+  {
+    "id": "trait_incurious",
+    "display_name": "Incurious",
+    "description": "Has zero interest in how anything works—or why it stopped working.",
+    "axis_id": "intellectual_drive",
+    "stage": -3,
+    "modifiers": {
+      "all_xp_mult": 0.75,
+      "science_xp_mult": 0.7
+    }
+  },
+  {
+    "id": "trait_apathetic",
+    "display_name": "Apathetic",
+    "description": "Lacks motivation to learn or grow; coasts on existing knowledge.",
+    "axis_id": "intellectual_drive",
+    "stage": -2,
+    "modifiers": {
+      "all_xp_mult": 0.85,
+      "science_xp_mult": 0.8
+    }
+  },
+  {
+    "id": "trait_unambitious",
+    "display_name": "Unambitious",
+    "description": "Content with current skills; doesn't seek out new challenges.",
+    "axis_id": "intellectual_drive",
+    "stage": -1,
+    "modifiers": {
+      "all_xp_mult": 0.9,
+      "science_xp_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_curious",
+    "display_name": "Curious",
+    "description": "Always asking questions and poking at unfamiliar tech.",
+    "axis_id": "intellectual_drive",
+    "stage": 1,
+    "modifiers": {
+      "all_xp_mult": 1.1,
+      "science_xp_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_studious",
+    "display_name": "Studious",
+    "description": "Devours technical manuals and spends off-shifts in the data archives.",
+    "axis_id": "intellectual_drive",
+    "stage": 2,
+    "modifiers": {
+      "all_xp_mult": 1.15,
+      "science_xp_mult": 1.2
+    }
+  },
+  {
+    "id": "trait_obsessive",
+    "display_name": "Obsessive",
+    "description": "Pursues knowledge to the exclusion of sleep, meals, and sanity.",
+    "axis_id": "intellectual_drive",
+    "stage": 3,
+    "modifiers": {
+      "all_xp_mult": 1.2,
+      "science_xp_mult": 1.3,
+      "sanity_recovery_mult": 0.9
+    }
+  },
+
+  {
+    "id": "trait_naive",
+    "display_name": "Naive",
+    "description": "Takes everything at face value; an easy mark for any con artist on the station.",
+    "axis_id": "subterfuge",
+    "stage": -3,
+    "modifiers": {
+      "manipulation_quality_bonus": -0.2,
+      "trust_gain_mult": 1.2
+    }
+  },
+  {
+    "id": "trait_gullible",
+    "display_name": "Gullible",
+    "description": "Believes tall tales and falls for transparent ploys with alarming regularity.",
+    "axis_id": "subterfuge",
+    "stage": -2,
+    "modifiers": {
+      "manipulation_quality_bonus": -0.15,
+      "trust_gain_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_trusting",
+    "display_name": "Trusting",
+    "description": "Gives others the benefit of the doubt, sometimes to a fault.",
+    "axis_id": "subterfuge",
+    "stage": -1,
+    "modifiers": {
+      "manipulation_quality_bonus": -0.05,
+      "trust_gain_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_cunning",
+    "display_name": "Cunning",
+    "description": "Reads people well and knows how to nudge conversations in useful directions.",
+    "axis_id": "subterfuge",
+    "stage": 1,
+    "modifiers": {
+      "manipulation_quality_bonus": 0.1
+    }
+  },
+  {
+    "id": "trait_scheming",
+    "display_name": "Scheming",
+    "description": "Always three moves ahead; plays the social game like a veteran operative.",
+    "axis_id": "subterfuge",
+    "stage": 2,
+    "modifiers": {
+      "manipulation_quality_bonus": 0.2,
+      "trust_gain_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_machiavellian",
+    "display_name": "Machiavellian",
+    "description": "A master manipulator who views every interaction as a piece on the board.",
+    "axis_id": "subterfuge",
+    "stage": 3,
+    "modifiers": {
+      "manipulation_quality_bonus": 0.3,
+      "trust_gain_mult": 0.8
+    }
+  },
+
+  {
+    "id": "trait_aimless",
+    "display_name": "Aimless",
+    "description": "Drifts through station life with no goals and no direction.",
+    "axis_id": "ambition",
+    "stage": -3,
+    "modifiers": {
+      "all_xp_mult": 0.8,
+      "work_speed_mult": 0.85,
+      "departure_threshold_mult": 0.85
+    }
+  },
+  {
+    "id": "trait_complacent",
+    "display_name": "Complacent",
+    "description": "Settled into comfortable routines and resistant to change.",
+    "axis_id": "ambition",
+    "stage": -2,
+    "modifiers": {
+      "all_xp_mult": 0.9,
+      "work_speed_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_content",
+    "display_name": "Content",
+    "description": "Satisfied with what they have; ambition takes a back seat to peace of mind.",
+    "axis_id": "ambition",
+    "stage": -1,
+    "modifiers": {
+      "all_xp_mult": 0.95,
+      "mood_recovery_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_aspiring",
+    "display_name": "Aspiring",
+    "description": "Quietly working toward something bigger; eyes on the next promotion.",
+    "axis_id": "ambition",
+    "stage": 1,
+    "modifiers": {
+      "all_xp_mult": 1.05,
+      "work_speed_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_driven",
+    "display_name": "Driven",
+    "description": "Relentlessly pursues advancement, volunteering for every difficult assignment.",
+    "axis_id": "ambition",
+    "stage": 2,
+    "modifiers": {
+      "all_xp_mult": 1.1,
+      "work_speed_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_ruthless",
+    "display_name": "Ruthless",
+    "description": "Will climb over anyone to reach the top—collateral damage is acceptable.",
+    "axis_id": "ambition",
+    "stage": 3,
+    "modifiers": {
+      "all_xp_mult": 1.15,
+      "work_speed_mult": 1.15,
+      "relationship_gain_mult": 0.85,
+      "tension_accumulation_mult": 0.85
+    }
+  },
+
+  {
+    "id": "trait_frail",
+    "display_name": "Frail",
+    "description": "A body ill-suited for station life; even routine maintenance is taxing.",
+    "axis_id": "physicality",
+    "stage": -3,
+    "modifiers": {
+      "injury_risk_mult": 1.4,
+      "illness_recovery_mult": 0.7,
+      "conditioning_xp_mult": 0.7
+    }
+  },
+  {
+    "id": "trait_delicate",
+    "display_name": "Delicate",
+    "description": "Bruises easily and takes longer to recover from physical strain.",
+    "axis_id": "physicality",
+    "stage": -2,
+    "modifiers": {
+      "injury_risk_mult": 1.25,
+      "illness_recovery_mult": 0.8,
+      "conditioning_xp_mult": 0.85
+    }
+  },
+  {
+    "id": "trait_soft",
+    "display_name": "Soft",
+    "description": "Lacks physical edge; prefers desk work to hauling cargo.",
+    "axis_id": "physicality",
+    "stage": -1,
+    "modifiers": {
+      "injury_risk_mult": 1.1,
+      "illness_recovery_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_hardy",
+    "display_name": "Hardy",
+    "description": "Shrugs off minor injuries and bounces back from illness quickly.",
+    "axis_id": "physicality",
+    "stage": 1,
+    "modifiers": {
+      "injury_risk_mult": 0.9,
+      "illness_recovery_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_tough",
+    "display_name": "Tough",
+    "description": "Built solid; handles physical punishment that would sideline most crew.",
+    "axis_id": "physicality",
+    "stage": 2,
+    "modifiers": {
+      "injury_risk_mult": 0.8,
+      "illness_recovery_mult": 1.2,
+      "conditioning_xp_mult": 1.15
+    }
+  },
+  {
+    "id": "trait_indomitable",
+    "display_name": "Indomitable",
+    "description": "A physical powerhouse who treats broken bones as minor inconveniences.",
+    "axis_id": "physicality",
+    "stage": 3,
+    "modifiers": {
+      "injury_risk_mult": 0.65,
+      "illness_recovery_mult": 1.3,
+      "conditioning_xp_mult": 1.3
+    }
+  },
+
+  {
+    "id": "trait_nihilistic_spiritual",
+    "display_name": "Nihilistic (Spiritual)",
+    "description": "Rejects all meaning beyond the material—the void is all there is.",
+    "axis_id": "spirituality",
+    "stage": -3,
+    "modifiers": {
+      "sanity_recovery_mult": 0.75,
+      "mood_floor_delta": -10
+    }
+  },
+  {
+    "id": "trait_skeptical",
+    "display_name": "Skeptical",
+    "description": "Demands empirical proof for everything; faith is an inefficiency.",
+    "axis_id": "spirituality",
+    "stage": -2,
+    "modifiers": {
+      "sanity_recovery_mult": 0.85,
+      "science_xp_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_agnostic",
+    "display_name": "Agnostic",
+    "description": "Keeps an open mind but doesn't commit to any belief system.",
+    "axis_id": "spirituality",
+    "stage": -1,
+    "modifiers": {
+      "sanity_recovery_mult": 0.95
+    }
+  },
+  {
+    "id": "trait_faithful",
+    "display_name": "Faithful",
+    "description": "Draws quiet strength from personal beliefs during hard times.",
+    "axis_id": "spirituality",
+    "stage": 1,
+    "modifiers": {
+      "sanity_recovery_mult": 1.1,
+      "mood_recovery_mult": 1.05
+    }
+  },
+  {
+    "id": "trait_devout",
+    "display_name": "Devout",
+    "description": "Deep spiritual conviction provides resilience against the darkness of space.",
+    "axis_id": "spirituality",
+    "stage": 2,
+    "modifiers": {
+      "sanity_recovery_mult": 1.2,
+      "mood_recovery_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_zealous",
+    "display_name": "Zealous",
+    "description": "Burning conviction that borders on fanaticism; unshakable but divisive.",
+    "axis_id": "spirituality",
+    "stage": 3,
+    "modifiers": {
+      "sanity_recovery_mult": 1.3,
+      "mood_recovery_mult": 1.15,
+      "tension_accumulation_mult": 1.15
+    }
+  },
+
+  {
+    "id": "trait_reclusive",
+    "display_name": "Reclusive",
+    "description": "Avoids all social contact; happiest alone in a sealed compartment.",
+    "axis_id": "sociability",
+    "stage": -3,
+    "modifiers": {
+      "social_need_depletion_mult": 0.6,
+      "relationship_gain_mult": 0.7
+    }
+  },
+  {
+    "id": "trait_introverted",
+    "display_name": "Introverted",
+    "description": "Recharges in solitude and finds crowds draining.",
+    "axis_id": "sociability",
+    "stage": -2,
+    "modifiers": {
+      "social_need_depletion_mult": 0.75,
+      "relationship_gain_mult": 0.85
+    }
+  },
+  {
+    "id": "trait_shy",
+    "display_name": "Shy",
+    "description": "Hangs back in group settings but warms up one-on-one.",
+    "axis_id": "sociability",
+    "stage": -1,
+    "modifiers": {
+      "social_need_depletion_mult": 0.85,
+      "relationship_gain_mult": 0.9
+    }
+  },
+  {
+    "id": "trait_extroverted",
+    "display_name": "Extroverted",
+    "description": "Energized by company; seeks out conversation during every break.",
+    "axis_id": "sociability",
+    "stage": 1,
+    "modifiers": {
+      "social_need_depletion_mult": 1.15,
+      "relationship_gain_mult": 1.1
+    }
+  },
+  {
+    "id": "trait_gregarious",
+    "display_name": "Gregarious",
+    "description": "The life of every mess hall gathering; knows everyone by name.",
+    "axis_id": "sociability",
+    "stage": 2,
+    "modifiers": {
+      "social_need_depletion_mult": 1.25,
+      "relationship_gain_mult": 1.2
+    }
+  },
+  {
+    "id": "trait_magnetic",
+    "display_name": "Magnetic",
+    "description": "An irresistible social gravity that draws people in and disarms hostility.",
+    "axis_id": "sociability",
+    "stage": 3,
+    "modifiers": {
+      "social_need_depletion_mult": 1.3,
+      "relationship_gain_mult": 1.3,
+      "hostile_conversation_immune": true
+    }
+  }
+]

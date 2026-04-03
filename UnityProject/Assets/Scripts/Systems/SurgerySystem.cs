@@ -139,6 +139,9 @@ namespace Waystation.Systems
                     // Surgery failure: register condition pressure on the surgeon so that
                     // repeated failures can eventually trigger a fear or anxiety trait.
                     _traits?.RegisterConditionPressure(surgeon, TraitConditionCategory.SurgeryFailure, 2f);
+                    // 12-axis: surgery failure pushes Emotional Expression toward stoic (-)
+                    if (FeatureFlags.UseFullTraitSystem)
+                        _traits?.AddPressure(surgeon, "emotional_expression", -2f);
                     break;
                 case SurgeryOutcome.CriticalFailure:
                     int d6 = Random.Range(1, 7);
@@ -147,6 +150,9 @@ namespace Waystation.Systems
                                          targetWound, profile, partDefs, station);
                     // Critical failure: stronger pressure spike on the surgeon.
                     _traits?.RegisterConditionPressure(surgeon, TraitConditionCategory.SurgeryFailure, 4f);
+                    // 12-axis: critical failure — stronger stoic (-) pressure
+                    if (FeatureFlags.UseFullTraitSystem)
+                        _traits?.AddPressure(surgeon, "emotional_expression", -4f);
                     break;
             }
 

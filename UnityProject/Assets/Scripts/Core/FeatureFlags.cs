@@ -258,5 +258,31 @@ namespace Waystation.Core
         /// or antenna research. Has no effect on saves or normal progression systems.
         /// </summary>
         public static bool TelescopeMode = false;
+
+        /// <summary>
+        /// Enables the full 12-axis trait system with pressure accumulation,
+        /// compatibility matrix, and Resonant passive tick.
+        /// When false, the older condition-pressure trait model from NPC-005 is used.
+        /// </summary>
+        public static bool UseFullTraitSystem = true;
+
+        /// <summary>
+        /// Enables the InteractionSystem: five-input conversation quality roll,
+        /// first impressions, overhearing, conversation joining, and task handoff
+        /// interactions. When false, ConversationSystem's raw CHA check is used.
+        /// </summary>
+        public static bool UseInteractionSystem = true;
+
+        /// <summary>
+        /// Enables a third NPC joining active conversations within overhear radius.
+        /// Only effective when UseInteractionSystem is also true.
+        /// </summary>
+        public static bool UseConversationJoining = true;
+
+        /// <summary>
+        /// Enables the TickScheduler: multi-channel load-balanced simulation clock.
+        /// When false, all systems tick via GameManager.OnTick as before.
+        /// </summary>
+        public static bool UseTickScheduler = true;
     }
 }
