@@ -106,6 +106,17 @@ namespace Waystation.UI
         }
 
         /// <summary>
+        /// Removes the entry at the given index and fires <see cref="OnBufferChanged"/>.
+        /// No-op if the index is out of range.
+        /// </summary>
+        public void RemoveAt(int index)
+        {
+            if (index < 0 || index >= _entries.Count) return;
+            _entries.RemoveAt(index);
+            OnBufferChanged?.Invoke();
+        }
+
+        /// <summary>
         /// Returns the single entry that should be displayed in the collapsed strip.
         /// Selects the highest-priority entry (lowest <see cref="LogCategory"/> int value),
         /// preserving insertion order (most-recent first) within each category.

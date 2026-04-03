@@ -44,6 +44,14 @@ namespace Waystation.UI
         private readonly List<ExpertiseOption> _options = new List<ExpertiseOption>();
         private string _selectedId;
         private Button _confirmButton;
+        private Button _cancelButton;
+
+        private readonly Label _npcPortrait;
+        private readonly Label _npcNameLabel;
+        private readonly Label _skillInfoLabel;
+        private readonly Label _queueInfoLabel;
+
+        private bool _mandatoryMode;
 
         // ── Events ────────────────────────────────────────────────────────
         /// <summary>
@@ -55,6 +63,31 @@ namespace Waystation.UI
         public ExpertiseSlotPrompt()
         {
             Title = "CHOOSE EXPERTISE";
+
+            // NPC header row
+            var npcRow = new VisualElement();
+            npcRow.AddToClassList("ws-expertise-slot-prompt__npc-row");
+
+            _npcPortrait = new Label("?");
+            _npcPortrait.AddToClassList("ws-expertise-slot-prompt__npc-portrait");
+
+            _npcNameLabel = new Label();
+            _npcNameLabel.AddToClassList("ws-expertise-slot-prompt__npc-name");
+
+            npcRow.Add(_npcPortrait);
+            npcRow.Add(_npcNameLabel);
+            BodyContent.Add(npcRow);
+
+            // Skill info
+            _skillInfoLabel = new Label();
+            _skillInfoLabel.AddToClassList("ws-expertise-slot-prompt__skill-info");
+            BodyContent.Add(_skillInfoLabel);
+
+            // Queue depth
+            _queueInfoLabel = new Label();
+            _queueInfoLabel.AddToClassList("ws-expertise-slot-prompt__queue-info");
+            _queueInfoLabel.style.display = DisplayStyle.None;
+            BodyContent.Add(_queueInfoLabel);
 
             // Slot list in the body
             _slotList = new VisualElement();
@@ -74,7 +107,58 @@ namespace Waystation.UI
             // Footer buttons
             _confirmButton = AddFooterButton("CONFIRM", OnConfirmClicked, isPrimary: true);
             _confirmButton.SetEnabled(false);
-            AddFooterButton("CANCEL", Hide);
+            _cancelButton = AddFooterButton("CANCEL", Hide);
+        }
+
+        // ── Properties ─────────────────────────────────────────────────────
+
+        /// <summary>Sets the NPC name and updates the initials circle.</summary>
+        public string NpcName
+        {
+            set
+            {
+                _npcNameLabel.text = value;
+                _npcPortrait.text = GetInitials(value);
+            }
+        }
+
+        /// <summary>Sets the skill info text (e.g. "Farming reached level 8").</summary>
+        public string SkillInfo
+        {
+            set => _skillInfoLabel.text = value;
+        }
+
+        /// <summary>Sets the queue depth text. Null or empty hides the label.</summary>
+        public string QueueInfo
+        {
+            set
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    _queueInfoLabel.style.display = DisplayStyle.None;
+                }
+                else
+                {
+                    _queueInfoLabel.text = value;
+                    _queueInfoLabel.style.display = DisplayStyle.Flex;
+                }
+            }
+        }
+
+        /// <summary>
+        /// When true, the player cannot dismiss the prompt without choosing.
+        /// Hides the cancel button and disables backdrop/close-button dismissal.
+        /// </summary>
+        public bool MandatoryMode
+        {
+            get => _mandatoryMode;
+            set
+            {
+                _mandatoryMode = value;
+                BackdropCloseEnabled = !value;
+                CloseButtonVisible = !value;
+                _cancelButton.style.display = value ? DisplayStyle.None : DisplayStyle.Flex;
+            }
         }
 
         // ── Public API ────────────────────────────────────────────────────
@@ -134,6 +218,21 @@ namespace Waystation.UI
             if (string.IsNullOrEmpty(_selectedId)) return;
             OnConfirmed?.Invoke(_selectedId);
             Hide();
+        }
+
+        /// <summary>
+        /// Returns the initials for a given name (first letter of first and last
+        /// parts). Returns "?" for null/empty input.
+        /// </summary>
+        public static string GetInitials(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "?";
+
+            var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return "?";
+            if (parts.Length == 1) return parts[0][0].ToString().ToUpperInvariant();
+
+            return (parts[0][0].ToString() + parts[parts.Length - 1][0].ToString()).ToUpperInvariant();
         }
     }
 }

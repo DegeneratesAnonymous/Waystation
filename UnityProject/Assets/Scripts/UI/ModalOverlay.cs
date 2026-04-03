@@ -22,6 +22,7 @@
 //   modal.Show();
 
 using System;
+using System.Collections.Generic;
 using UnityEngine.UIElements;
 
 namespace Waystation.UI
@@ -34,12 +35,14 @@ namespace Waystation.UI
     public partial class ModalOverlay : VisualElement
     {
         private const string ClassVisible = "ws-modal-overlay--visible";
+        private static readonly HashSet<ModalOverlay> s_liveOverlays = new HashSet<ModalOverlay>();
 
         // ── Child elements ────────────────────────────────────────────────
         private readonly VisualElement _panel;
         private readonly Label _titleLabel;
         private readonly VisualElement _body;
         private readonly VisualElement _footer;
+        private readonly Button _closeBtn;
 
         // ── Events ────────────────────────────────────────────────────────
         /// <summary>Fired when the overlay is shown.</summary>
@@ -70,10 +73,28 @@ namespace Waystation.UI
         /// </summary>
         public bool BackdropCloseEnabled { get; set; } = true;
 
+        /// <summary>
+        /// When false, hides the top-right close button.
+        /// </summary>
+        public bool CloseButtonVisible
+        {
+            get => _closeBtn.style.display != DisplayStyle.None;
+            set => _closeBtn.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
         // ── Constructor ───────────────────────────────────────────────────
         public ModalOverlay()
         {
             AddToClassList("ws-modal-overlay");
+
+            // Hidden by default so the overlay is safe even if USS fails to load.
+            style.display = DisplayStyle.None;
+            style.visibility = Visibility.Hidden;
+            style.opacity = 0f;
+            pickingMode = PickingMode.Ignore;
+
+            RegisterCallback<AttachToPanelEvent>(_ => s_liveOverlays.Add(this));
+            RegisterCallback<DetachFromPanelEvent>(_ => s_liveOverlays.Remove(this));
 
             // Backdrop click-to-close
             RegisterCallback<ClickEvent>(OnBackdropClick);
@@ -91,12 +112,12 @@ namespace Waystation.UI
             _titleLabel.AddToClassList("ws-modal-overlay__title");
             header.Add(_titleLabel);
 
-            var closeBtn = new Button(() => Hide());
-            closeBtn.AddToClassList("ws-btn");
-            closeBtn.AddToClassList("ws-btn--danger");
-            closeBtn.AddToClassList("close-btn");
-            closeBtn.text = "✕";
-            header.Add(closeBtn);
+            _closeBtn = new Button(() => Hide());
+            _closeBtn.AddToClassList("ws-btn");
+            _closeBtn.AddToClassList("ws-btn--danger");
+            _closeBtn.AddToClassList("close-btn");
+            _closeBtn.text = "✕";
+            header.Add(_closeBtn);
 
             // Body
             _body = new VisualElement();
@@ -109,7 +130,7 @@ namespace Waystation.UI
             _panel.Add(header);
             _panel.Add(_body);
             _panel.Add(_footer);
-            Add(_panel);
+            hierarchy.Add(_panel);
         }
 
         // ── Public API ────────────────────────────────────────────────────
@@ -118,6 +139,10 @@ namespace Waystation.UI
         public void Show()
         {
             AddToClassList(ClassVisible);
+            style.display = DisplayStyle.Flex;
+            style.visibility = Visibility.Visible;
+            style.opacity = 1f;
+            pickingMode = PickingMode.Position;
             OnShown?.Invoke();
         }
 
@@ -125,6 +150,10 @@ namespace Waystation.UI
         public void Hide()
         {
             RemoveFromClassList(ClassVisible);
+            style.display = DisplayStyle.None;
+            style.visibility = Visibility.Hidden;
+            style.opacity = 0f;
+            pickingMode = PickingMode.Ignore;
             OnHidden?.Invoke();
         }
 
@@ -141,6 +170,20 @@ namespace Waystation.UI
 
         /// <summary>Removes all buttons from the footer.</summary>
         public void ClearFooter() => _footer.Clear();
+
+        /// <summary>
+        /// Defensive cleanup for stale dim backdrops. Hides only live modal overlays
+        /// that are dismissible by default.
+        /// </summary>
+        public static void ForceHideAllVisible()
+        {
+            foreach (var overlay in s_liveOverlays)
+            {
+                if (overlay == null) continue;
+                if (!overlay.BackdropCloseEnabled) continue;
+                overlay.Hide();
+            }
+        }
 
         // ── Private ───────────────────────────────────────────────────────
         private void OnBackdropClick(ClickEvent evt)

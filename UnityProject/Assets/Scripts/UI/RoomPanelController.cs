@@ -91,17 +91,17 @@ namespace Waystation.UI
         {
             AddToClassList(PanelClass);
 
-            style.flexDirection   = FlexDirection.Column;
-            style.flexGrow        = 0;
-            style.flexShrink      = 0;
-            style.width           = 320;
-            style.position        = Position.Absolute;
-            style.right           = 0;
-            style.top             = 0;
-            style.bottom          = 0;
-            style.backgroundColor = new Color(0.12f, 0.12f, 0.16f, 0.97f);
-            style.borderLeftWidth = 1;
-            style.borderLeftColor = new Color(0.3f, 0.3f, 0.4f, 0.8f);
+            style.flexDirection    = FlexDirection.Column;
+            style.flexGrow         = 0;
+            style.flexShrink       = 0;
+            style.width            = 400;
+            style.position         = Position.Absolute;
+            style.left             = 0;
+            style.top              = 0;
+            style.bottom           = 32;
+            style.backgroundColor  = new Color(0.12f, 0.12f, 0.16f, 0.97f);
+            style.borderRightWidth = 1;
+            style.borderRightColor = new Color(0.3f, 0.3f, 0.4f, 0.8f);
 
             // ── Header ──────────────────────────────────────────────────────────
             var header = new VisualElement();
