@@ -5,7 +5,7 @@
 using UnityEngine;
 using Waystation.Core;
 
-namespace Waystation.Debug
+namespace Waystation.Diagnostics
 {
     public class TickBudgetOverlay
     {

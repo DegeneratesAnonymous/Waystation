@@ -31,6 +31,7 @@ namespace Waystation.Core
             public int SystemsDeferred;
 
             public float RemainingBudget => Mathf.Max(0f, BudgetMs - BudgetUsedMs);
+            public float UsagePercent => BudgetMs > 0f ? BudgetUsedMs / BudgetMs : 0f;
         }
 
         // ── Configuration ─────────────────────────────────────────────────
