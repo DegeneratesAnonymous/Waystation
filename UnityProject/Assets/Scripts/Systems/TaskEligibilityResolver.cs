@@ -18,7 +18,6 @@
 // Feature flag: SkillSystem.CapabilityChecksEnabled = false makes all capability-
 // locked tasks universally accessible and all soft penalties inactive.
 using System.Collections.Generic;
-using System.Linq;
 using Waystation.Models;
 
 namespace Waystation.Systems

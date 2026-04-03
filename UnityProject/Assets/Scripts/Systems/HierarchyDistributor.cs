@@ -94,7 +94,6 @@ namespace Waystation.Systems
             int overflow = teamSize - capacity;
 
             // Soft cap degradation
-            int effectiveInterval = PushCycleInterval;
             bool misassignmentRisk = false;
 
             if (overflow >= 6)
@@ -113,8 +112,8 @@ namespace Waystation.Systems
             else if (overflow >= 1)
             {
                 // 1–2 over: distribution delay (effectively slows push)
-                // We handle this by skipping every other cycle
-                if (_tickCounter % 2 != 0) return;
+                // We handle this by skipping every other cycle based on a stable station tick
+                if (station.tick % 2 != 0) return;
             }
 
             // Distribute tasks from station task queue to NPCs
