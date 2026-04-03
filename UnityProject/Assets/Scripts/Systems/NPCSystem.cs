@@ -454,9 +454,9 @@ namespace Waystation.Systems
 
         /// <summary>12-axis IDs for random generation seeding.</summary>
         private static readonly string[] AxisIds = {
-            "honesty", "aggression", "sociability", "emotional_expression",
-            "intellectual_curiosity", "loyalty", "ambition", "spirituality",
-            "disposition", "self_reliance", "subterfuge", "humor"
+            "honesty", "courage", "sociability", "emotional_expression",
+            "intellectual_drive", "loyalty", "ambition", "spirituality",
+            "disposition", "work_ethic", "subterfuge", "physicality"
         };
 
         /// <summary>

@@ -44,8 +44,9 @@ namespace Waystation.Diagnostics
             GUI.Box(new Rect(x, y, panelWidth, panelHeight), "");
 
             // Header
+            var headerStyle = new GUIStyle(GUI.skin.label) { richText = true };
             GUI.Label(new Rect(x + 8, y + 4, panelWidth - 16, headerHeight),
-                "<b>Tick Budget</b>");
+                "<b>Tick Budget</b>", headerStyle);
 
             // Channel rows
             for (int i = 0; i < snapshot.Length; i++)

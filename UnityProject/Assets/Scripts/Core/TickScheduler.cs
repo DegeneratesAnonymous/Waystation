@@ -74,10 +74,19 @@ namespace Waystation.Core
 
             if (data.ContainsKey("channels") && data["channels"] is List<object> chList)
             {
-                for (int i = 0; i < chList.Count && i < _channels.Count; i++)
+                foreach (var item in chList)
                 {
-                    if (chList[i] is not Dictionary<string, object> chData) continue;
-                    var ch = _channels[i];
+                    if (item is not Dictionary<string, object> chData) continue;
+
+                    // Match channel by "id" field; fall back to positional if no id present
+                    Channel ch = null;
+                    if (chData.ContainsKey("id"))
+                    {
+                        int configId = Convert.ToInt32(chData["id"]);
+                        ch = _channels.Find(c => c.Id == configId);
+                    }
+                    if (ch == null) continue;
+
                     if (chData.ContainsKey("default_cadence"))
                         ch.DefaultCadence = Convert.ToInt32(chData["default_cadence"]);
                     if (chData.ContainsKey("budget_ms"))

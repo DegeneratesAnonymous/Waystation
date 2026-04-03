@@ -416,9 +416,9 @@ namespace Waystation.Systems
                 if (h.starvationDayCount >= 3)
                 {
                     _traits?.RegisterConditionPressure(npc, TraitConditionCategory.SustainedStarvation, 2f);
-                    // 12-axis: starvation pushes Self-Reliance toward self-reliant (+)
+                    // 12-axis: starvation pushes Work Ethic toward resourceful (+)
                     if (FeatureFlags.UseFullTraitSystem)
-                        _traits?.AddPressure(npc, "self_reliance", 2f);
+                        _traits?.AddPressure(npc, "work_ethic", 2f);
                 }
             }
             else if (h.starvationDayCount > 0)

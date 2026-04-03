@@ -265,10 +265,11 @@ namespace Waystation.Systems
         // ── Interaction Weight ──────────────────────────────────────────────
 
         /// <summary>
-        /// Returns a float modifier for interaction quality based on faction relationship.
-        /// Same faction → 0.0. No faction → 0.0. 
-        /// Allied +0.2, Friendly +0.1, Neutral 0.0, Unfriendly -0.2, Hostile -0.4.
-        /// Visitor from hostile faction → -0.6.
+        /// Returns a base float modifier for interaction quality based on faction relationship.
+        /// Same faction → 0.0. No faction → 0.0. Different factions: visitor → -0.4,
+        /// non-visitor crew from different factions → 0.0.
+        /// For rep-based weights (Allied +0.2, Friendly +0.1, Neutral 0.0, Unfriendly -0.2,
+        /// Hostile -0.4, visitor from hostile -0.6), use the overload that accepts StationState.
         /// </summary>
         public static float GetInteractionWeight(NPCInstance npcA, NPCInstance npcB)
         {

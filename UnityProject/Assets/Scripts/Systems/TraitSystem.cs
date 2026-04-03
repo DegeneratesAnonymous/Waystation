@@ -375,9 +375,9 @@ namespace Waystation.Systems
         {
             if (!FeatureFlags.NpcTraits) return;
             RegisterConditionPressure(npc, TraitConditionCategory.ExtendedCombat, 2f);
-            // 12-axis: extended combat pushes Aggression toward aggressive (+)
+            // 12-axis: extended combat pushes Courage toward bold (+)
             if (FeatureFlags.UseFullTraitSystem)
-                AddPressure(npc, "aggression", 2f);
+                AddPressure(npc, "courage", 2f);
         }
 
         /// <summary>
@@ -388,9 +388,9 @@ namespace Waystation.Systems
         {
             if (!FeatureFlags.NpcTraits) return;
             RegisterConditionPressure(mentee, TraitConditionCategory.LongTermMentoring, 2f);
-            // 12-axis: mentoring pushes Intellectual Curiosity toward curious (+)
+            // 12-axis: mentoring pushes Intellectual Drive toward curious (+)
             if (FeatureFlags.UseFullTraitSystem)
-                AddPressure(mentee, "intellectual_curiosity", 2f);
+                AddPressure(mentee, "intellectual_drive", 2f);
         }
 
         /// <summary>
@@ -624,8 +624,20 @@ namespace Waystation.Systems
 
         public void LoadAxisData(string traitDefsJson, string compatMatrixJson)
         {
-            // Parse trait definitions
-            var defs = MiniJSON.Json.Deserialize(traitDefsJson) as List<object>;
+            // Clear existing data to avoid duplicates on reload
+            _axisDefs.Clear();
+            _compatMatrix.Clear();
+
+            // Parse trait definitions — accepts a raw JSON array or a {"traits":[...]} wrapper
+            List<object> defs = null;
+            var defsRoot = MiniJSON.Json.Deserialize(traitDefsJson);
+            if (defsRoot is List<object> rawArray)
+                defs = rawArray;
+            else if (defsRoot is Dictionary<string, object> defsWrapper &&
+                     defsWrapper.ContainsKey("traits") &&
+                     defsWrapper["traits"] is List<object> wrappedArray)
+                defs = wrappedArray;
+
             if (defs != null)
             {
                 foreach (var obj in defs)
@@ -657,8 +669,16 @@ namespace Waystation.Systems
                 }
             }
 
-            // Parse compatibility matrix
-            var matrix = MiniJSON.Json.Deserialize(compatMatrixJson) as List<object>;
+            // Parse compatibility matrix — accepts a {"pairs":[...]} wrapper or a raw array
+            List<object> matrix = null;
+            var matrixRoot = MiniJSON.Json.Deserialize(compatMatrixJson);
+            if (matrixRoot is Dictionary<string, object> matrixWrapper &&
+                matrixWrapper.ContainsKey("pairs") &&
+                matrixWrapper["pairs"] is List<object> pairsArray)
+                matrix = pairsArray;
+            else if (matrixRoot is List<object> rawMatrix)
+                matrix = rawMatrix;
+
             if (matrix != null)
             {
                 foreach (var obj in matrix)

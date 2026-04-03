@@ -20,7 +20,7 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Returns all crew NPCs within a Chebyshev tile radius of a given NPC.
+        /// Returns all crew and visitor NPCs within a Chebyshev tile radius of a given NPC.
         /// Excludes the origin NPC itself.
         /// </summary>
         public static List<NPCInstance> GetNPCsWithinRadius(
@@ -39,7 +39,7 @@ namespace Waystation.Systems
         }
 
         /// <summary>
-        /// Returns all crew NPCs within a Chebyshev tile radius of a tile position.
+        /// Returns all crew and visitor NPCs within a Chebyshev tile radius of a tile position.
         /// </summary>
         public static List<NPCInstance> GetNPCsWithinRadius(
             int col, int row, int radius, StationState station)

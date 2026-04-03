@@ -16,10 +16,17 @@ namespace Waystation.Tests
         private FactionSystem _factions;
         private SkillSystem _skills;
 
+        private bool _prevUseInteractionSystem;
+        private bool _prevUseConversationJoining;
+        private bool _prevUseFullTraitSystem;
+
         [SetUp]
         public void SetUp()
         {
-            // Save and set feature flags
+            // Capture and set feature flags
+            _prevUseInteractionSystem = FeatureFlags.UseInteractionSystem;
+            _prevUseConversationJoining = FeatureFlags.UseConversationJoining;
+            _prevUseFullTraitSystem = FeatureFlags.UseFullTraitSystem;
             FeatureFlags.UseInteractionSystem = true;
             FeatureFlags.UseConversationJoining = true;
             FeatureFlags.UseFullTraitSystem = true;
@@ -32,6 +39,14 @@ namespace Waystation.Tests
 
             _interactions = new InteractionSystem();
             _interactions.SetDependencies(_traits, _mood, _factions, _skills);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            FeatureFlags.UseInteractionSystem = _prevUseInteractionSystem;
+            FeatureFlags.UseConversationJoining = _prevUseConversationJoining;
+            FeatureFlags.UseFullTraitSystem = _prevUseFullTraitSystem;
         }
 
         private StationState MakeStation(int tick = 100)
@@ -110,7 +125,7 @@ namespace Waystation.Tests
 
             Assert.DoesNotThrow(() => _interactions.Tick(station));
             Assert.IsFalse(_interactions.IsInConversation("a"));
-            FeatureFlags.UseInteractionSystem = true;
+            // FeatureFlags restored by TearDown
         }
     }
 }

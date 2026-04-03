@@ -431,19 +431,23 @@ namespace Waystation.Systems
             // Gather all participants
             var participants = new HashSet<string>(w.participantUids);
 
-            // For each participant, find NPCs within overhear radius
+            // For each potential observer, use that observer's Perception to determine
+            // whether any participant is close enough to be overheard.
             var overheardNpcs = new HashSet<string>();
-            foreach (var uid in w.participantUids)
+            foreach (var kvp in station.npcs)
             {
-                if (!station.npcs.TryGetValue(uid, out var participant)) continue;
-                int perception = GetPerception(participant);
+                var observer = kvp.Value;
+                if (participants.Contains(observer.uid)) continue;
+
+                int perception = GetPerception(observer);
                 int overhearRadius = 3 + (perception / 8);
 
-                var nearby = SpatialHelpers.GetNPCsWithinRadius(participant, overhearRadius, station);
+                var nearby = SpatialHelpers.GetNPCsWithinRadius(observer, overhearRadius, station);
                 foreach (var npc in nearby)
                 {
-                    if (participants.Contains(npc.uid)) continue;
-                    overheardNpcs.Add(npc.uid);
+                    if (!participants.Contains(npc.uid)) continue;
+                    overheardNpcs.Add(observer.uid);
+                    break;
                 }
             }
 

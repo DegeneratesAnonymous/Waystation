@@ -1,18 +1,16 @@
 // LegacyTickSubscriber — compatibility shim for existing GameManager.OnTick subscribers.
 //
-// Wraps Action<StationState> delegates as Channel 0 (Immediate) TickRegistrations
+// Wraps Action delegates as Channel 0 (Immediate) TickRegistrations
 // with conservative EstimatedCostMs. Logs a migration warning at startup.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using Waystation.Models;
 
 namespace Waystation.Core
 {
     public class LegacyTickSubscriber
     {
         private readonly TickScheduler _scheduler;
-        private readonly StationState _station;
         private readonly List<string> _wrappedIds = new List<string>();
 
         public LegacyTickSubscriber(TickScheduler scheduler)
