@@ -22,12 +22,12 @@ namespace Waystation.Tests
 
             // Load axis data from embedded JSON strings
             string defsJson = @"{""traits"":[
-                {""id"":""trait_honest"",""display_name"":""Honest"",""axis_id"":""honesty"",""stage"":1,""modifiers"":{""persuasion_bonus"":0.05}},
-                {""id"":""trait_transparent"",""display_name"":""Transparent"",""axis_id"":""honesty"",""stage"":2,""modifiers"":{""persuasion_bonus"":0.1}},
-                {""id"":""trait_radically_honest"",""display_name"":""Radically Honest"",""axis_id"":""honesty"",""stage"":3,""modifiers"":{""persuasion_bonus"":0.15}},
-                {""id"":""trait_deceptive"",""display_name"":""Deceptive"",""axis_id"":""honesty"",""stage"":-1,""modifiers"":{""deception_bonus"":0.05}},
-                {""id"":""trait_manipulative"",""display_name"":""Manipulative"",""axis_id"":""honesty"",""stage"":-2,""modifiers"":{""deception_bonus"":0.1}},
-                {""id"":""trait_pathological_liar"",""display_name"":""Pathological Liar"",""axis_id"":""honesty"",""stage"":-3,""modifiers"":{""deception_bonus"":0.15}}
+                {""id"":""trait_honest"",""display_name"":""Honest"",""axis_id"":""honesty"",""stage"":1,""modifiers"":{""articulation_quality_bonus"":0.05}},
+                {""id"":""trait_transparent"",""display_name"":""Transparent"",""axis_id"":""honesty"",""stage"":2,""modifiers"":{""articulation_quality_bonus"":0.1}},
+                {""id"":""trait_radically_honest"",""display_name"":""Radically Honest"",""axis_id"":""honesty"",""stage"":3,""modifiers"":{""articulation_quality_bonus"":0.15}},
+                {""id"":""trait_deceptive"",""display_name"":""Deceptive"",""axis_id"":""honesty"",""stage"":-1,""modifiers"":{""manipulation_quality_bonus"":0.05}},
+                {""id"":""trait_manipulative"",""display_name"":""Manipulative"",""axis_id"":""honesty"",""stage"":-2,""modifiers"":{""manipulation_quality_bonus"":0.1}},
+                {""id"":""trait_pathological_liar"",""display_name"":""Pathological Liar"",""axis_id"":""honesty"",""stage"":-3,""modifiers"":{""manipulation_quality_bonus"":0.15}}
             ]}";
             string matrixJson = @"{""pairs"":[
                 {""axis_a"":""honesty"",""axis_b"":""subterfuge"",""positive_positive"":-0.3,""positive_negative"":0.2,""negative_positive"":0.2,""negative_negative"":-0.1}
@@ -120,7 +120,7 @@ namespace Waystation.Tests
         {
             var npc = MakeNpc();
             var mods = _traits.GetTraitModifiers(npc);
-            Assert.AreEqual(0f, mods.persuasion_bonus, "Default modifier should be 0");
+            Assert.AreEqual(0f, mods.ArticulationQualityBonus, "Default modifier should be 0");
         }
 
         [Test]
@@ -130,7 +130,7 @@ namespace Waystation.Tests
             npc.GetOrCreateTraitProfile().axisStates.Add(
                 new AxisState { axisId = "honesty", currentStage = 1 });
             var mods = _traits.GetTraitModifiers(npc);
-            Assert.Greater(mods.persuasion_bonus, 0f, "Honest +1 should give persuasion bonus");
+            Assert.AreNotEqual(0f, mods.ArticulationQualityBonus, "Honest +1 should give articulation bonus");
         }
     }
 }
