@@ -34,6 +34,12 @@ namespace Waystation.Systems
         public const int DockedDurationMin = 3;
         public const int DockedDurationMax = 12;
 
+        // Minimum ticks between visitor arrivals (~6 hours at 15 min/tick).
+        public const int ArrivalCooldownTicks = 24;
+        // Maximum simultaneous incoming ships before new arrivals are suppressed.
+        public const int MaxIncomingShips = 2;
+        private int _lastArrivalTick = -9999;
+
         private static readonly string[] ShipPrefixes =
         {
             "ISV","MCV","RSV","FSS","RVS","DSV","CRV","ASV","STV"
@@ -169,6 +175,7 @@ namespace Waystation.Systems
             var shipInstance = ShipInstance.Create(
                 inspectorTemplate.id, name, inspectorTemplate.role, "inspect", factionId, inspectorTemplate.threatLevel);
             station.AddShip(shipInstance);
+            _lastArrivalTick = station.tick;
             PendingDecisions.Add(shipInstance.uid);
             station.LogEvent($"Inspection patrol inbound: {shipInstance.name}.");
             _eventSystem.QueueEvent("event.arrival_generic",
@@ -184,6 +191,7 @@ namespace Waystation.Systems
             if (ship == null) return;
 
             station.AddShip(ship);
+            _lastArrivalTick = station.tick;
             // Flag ship for player docking decision (UI-016).
             PendingDecisions.Add(ship.uid);
             station.LogEvent(
@@ -194,10 +202,16 @@ namespace Waystation.Systems
 
         private bool ShouldGenerateArrival(StationState station)
         {
-            float prob = 0.20f;
-            if (station.HasTag("active_trading"))   prob += 0.10f;
-            if (station.HasTag("under_blockade"))   prob -= 0.15f;
-            return UnityEngine.Random.value < Mathf.Max(0.02f, prob);
+            // Enforce minimum gap between arrivals.
+            if (station.tick - _lastArrivalTick < ArrivalCooldownTicks) return false;
+
+            // Cap concurrent incoming ships.
+            if (station.GetIncomingShips().Count >= MaxIncomingShips) return false;
+
+            float prob = 0.03f;
+            if (station.HasTag("active_trading"))   prob += 0.04f;
+            if (station.HasTag("under_blockade"))   prob -= 0.02f;
+            return UnityEngine.Random.value < Mathf.Max(0.01f, prob);
         }
 
         private ShipInstance GenerateShip(StationState station)

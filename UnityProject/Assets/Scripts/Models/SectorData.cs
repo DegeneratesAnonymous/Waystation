@@ -13,6 +13,41 @@ using UnityEngine;
 
 namespace Waystation.Models
 {
+    // ── Sector Archetypes ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Region archetype derived from five noise fields.  Determines system count
+    /// range, visual tint, and gameplay modifiers for a sector.
+    /// </summary>
+    public enum SectorArchetype
+    {
+        Unclassified = 0,
+        Confluence,
+        MineralBelt,
+        SingularityReach,
+        RemnantsZone,
+        StormBelt,
+        NebulaField,
+        ContestedCore,
+        Cradle,
+        FrontierScatter,
+        VoidFringe,
+    }
+
+    /// <summary>
+    /// Five continuous noise field values sampled at a sector's grid position.
+    /// All values are normalised to [0..1].
+    /// </summary>
+    [Serializable]
+    public struct SectorNoiseValues
+    {
+        public float density;
+        public float resources;
+        public float hazard;
+        public float factionPressure;
+        public float stellarAge;
+    }
+
     // ── Enums ──────────────────────────────────────────────────────────────────
 
     public enum SurveyPrefix
@@ -155,6 +190,23 @@ namespace Waystation.Models
         /// and by the starting-scenario seed.
         /// </summary>
         public List<string> factionIds = new List<string>();
+
+        // ── Noise-driven generation fields ─────────────────────────────────────
+
+        /// <summary>Five noise field values sampled at this sector's grid coordinates.</summary>
+        public SectorNoiseValues noiseFields;
+
+        /// <summary>Region archetype resolved from noise field thresholds.</summary>
+        public SectorArchetype archetype = SectorArchetype.Unclassified;
+
+        /// <summary>Number of star systems in this sector (derived from archetype + density).</summary>
+        public int systemCount;
+
+        /// <summary>Grid column relative to home sector (home = 0,0).</summary>
+        public int gridCol;
+
+        /// <summary>Grid row relative to home sector (home = 0,0).</summary>
+        public int gridRow;
 
         // ── Derived display helpers ────────────────────────────────────────────
 

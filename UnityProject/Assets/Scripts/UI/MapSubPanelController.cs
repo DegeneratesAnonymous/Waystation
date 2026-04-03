@@ -20,6 +20,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Waystation.Models;
@@ -73,7 +74,7 @@ namespace Waystation.UI
         // ── Content area ──────────────────────────────────────────────────────
 
         private readonly VisualElement _contentRow;
-        private readonly ScrollView    _viewArea;
+        private readonly VisualElement _viewArea;
         private readonly VisualElement _detailSidebar;
 
         /// <summary>
@@ -92,6 +93,12 @@ namespace Waystation.UI
         // Stored so the sidebar can be re-populated after a sector unlock.
         private SectorData   _selectedSector;
 
+        // The solar system currently displayed in the System view.
+        // Defaults to the station's home system; set to a generated system when
+        // the player drills into a sector system dot.
+        private SolarSystemState _viewedSystem;
+        private bool _viewedSystemIsHome = true;
+
         // Dirty-flag values: track last known state to skip full RebuildView()
         // on EP-only tick updates (the most frequent Refresh() call path).
         private int  _lastEp          = -1;
@@ -103,16 +110,36 @@ namespace Waystation.UI
         private IVisualElementScheduledItem _orbitAnimator;
         private VisualElement _orbitCanvas;
         private VisualElement _orbitSelectionRing;
+        private VisualElement _orbitHoverRing;
+        private VisualElement _dashedOrbitOverlay;  // Painter2D layer for dashed moon/station orbits
+        private VisualElement _routeLineOverlay;    // Painter2D layer for dashed route lines
+        private VisualElement _routeEndpointRing;    // ring shown on last route waypoint dot
         private float _orbitTime;
         private int _selectedOrbitBodyIndex = -1;
-        private const float OrbitMotionSpeed = 2.8f;
+        private int _hoverOrbitBodyIndex = -1;
+        private MoonVisual _hoverMoonVisual;
+        private bool _hoverStation;
+        private Vector2 _canvasPointerLocal;
+        private bool _canvasHasPointer;
+        private string _proximityHoverTarget;
+        private float _proximityHoverTime;
+        private const float HoverProximityThreshold = 22f;
+        private const float TooltipDelaySeconds = 0.4f;
+        private SolarSystemState _currentOrbitSys; // held for canvas click forwarding
+        private const float OrbitPreviewTicksPerSecond = 1.0f;
+        private const float MinutesPerTick = 15f;
+
+        private Label _systemHoverTooltip;
+        private Label _sectorHoverTooltip;
 
         private sealed class OrbitVisual
         {
             public int bodyIndex;
             public VisualElement dot;
-            public float radius;
-            public float angularSpeed;
+            public float radius;           // semi-major axis in pixels
+            public float eccentricity;     // 0 = circle, 0.01–0.12 for planets
+            public float periapsisAngle;   // radians — rotation of the ellipse
+            public float orbitalPeriodTicks;
             public float phase;
             public float size;
             public float currentCenterX;   // updated every animation tick
@@ -123,10 +150,13 @@ namespace Waystation.UI
         {
             public OrbitVisual parent;
             public VisualElement dot;
-            public float moonOrbitRadius;  // pixel radius around parent body center
-            public float angularSpeed;
+            public float moonOrbitRadius;  // semi-major axis around parent (px)
+            public float eccentricity;     // small: 0.005–0.04
+            public float periapsisAngle;   // radians
+            public float orbitalPeriodTicks;
             public float phase;
             public float size;
+            public string name;
         }
 
         // ── Additional orbit / responsive state ───────────────────────────────
@@ -134,6 +164,23 @@ namespace Waystation.UI
         private float _orbitCenterY  = 150f;
         private float _fontScale     = 1.0f;
         private bool  _isBuilding;
+
+        // Route Plotter state.
+        private bool _routePlotterActive;
+        private readonly List<RouteWaypoint> _routeWaypoints = new List<RouteWaypoint>();
+        private VisualElement _routeOverlay;
+        private Button _routePlotterBtn;
+
+        private sealed class RouteWaypoint
+        {
+            public string name;
+            public float orbitalRadius; // AU for bodies
+            public float angle;         // radians at selection time
+            public Vector2 positionLY;  // for systems (sector view)
+            public Vector2 viewportPos; // pixel position relative to chart viewport (for route lines)
+            public VisualElement dotElement; // sector dot element (for dynamic position recomputation)
+            public bool isSystem;       // true = LY scale, false = AU scale
+        }
         private const float ReferencePanelWidth  = 1600f;
         private const float StationPhaseOffset   = 0.22f;
         private readonly List<MoonVisual> _moonVisuals = new List<MoonVisual>();
@@ -142,6 +189,30 @@ namespace Waystation.UI
         private VisualElement _starDotEl;
         private readonly List<(VisualElement ring, float radius)> _orbitRingEls
             = new List<(VisualElement ring, float radius)>();
+        private VisualElement _orbitWorld;
+        private float _orbitZoom = 1f;
+        private Vector2 _orbitPan = Vector2.zero;
+        private bool _orbitPanning;
+        private Vector2 _orbitPanStartMouse;
+        private Vector2 _orbitPanStartOffset;
+
+        private IVisualElementScheduledItem _systemHoverDelay;
+        private Vector2 _systemHoverMouse;
+
+        // Sector chart interaction state.
+        private VisualElement _sectorChartViewport;
+        private VisualElement _sectorChartWorld;
+        private float _sectorZoom = 1f;
+        private Vector2 _sectorPan = Vector2.zero;
+        private bool _sectorPanning;
+        private Vector2 _sectorPanStartMouse;
+        private Vector2 _sectorPanStartOffset;
+
+        private IVisualElementScheduledItem _sectorHoverDelay;
+        private Vector2 _sectorHoverMouse;
+
+        private int Fs(float size)
+            => Mathf.RoundToInt(size * _fontScale);
 
         // ── Events ────────────────────────────────────────────────────────────
 
@@ -249,6 +320,14 @@ namespace Waystation.UI
             spacer.style.flexGrow = 1;
             toolbar.Add(spacer);
 
+            // Route Plotter toggle
+            _routePlotterBtn = new Button();
+            _routePlotterBtn.text = "📐 ROUTE PLOTTER";
+            StyleActionButton(_routePlotterBtn);
+            _routePlotterBtn.style.marginRight = 8;
+            _routePlotterBtn.RegisterCallback<ClickEvent>(_ => ToggleRoutePlotter());
+            toolbar.Add(_routePlotterBtn);
+
             // Exploration Points balance
             _epLabel = new Label("✦ 0 EP");
             _epLabel.AddToClassList(EpLabelClass);
@@ -274,10 +353,12 @@ namespace Waystation.UI
             Add(_contentRow);
 
             // View area (fills remaining width, left of detail sidebar)
-            _viewArea = new ScrollView(ScrollViewMode.VerticalAndHorizontal);
+            _viewArea = new VisualElement();
             _viewArea.AddToClassList(ViewAreaClass);
+            _viewArea.style.flexDirection = FlexDirection.Column;
             _viewArea.style.flexGrow = 1;
             _viewArea.style.height   = Length.Percent(100);
+            _viewArea.style.minHeight = 0;
             _contentRow.Add(_viewArea);
 
             // Detail sidebar (hidden initially)
@@ -377,7 +458,29 @@ namespace Waystation.UI
             if (layer == MapLayer.Sector && _sectorBtn != null && !_sectorBtn.enabledSelf)
                 return;
 
+            // Switching back to System view without an explicit ViewSystem call
+            // should return to the home system.
+            if (layer == MapLayer.System)
+            {
+                _viewedSystem = _station?.solarSystem;
+                _viewedSystemIsHome = true;
+            }
+
             _currentView = layer;
+            RefreshToggleHighlights();
+            HideDetailSidebar();
+            RebuildView();
+        }
+
+        /// <summary>
+        /// Switches to the System view showing the given solar system.
+        /// Used when drilling into a sector system dot.
+        /// </summary>
+        private void ViewSystem(SolarSystemState sys, bool isHome)
+        {
+            _viewedSystem = sys;
+            _viewedSystemIsHome = isHome;
+            _currentView = MapLayer.System;
             RefreshToggleHighlights();
             HideDetailSidebar();
             RebuildView();
@@ -425,6 +528,14 @@ namespace Waystation.UI
                 _map?.EnsureHomeSectorForDev(_station);
                 BuildSectorView();
             }
+
+            // Rebuild route overlay on the new canvas if route plotter is active.
+            if (_routePlotterActive)
+            {
+                _routeWaypoints.Clear();
+                BuildRouteOverlay();
+            }
+
             _isBuilding = false;
         }
 
@@ -434,11 +545,14 @@ namespace Waystation.UI
         {
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
-            root.style.paddingLeft   = 20;
-            root.style.paddingTop    = 16;
-            root.style.paddingRight  = 20;
+            root.style.flexGrow      = 1;
+            root.style.height        = Length.Percent(100);
+            root.style.paddingLeft   = 8;
+            root.style.paddingTop    = 8;
+            root.style.paddingRight  = 8;
+            root.style.paddingBottom = 8;
 
-            var sys = _station?.solarSystem;
+            var sys = _viewedSystem ?? _station?.solarSystem;
             if (sys == null)
             {
                 var empty = new Label("No system data available.");
@@ -450,75 +564,230 @@ namespace Waystation.UI
                 return;
             }
 
-            // Star name header
-            var starHeader = new Label($"{sys.systemName}  ·  {StarTypeLabel(sys.starType)}");
-            starHeader.AddToClassList(SectionHeaderClass);
-            starHeader.style.fontSize       = (int)(15 * _fontScale);
-            starHeader.style.color          = ColAccentText;
-            starHeader.style.marginBottom   = 12;
-            starHeader.style.paddingTop     = 8;
-            starHeader.style.paddingBottom  = 8;
-            root.Add(starHeader);
-
             // Pictorial orbital view for quick spatial readability.
             root.Add(BuildOrbitVisualization(sys));
 
-            // Orbital bodies section
+            // If viewing a remote system, add a "Back to Sector" bar.
+            if (!_viewedSystemIsHome)
+            {
+                var backBar = new VisualElement();
+                backBar.style.flexDirection = FlexDirection.Row;
+                backBar.style.alignItems = Align.Center;
+                backBar.style.paddingLeft = 8;
+                backBar.style.paddingTop = 4;
+                backBar.style.paddingBottom = 4;
+
+                var backBtn = new Button(() => SetView(MapLayer.Sector)) { text = "◂ Back to Sector" };
+                backBtn.style.fontSize = Fs(10);
+                backBtn.style.color = ColAccentText;
+                backBtn.style.backgroundColor = new Color(0.10f, 0.16f, 0.26f, 0.90f);
+                backBtn.style.borderTopWidth = 1;
+                backBtn.style.borderRightWidth = 1;
+                backBtn.style.borderBottomWidth = 1;
+                backBtn.style.borderLeftWidth = 1;
+                backBtn.style.borderTopColor = ColDivider;
+                backBtn.style.borderRightColor = ColDivider;
+                backBtn.style.borderBottomColor = ColDivider;
+                backBtn.style.borderLeftColor = ColDivider;
+                backBtn.style.paddingLeft = 10;
+                backBtn.style.paddingRight = 10;
+                backBtn.style.paddingTop = 4;
+                backBtn.style.paddingBottom = 4;
+                backBar.Add(backBtn);
+
+                var homeBtn = new Button(() =>
+                {
+                    _viewedSystem = _station?.solarSystem;
+                    _viewedSystemIsHome = true;
+                    RebuildView();
+                }) { text = "⌂ Home System" };
+                homeBtn.style.fontSize = Fs(10);
+                homeBtn.style.color = new Color(0.25f, 1.00f, 0.50f, 1f);
+                homeBtn.style.backgroundColor = new Color(0.10f, 0.16f, 0.26f, 0.90f);
+                homeBtn.style.borderTopWidth = 1;
+                homeBtn.style.borderRightWidth = 1;
+                homeBtn.style.borderBottomWidth = 1;
+                homeBtn.style.borderLeftWidth = 1;
+                homeBtn.style.borderTopColor = ColDivider;
+                homeBtn.style.borderRightColor = ColDivider;
+                homeBtn.style.borderBottomColor = ColDivider;
+                homeBtn.style.borderLeftColor = ColDivider;
+                homeBtn.style.paddingLeft = 10;
+                homeBtn.style.paddingRight = 10;
+                homeBtn.style.paddingTop = 4;
+                homeBtn.style.paddingBottom = 4;
+                homeBtn.style.marginLeft = 8;
+                backBar.Add(homeBtn);
+
+                root.Insert(0, backBar);
+            }
+
+            // Floating bottom-left listing overlay inside the map canvas.
+            AddSystemListingsOverlay(sys);
+
+            _viewArea.Add(root);
+        }
+
+        private void AddSystemListingsOverlay(SolarSystemState sys)
+        {
+            if (_orbitCanvas == null) return;
+
+            var listsOverlay = new VisualElement();
+            listsOverlay.style.position = Position.Absolute;
+            listsOverlay.style.left = 10;
+            listsOverlay.style.bottom = 10;
+            listsOverlay.style.width = 660;
+            listsOverlay.style.maxWidth = Length.Percent(62);
+            listsOverlay.style.flexDirection = FlexDirection.Row;
+            listsOverlay.style.alignItems = Align.FlexStart;
+            _orbitCanvas.Add(listsOverlay);
+
+            var bodiesCard = new VisualElement();
+            bodiesCard.style.flexGrow = 3;
+            bodiesCard.style.flexShrink = 1;
+            bodiesCard.style.minWidth = 220;
+            bodiesCard.style.maxHeight = 210;
+            bodiesCard.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.78f);
+            bodiesCard.style.borderTopWidth = 1;
+            bodiesCard.style.borderRightWidth = 1;
+            bodiesCard.style.borderBottomWidth = 1;
+            bodiesCard.style.borderLeftWidth = 1;
+            bodiesCard.style.borderTopColor = ColDivider;
+            bodiesCard.style.borderRightColor = ColDivider;
+            bodiesCard.style.borderBottomColor = ColDivider;
+            bodiesCard.style.borderLeftColor = ColDivider;
+            bodiesCard.style.marginRight = 10;
+            listsOverlay.Add(bodiesCard);
+
+            var bodiesHdr = MakeSectionHeader("ORBITAL BODIES");
+            bodiesHdr.style.marginBottom = 0;
+            bodiesCard.Add(bodiesHdr);
+
+            var bodiesScroll = new ScrollView(ScrollViewMode.Vertical);
+            bodiesScroll.style.flexGrow = 1;
+            bodiesScroll.style.maxHeight = 170;
+            bodiesScroll.style.paddingLeft = 4;
+            bodiesScroll.style.paddingRight = 4;
+            bodiesCard.Add(bodiesScroll);
+
             if (sys.bodies.Count > 0)
             {
-                var bodiesHdr = MakeSectionHeader("ORBITAL BODIES");
-                root.Add(bodiesHdr);
-
                 for (int i = 0; i < sys.bodies.Count; i++)
                 {
                     var body = sys.bodies[i];
-                    bool isStation = sys.stationOrbitIndex == i;
+                    bool isStation = _viewedSystemIsHome && sys.stationOrbitIndex == i;
                     var row = BuildBodyRow(body, isStation, i, sys);
-                    root.Add(row);
-                    // Moon sub-rows (indented under parent body)
+                    bodiesScroll.Add(row);
                     foreach (var moon in body.moons)
-                        root.Add(BuildMoonRow(moon));
-                    // Station sub-row shown below its host body
+                        bodiesScroll.Add(BuildMoonRow(moon));
                     if (isStation)
-                        root.Add(BuildStationSubRow());
+                        bodiesScroll.Add(BuildStationSubRow());
                 }
             }
             else
             {
                 var noData = new Label("No orbital bodies catalogued.");
                 noData.style.color = ColTextMid;
-                root.Add(noData);
+                noData.style.fontSize = Fs(10);
+                bodiesScroll.Add(noData);
             }
 
-            // POIs section
+            var poiCard = new VisualElement();
+            poiCard.style.flexGrow = 2;
+            poiCard.style.flexShrink = 1;
+            poiCard.style.minWidth = 180;
+            poiCard.style.maxHeight = 210;
+            poiCard.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.78f);
+            poiCard.style.borderTopWidth = 1;
+            poiCard.style.borderRightWidth = 1;
+            poiCard.style.borderBottomWidth = 1;
+            poiCard.style.borderLeftWidth = 1;
+            poiCard.style.borderTopColor = ColDivider;
+            poiCard.style.borderRightColor = ColDivider;
+            poiCard.style.borderBottomColor = ColDivider;
+            poiCard.style.borderLeftColor = ColDivider;
+            listsOverlay.Add(poiCard);
+
+            var poiHdr = MakeSectionHeader("POINTS OF INTEREST");
+            poiHdr.style.marginBottom = 0;
+            poiCard.Add(poiHdr);
+
+            var poiScroll = new ScrollView(ScrollViewMode.Vertical);
+            poiScroll.style.flexGrow = 1;
+            poiScroll.style.maxHeight = 170;
+            poiScroll.style.paddingLeft = 4;
+            poiScroll.style.paddingRight = 4;
+            poiCard.Add(poiScroll);
+
             var pois = _map?.GetDiscoveredPois(_station);
             if (pois != null && pois.Count > 0)
             {
-                root.Add(MakeSectionHeader("POINTS OF INTEREST"));
                 foreach (var poi in pois)
                 {
                     var poiRow = new VisualElement();
-                    poiRow.style.flexDirection   = FlexDirection.Row;
-                    poiRow.style.paddingLeft      = 8;
-                    poiRow.style.paddingTop       = 5;
-                    poiRow.style.paddingBottom    = 5;
-                    poiRow.style.marginBottom     = 2;
-                    poiRow.style.backgroundColor  = ColBodyRow;
+                    poiRow.style.flexDirection = FlexDirection.Row;
+                    poiRow.style.paddingLeft = 8;
+                    poiRow.style.paddingTop = 5;
+                    poiRow.style.paddingBottom = 5;
+                    poiRow.style.marginBottom = 2;
+                    poiRow.style.backgroundColor = ColBodyRow;
                     poiRow.style.BorderRadius(3);
 
                     var poiName = new Label(poi.displayName ?? poi.poiType);
-                    poiName.style.color     = ColTextBright;
-                    poiName.style.flexGrow  = 1;
-                    var poiType = new Label(poi.poiType);
-                    poiType.style.color  = ColTextMid;
-                    poiType.style.width  = 110;
+                    poiName.style.color = ColTextBright;
+                    poiName.style.flexGrow = 1;
+                    poiName.style.fontSize = Fs(10);
                     poiRow.Add(poiName);
-                    poiRow.Add(poiType);
-                    root.Add(poiRow);
+
+                    var capturedPoi = poi;
+                    poiRow.RegisterCallback<ClickEvent>(_ =>
+                    {
+                        if (_routePlotterActive)
+                        {
+                            float pr = Mathf.Sqrt(capturedPoi.posX * capturedPoi.posX + capturedPoi.posY * capturedPoi.posY);
+                            float pa = Mathf.Atan2(capturedPoi.posY, capturedPoi.posX);
+                            AddRouteWaypoint(new RouteWaypoint
+                            {
+                                name = capturedPoi.displayName ?? capturedPoi.poiType,
+                                orbitalRadius = pr,
+                                angle = pa,
+                                isSystem = false,
+                            });
+                            return;
+                        }
+                        ShowPoiDetail(capturedPoi);
+                    });
+                    poiRow.RegisterCallback<PointerEnterEvent>(evt =>
+                    {
+                        _systemHoverMouse = ToLocalPoint(_orbitCanvas, evt.position);
+                        _systemHoverDelay?.Pause();
+                        _systemHoverDelay = poiRow.schedule.Execute(() =>
+                        {
+                            ShowSystemHoverTooltip(capturedPoi.displayName ?? capturedPoi.poiType, _systemHoverMouse + new Vector2(12f, 12f));
+                        }).StartingIn(1000);
+                    });
+                    poiRow.RegisterCallback<PointerMoveEvent>(evt =>
+                    {
+                        _systemHoverMouse = ToLocalPoint(_orbitCanvas, evt.position);
+                        if (_systemHoverTooltip != null && _systemHoverTooltip.style.display == DisplayStyle.Flex)
+                            PositionSystemHoverTooltip(_systemHoverMouse + new Vector2(12f, 12f));
+                    });
+                    poiRow.RegisterCallback<PointerLeaveEvent>(_ =>
+                    {
+                        _systemHoverDelay?.Pause();
+                        HideSystemHoverTooltip();
+                    });
+
+                    poiScroll.Add(poiRow);
                 }
             }
-
-            _viewArea.Add(root);
+            else
+            {
+                var noPoi = new Label("No points of interest detected.");
+                noPoi.style.color = ColTextMid;
+                noPoi.style.fontSize = Fs(10);
+                poiScroll.Add(noPoi);
+            }
         }
 
         private VisualElement BuildOrbitVisualization(SolarSystemState sys)
@@ -526,6 +795,9 @@ namespace Waystation.UI
             _orbitVisuals.Clear();
             _moonVisuals.Clear();
             _orbitRingEls.Clear();
+            _orbitZoom = 1f;
+            _orbitPan = Vector2.zero;
+            _orbitPanning = false;
             _starDotEl         = null;
             _stationDot        = null;
 
@@ -533,6 +805,7 @@ namespace Waystation.UI
                 _selectedOrbitBodyIndex = -1;
 
             var card = new VisualElement();
+            card.style.alignSelf = Align.Stretch;
             card.style.marginBottom = 16;
             card.style.paddingTop   = 8;
             card.style.paddingBottom = 8;
@@ -548,17 +821,10 @@ namespace Waystation.UI
             card.style.borderBottomColor = ColDivider;
             card.style.borderLeftColor   = ColDivider;
 
-            var title = new Label("SYSTEM ORRERY");
-            title.style.color = ColAccentText;
-            title.style.fontSize = (int)(11 * _fontScale);
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.marginBottom = 6;
-            card.Add(title);
-
             _orbitCanvas = new VisualElement();
             _orbitCanvas.style.position  = Position.Relative;
             _orbitCanvas.style.alignSelf = Align.Stretch;   // fills card width
-            _orbitCanvas.style.height    = 280;
+            _orbitCanvas.style.flexGrow  = 1;
             _orbitCanvas.style.minHeight = 280;
             _orbitCanvas.style.backgroundColor  = new Color(0.03f, 0.05f, 0.09f, 0.94f);
             _orbitCanvas.style.borderTopWidth    = 1;
@@ -569,11 +835,44 @@ namespace Waystation.UI
             _orbitCanvas.style.borderRightColor  = new Color(0.14f, 0.20f, 0.30f, 1f);
             _orbitCanvas.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
             _orbitCanvas.style.borderLeftColor   = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _orbitCanvas.style.overflow = Overflow.Hidden;
             card.Add(_orbitCanvas);
 
-            // Height: canvas 280 + title ~24 + padding 16
-            card.style.height    = 320;
-            card.style.minHeight = 320;
+            // Overlay in top-left: system name + collapsible map key.
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 8;
+            overlay.style.top = 8;
+            overlay.style.flexDirection = FlexDirection.Column;
+            _orbitCanvas.Add(overlay);
+
+            var systemName = new Label(sys.systemName);
+            systemName.style.color = ColAccentText;
+            systemName.style.fontSize = Fs(14);
+            systemName.style.unityFontStyleAndWeight = FontStyle.Bold;
+            systemName.style.marginBottom = 4;
+            systemName.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.72f);
+            systemName.style.paddingLeft = 8;
+            systemName.style.paddingRight = 8;
+            systemName.style.paddingTop = 4;
+            systemName.style.paddingBottom = 4;
+            systemName.style.borderTopWidth = 1;
+            systemName.style.borderRightWidth = 1;
+            systemName.style.borderBottomWidth = 1;
+            systemName.style.borderLeftWidth = 1;
+            systemName.style.borderTopColor = ColDivider;
+            systemName.style.borderRightColor = ColDivider;
+            systemName.style.borderBottomColor = ColDivider;
+            systemName.style.borderLeftColor = ColDivider;
+            overlay.Add(systemName);
+
+            overlay.Add(BuildMapLegend(compact: true, sectorMode: false));
+
+            // Stretch the map card to fill available panel height.
+            card.style.flexGrow  = 1;
+            card.style.minHeight = 340;
+            card.style.marginBottom = 0;
+            _orbitCanvas.style.flexGrow = 1;
 
             // Defer orrery content build until the canvas has its real layout width.
             var capturedSys  = sys;
@@ -583,19 +882,89 @@ namespace Waystation.UI
                 if (orreryBuilt || evt.newRect.width < 10f) return;
                 orreryBuilt    = true;
                 float cx = evt.newRect.width  * 0.5f;
-                float cy = evt.newRect.height * 0.5f;
+                // Keep the system cluster fully above bottom-left info cards.
+                float cy = evt.newRect.height * 0.40f;
                 _orbitCenterX  = cx;
                 _orbitCenterY  = cy;
-                BuildOrbitContent(capturedSys, cx, cy);
+                BuildOrbitContent(capturedSys, cx, cy, evt.newRect.width, evt.newRect.height);
                 StartOrbitAnimation();
+            });
+
+            _orbitCanvas.RegisterCallback<WheelEvent>(evt =>
+            {
+                float zoom = Mathf.Clamp(_orbitZoom * (1f - evt.delta.y * 0.0075f), 0.45f, 3.2f);
+                if (Mathf.Abs(zoom - _orbitZoom) < 0.001f) return;
+                _orbitZoom = zoom;
+                ApplyOrbitWorldTransform();
+                evt.StopPropagation();
+            });
+            _orbitCanvas.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 1) return; // right-drag to pan
+                _orbitPanning = true;
+                _orbitPanStartMouse = (Vector2)evt.position;
+                _orbitPanStartOffset = _orbitPan;
+                _orbitCanvas.CapturePointer(evt.pointerId);
+            });
+            _orbitCanvas.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                _canvasPointerLocal = ToLocalPoint(_orbitCanvas, evt.position);
+                _canvasHasPointer = true;
+                if (!_orbitPanning) return;
+                Vector2 delta = (Vector2)evt.position - _orbitPanStartMouse;
+                _orbitPan = _orbitPanStartOffset + delta;
+                ApplyOrbitWorldTransform();
+            });
+            _orbitCanvas.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                if (evt.button != 1) return;
+                _orbitPanning = false;
+                _orbitCanvas.ReleasePointer(evt.pointerId);
+            });
+            _orbitCanvas.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                _canvasHasPointer = true;
+            });
+            _orbitCanvas.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                _canvasHasPointer = false;
+                // Immediately clear hover so the ring doesn't stick.
+                if (_hoverOrbitBodyIndex >= 0 || _hoverMoonVisual != null || _hoverStation)
+                {
+                    ClearHoverScale();
+                    _hoverOrbitBodyIndex = -1;
+                    _hoverMoonVisual = null;
+                    _hoverStation = false;
+                    _proximityHoverTarget = null;
+                    HideSystemHoverTooltip();
+                }
+            });
+
+            // Canvas-level click: find the nearest body by proximity and select it.
+            // This avoids reliance on per-dot hit-testing for tiny moving elements.
+            _orbitCanvas.RegisterCallback<ClickEvent>(evt =>
+            {
+                if (_orbitPanning) return;
+                HandleCanvasClick(evt);
             });
 
             return card;
         }
 
-        private void BuildOrbitContent(SolarSystemState sys, float centerX, float centerY)
+        private void BuildOrbitContent(SolarSystemState sys, float centerX, float centerY, float canvasW, float canvasH)
         {
             if (_orbitCanvas == null) return;
+
+            EnsureSystemHoverTooltip();
+
+            _orbitWorld = new VisualElement();
+            _orbitWorld.style.position = Position.Absolute;
+            _orbitWorld.style.left = 0;
+            _orbitWorld.style.top = 0;
+            _orbitWorld.style.right = 0;
+            _orbitWorld.style.bottom = 0;
+            _orbitCanvas.Add(_orbitWorld);
+            ApplyOrbitWorldTransform();
 
             // ── Star ─────────────────────────────────────────────────────────
             float starSize = Mathf.Clamp(22f + sys.starSize * 3f, 22f, 34f);
@@ -612,34 +981,98 @@ namespace Waystation.UI
             if (!ColorUtility.TryParseHtmlString(sys.starColorHex, out Color starColor))
                 starColor = new Color(0.96f, 0.86f, 0.44f, 1f);
             star.style.backgroundColor = starColor;
-            _orbitCanvas.Add(star);
+            _orbitWorld.Add(star);
             _starDotEl = star;
+
+            _currentOrbitSys = sys;
 
             // ── Orbital bodies ────────────────────────────────────────────────
             int count = Mathf.Min(sys.bodies.Count, 9);
-            // Distribute radii proportionally: 12% of half-width for innermost,
-            // 88% for outermost — so orbits scale with the canvas size.
-            float halfW   = Mathf.Max(centerX, 60f);
-            float innerR  = halfW * 0.13f;
-            float outerR  = halfW * 0.87f;
+            // Use actual orbitalRadius data for proportional ring placement.
+            // Apply sqrt scale so inner planets aren't crammed while outer ones
+            // still have room.
+            float halfW = Mathf.Max(centerX, 60f);
+            float innerR = halfW * 0.12f;
+            float bottomReserve = 180f;
+            float verticalLimit = Mathf.Max(60f, canvasH - bottomReserve - centerY);
+            float outerR = Mathf.Min(halfW * 0.78f, verticalLimit);
+
+            // Gather actual orbital radii and compute mapping.
+            float minAU = float.MaxValue, maxAU = float.MinValue;
+            for (int i = 0; i < count; i++)
+            {
+                float r = sys.bodies[i].orbitalRadius;
+                if (r <= 0f) r = 0.5f + i * 1.5f; // fallback
+                if (r < minAU) minAU = r;
+                if (r > maxAU) maxAU = r;
+            }
+            float auRange = Mathf.Max(0.1f, maxAU - minAU);
+
+            // ── Pass 1: compute semi-major axis + eccentricity per body ───────
+            var orbitParams = new List<(float semiMajor, float eccentricity, float periapsisAngle)>();
+            for (int i = 0; i < count; i++)
+            {
+                var   body   = sys.bodies[i];
+                float bodyAU = body.orbitalRadius > 0f ? body.orbitalRadius : (0.5f + i * 1.5f);
+                float t = count == 1 ? 0.5f : Mathf.Sqrt((bodyAU - minAU) / auRange);
+                float semiMajor = innerR + t * (outerR - innerR);
+                semiMajor = Mathf.Max(semiMajor, innerR + i * 14f);
+
+                float ecc = DeriveEccentricity(body);
+                float omega = DerivePeriapsisAngle(body);
+                orbitParams.Add((semiMajor, ecc, omega));
+            }
+
+            // ── Pass 2: collision avoidance ───────────────────────────────────
+            // Ensure periapsis of orbit i > apoapsis of orbit i−1 + minGap.
+            const float minGapPx = 10f;
+            for (int i = 1; i < orbitParams.Count; i++)
+            {
+                var prev = orbitParams[i - 1];
+                var curr = orbitParams[i];
+                float prevApoapsis = prev.semiMajor * (1f + prev.eccentricity);
+                float currPeriapsis = curr.semiMajor * (1f - curr.eccentricity);
+
+                if (currPeriapsis < prevApoapsis + minGapPx)
+                {
+                    // Push current orbit outward so periapsis clears.
+                    float needed = prevApoapsis + minGapPx;
+                    float newSemiMajor = needed / (1f - curr.eccentricity);
+                    orbitParams[i] = (newSemiMajor, curr.eccentricity, curr.periapsisAngle);
+                }
+            }
 
             for (int i = 0; i < count; i++)
             {
                 var   body   = sys.bodies[i];
-                float radius = count == 1
-                    ? (innerR + outerR) * 0.5f
-                    : innerR + i * (outerR - innerR) / (count - 1f);
+                var   op     = orbitParams[i];
+                float radius = op.semiMajor;
+                float ecc    = op.eccentricity;
+                float omega  = op.periapsisAngle;
+
+                // Ellipse geometry: semi-minor axis and focal offset.
+                float semiMinor = radius * Mathf.Sqrt(1f - ecc * ecc);
+                // The star sits at one focus; the ellipse center is offset by a*e along the periapsis direction.
+                float focalOffset = radius * ecc;
+                // Ellipse center relative to star.
+                float ellCx = centerX - Mathf.Cos(omega) * focalOffset;
+                float ellCy = centerY - Mathf.Sin(omega) * focalOffset;
 
                 var ring = new VisualElement();
                 ring.style.position = Position.Absolute;
-                ring.style.left     = centerX - radius;
-                ring.style.top      = centerY - radius;
+                ring.style.left     = ellCx - radius;
+                ring.style.top      = ellCy - semiMinor;
                 ring.style.width    = radius * 2f;
-                ring.style.height   = radius * 2f;
-                ring.style.borderTopLeftRadius     = radius;
-                ring.style.borderTopRightRadius    = radius;
-                ring.style.borderBottomLeftRadius  = radius;
-                ring.style.borderBottomRightRadius = radius;
+                ring.style.height   = semiMinor * 2f;
+                ring.style.borderTopLeftRadius     = Length.Percent(50);
+                ring.style.borderTopRightRadius    = Length.Percent(50);
+                ring.style.borderBottomLeftRadius  = Length.Percent(50);
+                ring.style.borderBottomRightRadius = Length.Percent(50);
+                // Rotate the ellipse to align with the periapsis angle.
+                if (Mathf.Abs(omega) > 0.001f)
+                    ring.style.rotate = new Rotate(new Angle(omega * Mathf.Rad2Deg, AngleUnit.Degree));
+                ring.style.transformOrigin = new TransformOrigin(
+                    Length.Percent(50), Length.Percent(50));
                 ring.style.borderTopWidth    = 1;
                 ring.style.borderRightWidth  = 1;
                 ring.style.borderBottomWidth = 1;
@@ -648,7 +1081,7 @@ namespace Waystation.UI
                 ring.style.borderRightColor  = new Color(0.18f, 0.25f, 0.36f, 0.75f);
                 ring.style.borderBottomColor = new Color(0.18f, 0.25f, 0.36f, 0.75f);
                 ring.style.borderLeftColor   = new Color(0.18f, 0.25f, 0.36f, 0.75f);
-                _orbitCanvas.Add(ring);
+                _orbitWorld.Add(ring);
                 _orbitRingEls.Add((ring, radius));
 
                 float bodySize = Mathf.Clamp(7f + body.size * 1.8f, 7f, 14f);
@@ -663,32 +1096,21 @@ namespace Waystation.UI
                 if (!ColorUtility.TryParseHtmlString(body.colorHex, out Color bodyColor))
                     bodyColor = new Color(0.62f, 0.68f, 0.76f, 1f);
                 dot.style.backgroundColor = bodyColor;
+                dot.pickingMode = PickingMode.Ignore;
 
                 int capturedIdx = i;
-                dot.tooltip = body.name ?? BodyTypeLabel(body.bodyType);
-                dot.RegisterCallback<PointerEnterEvent>(_ =>
-                    dot.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f)));
-                dot.RegisterCallback<PointerLeaveEvent>(_ =>
-                    dot.style.scale = new Scale(new Vector3(1f, 1f, 1f)));
-                dot.RegisterCallback<ClickEvent>(_ =>
-                {
-                    if (capturedIdx >= 0 && capturedIdx < sys.bodies.Count)
-                    {
-                        SelectOrbitBody(capturedIdx);
-                        ShowBodyDetail(sys.bodies[capturedIdx], sys.stationOrbitIndex == capturedIdx);
-                    }
-                });
-                _orbitCanvas.Add(dot);
+                _orbitWorld.Add(dot);
 
-                float angularSpeed = 0.25f + (1f / Mathf.Max(30f, body.orbitalPeriod)) * 20f;
                 var ov = new OrbitVisual
                 {
-                    bodyIndex    = i,
-                    dot          = dot,
-                    radius       = radius,
-                    angularSpeed = angularSpeed,
-                    phase        = body.initialPhase,
-                    size         = bodySize,
+                    bodyIndex      = i,
+                    dot            = dot,
+                    radius         = radius,
+                    eccentricity   = ecc,
+                    periapsisAngle = omega,
+                    orbitalPeriodTicks = Mathf.Max(1f, body.orbitalPeriod),
+                    phase          = body.initialPhase,
+                    size           = bodySize,
                 };
                 _orbitVisuals.Add(ov);
 
@@ -710,22 +1132,28 @@ namespace Waystation.UI
                         moonCol = new Color(0.62f, 0.62f, 0.62f, 1f);
                     moonDot.style.backgroundColor = moonCol;
                     moonDot.style.opacity         = 0.75f;
-                    moonDot.tooltip               = moon.name ?? "Moon";
-                    _orbitCanvas.Add(moonDot);
-                    _moonVisuals.Add(new MoonVisual
+                    moonDot.pickingMode = PickingMode.Ignore;
+                    _orbitWorld.Add(moonDot);
+                    var moonVisual = new MoonVisual
                     {
                         parent          = ov,
                         dot             = moonDot,
                         moonOrbitRadius = moonOrbitBaseR + m * 6f,
-                        angularSpeed    = 1.8f + m * 0.6f,
+                        eccentricity    = DeriveMoonEccentricity(moon, m),
+                        periapsisAngle  = (moon.initialPhase * 2.3f + m * 1.1f) % (Mathf.PI * 2f),
+                        orbitalPeriodTicks = Mathf.Max(12f, ov.orbitalPeriodTicks * (0.13f + m * 0.06f)),
                         phase           = moon.initialPhase,
                         size            = moonSize,
-                    });
+                        name            = moon.name ?? "Moon",
+                    };
+                    _moonVisuals.Add(moonVisual);
                 }
             }
 
             // ── Station: independent entity orbiting its host body ────────────
-            if (sys.stationOrbitIndex >= 0
+            // Only show the station dot when viewing the home system.
+            if (_viewedSystemIsHome
+                && sys.stationOrbitIndex >= 0
                 && sys.stationOrbitIndex < sys.bodies.Count
                 && sys.stationOrbitIndex < _orbitVisuals.Count)
             {
@@ -747,8 +1175,8 @@ namespace Waystation.UI
                 _stationDot.style.borderRightColor  = new Color(0.60f, 1f, 0.70f, 0.8f);
                 _stationDot.style.borderBottomColor = new Color(0.60f, 1f, 0.70f, 0.8f);
                 _stationDot.style.borderLeftColor   = new Color(0.60f, 1f, 0.70f, 0.8f);
-                _stationDot.tooltip = "Your Station";
-                _orbitCanvas.Add(_stationDot);
+                _stationDot.pickingMode = PickingMode.Ignore;
+                _orbitWorld.Add(_stationDot);
             }
             else
             {
@@ -759,6 +1187,7 @@ namespace Waystation.UI
             // ── Selection ring (rendered on top) ──────────────────────────────
             _orbitSelectionRing = new VisualElement();
             _orbitSelectionRing.style.position       = Position.Absolute;
+            _orbitSelectionRing.pickingMode           = PickingMode.Ignore;
             _orbitSelectionRing.style.borderTopWidth    = 2;
             _orbitSelectionRing.style.borderRightWidth  = 2;
             _orbitSelectionRing.style.borderBottomWidth = 2;
@@ -768,45 +1197,115 @@ namespace Waystation.UI
             _orbitSelectionRing.style.borderBottomColor = new Color(1f, 1f, 1f, 0.95f);
             _orbitSelectionRing.style.borderLeftColor   = new Color(1f, 1f, 1f, 0.95f);
             _orbitSelectionRing.style.display = DisplayStyle.None;
-            _orbitCanvas.Add(_orbitSelectionRing);
+            _orbitWorld.Add(_orbitSelectionRing);
+
+            _orbitHoverRing = new VisualElement();
+            _orbitHoverRing.style.position       = Position.Absolute;
+            _orbitHoverRing.pickingMode           = PickingMode.Ignore;
+            _orbitHoverRing.style.borderTopWidth    = 2;
+            _orbitHoverRing.style.borderRightWidth  = 2;
+            _orbitHoverRing.style.borderBottomWidth = 2;
+            _orbitHoverRing.style.borderLeftWidth   = 2;
+            _orbitHoverRing.style.borderTopColor    = new Color(1f, 1f, 1f, 0.90f);
+            _orbitHoverRing.style.borderRightColor  = new Color(1f, 1f, 1f, 0.90f);
+            _orbitHoverRing.style.borderBottomColor = new Color(1f, 1f, 1f, 0.90f);
+            _orbitHoverRing.style.borderLeftColor   = new Color(1f, 1f, 1f, 0.90f);
+            _orbitHoverRing.style.display = DisplayStyle.None;
+            _orbitWorld.Add(_orbitHoverRing);
+
+            // ── Dashed orbit overlay (moon orbits + station orbit) ────────────
+            _dashedOrbitOverlay = new VisualElement();
+            _dashedOrbitOverlay.style.position = Position.Absolute;
+            _dashedOrbitOverlay.style.left = 0;
+            _dashedOrbitOverlay.style.top = 0;
+            _dashedOrbitOverlay.style.width = canvasW;
+            _dashedOrbitOverlay.style.height = canvasH;
+            _dashedOrbitOverlay.pickingMode = PickingMode.Ignore;
+            _dashedOrbitOverlay.generateVisualContent += ctx =>
+            {
+                var painter = ctx.painter2D;
+                painter.lineWidth = 0.6f;
+                painter.lineCap = LineCap.Butt;
+
+                // Dashed ellipses for moon orbits.
+                var moonOrbitColor = new Color(0.35f, 0.45f, 0.60f, 0.18f);
+                foreach (var moon in _moonVisuals)
+                {
+                    float pcx = moon.parent.currentCenterX;
+                    float pcy = moon.parent.currentCenterY;
+                    painter.strokeColor = moonOrbitColor;
+                    DrawDashedEllipse(painter, pcx, pcy, moon.moonOrbitRadius,
+                        moon.eccentricity, moon.periapsisAngle, 3f, 4f);
+                }
+
+                // Dashed ellipse for station orbit around its host body.
+                if (_stationDot != null && _stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
+                {
+                    var host = _orbitVisuals[_stationParentBodyIndex];
+                    float stOrbitR = host.size * 1.5f + 10f;
+                    painter.strokeColor = new Color(0.25f, 1.00f, 0.50f, 0.15f);
+                    DrawDashedEllipse(painter, host.currentCenterX, host.currentCenterY,
+                        stOrbitR, 0.01f, 0f, 3f, 5f);
+                }
+
+                // Dashed route lines (system-view: between orbital bodies).
+                if (_routePlotterActive && _routeWaypoints.Count >= 2)
+                {
+                    painter.lineWidth = 1.0f;
+                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.50f);
+                    for (int i = 1; i < _routeWaypoints.Count; i++)
+                    {
+                        var a = _routeWaypoints[i - 1];
+                        var b = _routeWaypoints[i];
+                        if (a.isSystem || b.isSystem) continue;
+                        var aPos = RouteBodyPos(a);
+                        var bPos = RouteBodyPos(b);
+                        DrawDashedLine(painter, aPos.x, aPos.y, bPos.x, bPos.y, 6f, 4f);
+                    }
+                }
+            };
+            _orbitWorld.Add(_dashedOrbitOverlay);
+        }
+
+        private void ApplyOrbitWorldTransform()
+        {
+            if (_orbitWorld == null) return;
+            _orbitWorld.style.translate = new Translate(_orbitPan.x, _orbitPan.y);
+            _orbitWorld.style.scale = new Scale(new Vector3(_orbitZoom, _orbitZoom, 1f));
         }
 
         private void StartOrbitAnimation()
         {
-            _orbitTime = 0f;
+            _orbitTime = _station?.tick ?? 0f;
             _orbitAnimator = schedule.Execute(() =>
             {
                 if (_orbitCanvas == null || _orbitCanvas.panel == null) return;
 
                 float dt = Mathf.Max(0.008f, Time.unscaledDeltaTime);
-                _orbitTime += dt * OrbitMotionSpeed;
+                _orbitTime += dt * OrbitPreviewTicksPerSecond;
                 float cx = _orbitCenterX;
                 float cy = _orbitCenterY;
 
-                // Animate main orbital bodies and record their screen centres.
+                // Animate main orbital bodies using elliptical orbits.
                 foreach (var body in _orbitVisuals)
                 {
-                    float angle = body.phase + _orbitTime * body.angularSpeed;
-                    float x = cx + Mathf.Cos(angle) * body.radius - body.size * 0.5f;
-                    float y = cy + Mathf.Sin(angle) * body.radius - body.size * 0.5f;
-                    body.dot.style.left  = x;
-                    body.dot.style.top   = y;
-                    body.currentCenterX  = x + body.size * 0.5f;
-                    body.currentCenterY  = y + body.size * 0.5f;
+                    float angle = body.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, body.orbitalPeriodTicks));
+                    var pos = EllipticalPos(cx, cy, body.radius, body.eccentricity, body.periapsisAngle, angle);
+                    body.dot.style.left = pos.x - body.size * 0.5f;
+                    body.dot.style.top  = pos.y - body.size * 0.5f;
+                    body.currentCenterX = pos.x;
+                    body.currentCenterY = pos.y;
                 }
 
-                // Animate moons orbiting their parent bodies.
+                // Animate moons on slightly elliptical orbits around their parent.
                 foreach (var moon in _moonVisuals)
                 {
-                    float moonAngle = moon.phase + _orbitTime * moon.angularSpeed;
-                    float mx = moon.parent.currentCenterX
-                             + Mathf.Cos(moonAngle) * moon.moonOrbitRadius
-                             - moon.size * 0.5f;
-                    float my = moon.parent.currentCenterY
-                             + Mathf.Sin(moonAngle) * moon.moonOrbitRadius
-                             - moon.size * 0.5f;
-                    moon.dot.style.left = mx;
-                    moon.dot.style.top  = my;
+                    float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
+                    var moonPos = EllipticalPos(
+                        moon.parent.currentCenterX, moon.parent.currentCenterY,
+                        moon.moonOrbitRadius, moon.eccentricity, moon.periapsisAngle, moonAngle);
+                    moon.dot.style.left = moonPos.x - moon.size * 0.5f;
+                    moon.dot.style.top  = moonPos.y - moon.size * 0.5f;
                 }
 
                 // Animate station orbiting its host body.
@@ -816,14 +1315,18 @@ namespace Waystation.UI
                 {
                     var   host         = _orbitVisuals[_stationParentBodyIndex];
                     float stOrbitR     = host.size * 1.5f + 10f;
-                    float stAngle      = _orbitTime * 2.1f + StationPhaseOffset;
+                    float stationPeriodTicks = Mathf.Max(8f, host.orbitalPeriodTicks * 0.10f);
+                    float stAngle = StationPhaseOffset + Mathf.PI * 2f * (_orbitTime / stationPeriodTicks);
                     float sx = host.currentCenterX + Mathf.Cos(stAngle) * stOrbitR - 3.5f;
                     float sy = host.currentCenterY + Mathf.Sin(stAngle) * stOrbitR - 3.5f;
                     _stationDot.style.left = sx;
                     _stationDot.style.top  = sy;
                 }
 
+                UpdateProximityHover(dt);
                 UpdateOrbitSelectionRing();
+                UpdateOrbitHoverRing();
+                _dashedOrbitOverlay?.MarkDirtyRepaint();
             }).Every(33);
         }
 
@@ -837,8 +1340,20 @@ namespace Waystation.UI
             _stationDot             = null;
             _stationParentBodyIndex = -1;
             _starDotEl              = null;
+            _orbitWorld             = null;
             _orbitSelectionRing     = null;
+            _orbitHoverRing         = null;
+            _dashedOrbitOverlay     = null;
+            _routeLineOverlay       = null;
             _orbitCanvas            = null;
+            _hoverOrbitBodyIndex    = -1;
+            _hoverMoonVisual        = null;
+            _hoverStation           = false;
+            _canvasHasPointer       = false;
+            _proximityHoverTarget   = null;
+            _systemHoverDelay?.Pause();
+            _systemHoverDelay = null;
+            _systemHoverTooltip = null;
         }
 
         private void SelectOrbitBody(int bodyIndex)
@@ -868,20 +1383,599 @@ namespace Waystation.UI
                 return;
             }
 
-            // Compute position from orbital math (avoids resolvedStyle lag/bounce).
-            float angle  = selected.phase + _orbitTime * selected.angularSpeed;
-            float dotCx  = _orbitCenterX + Mathf.Cos(angle) * selected.radius;
-            float dotCy  = _orbitCenterY + Mathf.Sin(angle) * selected.radius;
+            // Compute position from elliptical orbital math.
+            float angle = selected.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, selected.orbitalPeriodTicks));
+            var selPos = EllipticalPos(_orbitCenterX, _orbitCenterY, selected.radius, selected.eccentricity, selected.periapsisAngle, angle);
             float ringSize = selected.size + 10f;
             _orbitSelectionRing.style.width  = ringSize;
             _orbitSelectionRing.style.height = ringSize;
-            _orbitSelectionRing.style.left   = dotCx - ringSize * 0.5f;
-            _orbitSelectionRing.style.top    = dotCy - ringSize * 0.5f;
+            _orbitSelectionRing.style.left   = selPos.x - ringSize * 0.5f;
+            _orbitSelectionRing.style.top    = selPos.y - ringSize * 0.5f;
             _orbitSelectionRing.style.borderTopLeftRadius     = ringSize * 0.5f;
             _orbitSelectionRing.style.borderTopRightRadius    = ringSize * 0.5f;
             _orbitSelectionRing.style.borderBottomLeftRadius  = ringSize * 0.5f;
             _orbitSelectionRing.style.borderBottomRightRadius = ringSize * 0.5f;
             _orbitSelectionRing.style.display = DisplayStyle.Flex;
+        }
+
+        private void UpdateOrbitHoverRing()
+        {
+            if (_orbitHoverRing == null) return;
+
+            OrbitVisual hovered = null;
+            foreach (var v in _orbitVisuals)
+            {
+                if (v.bodyIndex == _hoverOrbitBodyIndex)
+                {
+                    hovered = v;
+                    break;
+                }
+            }
+
+            if (hovered == null)
+            {
+                if (_hoverMoonVisual != null)
+                {
+                    float moonAngle = _hoverMoonVisual.phase
+                                    + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, _hoverMoonVisual.orbitalPeriodTicks));
+                    var moonHovPos = EllipticalPos(
+                        _hoverMoonVisual.parent.currentCenterX, _hoverMoonVisual.parent.currentCenterY,
+                        _hoverMoonVisual.moonOrbitRadius, _hoverMoonVisual.eccentricity, _hoverMoonVisual.periapsisAngle, moonAngle);
+                    float moonRing = _hoverMoonVisual.size + 10f;
+                    _orbitHoverRing.style.width = moonRing;
+                    _orbitHoverRing.style.height = moonRing;
+                    _orbitHoverRing.style.left = moonHovPos.x - moonRing * 0.5f;
+                    _orbitHoverRing.style.top = moonHovPos.y - moonRing * 0.5f;
+                    _orbitHoverRing.style.borderTopLeftRadius = moonRing * 0.5f;
+                    _orbitHoverRing.style.borderTopRightRadius = moonRing * 0.5f;
+                    _orbitHoverRing.style.borderBottomLeftRadius = moonRing * 0.5f;
+                    _orbitHoverRing.style.borderBottomRightRadius = moonRing * 0.5f;
+                    _orbitHoverRing.style.display = DisplayStyle.Flex;
+                    return;
+                }
+
+                if (_hoverStation && _stationDot != null)
+                {
+                    var host = (_stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
+                        ? _orbitVisuals[_stationParentBodyIndex]
+                        : null;
+                    if (host != null)
+                    {
+                        float stOrbitR = host.size * 1.5f + 10f;
+                        float stationPeriodTicks = Mathf.Max(8f, host.orbitalPeriodTicks * 0.10f);
+                        float stAngle = StationPhaseOffset + Mathf.PI * 2f * (_orbitTime / stationPeriodTicks);
+                        float sx = host.currentCenterX + Mathf.Cos(stAngle) * stOrbitR;
+                        float sy = host.currentCenterY + Mathf.Sin(stAngle) * stOrbitR;
+                        float stRing = 12f;
+                        _orbitHoverRing.style.width = stRing;
+                        _orbitHoverRing.style.height = stRing;
+                        _orbitHoverRing.style.left = sx - stRing * 0.5f;
+                        _orbitHoverRing.style.top = sy - stRing * 0.5f;
+                        _orbitHoverRing.style.borderTopLeftRadius = stRing * 0.5f;
+                        _orbitHoverRing.style.borderTopRightRadius = stRing * 0.5f;
+                        _orbitHoverRing.style.borderBottomLeftRadius = stRing * 0.5f;
+                        _orbitHoverRing.style.borderBottomRightRadius = stRing * 0.5f;
+                        _orbitHoverRing.style.display = DisplayStyle.Flex;
+                        return;
+                    }
+                }
+
+                _orbitHoverRing.style.display = DisplayStyle.None;
+                return;
+            }
+
+            float angle = hovered.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, hovered.orbitalPeriodTicks));
+            var hovPos = EllipticalPos(_orbitCenterX, _orbitCenterY, hovered.radius, hovered.eccentricity, hovered.periapsisAngle, angle);
+            float ringSize = hovered.size + 12f;
+            _orbitHoverRing.style.width = ringSize;
+            _orbitHoverRing.style.height = ringSize;
+            _orbitHoverRing.style.left = hovPos.x - ringSize * 0.5f;
+            _orbitHoverRing.style.top = hovPos.y - ringSize * 0.5f;
+            _orbitHoverRing.style.borderTopLeftRadius = ringSize * 0.5f;
+            _orbitHoverRing.style.borderTopRightRadius = ringSize * 0.5f;
+            _orbitHoverRing.style.borderBottomLeftRadius = ringSize * 0.5f;
+            _orbitHoverRing.style.borderBottomRightRadius = ringSize * 0.5f;
+            _orbitHoverRing.style.display = DisplayStyle.Flex;
+        }
+
+        // ── Proximity-based hover detection ───────────────────────────────────
+
+        /// <summary>
+        /// Runs every animation tick.  Finds the closest body/moon/station to the
+        /// stored pointer position and drives hover state + tooltip from there.
+        /// This replaces per-dot PointerEnter/Leave which are unreliable on small
+        /// moving elements.
+        /// </summary>
+        private void UpdateProximityHover(float dt)
+        {
+            if (!_canvasHasPointer || _orbitCanvas == null)
+            {
+                if (_hoverOrbitBodyIndex >= 0 || _hoverMoonVisual != null || _hoverStation)
+                {
+                    ClearHoverScale();
+                    _hoverOrbitBodyIndex = -1;
+                    _hoverMoonVisual = null;
+                    _hoverStation = false;
+                    _proximityHoverTarget = null;
+                    HideSystemHoverTooltip();
+                    _systemHoverDelay?.Pause();
+                }
+                return;
+            }
+
+            // Convert canvas-local pointer to orbit-world coordinates.
+            float canvasW = _orbitCanvas.resolvedStyle.width;
+            float canvasH = _orbitCanvas.resolvedStyle.height;
+            if (canvasW < 10f || canvasH < 10f) return;
+            float pivotX = canvasW * 0.5f;
+            float pivotY = canvasH * 0.5f;
+            float worldPtrX = (_canvasPointerLocal.x - pivotX - _orbitPan.x) / Mathf.Max(0.01f, _orbitZoom) + pivotX;
+            float worldPtrY = (_canvasPointerLocal.y - pivotY - _orbitPan.y) / Mathf.Max(0.01f, _orbitZoom) + pivotY;
+
+            float bestDistSq = float.MaxValue;
+            int bestBody = -1;
+            MoonVisual bestMoon = null;
+            bool bestStation = false;
+            string bestName = null;
+
+            // Check bodies.
+            var sys = _viewedSystem ?? _station?.solarSystem;
+            foreach (var bv in _orbitVisuals)
+            {
+                float dx = bv.currentCenterX - worldPtrX;
+                float dy = bv.currentCenterY - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBody = bv.bodyIndex;
+                    bestMoon = null;
+                    bestStation = false;
+                    bestName = sys != null && bv.bodyIndex < sys.bodies.Count
+                        ? sys.bodies[bv.bodyIndex].name ?? BodyTypeLabel(sys.bodies[bv.bodyIndex].bodyType)
+                        : $"Body {bv.bodyIndex}";
+                }
+            }
+
+            // Check moons (elliptical positions).
+            foreach (var moon in _moonVisuals)
+            {
+                float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
+                var mPos = EllipticalPos(moon.parent.currentCenterX, moon.parent.currentCenterY,
+                    moon.moonOrbitRadius, moon.eccentricity, moon.periapsisAngle, moonAngle);
+                float dx = mPos.x - worldPtrX;
+                float dy = mPos.y - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBody = -1;
+                    bestMoon = moon;
+                    bestStation = false;
+                    bestName = moon.name;
+                }
+            }
+
+            // Check station.
+            if (_stationDot != null && _stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
+            {
+                var host = _orbitVisuals[_stationParentBodyIndex];
+                float stOrbitR = host.size * 1.5f + 10f;
+                float stationPeriodTicks = Mathf.Max(8f, host.orbitalPeriodTicks * 0.10f);
+                float stAngle = StationPhaseOffset + Mathf.PI * 2f * (_orbitTime / stationPeriodTicks);
+                float sx = host.currentCenterX + Mathf.Cos(stAngle) * stOrbitR;
+                float sy = host.currentCenterY + Mathf.Sin(stAngle) * stOrbitR;
+                float dx = sx - worldPtrX;
+                float dy = sy - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBody = -1;
+                    bestMoon = null;
+                    bestStation = true;
+                    bestName = "Your Station";
+                }
+            }
+
+            float threshold = HoverProximityThreshold / Mathf.Max(0.01f, _orbitZoom);
+            float threshSq = threshold * threshold;
+
+            if (bestDistSq <= threshSq)
+            {
+                // Target changed — clear previous scale.
+                if (bestBody != _hoverOrbitBodyIndex || bestMoon != _hoverMoonVisual || bestStation != _hoverStation)
+                    ClearHoverScale();
+
+                _hoverOrbitBodyIndex = bestBody;
+                _hoverMoonVisual = bestMoon;
+                _hoverStation = bestStation;
+
+                // Apply hover scale.
+                if (bestBody >= 0)
+                {
+                    foreach (var v in _orbitVisuals)
+                        if (v.bodyIndex == bestBody)
+                        {
+                            v.dot.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f));
+                            break;
+                        }
+                }
+                else if (bestMoon != null)
+                    bestMoon.dot.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f));
+
+                // Tooltip management.
+                if (bestName != _proximityHoverTarget)
+                {
+                    _proximityHoverTarget = bestName;
+                    _proximityHoverTime = 0f;
+                    HideSystemHoverTooltip();
+                }
+                else
+                {
+                    _proximityHoverTime += dt;
+                    if (_proximityHoverTime >= TooltipDelaySeconds && bestName != null)
+                    {
+                        EnsureSystemHoverTooltip();
+                        ShowSystemHoverTooltip(bestName, _canvasPointerLocal + new Vector2(12f, 12f));
+                    }
+                }
+            }
+            else
+            {
+                if (_hoverOrbitBodyIndex >= 0 || _hoverMoonVisual != null || _hoverStation)
+                {
+                    ClearHoverScale();
+                    _hoverOrbitBodyIndex = -1;
+                    _hoverMoonVisual = null;
+                    _hoverStation = false;
+                    _proximityHoverTarget = null;
+                    HideSystemHoverTooltip();
+                }
+                else if (_proximityHoverTarget != null)
+                {
+                    _proximityHoverTarget = null;
+                    HideSystemHoverTooltip();
+                }
+            }
+        }
+
+        private void ClearHoverScale()
+        {
+            if (_hoverOrbitBodyIndex >= 0)
+            {
+                foreach (var v in _orbitVisuals)
+                    if (v.bodyIndex == _hoverOrbitBodyIndex)
+                    {
+                        v.dot.style.scale = new Scale(new Vector3(1f, 1f, 1f));
+                        break;
+                    }
+            }
+            if (_hoverMoonVisual != null)
+                _hoverMoonVisual.dot.style.scale = new Scale(new Vector3(1f, 1f, 1f));
+        }
+
+        /// <summary>Canvas-level click handler: finds nearest body/moon/station by proximity and selects it.</summary>
+        private void HandleCanvasClick(ClickEvent evt)
+        {
+            if (_orbitCanvas == null) return;
+            var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+            if (sys == null) return;
+
+            // Convert click position to world coordinates (same transform as hover).
+            float canvasW = _orbitCanvas.resolvedStyle.width;
+            float canvasH = _orbitCanvas.resolvedStyle.height;
+            if (canvasW < 10f || canvasH < 10f) return;
+            float pivotX = canvasW * 0.5f;
+            float pivotY = canvasH * 0.5f;
+            Vector2 localPos = evt.localPosition;
+            float worldPtrX = (localPos.x - pivotX - _orbitPan.x) / Mathf.Max(0.01f, _orbitZoom) + pivotX;
+            float worldPtrY = (localPos.y - pivotY - _orbitPan.y) / Mathf.Max(0.01f, _orbitZoom) + pivotY;
+
+            float bestDistSq = float.MaxValue;
+            int bestBodyIdx = -1;
+            SolarBody bestBody = null;
+            SolarBody bestMoonBody = null;
+            bool bestStation = false;
+
+            // Bodies.
+            foreach (var bv in _orbitVisuals)
+            {
+                float dx = bv.currentCenterX - worldPtrX;
+                float dy = bv.currentCenterY - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBodyIdx = bv.bodyIndex;
+                    bestBody = bv.bodyIndex < sys.bodies.Count ? sys.bodies[bv.bodyIndex] : null;
+                    bestMoonBody = null;
+                    bestStation = false;
+                }
+            }
+
+            // Moons (elliptical).
+            foreach (var moon in _moonVisuals)
+            {
+                float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
+                var mClickPos = EllipticalPos(moon.parent.currentCenterX, moon.parent.currentCenterY,
+                    moon.moonOrbitRadius, moon.eccentricity, moon.periapsisAngle, moonAngle);
+                float dx = mClickPos.x - worldPtrX;
+                float dy = mClickPos.y - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBodyIdx = -1;
+                    bestBody = null;
+                    bestMoonBody = sys.bodies.Count > moon.parent.bodyIndex && moon.parent.bodyIndex >= 0
+                        ? sys.bodies[moon.parent.bodyIndex].moons.Count > 0
+                            ? FindMoonByName(sys.bodies[moon.parent.bodyIndex], moon.name)
+                            : null
+                        : null;
+                    bestStation = false;
+                }
+            }
+
+            // Station.
+            if (_stationDot != null && _stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
+            {
+                var host = _orbitVisuals[_stationParentBodyIndex];
+                float stOrbitR = host.size * 1.5f + 10f;
+                float stationPeriodTicks = Mathf.Max(8f, host.orbitalPeriodTicks * 0.10f);
+                float stAngle = StationPhaseOffset + Mathf.PI * 2f * (_orbitTime / stationPeriodTicks);
+                float sx = host.currentCenterX + Mathf.Cos(stAngle) * stOrbitR;
+                float sy = host.currentCenterY + Mathf.Sin(stAngle) * stOrbitR;
+                float dx = sx - worldPtrX;
+                float dy = sy - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBodyIdx = _stationParentBodyIndex;
+                    bestBody = bestBodyIdx < sys.bodies.Count ? sys.bodies[bestBodyIdx] : null;
+                    bestMoonBody = null;
+                    bestStation = true;
+                }
+            }
+
+            float threshold = HoverProximityThreshold / Mathf.Max(0.01f, _orbitZoom);
+            float threshSq = threshold * threshold;
+            if (bestDistSq > threshSq) return; // click was too far from anything
+
+            // Route plotter mode: add waypoint instead of selecting.
+            if (_routePlotterActive && bestBody != null && !bestStation)
+            {
+                float a = bestBody.initialPhase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, bestBody.orbitalPeriod));
+                AddRouteWaypoint(new RouteWaypoint
+                {
+                    name = bestBody.name ?? BodyTypeLabel(bestBody.bodyType),
+                    orbitalRadius = bestBody.orbitalRadius,
+                    angle = a,
+                    isSystem = false,
+                });
+                return;
+            }
+
+            if (bestStation)
+            {
+                SelectOrbitBody(_stationParentBodyIndex);
+                if (bestBody != null)
+                    ShowBodyDetail(bestBody, true);
+                return;
+            }
+
+            if (bestMoonBody != null)
+            {
+                ShowBodyDetail(bestMoonBody, false);
+                return;
+            }
+
+            if (bestBodyIdx >= 0 && bestBody != null)
+            {
+                SelectOrbitBody(bestBodyIdx);
+                ShowBodyDetail(bestBody, _viewedSystemIsHome && sys.stationOrbitIndex == bestBodyIdx);
+            }
+        }
+
+        /// <summary>Find a moon SolarBody by name from a parent body's moons list.</summary>
+        private SolarBody FindMoonByName(SolarBody parent, string moonName)
+        {
+            if (parent?.moons == null) return null;
+            foreach (var m in parent.moons)
+                if (m.name == moonName) return m;
+            return parent.moons.Count > 0 ? parent.moons[0] : null;
+        }
+
+        // ── Elliptical orbit helpers ──────────────────────────────────────────
+
+        /// <summary>
+        /// Computes the position of a body on an elliptical orbit.
+        /// Uses the Kepler first-law polar equation: r(θ) = a(1−e²)/(1+e·cos(θ−ω))
+        /// then converts to Cartesian offset from the focal point (the star).
+        /// </summary>
+        private static Vector2 EllipticalPos(float cx, float cy, float semiMajor, float eccentricity, float periapsisAngle, float trueAnomaly)
+        {
+            float e = Mathf.Clamp(eccentricity, 0f, 0.5f);
+            float theta = trueAnomaly - periapsisAngle;
+            float r = semiMajor * (1f - e * e) / (1f + e * Mathf.Cos(theta));
+            return new Vector2(
+                cx + Mathf.Cos(trueAnomaly) * r,
+                cy + Mathf.Sin(trueAnomaly) * r);
+        }
+
+        /// <summary>
+        /// Derives a deterministic eccentricity for a body based on its properties.
+        /// Mineral-rich / dense bodies get higher eccentricity (gravitational perturbation).
+        /// Gas giants get very low eccentricity (circular, stable orbits).
+        /// </summary>
+        private static float DeriveEccentricity(SolarBody body)
+        {
+            // Base eccentricity from body type (realistic ranges).
+            float e;
+            switch (body.bodyType)
+            {
+                case BodyType.GasGiant:     e = 0.012f; break; // very circular
+                case BodyType.IcePlanet:    e = 0.018f; break;
+                case BodyType.RockyPlanet:  e = 0.035f; break;
+                case BodyType.AsteroidBelt: e = 0.08f;  break; // belts are scattered
+                default:                    e = 0.03f;  break;
+            }
+
+            // Mineral-rich/dense bodies: higher eccentricity due to formation dynamics.
+            if (body.tags.Contains("rich_ore"))         e += 0.025f;
+            if (body.tags.Contains("ice_deposits"))     e += 0.015f;
+            if (body.tags.Contains("ancient_ruins"))    e += 0.01f;
+            if (body.tags.Contains("storm_activity"))   e += 0.008f;
+
+            // Larger bodies tend toward more circular orbits (self-clearing).
+            e *= Mathf.Lerp(1.2f, 0.7f, Mathf.Clamp01(body.size / 4f));
+
+            // Deterministic variation from initial phase (so each body is unique).
+            float variation = Mathf.Sin(body.initialPhase * 7.3f + body.orbitalRadius * 2.1f) * 0.015f;
+            e += variation;
+
+            return Mathf.Clamp(e, 0.005f, 0.12f);
+        }
+
+        /// <summary>
+        /// Derives periapsis angle from body properties (deterministic, no RNG needed).
+        /// </summary>
+        private static float DerivePeriapsisAngle(SolarBody body)
+        {
+            // Spread periapsis angles using orbital parameters as seed.
+            return (body.initialPhase * 3.7f + body.orbitalRadius * 1.9f) % (Mathf.PI * 2f);
+        }
+
+        /// <summary>Derives small eccentricity for moons (nearly circular).</summary>
+        private static float DeriveMoonEccentricity(SolarBody moon, int moonIndex)
+        {
+            float e = 0.008f + Mathf.Abs(Mathf.Sin(moon.initialPhase * 5.1f + moonIndex * 1.7f)) * 0.025f;
+            return Mathf.Clamp(e, 0.005f, 0.035f);
+        }
+
+        // ── Dashed drawing helpers (Painter2D) ─────────────────────────────────
+
+        /// <summary>Draws a dashed circle using Painter2D arc segments.</summary>
+        private static void DrawDashedCircle(Painter2D painter, float cx, float cy, float radius, float dashPx, float gapPx)
+        {
+            if (radius < 1f) return;
+            float circumference = 2f * Mathf.PI * radius;
+            float step = dashPx + gapPx;
+            int segCount = Mathf.Max(1, Mathf.FloorToInt(circumference / step));
+            float dashAngle = (dashPx / circumference) * 360f;
+            float stepAngle = 360f / segCount;
+
+            for (int i = 0; i < segCount; i++)
+            {
+                float startDeg = i * stepAngle;
+                float endDeg = startDeg + dashAngle;
+                float startRad = startDeg * Mathf.Deg2Rad;
+                float endRad = endDeg * Mathf.Deg2Rad;
+
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(cx + Mathf.Cos(startRad) * radius, cy + Mathf.Sin(startRad) * radius));
+
+                // Approximate arc with a few line segments for smoothness.
+                int arcSteps = Mathf.Max(2, Mathf.CeilToInt(dashAngle / 15f));
+                for (int s = 1; s <= arcSteps; s++)
+                {
+                    float t = startRad + (endRad - startRad) * (s / (float)arcSteps);
+                    painter.LineTo(new Vector2(cx + Mathf.Cos(t) * radius, cy + Mathf.Sin(t) * radius));
+                }
+                painter.Stroke();
+            }
+        }
+
+        /// <summary>
+        /// Draws a dashed ellipse using the Kepler polar equation.
+        /// The focus (star or parent body) is at (cx, cy).
+        /// </summary>
+        private static void DrawDashedEllipse(Painter2D painter, float cx, float cy, float semiMajor,
+            float eccentricity, float periapsisAngle, float dashPx, float gapPx)
+        {
+            if (semiMajor < 1f) return;
+            float e = Mathf.Clamp(eccentricity, 0f, 0.5f);
+            // Approximate circumference for dash stepping.
+            float semiMinor = semiMajor * Mathf.Sqrt(1f - e * e);
+            float circumference = Mathf.PI * (3f * (semiMajor + semiMinor) - Mathf.Sqrt((3f * semiMajor + semiMinor) * (semiMajor + 3f * semiMinor)));
+            float step = dashPx + gapPx;
+            int segCount = Mathf.Max(4, Mathf.FloorToInt(circumference / step));
+            float dashFrac = dashPx / step;
+            float stepAngle = Mathf.PI * 2f / segCount;
+
+            for (int i = 0; i < segCount; i++)
+            {
+                float startAngle = i * stepAngle;
+                float endAngle = startAngle + stepAngle * dashFrac;
+
+                // Start point.
+                float theta0 = startAngle - periapsisAngle;
+                float r0 = semiMajor * (1f - e * e) / (1f + e * Mathf.Cos(theta0));
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(cx + Mathf.Cos(startAngle) * r0, cy + Mathf.Sin(startAngle) * r0));
+
+                int arcSteps = Mathf.Max(2, Mathf.CeilToInt((endAngle - startAngle) * Mathf.Rad2Deg / 12f));
+                for (int s = 1; s <= arcSteps; s++)
+                {
+                    float t = startAngle + (endAngle - startAngle) * (s / (float)arcSteps);
+                    float thetaT = t - periapsisAngle;
+                    float rT = semiMajor * (1f - e * e) / (1f + e * Mathf.Cos(thetaT));
+                    painter.LineTo(new Vector2(cx + Mathf.Cos(t) * rT, cy + Mathf.Sin(t) * rT));
+                }
+                painter.Stroke();
+            }
+        }
+
+        /// <summary>Draws a dashed straight line using Painter2D.</summary>
+        private static void DrawDashedLine(Painter2D painter, float x0, float y0, float x1, float y1, float dashPx, float gapPx)
+        {
+            float dx = x1 - x0;
+            float dy = y1 - y0;
+            float len = Mathf.Sqrt(dx * dx + dy * dy);
+            if (len < 0.5f) return;
+            float nx = dx / len;
+            float ny = dy / len;
+            float step = dashPx + gapPx;
+            float pos = 0f;
+
+            while (pos < len)
+            {
+                float dashEnd = Mathf.Min(pos + dashPx, len);
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(x0 + nx * pos, y0 + ny * pos));
+                painter.LineTo(new Vector2(x0 + nx * dashEnd, y0 + ny * dashEnd));
+                painter.Stroke();
+                pos += step;
+            }
+        }
+
+        /// <summary>
+        /// Compute the canvas position of a route waypoint body using the matching
+        /// OrbitVisual's elliptical parameters.
+        /// </summary>
+        private Vector2 RouteBodyPos(RouteWaypoint wp)
+        {
+            float bestDist = float.MaxValue;
+            OrbitVisual match = null;
+            var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+            foreach (var ov in _orbitVisuals)
+            {
+                if (sys == null || ov.bodyIndex >= sys.bodies.Count) continue;
+                float diff = Mathf.Abs(sys.bodies[ov.bodyIndex].orbitalRadius - wp.orbitalRadius);
+                if (diff < bestDist)
+                {
+                    bestDist = diff;
+                    match = ov;
+                }
+            }
+            if (match != null)
+                return EllipticalPos(_orbitCenterX, _orbitCenterY, match.radius,
+                    match.eccentricity, match.periapsisAngle, wp.angle);
+            // Fallback to circular.
+            return new Vector2(
+                _orbitCenterX + Mathf.Cos(wp.angle) * 60f,
+                _orbitCenterY + Mathf.Sin(wp.angle) * 60f);
         }
 
         private VisualElement BuildBodyRow(SolarBody body, bool hasStation, int bodyIndex, SolarSystemState sys)
@@ -921,14 +2015,32 @@ namespace Waystation.UI
             nameLabel.AddToClassList(SystemBodyNameClass);
             nameLabel.style.color     = ColTextBright;
             nameLabel.style.flexGrow  = 1;
+            nameLabel.style.fontSize  = Fs(11);
             row.Add(nameLabel);
 
-            // Body type
-            var typeLabel = new Label(BodyTypeLabel(body.bodyType));
-            typeLabel.AddToClassList(SystemBodyTypeClass);
-            typeLabel.style.color = ColTextMid;
-            typeLabel.style.width = 100;
-            row.Add(typeLabel);
+            // Orbit distance (AU)
+            if (body.orbitalRadius > 0f)
+            {
+                var distLabel = new Label($"{body.orbitalRadius:F2} AU");
+                distLabel.style.color    = ColTextMid;
+                distLabel.style.fontSize = Fs(9);
+                distLabel.style.marginRight = 6;
+                row.Add(distLabel);
+            }
+
+            // Orbit time (compact)
+            if (body.orbitalPeriod > 0f)
+            {
+                float minutes = body.orbitalPeriod * MinutesPerTick;
+                float hours = minutes / 60f;
+                float days = hours / 24f;
+                string orbitText = days >= 1f ? $"{days:F1}d" : $"{hours:F1}h";
+                var orbitLabel = new Label(orbitText);
+                orbitLabel.style.color    = ColTextMid;
+                orbitLabel.style.fontSize = Fs(9);
+                orbitLabel.style.marginRight = 4;
+                row.Add(orbitLabel);
+            }
 
             // Hover highlight
             row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = ColBodyRowHov);
@@ -936,8 +2048,20 @@ namespace Waystation.UI
 
             row.RegisterCallback<ClickEvent>(_ =>
             {
+                if (_routePlotterActive)
+                {
+                    float angle = body.initialPhase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, body.orbitalPeriod));
+                    AddRouteWaypoint(new RouteWaypoint
+                    {
+                        name = body.name ?? BodyTypeLabel(body.bodyType),
+                        orbitalRadius = body.orbitalRadius,
+                        angle = angle,
+                        isSystem = false,
+                    });
+                    return;
+                }
                 SelectOrbitBody(bodyIndex);
-                ShowBodyDetail(body, sys.stationOrbitIndex == bodyIndex);
+                ShowBodyDetail(body, _viewedSystemIsHome && sys.stationOrbitIndex == bodyIndex);
             });
 
             return row;
@@ -987,11 +2111,6 @@ namespace Waystation.UI
                 nameLabel.style.fontSize = (int)(10 * _fontScale);
                 row.Add(nameLabel);
 
-                var typeLabel = new Label("Moon");
-                typeLabel.style.color    = ColTextMid;
-                typeLabel.style.fontSize = (int)(9 * _fontScale);
-                row.Add(typeLabel);
-
                 return row;
             }
 
@@ -1036,13 +2155,99 @@ namespace Waystation.UI
                 return row;
             }
 
+        private VisualElement BuildMapLegend(bool compact = false, bool sectorMode = false)
+        {
+            var card = new VisualElement();
+            card.style.alignSelf = Align.FlexStart;
+            card.style.marginBottom = compact ? 0 : 8;
+            card.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.72f);
+            card.style.borderTopWidth = 1;
+            card.style.borderRightWidth = 1;
+            card.style.borderBottomWidth = 1;
+            card.style.borderLeftWidth = 1;
+            card.style.borderTopColor = ColDivider;
+            card.style.borderRightColor = ColDivider;
+            card.style.borderBottomColor = ColDivider;
+            card.style.borderLeftColor = ColDivider;
+
+            var toggle = new Button { text = "MAP KEY ▾" };
+            toggle.style.fontSize = Fs(10);
+            toggle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            toggle.style.paddingLeft = 8;
+            toggle.style.paddingRight = 8;
+            toggle.style.paddingTop = 4;
+            toggle.style.paddingBottom = 4;
+            toggle.style.backgroundColor = new Color(0.10f, 0.14f, 0.22f, 1f);
+            toggle.style.color = ColTextBright;
+            card.Add(toggle);
+
+            var body = new VisualElement();
+            body.style.paddingLeft = 8;
+            body.style.paddingRight = 8;
+            body.style.paddingTop = 6;
+            body.style.paddingBottom = 6;
+            body.style.display = DisplayStyle.None;
+            card.Add(body);
+
+            if (sectorMode)
+            {
+                body.Add(BuildLegendLine("□", new Color(0.36f, 0.54f, 0.76f, 0.95f), "Sector tile"));
+                body.Add(BuildLegendLine("+", new Color(0.39f, 0.75f, 1f, 0.95f), "Expandable edge"));
+                body.Add(BuildLegendLine("•", new Color(0.62f, 0.86f, 1.00f, 0.95f), "System marker"));
+                body.Add(BuildLegendLine("◉", new Color(0.70f, 0.82f, 0.96f, 0.85f), "Archetype icon"));
+                body.Add(BuildLegendLine("░", new Color(0.44f, 0.53f, 0.68f, 0.55f), "Dust lane"));
+            }
+            else
+            {
+                body.Add(BuildLegendLine("●", new Color(0.80f, 0.68f, 0.52f, 1f), "Planet body"));
+                body.Add(BuildLegendLine("◆", new Color(0.25f, 1.00f, 0.50f, 1f), "Your station"));
+                body.Add(BuildLegendLine("○", new Color(0.56f, 0.71f, 0.90f, 0.8f), "Orbit ring"));
+                body.Add(BuildLegendLine("•", new Color(0.64f, 0.74f, 0.84f, 0.9f), "Moon"));
+            }
+
+            bool expanded = false;
+            toggle.clicked += () =>
+            {
+                expanded = !expanded;
+                body.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                toggle.text = expanded ? "MAP KEY ▴" : "MAP KEY ▾";
+            };
+
+            return card;
+        }
+
+        private VisualElement BuildLegendLine(string icon, Color iconColor, string text)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 2;
+
+            var iconLabel = new Label(icon);
+            iconLabel.style.width = 14;
+            iconLabel.style.minWidth = 14;
+            iconLabel.style.color = iconColor;
+            iconLabel.style.fontSize = Fs(10);
+            row.Add(iconLabel);
+
+            var textLabel = new Label(text);
+            textLabel.style.color = ColTextBright;
+            textLabel.style.fontSize = Fs(10);
+            row.Add(textLabel);
+
+            return row;
+        }
+
         private void BuildSectorView()
         {
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
-            root.style.paddingLeft   = 20;
-            root.style.paddingTop    = 16;
-            root.style.paddingRight  = 20;
+            root.style.flexGrow      = 1;
+            root.style.height        = Length.Percent(100);
+            root.style.paddingLeft   = 8;
+            root.style.paddingTop    = 8;
+            root.style.paddingRight  = 8;
+            root.style.paddingBottom = 8;
 
             if (_station == null || _station.sectors.Count == 0)
             {
@@ -1055,41 +2260,7 @@ namespace Waystation.UI
                 return;
             }
 
-            var hdr = new Label("SECTOR GRID");
-            hdr.AddToClassList(SectionHeaderClass);
-            hdr.style.fontSize      = 14;
-            hdr.style.color         = ColAccentText;
-            hdr.style.marginBottom  = 12;
-            hdr.style.paddingTop    = 8;
-            hdr.style.paddingBottom = 8;
-            root.Add(hdr);
-
             root.Add(BuildSectorStarChart(_station));
-
-            // Layout sectors in a flex-wrap grid.
-            var grid = new VisualElement();
-            grid.AddToClassList(SectorGridClass);
-            grid.style.flexDirection = FlexDirection.Row;
-            grid.style.flexWrap      = Wrap.Wrap;
-            grid.style.paddingBottom = 20;
-            root.Add(grid);
-
-            // Sort sectors — Visited first, then Detected, then Uncharted, each alpha.
-            var sorted = new List<SectorData>(_station.sectors.Values);
-            sorted.Sort((a, b) =>
-            {
-                int stateA = (int)a.discoveryState;
-                int stateB = (int)b.discoveryState;
-                // Visited > Detected > Uncharted (descending)
-                if (stateB != stateA) return stateB.CompareTo(stateA);
-                return string.Compare(a.uid, b.uid, StringComparison.Ordinal);
-            });
-
-            foreach (var sector in sorted)
-            {
-                var box = BuildSectorBox(sector);
-                grid.Add(box);
-            }
 
             _viewArea.Add(root);
         }
@@ -1097,9 +2268,10 @@ namespace Waystation.UI
         private VisualElement BuildSectorStarChart(StationState station)
         {
             var card = new VisualElement();
-            card.style.height = 360;
+            card.style.flexGrow = 1;
+            card.style.height = Length.Percent(100);
             card.style.minHeight = 360;
-            card.style.marginBottom = 12;
+            card.style.marginBottom = 0;
             card.style.paddingTop = 8;
             card.style.paddingBottom = 8;
             card.style.paddingLeft = 8;
@@ -1114,143 +2286,415 @@ namespace Waystation.UI
             card.style.borderBottomColor = ColDivider;
             card.style.borderLeftColor = ColDivider;
 
-            var title = new Label("SECTOR STAR CHART");
-            title.style.color = ColAccentText;
-            title.style.fontSize = 11;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.marginBottom = 6;
-            card.Add(title);
+            _sectorChartViewport = new VisualElement();
+            _sectorChartViewport.style.position = Position.Relative;
+            _sectorChartViewport.style.flexGrow = 1;
+            _sectorChartViewport.style.height = Length.Percent(100);
+            _sectorChartViewport.style.minHeight = 340;
+            _sectorChartViewport.style.overflow = Overflow.Hidden;
+            _sectorChartViewport.style.backgroundColor = new Color(0.03f, 0.05f, 0.09f, 0.95f);
+            _sectorChartViewport.style.borderTopWidth = 1;
+            _sectorChartViewport.style.borderRightWidth = 1;
+            _sectorChartViewport.style.borderBottomWidth = 1;
+            _sectorChartViewport.style.borderLeftWidth = 1;
+            _sectorChartViewport.style.borderTopColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _sectorChartViewport.style.borderRightColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _sectorChartViewport.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _sectorChartViewport.style.borderLeftColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            card.Add(_sectorChartViewport);
 
-            var canvas = new VisualElement();
-            canvas.style.position = Position.Relative;
-            canvas.style.height = 320;
-            canvas.style.backgroundColor = new Color(0.03f, 0.05f, 0.09f, 0.95f);
-            canvas.style.borderTopWidth = 1;
-            canvas.style.borderRightWidth = 1;
-            canvas.style.borderBottomWidth = 1;
-            canvas.style.borderLeftWidth = 1;
-            canvas.style.borderTopColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            canvas.style.borderRightColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            canvas.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            canvas.style.borderLeftColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            card.Add(canvas);
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 8;
+            overlay.style.top = 8;
+            overlay.style.flexDirection = FlexDirection.Column;
+            _sectorChartViewport.Add(overlay);
+
+            var sectorName = new Label("SECTOR GRID");
+            sectorName.style.color = ColAccentText;
+            sectorName.style.fontSize = Fs(14);
+            sectorName.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sectorName.style.marginBottom = 4;
+            sectorName.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.72f);
+            sectorName.style.paddingLeft = 8;
+            sectorName.style.paddingRight = 8;
+            sectorName.style.paddingTop = 4;
+            sectorName.style.paddingBottom = 4;
+            sectorName.style.borderTopWidth = 1;
+            sectorName.style.borderRightWidth = 1;
+            sectorName.style.borderBottomWidth = 1;
+            sectorName.style.borderLeftWidth = 1;
+            sectorName.style.borderTopColor = ColDivider;
+            sectorName.style.borderRightColor = ColDivider;
+            sectorName.style.borderBottomColor = ColDivider;
+            sectorName.style.borderLeftColor = ColDivider;
+            overlay.Add(sectorName);
+
+            overlay.Add(BuildMapLegend(compact: true, sectorMode: true));
+
+            _sectorChartWorld = new VisualElement();
+            _sectorChartWorld.style.position = Position.Absolute;
+            _sectorChartWorld.style.left = 0;
+            _sectorChartWorld.style.top = 0;
+            _sectorChartWorld.style.right = 0;
+            _sectorChartWorld.style.bottom = 0;
+            _sectorChartViewport.Add(_sectorChartWorld);
+
+            _sectorZoom = 1f;
+            _sectorPan = Vector2.zero;
+            _sectorPanning = false;
+            ApplySectorWorldTransform();
 
             var sectors = new List<SectorData>(station.sectors.Values);
             if (sectors.Count == 0) return card;
 
-            float minX = float.MaxValue;
-            float maxX = float.MinValue;
-            float minY = float.MaxValue;
-            float maxY = float.MinValue;
-            foreach (var s in sectors)
+            void RebuildChart(float width, float height)
             {
-                if (s.coordinates.x < minX) minX = s.coordinates.x;
-                if (s.coordinates.x > maxX) maxX = s.coordinates.x;
-                if (s.coordinates.y < minY) minY = s.coordinates.y;
-                if (s.coordinates.y > maxY) maxY = s.coordinates.y;
-            }
+                _sectorChartWorld.Clear();
+                AddNebulaBackdrop(_sectorChartWorld, width, height, station.galaxySeed);
 
-            float rangeX = Mathf.Max(1f, maxX - minX);
-            float rangeY = Mathf.Max(1f, maxY - minY);
-            const float pad = 18f;
-            const float plotW = 780f;
-            const float plotH = 284f;
-            canvas.style.width = plotW + pad * 2f;
-
-            var posMap = new Dictionary<string, Vector2>();
-            foreach (var s in sectors)
-            {
-                float nx = (s.coordinates.x - minX) / rangeX;
-                float ny = (s.coordinates.y - minY) / rangeY;
-                // Invert y for top-left UI coordinates.
-                float px = pad + nx * plotW;
-                float py = pad + (1f - ny) * plotH;
-                posMap[s.uid] = new Vector2(px, py);
-            }
-
-            // Draw subtle links between nearby discovered sectors.
-            var linkPairs = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var a in sectors)
-            {
-                if (a.discoveryState == SectorDiscoveryState.Uncharted) continue;
-                SectorData nearest = null;
-                float nearestDist = float.MaxValue;
-                foreach (var b in sectors)
+                var known = new Dictionary<Vector2Int, SectorData>();
+                foreach (var s in sectors)
                 {
-                    if (ReferenceEquals(a, b) || b.discoveryState == SectorDiscoveryState.Uncharted) continue;
-                    float d = Vector2.Distance(a.coordinates, b.coordinates);
-                    if (d < nearestDist)
+                    int col = Mathf.RoundToInt((s.coordinates.x - GalaxyGenerator.HomeX) / MapSystem.GalUnitPerCell);
+                    int row = Mathf.RoundToInt((s.coordinates.y - GalaxyGenerator.HomeY) / MapSystem.GalUnitPerCell);
+                    known[new Vector2Int(col, row)] = s;
+                }
+
+                var candidates = new HashSet<Vector2Int>();
+                var dirs = new[]
+                {
+                    new Vector2Int(0, 1),
+                    new Vector2Int(1, 0),
+                    new Vector2Int(0, -1),
+                    new Vector2Int(-1, 0)
+                };
+                foreach (var cell in known.Keys)
+                {
+                    foreach (var d in dirs)
                     {
-                        nearestDist = d;
-                        nearest = b;
+                        var n = new Vector2Int(cell.x + d.x, cell.y + d.y);
+                        if (!known.ContainsKey(n)) candidates.Add(n);
                     }
                 }
 
-                if (nearest == null || nearestDist > 18f) continue;
-                string k1 = string.Compare(a.uid, nearest.uid, StringComparison.Ordinal) < 0
-                    ? a.uid + "|" + nearest.uid
-                    : nearest.uid + "|" + a.uid;
-                if (!linkPairs.Add(k1)) continue;
-
-                Vector2 p1 = posMap[a.uid];
-                Vector2 p2 = posMap[nearest.uid];
-                AddSectorLane(canvas, p1, p2);
-            }
-
-            foreach (var s in sectors)
-            {
-                Vector2 p = posMap[s.uid];
-                float size = s.discoveryState switch
+                int minCol = int.MaxValue;
+                int maxCol = int.MinValue;
+                int minRow = int.MaxValue;
+                int maxRow = int.MinValue;
+                foreach (var k in known.Keys)
                 {
-                    SectorDiscoveryState.Visited => 13f,
-                    SectorDiscoveryState.Detected => 10f,
-                    _ => 7f,
-                };
-
-                var node = new VisualElement();
-                node.style.position = Position.Absolute;
-                node.style.left = p.x - size * 0.5f;
-                node.style.top = p.y - size * 0.5f;
-                node.style.width = size;
-                node.style.height = size;
-                node.style.borderTopLeftRadius = size * 0.5f;
-                node.style.borderTopRightRadius = size * 0.5f;
-                node.style.borderBottomLeftRadius = size * 0.5f;
-                node.style.borderBottomRightRadius = size * 0.5f;
-                node.style.backgroundColor = s.discoveryState switch
+                    if (k.x < minCol) minCol = k.x;
+                    if (k.x > maxCol) maxCol = k.x;
+                    if (k.y < minRow) minRow = k.y;
+                    if (k.y > maxRow) maxRow = k.y;
+                }
+                foreach (var c in candidates)
                 {
-                    SectorDiscoveryState.Visited => new Color(0.25f, 0.80f, 0.45f, 1f),
-                    SectorDiscoveryState.Detected => new Color(0.39f, 0.75f, 1.00f, 0.92f),
-                    _ => new Color(0.36f, 0.40f, 0.48f, 0.60f),
-                };
-
-                string tooltipText = s.discoveryState == SectorDiscoveryState.Uncharted
-                    ? "Uncharted sector"
-                    : s.ShortCodeAndCoord();
-                node.tooltip = tooltipText;
-
-                if (s.discoveryState != SectorDiscoveryState.Uncharted)
-                {
-                    var captured = s;
-                    node.RegisterCallback<PointerEnterEvent>(_ =>
-                    {
-                        node.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f));
-                        node.style.backgroundColor = new Color(0.70f, 0.88f, 1.00f, 1f);
-                    });
-                    node.RegisterCallback<PointerLeaveEvent>(_ =>
-                    {
-                        node.style.scale = new Scale(new Vector3(1f, 1f, 1f));
-                        node.style.backgroundColor = captured.discoveryState == SectorDiscoveryState.Visited
-                            ? new Color(0.25f, 0.80f, 0.45f, 1f)
-                            : new Color(0.39f, 0.75f, 1.00f, 0.92f);
-                    });
-                    node.RegisterCallback<ClickEvent>(_ => ShowSectorDetail(captured));
+                    if (c.x < minCol) minCol = c.x;
+                    if (c.x > maxCol) maxCol = c.x;
+                    if (c.y < minRow) minRow = c.y;
+                    if (c.y > maxRow) maxRow = c.y;
                 }
 
-                canvas.Add(node);
+                const float cellW = 168f;
+                const float cellH = 116f;
+                const float cellGap = 3f;
+                const float pad = 48f;
+
+                float worldW = (maxCol - minCol + 1) * cellW + (maxCol - minCol) * cellGap + pad * 2f;
+                float worldH = (maxRow - minRow + 1) * cellH + (maxRow - minRow) * cellGap + pad * 2f;
+
+                Vector2 CellPos(int col, int row)
+                {
+                    float x = (width - worldW) * 0.5f + pad + (col - minCol) * (cellW + cellGap);
+                    float y = (height - worldH) * 0.5f + pad + (maxRow - row) * (cellH + cellGap);
+                    return new Vector2(x, y);
+                }
+
+                bool canUnlock = SystemMapController.TelescopeMode || station.explorationPoints >= MapSystem.SectorUnlockPointCost;
+
+                foreach (var kv in known)
+                {
+                    Vector2 p = CellPos(kv.Key.x, kv.Key.y);
+                    var sector = kv.Value;
+
+                    var sectorBox = new VisualElement();
+                    sectorBox.style.position = Position.Absolute;
+                    sectorBox.style.left = p.x;
+                    sectorBox.style.top = p.y;
+                    sectorBox.style.width = cellW;
+                    sectorBox.style.height = cellH;
+                    sectorBox.style.overflow = Overflow.Visible;
+                    sectorBox.style.backgroundColor = sector.discoveryState == SectorDiscoveryState.Visited
+                        ? new Color(0.08f, 0.16f, 0.23f, 0.94f)
+                        : new Color(0.08f, 0.12f, 0.19f, 0.90f);
+
+                    // Archetype tint overlay.
+                    var tint = ArchetypeTint(sector.archetype);
+                    if (tint.a > 0f)
+                    {
+                        var tintOverlay = new VisualElement();
+                        tintOverlay.style.position = Position.Absolute;
+                        tintOverlay.style.left = 0; tintOverlay.style.top = 0;
+                        tintOverlay.style.right = 0; tintOverlay.style.bottom = 0;
+                        tintOverlay.style.backgroundColor = tint;
+                        tintOverlay.pickingMode = PickingMode.Ignore;
+                        sectorBox.Add(tintOverlay);
+                    }
+                    sectorBox.style.borderTopWidth = 1;
+                    sectorBox.style.borderRightWidth = 1;
+                    sectorBox.style.borderBottomWidth = 1;
+                    sectorBox.style.borderLeftWidth = 1;
+                    Color baseBorder = ResolveSectorBorderColor(sector);
+                    sectorBox.style.borderTopColor = baseBorder;
+                    sectorBox.style.borderRightColor = sectorBox.style.borderTopColor;
+                    sectorBox.style.borderBottomColor = sectorBox.style.borderTopColor;
+                    sectorBox.style.borderLeftColor = sectorBox.style.borderTopColor;
+                    _sectorChartWorld.Add(sectorBox);
+
+                    string hoverNameText = string.IsNullOrWhiteSpace(sector.properName)
+                        ? sector.ShortCodeAndCoord()
+                        : $"{sector.ShortCodeAndCoord()}  \"{sector.properName}\"";
+                    var hoverName = new Label(hoverNameText);
+                    hoverName.style.position = Position.Absolute;
+                    hoverName.style.left = 4;
+                    hoverName.style.top = -22;
+                    hoverName.style.maxWidth = cellW + 70f;
+                    hoverName.style.paddingLeft = 6;
+                    hoverName.style.paddingRight = 6;
+                    hoverName.style.paddingTop = 2;
+                    hoverName.style.paddingBottom = 2;
+                    hoverName.style.backgroundColor = new Color(0.06f, 0.10f, 0.18f, 0.96f);
+                    hoverName.style.borderTopWidth = 1;
+                    hoverName.style.borderRightWidth = 1;
+                    hoverName.style.borderBottomWidth = 1;
+                    hoverName.style.borderLeftWidth = 1;
+                    hoverName.style.borderTopColor = new Color(0.34f, 0.52f, 0.74f, 0.95f);
+                    hoverName.style.borderRightColor = new Color(0.34f, 0.52f, 0.74f, 0.95f);
+                    hoverName.style.borderBottomColor = new Color(0.12f, 0.20f, 0.32f, 0.95f);
+                    hoverName.style.borderLeftColor = new Color(0.12f, 0.20f, 0.32f, 0.95f);
+                    hoverName.style.color = new Color(0.82f, 0.90f, 1.00f, 1f);
+                    hoverName.style.fontSize = Fs(10);
+                    hoverName.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    hoverName.style.display = DisplayStyle.None;
+                    hoverName.pickingMode = PickingMode.Ignore;
+                    sectorBox.Add(hoverName);
+
+                    // Archetype icon (top-right, visible only for visited sectors).
+                    if (sector.discoveryState == SectorDiscoveryState.Visited)
+                    {
+                        var icon = new Label(ArchetypeIcon(sector.archetype));
+                        icon.style.position = Position.Absolute;
+                        icon.style.right = 4;
+                        icon.style.top = 3;
+                        icon.style.fontSize = Fs(12);
+                        icon.style.color = new Color(0.70f, 0.82f, 0.96f, 0.85f);
+                        icon.pickingMode = PickingMode.Ignore;
+                        sectorBox.Add(icon);
+                    }
+
+                    var cluster = new VisualElement();
+                    cluster.style.position = Position.Absolute;
+                    cluster.style.left = 1;
+                    cluster.style.top = 1;
+                    cluster.style.right = 1;
+                    cluster.style.bottom = 1;
+                    cluster.style.backgroundColor = new Color(0.03f, 0.05f, 0.10f, 0.85f);
+                    sectorBox.Add(cluster);
+
+                    int dotCount;
+                    {
+                        bool isHomeSector = _station?.solarSystem != null &&
+                            Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                            Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+                        var generatedSystems = SolarSystemGenerator.GenerateSectorSystems(sector, isHomeSector, _station?.solarSystem);
+                        dotCount = generatedSystems != null && generatedSystems.Count > 0
+                            ? generatedSystems.Count
+                            : (sector.systemCount > 0 ? sector.systemCount : 12);
+                    }
+                    AddSectorSystemCluster(cluster, cellW - 2f, cellH - 2f, station.galaxySeed ^ sector.uid.GetHashCode(), sector, dotCount, hoverName, hoverNameText);
+
+                    var capturedSector = sector;
+                    sectorBox.RegisterCallback<PointerEnterEvent>(_ =>
+                    {
+                        sectorBox.BringToFront();
+                        hoverName.style.display = DisplayStyle.Flex;
+                        sectorBox.style.borderTopColor = new Color(1f, 1f, 1f, 0.95f);
+                        sectorBox.style.borderRightColor = new Color(1f, 1f, 1f, 0.95f);
+                        sectorBox.style.borderBottomColor = new Color(1f, 1f, 1f, 0.95f);
+                        sectorBox.style.borderLeftColor = new Color(1f, 1f, 1f, 0.95f);
+                    });
+                    sectorBox.RegisterCallback<PointerLeaveEvent>(_ =>
+                    {
+                        hoverName.style.display = DisplayStyle.None;
+                        Color border = ResolveSectorBorderColor(sector);
+                        sectorBox.style.borderTopColor = border;
+                        sectorBox.style.borderRightColor = border;
+                        sectorBox.style.borderBottomColor = border;
+                        sectorBox.style.borderLeftColor = border;
+                    });
+                    sectorBox.RegisterCallback<ClickEvent>(_ => ShowSectorDetail(capturedSector));
+                }
+
+                foreach (var c in candidates)
+                {
+                    Vector2 p = CellPos(c.x, c.y);
+                    var plus = new Button();
+                    plus.text = "+";
+                    plus.style.position = Position.Absolute;
+                    plus.style.left = p.x + (cellW * 0.5f) - 16f;
+                    plus.style.top = p.y + (cellH * 0.5f) - 16f;
+                    plus.style.width = 32;
+                    plus.style.height = 32;
+                    plus.style.paddingLeft = 0;
+                    plus.style.paddingRight = 0;
+                    plus.style.paddingTop = 0;
+                    plus.style.paddingBottom = 0;
+                    plus.style.unityTextAlign = TextAnchor.MiddleCenter;
+                    plus.style.fontSize = Fs(15);
+                    plus.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    plus.style.backgroundColor = canUnlock
+                        ? new Color(0.12f, 0.22f, 0.34f, 0.95f)
+                        : new Color(0.12f, 0.14f, 0.18f, 0.75f);
+                    plus.style.color = canUnlock ? ColAccentText : new Color(0.35f, 0.40f, 0.48f, 0.95f);
+                    plus.style.borderTopWidth = 1;
+                    plus.style.borderRightWidth = 1;
+                    plus.style.borderBottomWidth = 1;
+                    plus.style.borderLeftWidth = 1;
+                    plus.style.borderTopColor = ColDivider;
+                    plus.style.borderRightColor = ColDivider;
+                    plus.style.borderBottomColor = ColDivider;
+                    plus.style.borderLeftColor = ColDivider;
+                    plus.SetEnabled(canUnlock);
+                    plus.tooltip = canUnlock
+                        ? "Expand sector grid"
+                        : $"Need {MapSystem.SectorUnlockPointCost} EP to expand";
+
+                    int unlockCol = c.x;
+                    int unlockRow = c.y;
+                    plus.clicked += () =>
+                    {
+                        var newSector = TryUnlockSectorAtAndGetSector(unlockCol, unlockRow);
+                        if (newSector == null) return;
+                        OnSectorUnlocked?.Invoke(newSector);
+                        ShowSectorDetail(newSector);
+                        Refresh(_station, _map);
+                    };
+
+                    _sectorChartWorld.Add(plus);
+                }
             }
 
+            _sectorChartViewport.RegisterCallback<GeometryChangedEvent>(evt =>
+            {
+                if (evt.newRect.width < 20f || evt.newRect.height < 20f) return;
+                RebuildChart(evt.newRect.width, evt.newRect.height);
+            });
+            _sectorChartViewport.RegisterCallback<WheelEvent>(evt =>
+            {
+                float zoom = Mathf.Clamp(_sectorZoom * (1f - evt.delta.y * 0.0075f), 0.45f, 3.4f);
+                if (Mathf.Abs(zoom - _sectorZoom) < 0.001f) return;
+                _sectorZoom = zoom;
+                ApplySectorWorldTransform();
+                _routeLineOverlay?.MarkDirtyRepaint();
+                evt.StopPropagation();
+            });
+            _sectorChartViewport.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 1) return;
+                _sectorPanning = true;
+                _sectorPanStartMouse = (Vector2)evt.position;
+                _sectorPanStartOffset = _sectorPan;
+                _sectorChartViewport.CapturePointer(evt.pointerId);
+            });
+            _sectorChartViewport.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!_sectorPanning) return;
+                Vector2 delta = (Vector2)evt.position - _sectorPanStartMouse;
+                _sectorPan = _sectorPanStartOffset + delta;
+                ApplySectorWorldTransform();
+                _routeLineOverlay?.MarkDirtyRepaint();
+            });
+            _sectorChartViewport.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                if (evt.button != 1) return;
+                _sectorPanning = false;
+                _sectorChartViewport.ReleasePointer(evt.pointerId);
+            });
+
             return card;
+        }
+
+        private void ApplySectorWorldTransform()
+        {
+            if (_sectorChartWorld == null) return;
+            _sectorChartWorld.style.translate = new Translate(_sectorPan.x, _sectorPan.y);
+            _sectorChartWorld.style.scale = new Scale(new Vector3(_sectorZoom, _sectorZoom, 1f));
+        }
+
+        private static void AddNebulaBackdrop(VisualElement parent, float width, float height, int seed)
+        {
+            var rng = new System.Random(seed ^ 0x5f3759df);
+
+            // Thin stratified haze bands (less "blob-like" than ovals).
+            int bands = 4;
+            for (int i = 0; i < bands; i++)
+            {
+                float w = 220f + (float)rng.NextDouble() * 360f;
+                float h = 36f + (float)rng.NextDouble() * 80f;
+                float x = (float)rng.NextDouble() * Mathf.Max(1f, width - w);
+                float y = (float)rng.NextDouble() * Mathf.Max(1f, height - h);
+
+                var band = new VisualElement();
+                band.style.position = Position.Absolute;
+                band.style.left = x;
+                band.style.top = y;
+                band.style.width = w;
+                band.style.height = h;
+                band.style.backgroundColor = new Color(
+                    0.11f + (float)rng.NextDouble() * 0.10f,
+                    0.16f + (float)rng.NextDouble() * 0.12f,
+                    0.24f + (float)rng.NextDouble() * 0.14f,
+                    0.10f);
+                band.style.borderTopWidth = 1;
+                band.style.borderBottomWidth = 1;
+                band.style.borderTopColor = new Color(0.28f, 0.42f, 0.62f, 0.15f);
+                band.style.borderBottomColor = new Color(0.03f, 0.06f, 0.10f, 0.35f);
+                parent.Add(band);
+
+                // Layer a shifted slice to break up hard rectangle edges.
+                var slice = new VisualElement();
+                slice.style.position = Position.Absolute;
+                slice.style.left = x + 14f;
+                slice.style.top = y - 8f;
+                slice.style.width = Mathf.Max(40f, w * 0.72f);
+                slice.style.height = Mathf.Max(18f, h * 0.58f);
+                slice.style.backgroundColor = new Color(0.15f, 0.20f, 0.31f, 0.10f);
+                parent.Add(slice);
+            }
+
+            // Sparse stardust points to avoid flat negative space.
+            int stars = 70;
+            for (int i = 0; i < stars; i++)
+            {
+                float size = 1f + (float)rng.NextDouble() * 1.5f;
+                float x = (float)rng.NextDouble() * Mathf.Max(1f, width - size - 2f);
+                float y = (float)rng.NextDouble() * Mathf.Max(1f, height - size - 2f);
+
+                var star = new VisualElement();
+                star.style.position = Position.Absolute;
+                star.style.left = x;
+                star.style.top = y;
+                star.style.width = size;
+                star.style.height = size;
+                star.style.borderTopLeftRadius = size * 0.5f;
+                star.style.borderTopRightRadius = size * 0.5f;
+                star.style.borderBottomLeftRadius = size * 0.5f;
+                star.style.borderBottomRightRadius = size * 0.5f;
+                star.style.backgroundColor = new Color(0.46f, 0.60f, 0.80f, 0.22f + (float)rng.NextDouble() * 0.25f);
+                parent.Add(star);
+            }
         }
 
         private static void AddSectorLane(VisualElement parent, Vector2 a, Vector2 b)
@@ -1270,6 +2714,396 @@ namespace Waystation.UI
             line.style.transformOrigin = new TransformOrigin(0, 0, 0);
             line.style.rotate = new Rotate(new Angle(angle, AngleUnit.Degree));
             parent.Add(line);
+        }
+
+        private void AddSectorSystemCluster(VisualElement parent, float width, float height, int seed,
+            SectorData sector, int systemCount, Label hoverLabel, string hoverLabelDefault)
+        {
+            // Generate actual system data for this sector so each dot maps to a real system.
+            bool isHome = _station?.solarSystem != null &&
+                          Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                          Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+            var systems = SolarSystemGenerator.GenerateSectorSystems(sector, isHome, _station?.solarSystem);
+
+            var rng = new System.Random(seed ^ 0x2f6e2b1);
+            int count = Mathf.Min(systemCount > 0 ? systemCount : rng.Next(12, 21), systems.Count);
+            if (count > systems.Count) count = systems.Count;
+
+            const float edgePad = 6f;
+            var placed = new List<(Vector2 center, float radius)>();
+            for (int i = 0; i < count; i++)
+            {
+                float size = 3.2f + (float)rng.NextDouble() * 2.4f;
+                float x = edgePad;
+                float y = edgePad;
+                float radius = size * 0.5f;
+
+                bool found = false;
+                float rangeW = Mathf.Max(1f, width - 2f * edgePad - size);
+                float rangeH = Mathf.Max(1f, height - 2f * edgePad - size);
+                for (int tries = 0; tries < 28; tries++)
+                {
+                    float tx = edgePad + (float)rng.NextDouble() * rangeW;
+                    float ty = edgePad + (float)rng.NextDouble() * rangeH;
+                    Vector2 c = new Vector2(tx + radius, ty + radius);
+
+                    bool overlaps = false;
+                    for (int p = 0; p < placed.Count; p++)
+                    {
+                        float minDist = radius + placed[p].radius + 2.4f;
+                        if ((c - placed[p].center).sqrMagnitude < minDist * minDist)
+                        {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+
+                    if (!overlaps)
+                    {
+                        x = tx;
+                        y = ty;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    x = edgePad + (float)rng.NextDouble() * rangeW;
+                    y = edgePad + (float)rng.NextDouble() * rangeH;
+                }
+                placed.Add((new Vector2(x + radius, y + radius), radius));
+
+                var ring = new VisualElement();
+                ring.style.position = Position.Absolute;
+                ring.style.left = x - 2f;
+                ring.style.top = y - 2f;
+                ring.style.width = size + 4f;
+                ring.style.height = size + 4f;
+                ring.style.borderTopLeftRadius = (size + 4f) * 0.5f;
+                ring.style.borderTopRightRadius = (size + 4f) * 0.5f;
+                ring.style.borderBottomLeftRadius = (size + 4f) * 0.5f;
+                ring.style.borderBottomRightRadius = (size + 4f) * 0.5f;
+                ring.style.borderTopWidth = 1;
+                ring.style.borderRightWidth = 1;
+                ring.style.borderBottomWidth = 1;
+                ring.style.borderLeftWidth = 1;
+                ring.style.borderTopColor = Color.white;
+                ring.style.borderRightColor = Color.white;
+                ring.style.borderBottomColor = Color.white;
+                ring.style.borderLeftColor = Color.white;
+                ring.style.display = DisplayStyle.None;
+                ring.pickingMode = PickingMode.Ignore;
+                parent.Add(ring);
+
+                // Tint the home system dot green so the player can identify it.
+                bool isDotHome = isHome && i == 0;
+                var dot = new VisualElement();
+                dot.style.position = Position.Absolute;
+                dot.style.left = x;
+                dot.style.top = y;
+                dot.style.width = size;
+                dot.style.height = size;
+                dot.style.borderTopLeftRadius = size * 0.5f;
+                dot.style.borderTopRightRadius = size * 0.5f;
+                dot.style.borderBottomLeftRadius = size * 0.5f;
+                dot.style.borderBottomRightRadius = size * 0.5f;
+                dot.style.backgroundColor = isDotHome
+                    ? new Color(0.25f, 1.00f, 0.50f, 1f)
+                    : sector.discoveryState == SectorDiscoveryState.Visited
+                        ? new Color(0.62f, 0.86f, 1.00f, 0.95f)
+                        : new Color(0.46f, 0.62f, 0.80f, 0.78f);
+
+                int capturedIndex = i;
+                var capturedNeighbor = systems[i];
+                bool capturedIsHome = isDotHome;
+                dot.RegisterCallback<PointerEnterEvent>(_ =>
+                {
+                    ring.style.display = DisplayStyle.Flex;
+                    dot.style.scale = new Scale(new Vector3(1.65f, 1.65f, 1f));
+                    if (hoverLabel != null)
+                    {
+                        float dLY = capturedNeighbor.positionLY.magnitude;
+                        string distText = dLY > 0.01f ? $"  ({dLY:F1} LY)" : "";
+                        hoverLabel.text = capturedNeighbor.systemName + distText;
+                    }
+                });
+                dot.RegisterCallback<PointerLeaveEvent>(_ =>
+                {
+                    ring.style.display = DisplayStyle.None;
+                    dot.style.scale = new Scale(new Vector3(1f, 1f, 1f));
+                    if (hoverLabel != null)
+                        hoverLabel.text = hoverLabelDefault;
+                });
+                dot.RegisterCallback<ClickEvent>(_ =>
+                {
+                    if (_routePlotterActive)
+                    {
+                        Vector2 dotViewportPos = this.WorldToLocal(dot.worldBound.center);
+                        AddRouteWaypoint(new RouteWaypoint
+                        {
+                            name = capturedNeighbor.systemName,
+                            positionLY = capturedNeighbor.positionLY,
+                            dotElement = dot,
+                            viewportPos = dotViewportPos,
+                            isSystem = true,
+                        });
+                        return;
+                    }
+                    if (capturedIsHome && _station?.solarSystem != null)
+                    {
+                        ViewSystem(_station.solarSystem, true);
+                    }
+                    else
+                    {
+                        var fullSys = SolarSystemGenerator.Generate("sys", capturedNeighbor.seed);
+                        ViewSystem(fullSys, false);
+                    }
+                });
+
+                parent.Add(dot);
+            }
+        }
+
+        private static Vector2 ToLocalPoint(VisualElement relativeTo, Vector2 panelPosition)
+        {
+            if (relativeTo == null) return panelPosition;
+            return new Vector2(panelPosition.x - relativeTo.worldBound.x, panelPosition.y - relativeTo.worldBound.y);
+        }
+
+        private static void StyleHoverTooltip(Label tip)
+        {
+            tip.style.position = Position.Absolute;
+            tip.style.paddingLeft = 8;
+            tip.style.paddingRight = 8;
+            tip.style.paddingTop = 4;
+            tip.style.paddingBottom = 4;
+            tip.style.fontSize = 10;
+            tip.style.backgroundColor = new Color(0.06f, 0.10f, 0.18f, 0.97f);
+            tip.style.color = new Color(0.88f, 0.93f, 1f, 1f);
+            tip.style.borderTopWidth = 1;
+            tip.style.borderRightWidth = 1;
+            tip.style.borderBottomWidth = 1;
+            tip.style.borderLeftWidth = 1;
+            tip.style.borderTopColor = new Color(0.32f, 0.50f, 0.72f, 0.95f);
+            tip.style.borderRightColor = new Color(0.32f, 0.50f, 0.72f, 0.95f);
+            tip.style.borderBottomColor = new Color(0.12f, 0.20f, 0.32f, 0.95f);
+            tip.style.borderLeftColor = new Color(0.12f, 0.20f, 0.32f, 0.95f);
+            tip.style.display = DisplayStyle.None;
+            tip.pickingMode = PickingMode.Ignore;
+        }
+
+        private void EnsureSystemHoverTooltip()
+        {
+            if (_orbitCanvas == null || _systemHoverTooltip != null) return;
+            _systemHoverTooltip = new Label();
+            StyleHoverTooltip(_systemHoverTooltip);
+            _orbitCanvas.Add(_systemHoverTooltip);
+        }
+
+        private void ShowSystemHoverTooltip(string text, Vector2 localPos)
+        {
+            if (_systemHoverTooltip == null) return;
+            _systemHoverTooltip.text = text;
+            PositionSystemHoverTooltip(localPos);
+            _systemHoverTooltip.style.display = DisplayStyle.Flex;
+            _systemHoverTooltip.BringToFront();
+        }
+
+        private void PositionSystemHoverTooltip(Vector2 localPos)
+        {
+            if (_systemHoverTooltip == null || _orbitCanvas == null) return;
+            float x = Mathf.Clamp(localPos.x, 4f, Mathf.Max(4f, _orbitCanvas.resolvedStyle.width - 220f));
+            float y = Mathf.Clamp(localPos.y, 4f, Mathf.Max(4f, _orbitCanvas.resolvedStyle.height - 34f));
+            _systemHoverTooltip.style.left = x;
+            _systemHoverTooltip.style.top = y;
+        }
+
+        private void HideSystemHoverTooltip()
+        {
+            if (_systemHoverTooltip == null) return;
+            _systemHoverTooltip.style.display = DisplayStyle.None;
+        }
+
+        private void EnsureSectorHoverTooltip()
+        {
+            if (_sectorChartViewport == null || _sectorHoverTooltip != null) return;
+            _sectorHoverTooltip = new Label();
+            StyleHoverTooltip(_sectorHoverTooltip);
+            _sectorChartViewport.Add(_sectorHoverTooltip);
+        }
+
+        private void ShowSectorHoverTooltip(string text, Vector2 localPos)
+        {
+            if (_sectorHoverTooltip == null) return;
+            _sectorHoverTooltip.text = text;
+            PositionSectorHoverTooltip(localPos);
+            _sectorHoverTooltip.style.display = DisplayStyle.Flex;
+            _sectorHoverTooltip.BringToFront();
+        }
+
+        private void PositionSectorHoverTooltip(Vector2 localPos)
+        {
+            if (_sectorHoverTooltip == null || _sectorChartViewport == null) return;
+            float x = Mathf.Clamp(localPos.x, 4f, Mathf.Max(4f, _sectorChartViewport.resolvedStyle.width - 220f));
+            float y = Mathf.Clamp(localPos.y, 4f, Mathf.Max(4f, _sectorChartViewport.resolvedStyle.height - 34f));
+            _sectorHoverTooltip.style.left = x;
+            _sectorHoverTooltip.style.top = y;
+        }
+
+        private void HideSectorHoverTooltip()
+        {
+            if (_sectorHoverTooltip == null) return;
+            _sectorHoverTooltip.style.display = DisplayStyle.None;
+        }
+
+        private static string GenerateSectorSystemName(SectorData sector, int index)
+        {
+            string code = sector.ShortCodeAndCoord();
+            return $"{code} System {index + 1:D2}";
+        }
+
+        private Color ResolveSectorBorderColor(SectorData sector)
+        {
+            Color neutral = sector.discoveryState == SectorDiscoveryState.Visited
+                ? new Color(0.25f, 0.80f, 0.45f, 0.95f)
+                : ColDivider;
+
+            if (sector == null || sector.factionIds == null || sector.factionIds.Count == 0)
+                return neutral;
+
+            // Full control tint requires >1 controlled systems unless the sector only has one.
+            int totalSystems = Mathf.Max(1, sector.systemCount);
+            int controlledEstimate = Mathf.Max(1, Mathf.RoundToInt((float)totalSystems / Mathf.Max(1, sector.factionIds.Count)));
+            bool qualifies = totalSystems == 1 || controlledEstimate > 1;
+            if (!qualifies)
+                return neutral;
+
+            string factionId = sector.factionIds[0];
+            if (string.IsNullOrWhiteSpace(factionId))
+                return neutral;
+
+            // Use player faction brand color when the id indicates player control.
+            if (_station != null && factionId.IndexOf("player", StringComparison.OrdinalIgnoreCase) >= 0
+                && ColorUtility.TryParseHtmlString(_station.playerFactionColor, out Color playerCol))
+                return new Color(playerCol.r, playerCol.g, playerCol.b, 0.95f);
+
+            int hash = StableHash(factionId);
+            float hue = (hash % 360) / 360f;
+            Color tint = Color.HSVToRGB(hue, 0.52f, 0.86f);
+            return new Color(tint.r, tint.g, tint.b, 0.95f);
+        }
+
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                for (int i = 0; i < s.Length; i++)
+                {
+                    hash ^= s[i];
+                    hash *= 16777619u;
+                }
+                return (int)(hash & int.MaxValue);
+            }
+        }
+
+        private void ShowPoiDetail(PointOfInterest poi)
+        {
+            if (poi == null)
+                return;
+
+            _detailSidebar.Clear();
+            _detailSidebar.style.display = DisplayStyle.Flex;
+
+            var headerRow = MakeDetailHeader(poi.displayName ?? poi.poiType);
+            _detailSidebar.Add(headerRow);
+
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            _detailSidebar.Add(scroll);
+
+            var body = new VisualElement();
+            body.AddToClassList(DetailBodyClass);
+            body.style.paddingTop = 12;
+            body.style.paddingBottom = 12;
+            body.style.paddingLeft = 12;
+            body.style.paddingRight = 12;
+            scroll.Add(body);
+
+            AddDetailRow(body, "Type", poi.poiType ?? "Unknown");
+            AddDetailRow(body, "State", poi.visited ? "Visited" : "Detected");
+            AddDetailRow(body, "Coordinates", $"{poi.posX:F1}, {poi.posY:F1}");
+
+            // Distance from star and from station.
+            float poiDist = Mathf.Sqrt(poi.posX * poi.posX + poi.posY * poi.posY);
+            if (poiDist > 0.01f)
+                AddDetailRow(body, "Dist. from Star", $"{poiDist:F2} AU");
+
+            if (_viewedSystemIsHome)
+            {
+                var sys = _viewedSystem ?? _station?.solarSystem;
+                if (sys != null && sys.stationOrbitIndex >= 0 && sys.stationOrbitIndex < sys.bodies.Count)
+                {
+                    float stR = sys.bodies[sys.stationOrbitIndex].orbitalRadius;
+                    float minD = Mathf.Abs(poiDist - stR);
+                    float maxD = poiDist + stR;
+                    AddDetailRow(body, "Dist. to Station", $"{minD:F2}–{maxD:F2} AU");
+                }
+            }
+
+            if (poi.resourceYield != null && poi.resourceYield.Count > 0)
+            {
+                body.Add(MakeDivider());
+                var hdr = new Label("RESOURCE YIELD");
+                hdr.style.color = ColTextMid;
+                hdr.style.fontSize = 10;
+                hdr.style.marginBottom = 4;
+                body.Add(hdr);
+
+                foreach (var kv in poi.resourceYield)
+                {
+                    var line = new Label($"• {kv.Key}: {kv.Value}");
+                    line.style.color = ColTextBright;
+                    line.style.fontSize = 11;
+                    body.Add(line);
+                }
+            }
+        }
+
+        private static Color ArchetypeTint(SectorArchetype archetype)
+        {
+            return archetype switch
+            {
+                SectorArchetype.Confluence       => new Color(0.165f, 0.290f, 0.416f, 0.18f), // #2a4a6a
+                SectorArchetype.MineralBelt      => new Color(0.290f, 0.227f, 0.102f, 0.18f), // #4a3a1a
+                SectorArchetype.SingularityReach  => new Color(0.102f, 0.039f, 0.165f, 0.18f), // #1a0a2a
+                SectorArchetype.RemnantsZone     => new Color(0.102f, 0.102f, 0.165f, 0.18f), // #1a1a2a
+                SectorArchetype.StormBelt        => new Color(0.102f, 0.165f, 0.102f, 0.18f), // #1a2a1a
+                SectorArchetype.NebulaField      => new Color(0.165f, 0.102f, 0.227f, 0.18f), // #2a1a3a
+                SectorArchetype.ContestedCore    => new Color(0.227f, 0.102f, 0.102f, 0.18f), // #3a1a1a
+                SectorArchetype.Cradle           => new Color(0.102f, 0.227f, 0.165f, 0.18f), // #1a3a2a
+                SectorArchetype.FrontierScatter  => new Color(0.165f, 0.165f, 0.102f, 0.18f), // #2a2a1a
+                _                                => new Color(0f, 0f, 0f, 0f),                // VoidFringe / default = no tint
+            };
+        }
+
+        private static string ArchetypeIcon(SectorArchetype archetype)
+        {
+            return archetype switch
+            {
+                SectorArchetype.Confluence       => "⊕",
+                SectorArchetype.MineralBelt      => "◈",
+                SectorArchetype.SingularityReach  => "◉",
+                SectorArchetype.RemnantsZone     => "☠",
+                SectorArchetype.StormBelt        => "⚡",
+                SectorArchetype.NebulaField      => "☁",
+                SectorArchetype.ContestedCore    => "⚔",
+                SectorArchetype.Cradle           => "☀",
+                SectorArchetype.FrontierScatter  => "◇",
+                SectorArchetype.VoidFringe       => "·",
+                _                                => "·",
+            };
         }
 
         private VisualElement BuildSectorBox(SectorData sector)
@@ -1386,9 +3220,62 @@ namespace Waystation.UI
             _detailSidebar.Clear();
             _detailSidebar.style.display = DisplayStyle.Flex;
 
+            string displayName = body.name ?? BodyTypeLabel(body.bodyType);
+
             // Header row with close button
-            var headerRow = MakeDetailHeader(body.name ?? BodyTypeLabel(body.bodyType));
+            var headerRow = MakeDetailHeader(displayName);
             _detailSidebar.Add(headerRow);
+
+            // Rename row — text field + confirm, only for the home system's bodies.
+            if (_viewedSystemIsHome)
+            {
+                var renameRow = new VisualElement();
+                renameRow.style.flexDirection = FlexDirection.Row;
+                renameRow.style.alignItems = Align.Center;
+                renameRow.style.paddingLeft = 10;
+                renameRow.style.paddingRight = 10;
+                renameRow.style.paddingTop = 6;
+                renameRow.style.paddingBottom = 6;
+                renameRow.style.borderBottomWidth = 1;
+                renameRow.style.borderBottomColor = ColDivider;
+
+                var renameField = new TextField();
+                renameField.value = displayName;
+                renameField.style.flexGrow = 1;
+                renameField.style.fontSize = 11;
+                renameRow.Add(renameField);
+
+                var renameBtn = new Button(() =>
+                {
+                    string newName = renameField.value?.Trim();
+                    if (!string.IsNullOrEmpty(newName) && newName != body.name)
+                    {
+                        body.name = newName;
+                        // Refresh the header label
+                        var titleEl = headerRow.Q<Label>(className: DetailTitleClass);
+                        if (titleEl != null) titleEl.text = newName;
+                    }
+                }) { text = "Rename" };
+                renameBtn.style.fontSize = 10;
+                renameBtn.style.marginLeft = 6;
+                renameBtn.style.paddingLeft = 8;
+                renameBtn.style.paddingRight = 8;
+                renameBtn.style.paddingTop = 3;
+                renameBtn.style.paddingBottom = 3;
+                renameBtn.style.color = ColAccentText;
+                renameBtn.style.backgroundColor = new Color(0.10f, 0.16f, 0.26f, 0.90f);
+                renameBtn.style.borderTopWidth = 1;
+                renameBtn.style.borderRightWidth = 1;
+                renameBtn.style.borderBottomWidth = 1;
+                renameBtn.style.borderLeftWidth = 1;
+                renameBtn.style.borderTopColor = ColDivider;
+                renameBtn.style.borderRightColor = ColDivider;
+                renameBtn.style.borderBottomColor = ColDivider;
+                renameBtn.style.borderLeftColor = ColDivider;
+                renameRow.Add(renameBtn);
+
+                _detailSidebar.Add(renameRow);
+            }
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
@@ -1409,11 +3296,30 @@ namespace Waystation.UI
             if (body.orbitalRadius > 0f)
             {
                 AddDetailRow(body2, "Orbital Radius",  $"{body.orbitalRadius:F2} AU");
-                AddDetailRow(body2, "Orbital Period",  $"{body.orbitalPeriod:F0} ticks");
+                float minutes = body.orbitalPeriod * MinutesPerTick;
+                float hours = minutes / 60f;
+                float days = hours / 24f;
+                AddDetailRow(body2, "Orbital Period", $"{body.orbitalPeriod:F0} ticks ({days:F1} d / {hours:F1} h)");
             }
 
             if (body.moons.Count > 0)
                 AddDetailRow(body2, "Moons", body.moons.Count.ToString());
+
+            // Distance from station body (if in home system and station exists).
+            if (_viewedSystemIsHome)
+            {
+                var sys = _viewedSystem ?? _station?.solarSystem;
+                if (sys != null && sys.stationOrbitIndex >= 0 && sys.stationOrbitIndex < sys.bodies.Count)
+                {
+                    var stBody = sys.bodies[sys.stationOrbitIndex];
+                    if (stBody != body && body.orbitalRadius > 0f && stBody.orbitalRadius > 0f)
+                    {
+                        float minDist = Mathf.Abs(body.orbitalRadius - stBody.orbitalRadius);
+                        float maxDist = body.orbitalRadius + stBody.orbitalRadius;
+                        AddDetailRow(body2, "Dist. to Station", $"{minDist:F2}–{maxDist:F2} AU");
+                    }
+                }
+            }
 
             if (hasStation)
             {
@@ -1515,63 +3421,7 @@ namespace Waystation.UI
                 }
             }
 
-            // Unlock button for adjacent Uncharted sectors
-            if (_map != null && _station != null)
-            {
-                bool telescopeMode = SystemMapController.TelescopeMode;
-                int ep = _station.explorationPoints;
-                bool canAfford = telescopeMode || ep >= MapSystem.SectorUnlockPointCost;
-
-                body.Add(MakeDivider());
-
-                var unlockHeader = new Label("EXPLORATION");
-                unlockHeader.style.color     = ColTextMid;
-                unlockHeader.style.fontSize  = 10;
-                unlockHeader.style.marginTop  = 8;
-                unlockHeader.style.marginBottom = 4;
-                body.Add(unlockHeader);
-
-                var unlockCostLabel = new Label(telescopeMode
-                    ? "Telescope Mode active: unlock sectors without EP cost."
-                    : $"Unlock adjacent sector: {MapSystem.SectorUnlockPointCost} EP");
-                unlockCostLabel.style.color   = ColTextMid;
-                unlockCostLabel.style.fontSize = 11;
-                unlockCostLabel.style.marginBottom = 6;
-                body.Add(unlockCostLabel);
-
-                var capturedSector = sector;
-                var unlockBtn = new Button(() =>
-                {
-                    if (_map == null || _station == null) return;
-                    // Attempt to unlock a sector adjacent to this one, trying all four
-                    // cardinal directions and capturing the newly generated sector.
-                    int col = Mathf.RoundToInt(
-                        (capturedSector.coordinates.x - GalaxyGenerator.HomeX) / MapSystem.GalUnitPerCell);
-                    int row = Mathf.RoundToInt(
-                        (capturedSector.coordinates.y - GalaxyGenerator.HomeY) / MapSystem.GalUnitPerCell);
-
-                    SectorData newSector = TryUnlockAdjacentAndGetSector(col, row);
-                    if (newSector != null)
-                    {
-                        // Notify subscribers (e.g. WaystationHUDController → FactionSystem)
-                        OnSectorUnlocked?.Invoke(newSector);
-                        // Refresh detects the increased sector count via dirty check and
-                        // rebuilds the grid; it also re-populates the detail sidebar for
-                        // the currently selected sector (_selectedSector) so the EP
-                        // balance and Unlock button state are up-to-date.
-                        Refresh(_station, _map);
-                    }
-                });
-                unlockBtn.text = telescopeMode
-                    ? "UNLOCK ADJACENT (TELESCOPE)"
-                    : $"UNLOCK ADJACENT ({MapSystem.SectorUnlockPointCost} EP)";
-                unlockBtn.AddToClassList(UnlockBtnClass);
-                StyleActionButton(unlockBtn);
-                unlockBtn.SetEnabled(canAfford);
-                if (!canAfford)
-                    unlockBtn.tooltip = $"Need {MapSystem.SectorUnlockPointCost} EP (have {ep})";
-                body.Add(unlockBtn);
-            }
+            // Adjacent expansion now lives exclusively on the sector grid '+' nodes.
         }
 
         /// <summary>
@@ -1598,6 +3448,506 @@ namespace Waystation.UI
                         return sec;
             }
             return null;
+        }
+
+        private SectorData TryUnlockSectorAtAndGetSector(int col, int row)
+        {
+            if (_map == null || _station == null) return null;
+            if (!_map.TryUnlockSector(_station, col, row)) return null;
+
+            float gx = GalaxyGenerator.HomeX + col * MapSystem.GalUnitPerCell;
+            float gy = GalaxyGenerator.HomeY + row * MapSystem.GalUnitPerCell;
+            foreach (var sec in _station.sectors.Values)
+                if (Mathf.Approximately(sec.coordinates.x, gx) &&
+                    Mathf.Approximately(sec.coordinates.y, gy))
+                    return sec;
+            return null;
+        }
+
+        // ── Route Plotter ─────────────────────────────────────────────────────
+
+        private void ToggleRoutePlotter()
+        {
+            _routePlotterActive = !_routePlotterActive;
+
+            if (_routePlotterActive)
+            {
+                _routeWaypoints.Clear();
+                if (_routePlotterBtn != null)
+                {
+                    _routePlotterBtn.style.backgroundColor = new Color(0.12f, 0.36f, 0.62f, 1f);
+                    _routePlotterBtn.style.color = new Color(0.85f, 0.95f, 1.00f, 1f);
+                }
+                BuildRouteOverlay();
+            }
+            else
+            {
+                if (_routePlotterBtn != null)
+                {
+                    StyleActionButton(_routePlotterBtn);
+                    _routePlotterBtn.style.marginRight = 8;
+                }
+                HideRouteOverlay();
+            }
+        }
+
+        private void BuildRouteOverlay()
+        {
+            HideRouteOverlay();
+
+            // Attach the overlay to whichever canvas is currently active.
+            VisualElement parent = _currentView == MapLayer.System ? _orbitCanvas : _sectorChartViewport;
+            if (parent == null) return;
+
+            // Route line overlay (Painter2D) for dashed lines between waypoints.
+            if (_currentView == MapLayer.Sector && _sectorChartViewport != null)
+            {
+                _routeLineOverlay = new VisualElement();
+                _routeLineOverlay.style.position = Position.Absolute;
+                _routeLineOverlay.style.left = 0;
+                _routeLineOverlay.style.top = 0;
+                _routeLineOverlay.style.right = 0;
+                _routeLineOverlay.style.bottom = 0;
+                _routeLineOverlay.pickingMode = PickingMode.Ignore;
+                _routeLineOverlay.generateVisualContent += ctx =>
+                {
+                    if (_routeWaypoints.Count < 2 || _sectorChartViewport == null) return;
+                    var painter = ctx.painter2D;
+                    painter.lineWidth = 1.2f;
+                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.50f);
+                    painter.lineCap = LineCap.Round;
+                    for (int ri = 1; ri < _routeWaypoints.Count; ri++)
+                    {
+                        var wa = _routeWaypoints[ri - 1];
+                        var wb = _routeWaypoints[ri];
+                        if (!wa.isSystem || !wb.isSystem) continue;
+                        var pa = wa.dotElement != null && wa.dotElement.panel != null
+                            ? (Vector2)_routeLineOverlay.WorldToLocal(wa.dotElement.worldBound.center)
+                            : wa.viewportPos;
+                        var pb = wb.dotElement != null && wb.dotElement.panel != null
+                            ? (Vector2)_routeLineOverlay.WorldToLocal(wb.dotElement.worldBound.center)
+                            : wb.viewportPos;
+                        DrawDashedLine(painter, pa.x, pa.y, pb.x, pb.y, 6f, 4f);
+                    }
+                };
+                _sectorChartViewport.Add(_routeLineOverlay);
+            }
+
+            _routeOverlay = new VisualElement();
+            _routeOverlay.style.position = Position.Absolute;
+            _routeOverlay.style.right = 10;
+            _routeOverlay.style.top = 10;
+            _routeOverlay.style.width = 240;
+            _routeOverlay.style.maxHeight = Length.Percent(70);
+            _routeOverlay.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.92f);
+            _routeOverlay.style.borderTopWidth = 1;
+            _routeOverlay.style.borderRightWidth = 1;
+            _routeOverlay.style.borderBottomWidth = 1;
+            _routeOverlay.style.borderLeftWidth = 1;
+            _routeOverlay.style.borderTopColor = ColDivider;
+            _routeOverlay.style.borderRightColor = ColDivider;
+            _routeOverlay.style.borderBottomColor = ColDivider;
+            _routeOverlay.style.borderLeftColor = ColDivider;
+            _routeOverlay.pickingMode = PickingMode.Position;
+            parent.Add(_routeOverlay);
+
+            // Header
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.paddingLeft = 8;
+            header.style.paddingRight = 8;
+            header.style.paddingTop = 6;
+            header.style.paddingBottom = 6;
+            header.style.borderBottomWidth = 1;
+            header.style.borderBottomColor = ColDivider;
+            header.style.backgroundColor = ColSectionHdr;
+
+            var title = new Label("ROUTE PLOTTER");
+            title.style.color = ColAccentText;
+            title.style.fontSize = Fs(11);
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 0.5f;
+            title.style.flexGrow = 1;
+            header.Add(title);
+
+            var clearBtn = new Button(() =>
+            {
+                _routeWaypoints.Clear();
+                UpdateRouteOverlay();
+                UpdateRouteEndpointRing();
+                _routeLineOverlay?.MarkDirtyRepaint();
+                _dashedOrbitOverlay?.MarkDirtyRepaint();
+            }) { text = "Clear" };
+            clearBtn.style.fontSize = Fs(9);
+            clearBtn.style.color = ColTextMid;
+            clearBtn.style.backgroundColor = StyleKeyword.Null;
+            clearBtn.style.borderTopWidth = 0;
+            clearBtn.style.borderRightWidth = 0;
+            clearBtn.style.borderBottomWidth = 0;
+            clearBtn.style.borderLeftWidth = 0;
+            clearBtn.style.paddingLeft = 6;
+            clearBtn.style.paddingRight = 6;
+            clearBtn.style.paddingTop = 2;
+            clearBtn.style.paddingBottom = 2;
+            header.Add(clearBtn);
+
+            var closeBtn = new Button(() => ToggleRoutePlotter()) { text = "✕" };
+            closeBtn.style.width = 20;
+            closeBtn.style.height = 20;
+            closeBtn.style.fontSize = Fs(10);
+            closeBtn.style.color = ColTextMid;
+            closeBtn.style.backgroundColor = StyleKeyword.Null;
+            closeBtn.style.borderTopWidth = 0;
+            closeBtn.style.borderRightWidth = 0;
+            closeBtn.style.borderBottomWidth = 0;
+            closeBtn.style.borderLeftWidth = 0;
+            closeBtn.style.paddingLeft = 0;
+            closeBtn.style.paddingRight = 0;
+            closeBtn.style.paddingTop = 0;
+            closeBtn.style.paddingBottom = 0;
+            closeBtn.style.marginLeft = 4;
+            header.Add(closeBtn);
+
+            _routeOverlay.Add(header);
+
+            // Instruction label (shown when empty)
+            var instruction = new Label(_currentView == MapLayer.System
+                ? "Click bodies to add waypoints."
+                : "Click system dots to add waypoints.");
+            instruction.name = "RouteInstruction";
+            instruction.style.color = ColTextMid;
+            instruction.style.fontSize = Fs(9);
+            instruction.style.paddingLeft = 8;
+            instruction.style.paddingTop = 8;
+            instruction.style.paddingBottom = 8;
+            _routeOverlay.Add(instruction);
+
+            // Scrollable waypoint list
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.name = "RouteList";
+            scroll.style.flexGrow = 1;
+            scroll.style.maxHeight = 300;
+            scroll.style.paddingLeft = 4;
+            scroll.style.paddingRight = 4;
+            scroll.style.display = DisplayStyle.None;
+            _routeOverlay.Add(scroll);
+
+            // Total distance footer
+            var footer = new VisualElement();
+            footer.name = "RouteFooter";
+            footer.style.flexDirection = FlexDirection.Row;
+            footer.style.alignItems = Align.Center;
+            footer.style.paddingLeft = 8;
+            footer.style.paddingRight = 8;
+            footer.style.paddingTop = 6;
+            footer.style.paddingBottom = 6;
+            footer.style.borderTopWidth = 1;
+            footer.style.borderTopColor = ColDivider;
+            footer.style.display = DisplayStyle.None;
+
+            var totalLabel = new Label("TOTAL");
+            totalLabel.style.color = ColTextMid;
+            totalLabel.style.fontSize = Fs(9);
+            totalLabel.style.flexGrow = 1;
+            totalLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            footer.Add(totalLabel);
+
+            var totalValue = new Label("0.00 AU");
+            totalValue.name = "RouteTotalValue";
+            totalValue.style.color = ColAccentText;
+            totalValue.style.fontSize = Fs(11);
+            totalValue.style.unityFontStyleAndWeight = FontStyle.Bold;
+            footer.Add(totalValue);
+
+            _routeOverlay.Add(footer);
+
+            // "Send Ship" button — greyed out unless a player ship is docked.
+            var sendShipBtn = new Button() { text = "Send Ship" };
+            sendShipBtn.name = "RouteSendShipBtn";
+            sendShipBtn.style.marginLeft = 8;
+            sendShipBtn.style.marginRight = 8;
+            sendShipBtn.style.marginTop = 0;
+            sendShipBtn.style.marginBottom = 8;
+            sendShipBtn.style.paddingTop = 6;
+            sendShipBtn.style.paddingBottom = 6;
+            sendShipBtn.style.paddingLeft = 0;
+            sendShipBtn.style.paddingRight = 0;
+            sendShipBtn.style.fontSize = Fs(11);
+            sendShipBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sendShipBtn.style.letterSpacing = 0.5f;
+            sendShipBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            sendShipBtn.style.borderTopWidth = 1;
+            sendShipBtn.style.borderRightWidth = 1;
+            sendShipBtn.style.borderBottomWidth = 1;
+            sendShipBtn.style.borderLeftWidth = 1;
+            sendShipBtn.style.borderTopColor = ColDivider;
+            sendShipBtn.style.borderRightColor = ColDivider;
+            sendShipBtn.style.borderBottomColor = ColDivider;
+            sendShipBtn.style.borderLeftColor = ColAccent;
+            sendShipBtn.style.borderLeftWidth = 2;
+            sendShipBtn.style.borderTopLeftRadius = 2;
+            sendShipBtn.style.borderTopRightRadius = 2;
+            sendShipBtn.style.borderBottomLeftRadius = 2;
+            sendShipBtn.style.borderBottomRightRadius = 2;
+            sendShipBtn.style.display = DisplayStyle.None;
+
+            bool hasDockedShip = _station != null &&
+                _station.ownedShips.Values.Any(s => s.status == "docked");
+            if (hasDockedShip)
+            {
+                sendShipBtn.style.backgroundColor = new Color(0.22f, 0.24f, 0.31f, 1f);
+                sendShipBtn.style.color = ColTextBright;
+                sendShipBtn.SetEnabled(true);
+            }
+            else
+            {
+                sendShipBtn.style.backgroundColor = new Color(0.15f, 0.16f, 0.22f, 1f);
+                sendShipBtn.style.color = new Color(0.34f, 0.37f, 0.45f, 0.6f);
+                sendShipBtn.SetEnabled(false);
+            }
+
+            sendShipBtn.clicked += HandleSendShipClicked;
+            _routeOverlay.Add(sendShipBtn);
+        }
+
+        /// <summary>Raised when the player clicks "Send Ship" in the route plotter panel.</summary>
+        public event Action OnSendShipRequested;
+
+        private void HandleSendShipClicked()
+        {
+            OnSendShipRequested?.Invoke();
+        }
+
+        private void HideRouteOverlay()
+        {
+            if (_routeOverlay != null)
+            {
+                _routeOverlay.RemoveFromHierarchy();
+                _routeOverlay = null;
+            }
+            if (_routeLineOverlay != null)
+            {
+                _routeLineOverlay.RemoveFromHierarchy();
+                _routeLineOverlay = null;
+            }
+            ClearRouteEndpointRing();
+        }
+
+        private void AddRouteWaypoint(RouteWaypoint wp)
+        {
+            _routeWaypoints.Add(wp);
+            UpdateRouteOverlay();
+            UpdateRouteEndpointRing();
+            _routeLineOverlay?.MarkDirtyRepaint();
+            _dashedOrbitOverlay?.MarkDirtyRepaint();
+        }
+
+        private void ClearRouteEndpointRing()
+        {
+            if (_routeEndpointRing != null)
+            {
+                _routeEndpointRing.RemoveFromHierarchy();
+                _routeEndpointRing = null;
+            }
+        }
+
+        private void UpdateRouteEndpointRing()
+        {
+            ClearRouteEndpointRing();
+            if (_routeWaypoints.Count == 0) return;
+
+            var last = _routeWaypoints[_routeWaypoints.Count - 1];
+
+            bool hasDockedShip = _station != null &&
+                _station.ownedShips.Values.Any(s => s.status == "docked");
+
+            Color ringColor = hasDockedShip
+                ? new Color(0.19f, 0.63f, 0.31f, 1f)   // green — reachable
+                : new Color(0.78f, 0.19f, 0.19f, 1f);  // red — unreachable
+
+            // Determine the target dot: sector view stores it directly;
+            // system view must look up the matching OrbitVisual dot.
+            VisualElement targetDot = last.dotElement;
+            if (targetDot == null && !last.isSystem)
+            {
+                // System view: find the OrbitVisual whose body orbital radius matches.
+                var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+                float bestDist = float.MaxValue;
+                OrbitVisual match = null;
+                foreach (var ov in _orbitVisuals)
+                {
+                    if (sys == null || ov.bodyIndex >= sys.bodies.Count) continue;
+                    float diff = Mathf.Abs(sys.bodies[ov.bodyIndex].orbitalRadius - last.orbitalRadius);
+                    if (diff < bestDist)
+                    {
+                        bestDist = diff;
+                        match = ov;
+                    }
+                }
+                if (match != null) targetDot = match.dot;
+            }
+
+            if (targetDot == null || targetDot.parent == null) return;
+
+            float pad = 3f;
+
+            _routeEndpointRing = new VisualElement();
+            _routeEndpointRing.pickingMode = PickingMode.Ignore;
+            _routeEndpointRing.style.position = Position.Absolute;
+            _routeEndpointRing.style.left = -pad;
+            _routeEndpointRing.style.top  = -pad;
+            _routeEndpointRing.style.right = -pad;
+            _routeEndpointRing.style.bottom = -pad;
+            _routeEndpointRing.style.borderTopLeftRadius     = Length.Percent(50);
+            _routeEndpointRing.style.borderTopRightRadius    = Length.Percent(50);
+            _routeEndpointRing.style.borderBottomLeftRadius  = Length.Percent(50);
+            _routeEndpointRing.style.borderBottomRightRadius = Length.Percent(50);
+            _routeEndpointRing.style.borderTopWidth    = 1;
+            _routeEndpointRing.style.borderRightWidth  = 1;
+            _routeEndpointRing.style.borderBottomWidth = 1;
+            _routeEndpointRing.style.borderLeftWidth   = 1;
+            _routeEndpointRing.style.borderTopColor    = ringColor;
+            _routeEndpointRing.style.borderRightColor  = ringColor;
+            _routeEndpointRing.style.borderBottomColor = ringColor;
+            _routeEndpointRing.style.borderLeftColor   = ringColor;
+
+            targetDot.Add(_routeEndpointRing);
+        }
+
+        private void UpdateRouteOverlay()
+        {
+            if (_routeOverlay == null) return;
+
+            var instruction = _routeOverlay.Q("RouteInstruction");
+            var scroll = _routeOverlay.Q("RouteList") as ScrollView;
+            var footer = _routeOverlay.Q("RouteFooter");
+            var totalValue = _routeOverlay.Q<Label>("RouteTotalValue");
+
+            if (scroll == null) return;
+
+            bool hasWaypoints = _routeWaypoints.Count > 0;
+            if (instruction != null) instruction.style.display = hasWaypoints ? DisplayStyle.None : DisplayStyle.Flex;
+            scroll.style.display = hasWaypoints ? DisplayStyle.Flex : DisplayStyle.None;
+            if (footer != null) footer.style.display = _routeWaypoints.Count >= 2 ? DisplayStyle.Flex : DisplayStyle.None;
+
+            var sendBtn = _routeOverlay.Q("RouteSendShipBtn");
+            if (sendBtn != null)
+            {
+                sendBtn.style.display = _routeWaypoints.Count >= 2 ? DisplayStyle.Flex : DisplayStyle.None;
+                bool hasDockedShip = _station != null &&
+                    _station.ownedShips.Values.Any(s => s.status == "docked");
+                if (hasDockedShip)
+                {
+                    sendBtn.style.backgroundColor = new Color(0.22f, 0.24f, 0.31f, 1f);
+                    sendBtn.style.color = ColTextBright;
+                    sendBtn.SetEnabled(true);
+                }
+                else
+                {
+                    sendBtn.style.backgroundColor = new Color(0.15f, 0.16f, 0.22f, 1f);
+                    sendBtn.style.color = new Color(0.34f, 0.37f, 0.45f, 0.6f);
+                    sendBtn.SetEnabled(false);
+                }
+            }
+
+            scroll.Clear();
+
+            float totalDist = 0f;
+            string unit = _routeWaypoints.Count > 0 && _routeWaypoints[0].isSystem ? "LY" : "AU";
+
+            for (int i = 0; i < _routeWaypoints.Count; i++)
+            {
+                var wp = _routeWaypoints[i];
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.paddingLeft = 4;
+                row.style.paddingRight = 4;
+                row.style.paddingTop = 4;
+                row.style.paddingBottom = 4;
+                row.style.marginBottom = 1;
+                row.style.backgroundColor = i % 2 == 0 ? ColBodyRow : new Color(0.08f, 0.12f, 0.19f, 0.90f);
+
+                // Waypoint number
+                var numLabel = new Label($"{i + 1}.");
+                numLabel.style.color = ColAccentText;
+                numLabel.style.fontSize = Fs(9);
+                numLabel.style.width = 18;
+                numLabel.style.minWidth = 18;
+                row.Add(numLabel);
+
+                // Waypoint name
+                var nameLabel = new Label(wp.name);
+                nameLabel.style.color = ColTextBright;
+                nameLabel.style.fontSize = Fs(10);
+                nameLabel.style.flexGrow = 1;
+                nameLabel.style.overflow = Overflow.Hidden;
+                row.Add(nameLabel);
+
+                // Leg distance (from previous)
+                if (i > 0)
+                {
+                    float legDist = CalculateLegDistance(_routeWaypoints[i - 1], wp);
+                    totalDist += legDist;
+                    var distLabel = new Label($"{legDist:F2} {unit}");
+                    distLabel.style.color = ColTextMid;
+                    distLabel.style.fontSize = Fs(9);
+                    row.Add(distLabel);
+                }
+
+                // Remove button
+                int capturedIndex = i;
+                var rmBtn = new Button(() =>
+                {
+                    if (capturedIndex < _routeWaypoints.Count)
+                    {
+                        _routeWaypoints.RemoveAt(capturedIndex);
+                        UpdateRouteOverlay();
+                        UpdateRouteEndpointRing();
+                        _routeLineOverlay?.MarkDirtyRepaint();
+                        _dashedOrbitOverlay?.MarkDirtyRepaint();
+                    }
+                }) { text = "✕" };
+                rmBtn.style.width = 16;
+                rmBtn.style.height = 16;
+                rmBtn.style.fontSize = Fs(8);
+                rmBtn.style.color = ColTextMid;
+                rmBtn.style.backgroundColor = StyleKeyword.Null;
+                rmBtn.style.borderTopWidth = 0;
+                rmBtn.style.borderRightWidth = 0;
+                rmBtn.style.borderBottomWidth = 0;
+                rmBtn.style.borderLeftWidth = 0;
+                rmBtn.style.paddingLeft = 0;
+                rmBtn.style.paddingRight = 0;
+                rmBtn.style.paddingTop = 0;
+                rmBtn.style.paddingBottom = 0;
+                rmBtn.style.marginLeft = 4;
+                row.Add(rmBtn);
+
+                scroll.Add(row);
+            }
+
+            if (totalValue != null)
+                totalValue.text = $"{totalDist:F2} {unit}";
+        }
+
+        private static float CalculateLegDistance(RouteWaypoint a, RouteWaypoint b)
+        {
+            if (a.isSystem && b.isSystem)
+            {
+                // Inter-system: straight-line distance in LY.
+                float dx = b.positionLY.x - a.positionLY.x;
+                float dy = b.positionLY.y - a.positionLY.y;
+                return Mathf.Sqrt(dx * dx + dy * dy);
+            }
+
+            // Intra-system: distance between two bodies based on orbital position.
+            float ax = a.orbitalRadius * Mathf.Cos(a.angle);
+            float ay = a.orbitalRadius * Mathf.Sin(a.angle);
+            float bx = b.orbitalRadius * Mathf.Cos(b.angle);
+            float by = b.orbitalRadius * Mathf.Sin(b.angle);
+            return Mathf.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
         }
 
         // ── Detail sidebar close ──────────────────────────────────────────────
