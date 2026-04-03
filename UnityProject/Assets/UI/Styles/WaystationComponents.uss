@@ -310,6 +310,12 @@
     display: flex;
 }
 
+.ws-modal-overlay--top-left {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 80px 0 0 16px;
+}
+
 .ws-modal-overlay__panel {
     background-color: var(--ws-bg-panel);
     border-color: var(--ws-border-lit);
@@ -358,6 +364,48 @@
 
 /* ══════════════════════════════════════════════════════════════════════════
    EXPERTISE SLOT PROMPT  (.ws-expertise-slot-prompt)                      */
+
+.ws-expertise-slot-prompt__npc-row {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--ws-space-md);
+    margin-bottom: var(--ws-space-md);
+}
+
+.ws-expertise-slot-prompt__npc-portrait {
+    width: 32px;
+    height: 32px;
+    border-radius: 16px;
+    background-color: var(--ws-bg-raised);
+    border-color: var(--ws-border-mid);
+    border-width: 1px;
+    color: var(--ws-text-head);
+    font-size: var(--ws-fs-cat-name);
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    flex-shrink: 0;
+}
+
+.ws-expertise-slot-prompt__npc-name {
+    font-size: var(--ws-fs-cat-name);
+    color: var(--ws-text-head);
+    -unity-font-style: bold;
+    letter-spacing: var(--ws-ls-cat-name);
+}
+
+.ws-expertise-slot-prompt__skill-info {
+    font-size: var(--ws-fs-body);
+    color: var(--ws-text-base);
+    margin-bottom: var(--ws-space-sm);
+}
+
+.ws-expertise-slot-prompt__queue-info {
+    font-size: var(--ws-fs-meta);
+    color: var(--ws-text-dim);
+    letter-spacing: var(--ws-ls-meta);
+    align-self: flex-end;
+    margin-bottom: var(--ws-space-sm);
+}
 
 .ws-expertise-slot-prompt__slot-list {
     flex-direction: column;
@@ -917,6 +965,85 @@
 
 .ws-side-panel__tab--active .ws-side-panel__tab-label {
     color: var(--ws-acc-bright);
+}
+
+/* ── Departure Warning Panel (UI-030) ──────────────────────────── */
+
+.ws-departure-warning {
+    position: absolute;
+    top: 80px;
+    left: 16px;
+    width: 320px;
+    padding: 12px 14px;
+    background-color: rgba(12, 16, 24, 0.92);
+    border-color: rgba(100, 140, 210, 0.25);
+    border-width: 1px;
+    border-radius: 6px;
+}
+
+.ws-departure-warning__header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.ws-departure-warning__npc-name {
+    font-size: 14px;
+    color: rgba(220, 230, 255, 1);
+    -unity-font-style: bold;
+}
+
+.ws-departure-warning__tension-label {
+    font-size: 11px;
+    -unity-font-style: bold;
+}
+
+.ws-departure-warning__countdown-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.ws-departure-warning__bar-track {
+    flex-grow: 1;
+    height: 8px;
+    background-color: rgba(40, 50, 70, 0.8);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-right: 8px;
+}
+
+.ws-departure-warning__bar-fill {
+    height: 100%;
+    width: 100%;
+    border-radius: 4px;
+    background-color: rgba(77, 184, 115, 1);
+    transition-property: width, background-color;
+    transition-duration: 0.3s;
+}
+
+.ws-departure-warning__countdown-text {
+    font-size: 11px;
+    color: rgba(170, 190, 220, 1);
+    min-width: 40px;
+    -unity-text-align: middle-right;
+}
+
+.ws-departure-warning__outcome {
+    font-size: 12px;
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+    -unity-text-align: middle-left;
+}
+
+.ws-departure-warning__btn-row {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.ws-departure-warning__btn-row .ws-btn {
+    margin-left: 6px;
 }
 
 

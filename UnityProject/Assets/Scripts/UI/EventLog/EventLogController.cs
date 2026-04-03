@@ -50,6 +50,7 @@ namespace Waystation.UI
         private LogCategory? _activeFilter;  // null = All
         private int          _currentTick;
         private int          _pointerCount;
+        private int          _previewIndex;  // index into buffer for cycling
 
         // ── Child elements ────────────────────────────────────────────────────
         private readonly VisualElement _header;
@@ -57,6 +58,8 @@ namespace Waystation.UI
         private readonly VisualElement _catIconEl;
         private readonly Label         _previewLabel;
         private readonly Label         _chevronLabel;
+        private readonly Label         _countLabel;
+        private readonly Label         _contextLabel;
         private readonly VisualElement _body;
         private readonly VisualElement _filterRow;
         private readonly ScrollView    _entryList;
@@ -68,6 +71,12 @@ namespace Waystation.UI
         private Action                 _openNetworkOverlay;
         private Action<string>         _openVisitorPanel;   // (visitorId)
         private Action<string>         _openFleetPanel;     // (shipUid)
+
+        // Fired when the collapsed notification header is clicked.
+        public event Action<LogEntry> OnNotificationClicked;
+
+        // Fired when a specific log entry row is clicked while expanded.
+        public event Action<LogEntry> OnEntryClicked;
 
         // ── Public properties ─────────────────────────────────────────────────
 
@@ -112,15 +121,57 @@ namespace Waystation.UI
             _header.style.flexDirection = FlexDirection.Row;
             _header.style.alignItems    = Align.Center;
             _header.style.height        = 32;
-            _header.style.paddingLeft   = 8;
-            _header.style.paddingRight  = 8;
+            _header.style.paddingLeft   = 6;
+            _header.style.paddingRight  = 6;
             _header.style.backgroundColor = new Color(0.14f, 0.16f, 0.22f, 1f);
             _header.style.borderTopWidth  = 1;
             _header.style.borderTopColor  = new Color(0.22f, 0.26f, 0.36f, 1f);
-            _header.RegisterCallback<ClickEvent>(_ => Toggle());
             Add(_header);
 
-            // Alert accent (left edge, visible on Alert entries)
+            // ── Left cluster: count + dismiss ─────────────────────────────────
+            _countLabel = new Label("0");
+            _countLabel.AddToClassList("ws-event-log__count");
+            _countLabel.style.fontSize      = 9;
+            _countLabel.style.color         = new Color(0.46f, 0.60f, 0.78f, 0.8f);
+            _countLabel.style.marginRight   = 4;
+            _countLabel.style.flexShrink    = 0;
+            _countLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _header.Add(_countLabel);
+
+            var dismissBtn = new Button();
+            dismissBtn.text = "\u2715"; // ✕
+            dismissBtn.AddToClassList("ws-event-log__nav-btn");
+            StyleNavButton(dismissBtn);
+            dismissBtn.tooltip = "Dismiss current event";
+            dismissBtn.RegisterCallback<ClickEvent>(evt => { evt.StopPropagation(); DismissCurrentEntry(); });
+            _header.Add(dismissBtn);
+
+            var prevBtn = new Button();
+            prevBtn.text = "\u25C0"; // ◀
+            prevBtn.AddToClassList("ws-event-log__nav-btn");
+            StyleNavButton(prevBtn);
+            prevBtn.tooltip = "Previous event";
+            prevBtn.RegisterCallback<ClickEvent>(evt => { evt.StopPropagation(); CyclePreview(-1); });
+            _header.Add(prevBtn);
+
+            var nextBtn = new Button();
+            nextBtn.text = "\u25B6"; // ▶
+            nextBtn.AddToClassList("ws-event-log__nav-btn");
+            StyleNavButton(nextBtn);
+            nextBtn.tooltip = "Next event";
+            nextBtn.RegisterCallback<ClickEvent>(evt => { evt.StopPropagation(); CyclePreview(1); });
+            _header.Add(nextBtn);
+
+            // ── Left separator ────────────────────────────────────────────────
+            var sepL = new VisualElement();
+            sepL.style.width           = 1;
+            sepL.style.alignSelf       = Align.Stretch;
+            sepL.style.marginLeft      = 4;
+            sepL.style.marginRight     = 6;
+            sepL.style.backgroundColor = new Color(0.26f, 0.30f, 0.40f, 0.6f);
+            _header.Add(sepL);
+
+            // Alert accent (visible on Alert entries)
             _alertAccent = new VisualElement();
             _alertAccent.AddToClassList("ws-event-log__alert-accent");
             _alertAccent.style.width     = 3;
@@ -141,22 +192,37 @@ namespace Waystation.UI
             _catIconEl.style.marginRight    = 6;
             _header.Add(_catIconEl);
 
-            // Preview text
-            _previewLabel = new Label("—");
+            // Preview text (fills center)
+            _previewLabel = new Label("\u2014");
             _previewLabel.AddToClassList("ws-event-log__preview-text");
-            _previewLabel.style.flexGrow = 1;
-            _previewLabel.style.fontSize = 8;
-            _previewLabel.style.color    = new Color(0.65f, 0.82f, 1f, 0.75f);
-            _previewLabel.style.overflow = Overflow.Hidden;
+            _previewLabel.style.flexGrow   = 1;
+            _previewLabel.style.flexShrink = 1;
+            _previewLabel.style.fontSize   = 8;
+            _previewLabel.style.color      = new Color(0.65f, 0.82f, 1f, 0.75f);
+            _previewLabel.style.overflow   = Overflow.Hidden;
+            _previewLabel.RegisterCallback<ClickEvent>(evt => { evt.StopPropagation(); OnPreviewClicked(); });
             _header.Add(_previewLabel);
 
-            // Chevron
-            _chevronLabel = new Label("▲");
+            // Context info (tile selection, right-aligned)
+            _contextLabel = new Label("");
+            _contextLabel.AddToClassList("ws-event-log__context");
+            _contextLabel.style.fontSize      = 9;
+            _contextLabel.style.color         = new Color(0.55f, 0.65f, 0.8f, 0.85f);
+            _contextLabel.style.flexShrink    = 0;
+            _contextLabel.style.marginLeft    = 6;
+            _contextLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _contextLabel.style.display       = DisplayStyle.None;
+            _header.Add(_contextLabel);
+
+            // Chevron (expand/collapse)
+            _chevronLabel = new Label("\u25B2");
             _chevronLabel.AddToClassList("ws-event-log__chevron");
-            _chevronLabel.style.fontSize    = 8;
-            _chevronLabel.style.color       = new Color(0.46f, 0.60f, 0.78f, 1f);
-            _chevronLabel.style.flexShrink  = 0;
-            _chevronLabel.style.marginLeft  = 6;
+            _chevronLabel.style.fontSize      = 8;
+            _chevronLabel.style.color         = new Color(0.46f, 0.60f, 0.78f, 1f);
+            _chevronLabel.style.flexShrink    = 0;
+            _chevronLabel.style.marginLeft    = 6;
+            _chevronLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _chevronLabel.RegisterCallback<ClickEvent>(evt => { evt.StopPropagation(); Toggle(); });
             _header.Add(_chevronLabel);
 
             // ── Body (collapsed by default: max-height 0, opacity 0) ──────────
@@ -336,17 +402,23 @@ namespace Waystation.UI
 
         private void RefreshCollapsedPreview()
         {
-            var buf   = EventLogBuffer.Instance;
-            var entry = buf.GetCollapsedEntry();
+            var buf     = EventLogBuffer.Instance;
+            var entries = buf.Entries;
+            int count   = entries.Count;
 
-            if (entry == null)
+            _countLabel.text = count.ToString();
+
+            if (count == 0)
             {
+                _previewIndex = 0;
                 _previewLabel.text = "No recent events.";
                 _alertAccent.style.display = DisplayStyle.None;
                 SetCatIcon(null);
                 return;
             }
 
+            _previewIndex = Mathf.Clamp(_previewIndex, 0, count - 1);
+            var entry = entries[_previewIndex];
             _previewLabel.text = entry.BodyText ?? string.Empty;
 
             // Alert accent
@@ -355,6 +427,89 @@ namespace Waystation.UI
             _header.EnableInClassList("ws-event-log__header--alert", isAlert);
 
             SetCatIcon(entry.Category);
+        }
+
+        private void OnPreviewClicked()
+        {
+            var entries = EventLogBuffer.Instance.Entries;
+            if (entries.Count > 0 && _previewIndex >= 0 && _previewIndex < entries.Count)
+            {
+                var entry = entries[_previewIndex];
+                if (OnNotificationClicked != null)
+                {
+                    OnNotificationClicked.Invoke(entry);
+                    return;
+                }
+                OnEntryClicked?.Invoke(entry);
+                return;
+            }
+            Toggle();
+        }
+
+        /// <summary>Cycle the collapsed preview through buffered entries.</summary>
+        private void CyclePreview(int delta)
+        {
+            var count = EventLogBuffer.Instance.Entries.Count;
+            if (count == 0) return;
+            _previewIndex = (_previewIndex + delta + count) % count;
+            RefreshCollapsedPreview();
+        }
+
+        /// <summary>Dismiss (remove) the currently previewed entry from the buffer.</summary>
+        private void DismissCurrentEntry()
+        {
+            var buf = EventLogBuffer.Instance;
+            if (buf.Entries.Count == 0) return;
+            int idx = Mathf.Clamp(_previewIndex, 0, buf.Entries.Count - 1);
+            buf.RemoveAt(idx);
+            if (_previewIndex >= buf.Entries.Count && _previewIndex > 0)
+                _previewIndex = buf.Entries.Count - 1;
+            // Buffer fires OnBufferChanged → RefreshCollapsedPreview
+        }
+
+        /// <summary>Set (or clear) the right-side context text in the header bar.</summary>
+        public void SetContextText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                _contextLabel.text = "";
+                _contextLabel.style.display = DisplayStyle.None;
+            }
+            else
+            {
+                _contextLabel.text = text;
+                _contextLabel.style.display = DisplayStyle.Flex;
+            }
+        }
+
+        private static void StyleNavButton(Button btn)
+        {
+            btn.style.fontSize        = 9;
+            btn.style.width           = 18;
+            btn.style.height          = 18;
+            btn.style.paddingLeft     = 0;
+            btn.style.paddingRight    = 0;
+            btn.style.paddingTop      = 0;
+            btn.style.paddingBottom   = 0;
+            btn.style.marginLeft      = 1;
+            btn.style.marginRight     = 1;
+            btn.style.backgroundColor = new Color(0.12f, 0.14f, 0.20f, 0.8f);
+            btn.style.color           = new Color(0.46f, 0.60f, 0.78f, 1f);
+            btn.style.unityTextAlign  = TextAnchor.MiddleCenter;
+            btn.style.alignItems      = Align.Center;
+            btn.style.justifyContent  = Justify.Center;
+            btn.style.borderTopWidth    = 1;
+            btn.style.borderBottomWidth = 1;
+            btn.style.borderLeftWidth   = 1;
+            btn.style.borderRightWidth  = 1;
+            btn.style.borderTopColor    = new Color(0.22f, 0.26f, 0.36f, 0.6f);
+            btn.style.borderBottomColor = new Color(0.22f, 0.26f, 0.36f, 0.6f);
+            btn.style.borderLeftColor   = new Color(0.22f, 0.26f, 0.36f, 0.6f);
+            btn.style.borderRightColor  = new Color(0.22f, 0.26f, 0.36f, 0.6f);
+            btn.style.borderTopLeftRadius     = 2;
+            btn.style.borderTopRightRadius    = 2;
+            btn.style.borderBottomLeftRadius  = 2;
+            btn.style.borderBottomRightRadius = 2;
         }
 
         private void SetCatIcon(LogCategory? cat)
@@ -420,6 +575,10 @@ namespace Waystation.UI
                 }
 
                 var view = new LogEntryView(entry, _currentTick, OnNavigate);
+                view.RegisterCallback<ClickEvent>(_ =>
+                {
+                    OnEntryClicked?.Invoke(entry);
+                });
                 _entryList.contentContainer.Add(view);
             }
         }

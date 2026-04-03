@@ -182,6 +182,13 @@ namespace Waystation.Core
         public event Action<string>          OnLogMessage;
         public event Action                  OnGameLoaded;
 
+        /// <summary>
+        /// Fired when an NPC announces intent to depart. Separated from OnNewEvent
+        /// so the UI can show a non-pausing departure warning instead of the
+        /// standard event decision modal.  Payload: (npc, interventionDeadlineTick).
+        /// </summary>
+        public event Action<NPCInstance, int> OnDepartureWarning;
+
         private float _tickTimer;
         private List<PendingEvent> _pendingEventsBuffer = new List<PendingEvent>();
 
@@ -344,7 +351,13 @@ namespace Waystation.Core
             // Wire departure events: surface player alert and log departure
             Tension.OnDepartureAnnounced += (npc, deadline) =>
             {
-                OnNewEvent?.Invoke(MakeDepartureAlertEvent(npc, deadline));
+                // Log to event buffer for the event log strip, but fire through
+                // OnDepartureWarning instead of OnNewEvent so the UI shows a
+                // non-pausing departure warning panel (UI-030).
+                var alert = MakeDepartureAlertEvent(npc, deadline);
+                var category = alert.definition.hostile ? LogCategory.Alert : LogCategory.World;
+                EventLogBuffer.Instance?.Add(category, alert.definition.description ?? alert.definition.id);
+                OnDepartureWarning?.Invoke(npc, deadline);
             };
             Tension.OnNpcDeparted += npc =>
             {

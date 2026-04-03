@@ -103,14 +103,14 @@ namespace Waystation.UI
             style.flexDirection   = FlexDirection.Column;
             style.flexGrow        = 0;
             style.flexShrink      = 0;
-            style.width           = 320;
+            style.width           = 400;
             style.position        = Position.Absolute;
-            style.right           = 0;
+            style.left            = 0;
             style.top             = 0;
-            style.bottom          = 0;
+            style.bottom          = 32;   // clear the event log strip (32px header)
             style.backgroundColor = new Color(0.12f, 0.12f, 0.16f, 0.97f);
-            style.borderLeftWidth = 1;
-            style.borderLeftColor = new Color(0.3f, 0.3f, 0.4f, 0.8f);
+            style.borderRightWidth = 1;
+            style.borderRightColor = new Color(0.3f, 0.3f, 0.4f, 0.8f);
 
             // ── Header ──────────────────────────────────────────────────────────
             var header = new VisualElement();
@@ -431,32 +431,57 @@ namespace Waystation.UI
 
         // ── Skills tab ─────────────────────────────────────────────────────────
 
+        // Stat display order for domain-skill section grouping.
+        private static readonly string[] StatGroupOrder = { "STR", "DEX", "INT", "WIS", "CHA", "END" };
+
+        /// <summary>Look up an ability score value by its three-letter abbreviation.</summary>
+        private static int GetAbilityScore(AbilityScores scores, string stat)
+        {
+            switch (stat)
+            {
+                case "STR": return scores.STR;
+                case "DEX": return scores.DEX;
+                case "INT": return scores.INT;
+                case "WIS": return scores.WIS;
+                case "CHA": return scores.CHA;
+                case "END": return scores.END;
+                default:    return 0;
+            }
+        }
+
         private void BuildSkillsTab()
         {
             var root = _tabContent.contentContainer;
-            root.style.paddingLeft   = 10;
-            root.style.paddingRight  = 10;
-            root.style.paddingTop    = 10;
+            root.style.paddingLeft   = 8;
+            root.style.paddingRight  = 8;
+            root.style.paddingTop    = 6;
             root.style.paddingBottom = 10;
 
+            // ── Character level + rank header ──────────────────────────────────
             int charLevel = SkillSystem.GetCharacterLevel(_npc);
             string rankName = RankLabel(_npc.rank);
 
             var charRow = new VisualElement();
-            charRow.style.flexDirection = FlexDirection.Row;
-            charRow.style.marginBottom  = 10;
+            charRow.style.flexShrink        = 0;
+            charRow.style.flexDirection     = FlexDirection.Row;
+            charRow.style.alignItems        = Align.Center;
+            charRow.style.marginBottom      = 6;
+            charRow.style.paddingBottom     = 4;
+            charRow.style.borderBottomWidth = 1;
+            charRow.style.borderBottomColor = new Color(0.3f, 0.3f, 0.4f, 0.6f);
 
-            var lvlLabel = new Label($"Character Level {charLevel}");
+            var lvlLabel = new Label($"Level {charLevel}");
             lvlLabel.style.flexGrow  = 1;
-            lvlLabel.style.fontSize  = 13;
+            lvlLabel.style.fontSize  = 12;
             lvlLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lvlLabel.style.color = new Color(0.9f, 0.92f, 1f);
             charRow.Add(lvlLabel);
 
             if (!string.IsNullOrEmpty(rankName))
             {
                 var rankLbl = new Label(rankName);
-                rankLbl.style.fontSize = 12;
-                rankLbl.style.color    = new Color(0.65f, 0.65f, 0.75f);
+                rankLbl.style.fontSize = 10;
+                rankLbl.style.color    = new Color(0.55f, 0.55f, 0.65f);
                 rankLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
                 charRow.Add(rankLbl);
             }
@@ -472,175 +497,404 @@ namespace Waystation.UI
                 return;
             }
 
-            bool addedSimpleHeader   = false;
-            bool addedAdvancedHeader = false;
+            // ── Group domain skills by primary stat ────────────────────────────
+            var domainGroups = new Dictionary<string, List<(SkillInstance inst, SkillDefinition def)>>();
 
             foreach (var inst in _npc.skillInstances)
             {
-                if (_registry == null || !_registry.Skills.TryGetValue(inst.skillId, out var def))
-                {
+                SkillDefinition def;
+                if (_registry == null || !_registry.Skills.TryGetValue(inst.skillId, out def))
                     def = new SkillDefinition { skillId = inst.skillId, displayName = inst.skillId };
-                }
 
-                bool isAdvanced = def.skillType == SkillType.Advanced || def.IsDomainSkill;
-
-                if (!isAdvanced && !addedSimpleHeader)
+                if (def.IsDomainSkill && !string.IsNullOrEmpty(def.primaryStat))
                 {
-                    AddSectionHeader(root, "SIMPLE SKILLS");
-                    addedSimpleHeader = true;
+                    if (!domainGroups.ContainsKey(def.primaryStat))
+                        domainGroups[def.primaryStat] = new List<(SkillInstance, SkillDefinition)>();
+                    domainGroups[def.primaryStat].Add((inst, def));
                 }
-                else if (isAdvanced && !addedAdvancedHeader)
-                {
-                    AddSectionHeader(root, "ADVANCED SKILLS");
-                    addedAdvancedHeader = true;
-                }
-
-                root.Add(BuildSkillRow(inst, def));
             }
+
+            // ── Render domain groups in stat order ─────────────────────────────
+            var scores = _npc.abilityScores ?? new AbilityScores();
+            foreach (string stat in StatGroupOrder)
+            {
+                if (!domainGroups.TryGetValue(stat, out var group)) continue;
+
+                int scoreVal = GetAbilityScore(scores, stat);
+                int mod      = AbilityScores.GetModifier(scoreVal);
+                string modStr = mod >= 0 ? $"+{mod}" : $"{mod}";
+
+                // ── Stat group header (TTRPG style) ────────────────────────────
+                var statHeader = new VisualElement();
+                statHeader.style.flexShrink        = 0;
+                statHeader.style.flexDirection     = FlexDirection.Row;
+                statHeader.style.alignItems        = Align.Center;
+                statHeader.style.marginTop         = 8;
+                statHeader.style.marginBottom      = 3;
+                statHeader.style.paddingBottom     = 2;
+                statHeader.style.borderBottomWidth = 1;
+                statHeader.style.borderBottomColor = new Color(0.35f, 0.4f, 0.55f, 0.5f);
+
+                var statNameLbl = new Label(stat);
+                statNameLbl.style.fontSize = 11;
+                statNameLbl.style.color    = new Color(0.6f, 0.72f, 0.9f);
+                statNameLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                statNameLbl.style.marginRight = 6;
+                statHeader.Add(statNameLbl);
+
+                var statScoreLbl = new Label($"{scoreVal}");
+                statScoreLbl.style.fontSize = 11;
+                statScoreLbl.style.color    = new Color(0.85f, 0.88f, 0.95f);
+                statScoreLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                statScoreLbl.style.marginRight = 3;
+                statHeader.Add(statScoreLbl);
+
+                var statModLbl = new Label($"({modStr})");
+                statModLbl.style.fontSize = 9;
+                statModLbl.style.color    = mod >= 0
+                    ? new Color(0.4f, 0.75f, 0.5f)
+                    : new Color(0.85f, 0.45f, 0.4f);
+                statHeader.Add(statModLbl);
+
+                // Spacer + skill count
+                var spacer = new VisualElement();
+                spacer.style.flexGrow = 1;
+                statHeader.Add(spacer);
+
+                var countLbl = new Label($"{group.Count} skill{(group.Count != 1 ? "s" : "")}");
+                countLbl.style.fontSize = 9;
+                countLbl.style.color    = new Color(0.45f, 0.45f, 0.55f);
+                statHeader.Add(countLbl);
+
+                root.Add(statHeader);
+
+                foreach (var (inst, def) in group)
+                    root.Add(BuildDomainSkillRow(inst, def));
+            }
+
+            // ── Perception section ─────────────────────────────────────────────
+            int perceptionValue = SkillSystem.GetPerceptionScore(_npc);
+
+            var perceptionHeader = new VisualElement();
+            perceptionHeader.style.flexShrink        = 0;
+            perceptionHeader.style.flexDirection     = FlexDirection.Row;
+            perceptionHeader.style.alignItems        = Align.Center;
+            perceptionHeader.style.marginTop         = 10;
+            perceptionHeader.style.marginBottom      = 3;
+            perceptionHeader.style.paddingBottom     = 2;
+            perceptionHeader.style.borderBottomWidth = 1;
+            perceptionHeader.style.borderBottomColor = new Color(0.35f, 0.4f, 0.55f, 0.5f);
+
+            var perceptionTitleLbl = new Label("PERCEPTION");
+            perceptionTitleLbl.style.fontSize = 11;
+            perceptionTitleLbl.style.color    = new Color(0.6f, 0.72f, 0.9f);
+            perceptionTitleLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            perceptionTitleLbl.style.flexGrow = 1;
+            perceptionHeader.Add(perceptionTitleLbl);
+
+            var perceptionScoreLbl = new Label($"{perceptionValue}");
+            perceptionScoreLbl.style.fontSize = 12;
+            perceptionScoreLbl.style.color    = new Color(0.85f, 0.88f, 0.95f);
+            perceptionScoreLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            perceptionHeader.Add(perceptionScoreLbl);
+
+            root.Add(perceptionHeader);
+
+            // Perception card
+            var perceptionCard = new VisualElement();
+            perceptionCard.style.flexShrink      = 0;
+            perceptionCard.style.backgroundColor = new Color(0.15f, 0.15f, 0.2f, 0.5f);
+            perceptionCard.style.borderTopLeftRadius     = 3;
+            perceptionCard.style.borderTopRightRadius    = 3;
+            perceptionCard.style.borderBottomLeftRadius  = 3;
+            perceptionCard.style.borderBottomRightRadius = 3;
+            perceptionCard.style.paddingLeft   = 8;
+            perceptionCard.style.paddingRight  = 8;
+            perceptionCard.style.paddingTop    = 5;
+            perceptionCard.style.paddingBottom = 5;
+
+            var perceptionFormulaLbl = new Label("WIS + (INT + CHA) / 4");
+            perceptionFormulaLbl.style.fontSize = 9;
+            perceptionFormulaLbl.style.color    = new Color(0.5f, 0.5f, 0.6f);
+            perceptionCard.Add(perceptionFormulaLbl);
+
+            var perceptionDescLbl = new Label(
+                "Passive. Fires on threat detection, contraband scanning, " +
+                "social manipulation, and environmental fault checks.");
+            perceptionDescLbl.style.fontSize   = 9;
+            perceptionDescLbl.style.color      = new Color(0.5f, 0.5f, 0.6f);
+            perceptionDescLbl.style.whiteSpace = WhiteSpace.Normal;
+            perceptionDescLbl.style.marginTop  = 2;
+            perceptionCard.Add(perceptionDescLbl);
+
+            root.Add(perceptionCard);
         }
 
-        private VisualElement BuildSkillRow(SkillInstance inst, SkillDefinition def)
+        /// <summary>Build a card-style row for a domain skill.</summary>
+        private VisualElement BuildDomainSkillRow(SkillInstance inst, SkillDefinition def)
         {
-            var row = new VisualElement();
-            row.AddToClassList(SkillRowClass);
-            row.style.marginBottom = 6;
+            // ── Card container ─────────────────────────────────────────────────
+            var card = new VisualElement();
+            card.AddToClassList(SkillRowClass);
+            card.style.flexShrink      = 0;
+            card.style.backgroundColor = new Color(0.15f, 0.15f, 0.2f, 0.5f);
+            card.style.borderTopLeftRadius     = 3;
+            card.style.borderTopRightRadius    = 3;
+            card.style.borderBottomLeftRadius  = 3;
+            card.style.borderBottomRightRadius = 3;
+            card.style.paddingLeft   = 8;
+            card.style.paddingRight  = 8;
+            card.style.paddingTop    = 5;
+            card.style.paddingBottom = 5;
+            card.style.marginBottom  = 2;
 
-            // Top line: name + level
-            var topLine = new VisualElement();
-            topLine.style.flexDirection = FlexDirection.Row;
-            topLine.style.alignItems    = Align.Center;
-            topLine.style.marginBottom  = 2;
+            bool isProficient = SkillSystem.IsSkillProficient(_npc, inst.skillId);
+
+            // ── Row 1: proficiency pip + skill name + level ────────────────────
+            var nameRow = new VisualElement();
+            nameRow.style.flexShrink    = 0;
+            nameRow.style.flexDirection = FlexDirection.Row;
+            nameRow.style.alignItems    = Align.Center;
+
+            // Proficiency pip
+            var profPip = new VisualElement();
+            profPip.style.width  = 8;
+            profPip.style.height = 8;
+            profPip.style.borderTopLeftRadius     = 4;
+            profPip.style.borderTopRightRadius    = 4;
+            profPip.style.borderBottomLeftRadius  = 4;
+            profPip.style.borderBottomRightRadius = 4;
+            profPip.style.marginRight = 6;
+            if (isProficient)
+            {
+                profPip.style.backgroundColor = new Color(0.30f, 0.72f, 0.45f);
+                profPip.tooltip = "Proficient";
+            }
+            else
+            {
+                profPip.style.backgroundColor = Color.clear;
+                profPip.style.borderTopWidth    = 1;
+                profPip.style.borderRightWidth  = 1;
+                profPip.style.borderBottomWidth = 1;
+                profPip.style.borderLeftWidth   = 1;
+                profPip.style.borderTopColor    = new Color(0.4f, 0.4f, 0.5f);
+                profPip.style.borderRightColor  = new Color(0.4f, 0.4f, 0.5f);
+                profPip.style.borderBottomColor = new Color(0.4f, 0.4f, 0.5f);
+                profPip.style.borderLeftColor   = new Color(0.4f, 0.4f, 0.5f);
+                profPip.tooltip = "Not proficient";
+            }
+            nameRow.Add(profPip);
 
             var nameLbl = new Label(def.displayName ?? def.skillId);
             nameLbl.style.flexGrow  = 1;
-            nameLbl.style.fontSize  = 12;
-            topLine.Add(nameLbl);
+            nameLbl.style.fontSize  = 11;
+            nameLbl.style.color     = new Color(0.88f, 0.9f, 0.96f);
+            nameLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            nameRow.Add(nameLbl);
 
             var levelLbl = new Label($"Lv {inst.Level}");
-            levelLbl.style.fontSize = 11;
+            levelLbl.style.fontSize = 10;
             levelLbl.style.color    = new Color(0.65f, 0.75f, 0.9f);
-            topLine.Add(levelLbl);
+            levelLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            nameRow.Add(levelLbl);
 
-            row.Add(topLine);
+            card.Add(nameRow);
 
-            // XP bar
+            // ── Row 2: formula + cap (muted detail line) ───────────────────────
+            string formulaText = BuildFormulaLabel(def);
+            bool showCap = !isProficient && def.proficiencyRequiredForMaxLevel;
+            if (!string.IsNullOrEmpty(formulaText) || showCap)
+            {
+                var detailRow = new VisualElement();
+                detailRow.style.flexShrink    = 0;
+                detailRow.style.flexDirection = FlexDirection.Row;
+                detailRow.style.alignItems    = Align.Center;
+                detailRow.style.marginTop     = 1;
+                detailRow.style.paddingLeft   = 14; // indented past pip
+
+                if (!string.IsNullOrEmpty(formulaText))
+                {
+                    var formulaLbl = new Label(formulaText);
+                    formulaLbl.style.fontSize  = 9;
+                    formulaLbl.style.color     = new Color(0.45f, 0.48f, 0.58f);
+                    formulaLbl.style.flexGrow  = 1;
+                    detailRow.Add(formulaLbl);
+                }
+
+                if (showCap)
+                {
+                    var capLbl = new Label("Cap: 6");
+                    capLbl.style.fontSize = 9;
+                    capLbl.style.color    = new Color(0.88f, 0.68f, 0.10f);
+                    capLbl.tooltip = "Not proficient \u2014 XP at 50% rate, max level 6";
+                    detailRow.Add(capLbl);
+                }
+
+                card.Add(detailRow);
+            }
+
+            // ── Row 3: XP progress bar ─────────────────────────────────────────
             float levelFloor = SkillSystem.GetXPForLevel(inst.Level);
             float levelCeil  = SkillSystem.GetXPForLevel(inst.Level + 1);
             float xpRange    = levelCeil - levelFloor;
             float xpProgress = xpRange > 0f ? (inst.currentXP - levelFloor) / xpRange : 0f;
 
-            row.Add(MakeBar(xpProgress, new Color(0.3f, 0.55f, 0.9f)));
+            var barContainer = new VisualElement();
+            barContainer.style.flexShrink = 0;
+            barContainer.style.marginTop  = 3;
+            barContainer.style.paddingLeft = 14;
+            barContainer.Add(MakeBar(xpProgress, new Color(0.3f, 0.55f, 0.9f)));
+            card.Add(barContainer);
 
-            // Formula label for advanced skills
-            bool isAdvanced = def.skillType == SkillType.Advanced || def.IsDomainSkill;
-            if (isAdvanced && !string.IsNullOrEmpty(def.governingAbility))
+            // ── Row 4+: domain expertise slots ─────────────────────────────────
+            if (def.domainExpertiseSlots != null && def.domainExpertiseSlots.Count > 0)
             {
-                var formulaLbl = new Label($"Formula: {def.governingAbility}");
-                formulaLbl.style.fontSize = 10;
-                formulaLbl.style.color    = new Color(0.5f, 0.5f, 0.6f);
-                formulaLbl.style.marginTop = 1;
-                row.Add(formulaLbl);
+                var slotsContainer = new VisualElement();
+                slotsContainer.style.flexShrink  = 0;
+                slotsContainer.style.marginTop  = 3;
+                slotsContainer.style.paddingLeft = 14;
+
+                foreach (var slotDef in def.domainExpertiseSlots)
+                    slotsContainer.Add(BuildDomainExpertiseSlotRow(inst, def, slotDef));
+
+                card.Add(slotsContainer);
             }
 
-            // Expertise slot pips
-            // Integer division is intentional: floors to the number of complete multiples
-            // of SlotEverySkillLevels (4) reached, so level 7 yields 1 slot, level 8 yields 2.
-            int slotsEarned  = inst.Level / SkillSystem.SlotEverySkillLevels;
-            int slotsChosen  = 0;
-            if (_npc.chosenExpertise != null && _registry?.Expertises != null)
+            return card;
+        }
+
+        /// <summary>
+        /// Build a single domain expertise slot row showing the unlock level,
+        /// option names, and the current claimed/unclaimed/locked state.
+        /// </summary>
+        private VisualElement BuildDomainExpertiseSlotRow(
+            SkillInstance inst,
+            SkillDefinition def,
+            DomainExpertiseSlotDefinition slotDef)
+        {
+            var slotRow = new VisualElement();
+            slotRow.style.flexShrink    = 0;
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.alignItems    = Align.Center;
+            slotRow.style.marginTop     = 2;
+
+            // Determine state
+            string claimedOptionName = null;
+            bool isClaimed = false;
+            foreach (var opt in slotDef.options)
             {
-                foreach (var expId in _npc.chosenExpertise)
+                if (_npc.chosenExpertise != null && _npc.chosenExpertise.Contains(opt.id))
                 {
-                    if (_registry.Expertises.TryGetValue(expId, out var expDef) &&
-                        expDef.requiredSkillId == inst.skillId)
-                        slotsChosen++;
-                }
-            }
-            bool hasPendingSlot = _npc.pendingExpertiseSkillIds != null &&
-                                  _npc.pendingExpertiseSkillIds.Contains(inst.skillId);
-
-            if (slotsEarned > 0 || hasPendingSlot)
-            {
-                var pipRow = new VisualElement();
-                pipRow.style.flexDirection = FlexDirection.Row;
-                pipRow.style.marginTop     = 3;
-
-                int totalPips = hasPendingSlot ? Mathf.Max(slotsEarned, slotsChosen + 1) : slotsEarned;
-                for (int i = 0; i < totalPips; i++)
-                {
-                    bool filled  = i < slotsChosen;
-                    bool pending = !filled && hasPendingSlot && i == slotsChosen;
-
-                    var pip = new VisualElement();
-                    pip.AddToClassList(ExpertisePipClass);
-
-                    pip.style.width            = 12;
-                    pip.style.height           = 12;
-                    pip.style.borderTopLeftRadius     = 6;
-                    pip.style.borderTopRightRadius    = 6;
-                    pip.style.borderBottomLeftRadius  = 6;
-                    pip.style.borderBottomRightRadius = 6;
-                    pip.style.marginRight      = 4;
-                    pip.style.borderTopWidth   = 1;
-                    pip.style.borderRightWidth = 1;
-                    pip.style.borderBottomWidth = 1;
-                    pip.style.borderLeftWidth  = 1;
-
-                    if (filled)
-                    {
-                        pip.AddToClassList(ExpertisePipFilledClass);
-                        pip.style.backgroundColor  = new Color(0.3f, 0.55f, 0.9f);
-                        pip.style.borderTopColor   = new Color(0.4f, 0.65f, 1f);
-                        pip.style.borderRightColor = new Color(0.4f, 0.65f, 1f);
-                        pip.style.borderBottomColor = new Color(0.4f, 0.65f, 1f);
-                        pip.style.borderLeftColor  = new Color(0.4f, 0.65f, 1f);
-                    }
-                    else if (pending)
-                    {
-                        pip.AddToClassList(ExpertisePipPendingClass);
-                        pip.style.backgroundColor  = new Color(0.9f, 0.65f, 0.1f, 0.4f);
-                        pip.style.borderTopColor   = new Color(0.9f, 0.7f, 0.2f);
-                        pip.style.borderRightColor = new Color(0.9f, 0.7f, 0.2f);
-                        pip.style.borderBottomColor = new Color(0.9f, 0.7f, 0.2f);
-                        pip.style.borderLeftColor  = new Color(0.9f, 0.7f, 0.2f);
-
-                        string capturedSkillId = inst.skillId;
-                        string capturedNpcUid  = _npc.uid;
-                        pip.RegisterCallback<ClickEvent>(_ =>
-                            OnExpertiseSlotClicked?.Invoke(capturedNpcUid, capturedSkillId));
-                    }
-                    else
-                    {
-                        pip.style.backgroundColor = Color.clear;
-                        pip.style.borderTopColor   = new Color(0.35f, 0.35f, 0.4f);
-                        pip.style.borderRightColor  = new Color(0.35f, 0.35f, 0.4f);
-                        pip.style.borderBottomColor = new Color(0.35f, 0.35f, 0.4f);
-                        pip.style.borderLeftColor   = new Color(0.35f, 0.35f, 0.4f);
-                    }
-
-                    pipRow.Add(pip);
-                }
-
-                row.Add(pipRow);
-
-                // Clicking the skill row with a pending pip fires the modal.
-                // Guard against double-invocation when clicking on a child element
-                // (e.g., the pending expertise pip) by only handling clicks whose
-                // direct target is the row itself.
-                if (hasPendingSlot)
-                {
-                    string capturedSkillId = inst.skillId;
-                    string capturedNpcUid  = _npc.uid;
-                    row.RegisterCallback<ClickEvent>(evt =>
-                    {
-                        if (evt.target != row)
-                            return;
-                        OnExpertiseSlotClicked?.Invoke(capturedNpcUid, capturedSkillId);
-                    });
+                    claimedOptionName = opt.name;
+                    isClaimed = true;
+                    break;
                 }
             }
 
-            return row;
+            bool levelReached = inst.Level >= slotDef.unlockLevel;
+            bool isUnclaimedReachable = !isClaimed && levelReached;
+
+            // Pip indicator
+            var pip = new VisualElement();
+            pip.AddToClassList(ExpertisePipClass);
+            pip.style.width  = 8;
+            pip.style.height = 8;
+            pip.style.borderTopLeftRadius     = 4;
+            pip.style.borderTopRightRadius    = 4;
+            pip.style.borderBottomLeftRadius  = 4;
+            pip.style.borderBottomRightRadius = 4;
+            pip.style.marginRight      = 5;
+            pip.style.borderTopWidth   = 1;
+            pip.style.borderRightWidth = 1;
+            pip.style.borderBottomWidth = 1;
+            pip.style.borderLeftWidth  = 1;
+
+            if (isClaimed)
+            {
+                pip.AddToClassList(ExpertisePipFilledClass);
+                pip.style.backgroundColor  = new Color(0.3f, 0.55f, 0.9f);
+                pip.style.borderTopColor   = new Color(0.4f, 0.65f, 1f);
+                pip.style.borderRightColor = new Color(0.4f, 0.65f, 1f);
+                pip.style.borderBottomColor = new Color(0.4f, 0.65f, 1f);
+                pip.style.borderLeftColor  = new Color(0.4f, 0.65f, 1f);
+            }
+            else if (isUnclaimedReachable)
+            {
+                pip.AddToClassList(ExpertisePipPendingClass);
+                pip.style.backgroundColor  = new Color(0.9f, 0.65f, 0.1f, 0.4f);
+                pip.style.borderTopColor   = new Color(0.9f, 0.7f, 0.2f);
+                pip.style.borderRightColor = new Color(0.9f, 0.7f, 0.2f);
+                pip.style.borderBottomColor = new Color(0.9f, 0.7f, 0.2f);
+                pip.style.borderLeftColor  = new Color(0.9f, 0.7f, 0.2f);
+
+                string capturedSkillId = inst.skillId;
+                string capturedNpcUid  = _npc.uid;
+                pip.RegisterCallback<ClickEvent>(_ =>
+                    OnExpertiseSlotClicked?.Invoke(capturedNpcUid, capturedSkillId));
+            }
+            else
+            {
+                pip.style.backgroundColor = Color.clear;
+                pip.style.borderTopColor   = new Color(0.3f, 0.3f, 0.38f);
+                pip.style.borderRightColor  = new Color(0.3f, 0.3f, 0.38f);
+                pip.style.borderBottomColor = new Color(0.3f, 0.3f, 0.38f);
+                pip.style.borderLeftColor   = new Color(0.3f, 0.3f, 0.38f);
+            }
+
+            slotRow.Add(pip);
+
+            // Slot label
+            string slotText;
+            Color slotTextColor;
+            if (isClaimed)
+            {
+                slotText = claimedOptionName;
+                slotTextColor = new Color(0.84f, 0.90f, 1f);
+            }
+            else if (isUnclaimedReachable)
+            {
+                slotText = $"Lv {slotDef.unlockLevel} \u2014 Choose specialisation";
+                slotTextColor = new Color(0.9f, 0.7f, 0.2f);
+            }
+            else
+            {
+                slotText = $"Lv {slotDef.unlockLevel} \u2014 Locked";
+                slotTextColor = new Color(0.4f, 0.4f, 0.48f);
+            }
+
+            var slotLabel = new Label(slotText);
+            slotLabel.style.fontSize = 10;
+            slotLabel.style.color    = slotTextColor;
+            slotLabel.style.flexGrow = 1;
+            slotRow.Add(slotLabel);
+
+            if (isUnclaimedReachable)
+            {
+                string capturedSkillId2 = inst.skillId;
+                string capturedNpcUid2  = _npc.uid;
+                slotRow.RegisterCallback<ClickEvent>(evt =>
+                {
+                    if (evt.target == pip) return;
+                    OnExpertiseSlotClicked?.Invoke(capturedNpcUid2, capturedSkillId2);
+                });
+            }
+
+            return slotRow;
+        }
+
+        /// <summary>
+        /// Builds a formula label string from a domain skill definition.
+        /// PrimaryDominant: "WIS + INT/2"; EqualWeight: "(WIS + INT) / 2".
+        /// </summary>
+        private static string BuildFormulaLabel(SkillDefinition def)
+        {
+            if (!def.IsDomainSkill) return null;
+            string p = def.primaryStat;
+            string s = def.secondaryStat;
+            if (string.IsNullOrEmpty(p) || string.IsNullOrEmpty(s)) return p ?? s ?? "";
+            return def.weight == SkillWeight.EqualWeight
+                ? $"({p} + {s}) / 2"
+                : $"{p} + {s}/2";
         }
 
         // ── Relationships tab ──────────────────────────────────────────────────
@@ -971,8 +1225,9 @@ namespace Waystation.UI
             lbl.style.fontSize   = 10;
             lbl.style.color      = new Color(0.5f, 0.6f, 0.75f);
             lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            lbl.style.marginTop    = 8;
-            lbl.style.marginBottom = 4;
+            lbl.style.marginTop    = 12;
+            lbl.style.marginBottom = 6;
+            lbl.style.paddingBottom = 4;
             lbl.style.borderBottomWidth = 1;
             lbl.style.borderBottomColor = new Color(0.3f, 0.3f, 0.4f, 0.4f);
             parent.Add(lbl);
@@ -982,12 +1237,12 @@ namespace Waystation.UI
         {
             var bg = new VisualElement();
             bg.AddToClassList(BarBgClass);
-            bg.style.height           = 6;
+            bg.style.height           = 4;
             bg.style.backgroundColor  = new Color(0.25f, 0.25f, 0.3f, 0.8f);
-            bg.style.borderTopLeftRadius     = 3;
-            bg.style.borderTopRightRadius    = 3;
-            bg.style.borderBottomLeftRadius  = 3;
-            bg.style.borderBottomRightRadius = 3;
+            bg.style.borderTopLeftRadius     = 2;
+            bg.style.borderTopRightRadius    = 2;
+            bg.style.borderBottomLeftRadius  = 2;
+            bg.style.borderBottomRightRadius = 2;
             bg.style.overflow = Overflow.Hidden;
             if (flexible)
                 bg.style.flexGrow = 1;
@@ -999,10 +1254,10 @@ namespace Waystation.UI
             fillEl.style.height          = Length.Percent(100);
             fillEl.style.width           = Length.Percent(Mathf.Clamp01(fill) * 100f);
             fillEl.style.backgroundColor = color;
-            fillEl.style.borderTopLeftRadius     = 3;
-            fillEl.style.borderTopRightRadius    = 3;
-            fillEl.style.borderBottomLeftRadius  = 3;
-            fillEl.style.borderBottomRightRadius = 3;
+            fillEl.style.borderTopLeftRadius     = 2;
+            fillEl.style.borderTopRightRadius    = 2;
+            fillEl.style.borderBottomLeftRadius  = 2;
+            fillEl.style.borderBottomRightRadius = 2;
 
             bg.Add(fillEl);
             return bg;

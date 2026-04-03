@@ -170,9 +170,16 @@ namespace Waystation.View
         private int _lastClickCol = -1, _lastClickRow = -1;
         private int _tileLayerIndex = 0;
 
-        // Context panel (bottom-left drawer) — the foundation or NPC dot the player last clicked.
+        // Context panel (bottom-right drawer) — the foundation or NPC dot the player last clicked.
         private FoundationInstance _ctxFoundation = null;
         private GUIStyle _ctxPanelStyle, _ctxHeaderStyle, _ctxValueStyle, _ctxCtaStyle;
+
+        /// <summary>
+        /// Static context string for the currently selected tile/foundation.
+        /// Read by WaystationHUDController to display in the event strip.
+        /// </summary>
+        public static string TileContextText { get; private set; } = "";
+
         // Door access editor sub-state
         private bool   _doorAccessEditing       = false;
         private string _doorAccessInput_Species = "";
@@ -1948,21 +1955,29 @@ namespace Waystation.View
             bool hasFoundCtx = _ctxFoundation != null && _gm?.Station != null &&
                                _gm.Station.foundations.ContainsKey(_ctxFoundation.uid);
 
-            // NPC selection is shown in the GameHUD bottom-left overlay; only show this
-            // panel for foundation/tile context.
-            if (!hasFoundCtx) { _doorAccessEditing = false; return; }
+            if (!hasFoundCtx) { _doorAccessEditing = false; TileContextText = ""; return; }
 
-            bool isDoor = hasFoundCtx && _ctxFoundation.buildableId.Contains("door") &&
-                          _ctxFoundation.status == "complete";
+            var f     = _ctxFoundation;
+            string bName = f.buildableId.Contains('.') ? f.buildableId.Split('.')[^1] : f.buildableId;
+
+            bool isDoor = f.buildableId.Contains("door") && f.status == "complete";
             if (!isDoor) _doorAccessEditing = false;
 
-            // Fetch network inspection data once so it can inform height + drawing.
-            NetworkInspectionData netInspect = null;
-            if (hasFoundCtx && _ctxFoundation.networkId != null && _gm?.UtilityNetworks != null)
-                netInspect = _gm.UtilityNetworks.GetInspectionData(_gm.Station, _ctxFoundation.uid);
+            bool hasNetwork = f.networkId != null && _gm.Station.networks.ContainsKey(f.networkId);
+            bool needsFullPanel = isDoor || hasNetwork || IsIsolator(f);
 
-            // Compute dynamic panel height so it expands upward for door controls or extra NPC lines.
-            float PH = 150f;
+            // Always push summary to the event strip context label
+            TileContextText = $"\u25a3 {bName} [{f.status}]  HP: {f.health}/{f.maxHealth}";
+
+            // Simple tiles: just the event strip text, no IMGUI panel
+            if (!needsFullPanel) return;
+
+            // ── Full IMGUI panel for doors / networks / isolators ──────────────
+            NetworkInspectionData netInspect = null;
+            if (f.networkId != null && _gm?.UtilityNetworks != null)
+                netInspect = _gm.UtilityNetworks.GetInspectionData(_gm.Station, f.uid);
+
+            float PH = 80f; // compact base for name + HP + network lines
             if (isDoor)
             {
                 PH += 8f  +  // separator space
@@ -1995,16 +2010,13 @@ namespace Waystation.View
             }
 
             const float PW = 290f;
-            float px = 10f, py = Screen.height - PH - 10f;
+            float px = Screen.width - PW - 10f, py = Screen.height - PH - 42f; // 42 = 32 strip + 10 margin
             var panelRect = new Rect(px, py, PW, PH);
             GUI.Box(panelRect, GUIContent.none, _ctxPanelStyle);
             GUI.BeginGroup(panelRect);
 
             float y = 6f;
-            if (hasFoundCtx)
             {
-                var f     = _ctxFoundation;
-                string bName = f.buildableId.Contains('.') ? f.buildableId.Split('.')[^1] : f.buildableId;
                 GUI.Label(new Rect(8, y, PW - 16, 18), $"\u25a3  {bName}  [{f.status}]", _ctxHeaderStyle);
                 y += 20;
                 GUI.Label(new Rect(8, y, PW - 16, 16), $"HP: {f.health}/{f.maxHealth}  |  Layer: {f.tileLayer}", _ctxValueStyle);

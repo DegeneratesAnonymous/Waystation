@@ -173,6 +173,42 @@ namespace Waystation.UI
 
         // Event log strip (WO-UI-003)
         private EventLogController _eventLog;
+        private bool _wasPausedLastFrame;
+        private DrawerPanel _eventInfoDrawer;
+        private Label _eventInfoTitleLabel;
+        private Label _eventInfoMetaLabel;
+        private Label _eventInfoBodyLabel;
+        private Label _eventInfoNavLabel;
+
+        // Event / decision modal (UI-027)
+        private ModalOverlay _eventDecisionModal;
+        private bool _eventModalPauseCaptured;
+        private bool _eventModalPriorPaused;
+        private float _eventModalPriorTicksPerSecond = 1f;
+
+        // Expertise slot unlock prompt queue (UI-028)
+        private struct ExpertisePromptEntry
+        {
+            public NPCInstance npc;
+            public string skillId;
+            public int skillLevel;
+        }
+        private readonly Queue<ExpertisePromptEntry> _expertisePromptQueue = new Queue<ExpertisePromptEntry>();
+        private ExpertiseSlotPrompt _activeExpertisePrompt;
+        private bool _expertisePauseCaptured;
+        private bool _expertisePriorPaused;
+        private float _expertisePriorTicksPerSecond = 1f;
+
+        // Departure warning panel queue (UI-030)
+        private struct DepartureWarningEntry
+        {
+            public NPCInstance npc;
+            public int deadlineTick;
+            public int announcedAtTick;
+        }
+        private readonly Queue<DepartureWarningEntry> _departureWarningQueue = new Queue<DepartureWarningEntry>();
+        private DepartureWarningPanel _activeDepartureWarning;
+        private int _departureOutcomeDismissCountdown = -1;
 
         // Shared UIDocument created on demand for all UI Toolkit panels.
         private UIDocument _uiDocument;
@@ -330,7 +366,23 @@ namespace Waystation.UI
                 _gm.OnTick       -= OnTick;
                 _gm.OnNewEvent   -= OnNewEvent;
                 _gm.OnGameLoaded -= OnGameLoaded;
+                _gm.OnDepartureWarning -= OnDepartureWarning;
+                if (_gm.Skills != null)
+                    _gm.Skills.OnSlotEarned -= OnExpertiseSlotEarned;
             }
+
+            if (_eventLog != null)
+            {
+                _eventLog.OnNotificationClicked -= OnEventNotificationClicked;
+                _eventLog.OnEntryClicked -= OnEventNotificationClicked;
+                _eventLog.UnregisterCallback<ClickEvent>(OnEventLogStripFallbackClick);
+            }
+
+            RemoveEventDecisionModal(restoreSpeed: false);
+            RemoveActiveExpertisePrompt(restoreSpeed: false);
+            _expertisePromptQueue.Clear();
+            RemoveActiveDepartureWarning();
+            _departureWarningQueue.Clear();
         }
 
         private IEnumerator WaitForGame()
@@ -346,6 +398,9 @@ namespace Waystation.UI
             _gm.OnTick       += OnTick;
             _gm.OnNewEvent   += OnNewEvent;
             _gm.OnGameLoaded += OnGameLoaded;
+            if (_gm.Skills != null)
+                _gm.Skills.OnSlotEarned += OnExpertiseSlotEarned;
+            _gm.OnDepartureWarning += OnDepartureWarning;
 
             // Initial refresh once the game state is available.
             OnGameLoaded();
@@ -1005,10 +1060,141 @@ namespace Waystation.UI
         private void BuildEventLog()
         {
             _eventLog = new EventLogController();
-            // Inset from the right by the side-panel tab strip width (56 px) so
-            // the log bar doesn't overlap the tab icon column.
-            _eventLog.style.right = 52; // matches tab strip width
+            _eventLog.OnNotificationClicked += OnEventNotificationClicked;
+            _eventLog.OnEntryClicked += OnEventNotificationClicked;
+            // Fallback path: when collapsed, any click on the strip opens details.
+            _eventLog.RegisterCallback<ClickEvent>(OnEventLogStripFallbackClick);
             _contentArea.Add(_eventLog);
+
+            EnsureEventInfoDrawer();
+        }
+
+        private void EnsureEventInfoDrawer()
+        {
+            if (_eventInfoDrawer != null) return;
+
+            _eventInfoDrawer = new DrawerPanel(DrawerPanel.Direction.Horizontal);
+            _eventInfoDrawer.style.position = Position.Absolute;
+            _eventInfoDrawer.style.left = 0;
+            _eventInfoDrawer.style.top = 32;      // keep top bar visible
+            _eventInfoDrawer.style.bottom = 32;   // keep bottom event strip visible
+            _eventInfoDrawer.style.width = 320;
+            _eventInfoDrawer.style.maxWidth = 0;
+            _eventInfoDrawer.style.display = DisplayStyle.Flex;
+            _eventInfoDrawer.style.backgroundColor = new Color(0.06f, 0.09f, 0.14f, 0.98f);
+            _eventInfoDrawer.style.borderRightWidth = 1;
+            _eventInfoDrawer.style.borderRightColor = new Color(0.15f, 0.22f, 0.32f, 1f);
+            _eventInfoDrawer.style.flexDirection = FlexDirection.Column;
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.paddingLeft = 10;
+            header.style.paddingRight = 6;
+            header.style.paddingTop = 8;
+            header.style.paddingBottom = 8;
+            header.style.borderBottomWidth = 1;
+            header.style.borderBottomColor = new Color(0.15f, 0.22f, 0.32f, 1f);
+            header.style.backgroundColor = new Color(0.10f, 0.14f, 0.20f, 1f);
+
+            _eventInfoTitleLabel = new Label("EVENT DETAILS");
+            _eventInfoTitleLabel.style.flexGrow = 1;
+            _eventInfoTitleLabel.style.color = new Color(0.70f, 0.84f, 1f, 1f);
+            _eventInfoTitleLabel.style.fontSize = 12;
+            _eventInfoTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.Add(_eventInfoTitleLabel);
+
+            var closeBtn = new Button(() => _eventInfoDrawer.Close()) { text = "✕" };
+            closeBtn.style.width = 20;
+            closeBtn.style.height = 20;
+            closeBtn.style.backgroundColor = StyleKeyword.Null;
+            closeBtn.style.borderTopWidth = 0;
+            closeBtn.style.borderRightWidth = 0;
+            closeBtn.style.borderBottomWidth = 0;
+            closeBtn.style.borderLeftWidth = 0;
+            closeBtn.style.color = new Color(0.46f, 0.60f, 0.78f, 0.95f);
+            closeBtn.style.fontSize = 10;
+            header.Add(closeBtn);
+
+            _eventInfoDrawer.Add(header);
+
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.paddingLeft = 10;
+            content.style.paddingRight = 10;
+            content.style.paddingTop = 8;
+            content.style.paddingBottom = 8;
+
+            _eventInfoMetaLabel = new Label();
+            _eventInfoMetaLabel.style.color = new Color(0.50f, 0.66f, 0.84f, 0.95f);
+            _eventInfoMetaLabel.style.fontSize = 9;
+            _eventInfoMetaLabel.style.marginBottom = 6;
+            content.Add(_eventInfoMetaLabel);
+
+            _eventInfoBodyLabel = new Label();
+            _eventInfoBodyLabel.style.whiteSpace = WhiteSpace.Normal;
+            _eventInfoBodyLabel.style.unityTextAlign = TextAnchor.UpperLeft;
+            _eventInfoBodyLabel.style.color = new Color(0.84f, 0.90f, 1f, 1f);
+            _eventInfoBodyLabel.style.fontSize = 11;
+            _eventInfoBodyLabel.style.marginBottom = 8;
+            content.Add(_eventInfoBodyLabel);
+
+            _eventInfoNavLabel = new Label();
+            _eventInfoNavLabel.style.whiteSpace = WhiteSpace.Normal;
+            _eventInfoNavLabel.style.color = new Color(0.44f, 0.76f, 1f, 1f);
+            _eventInfoNavLabel.style.fontSize = 9;
+            _eventInfoNavLabel.style.display = DisplayStyle.None;
+            content.Add(_eventInfoNavLabel);
+
+            _eventInfoDrawer.Add(content);
+            _contentArea.Add(_eventInfoDrawer);
+        }
+
+        private void OnEventLogStripFallbackClick(ClickEvent evt)
+        {
+            if (_eventLog == null || _eventLog.IsExpanded) return;
+            var entry = EventLogBuffer.Instance.GetCollapsedEntry();
+            if (entry == null) return;
+            OnEventNotificationClicked(entry);
+        }
+
+        private void OnEventNotificationClicked(LogEntry entry)
+        {
+            if (entry == null) return;
+
+            EnsureEventInfoDrawer();
+
+            Debug.Log($"[WaystationHUDController] Event notification clicked: '{entry.BodyText}'");
+
+            string cat = entry.Category switch
+            {
+                LogCategory.Alert => "ALERT",
+                LogCategory.Crew => "CREW",
+                LogCategory.Station => "STATION",
+                LogCategory.World => "WORLD",
+                _ => "EVENT",
+            };
+
+            _eventInfoTitleLabel.text = $"{cat} EVENT";
+            _eventInfoMetaLabel.text = $"Tick {entry.TickFired:N0}";
+            _eventInfoBodyLabel.text = entry.BodyText ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(entry.NavigateLabel))
+            {
+                _eventInfoNavLabel.text = $"Related action: {entry.NavigateLabel}";
+                _eventInfoNavLabel.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                _eventInfoNavLabel.style.display = DisplayStyle.None;
+                _eventInfoNavLabel.text = string.Empty;
+            }
+
+            _eventInfoDrawer.Open();
+            _eventInfoDrawer.style.maxWidth = 360;
+            _eventInfoDrawer.style.visibility = Visibility.Visible;
+            _eventInfoDrawer.style.opacity = 1;
+            _eventInfoDrawer.BringToFront();
         }
 
         // ── Fleet tab mount (UI-020 / UI-021) ────────────────────────────────
@@ -1165,6 +1351,14 @@ namespace Waystation.UI
                 _topBar?.RefreshSpeedButtons();
             }
 
+            if (_ready && _gm != null)
+            {
+                bool paused = _gm.IsPaused;
+                if (_wasPausedLastFrame && !paused)
+                    ModalOverlay.ForceHideAllVisible();
+                _wasPausedLastFrame = paused;
+            }
+
             // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
             GameHUD.InBuildMode = !string.IsNullOrEmpty(_ghostBuildableId);
 
@@ -1173,6 +1367,9 @@ namespace Waystation.UI
             bool sidePanelOver = _sidePanel != null && _sidePanel.IsMouseOverPanel;
             bool eventLogOver  = _eventLog  != null && _eventLog.IsMouseOverStrip;
             GameHUD.IsMouseOverDrawer = sidePanelOver || eventLogOver || _panelsUnderPointer > 0;
+
+            // Push tile selection context text from StationRoomView into the event strip.
+            _eventLog?.SetContextText(Waystation.View.StationRoomView.TileContextText);
         }
 
         // ── GameManager event handlers ────────────────────────────────────────
@@ -1181,6 +1378,7 @@ namespace Waystation.UI
         {
             _topBar?.OnTick(station);
             _eventLog?.OnTick(station?.tick ?? 0);
+            UpdateDepartureWarningOnTick(station);
 
             bool stationTabActive = _sidePanel?.ActiveTab == SidePanelController.Tab.Station;
 
@@ -1420,6 +1618,196 @@ namespace Waystation.UI
             // so no manual call to OnBufferChanged is needed here.
             var category = pending.definition.hostile ? LogCategory.Alert : LogCategory.World;
             EventLogBuffer.Instance.Add(category, pending.definition.description ?? pending.definition.id);
+
+            ShowEventDecisionModal(pending);
+        }
+
+        private void ShowEventDecisionModal(PendingEvent pending)
+        {
+            if (_gm == null || _contentArea == null || pending?.definition == null) return;
+
+            if (!_eventModalPauseCaptured)
+            {
+                _eventModalPriorPaused = _gm.IsPaused;
+                _eventModalPriorTicksPerSecond = _gm.SecondsPerTick > 0.0001f
+                    ? 1f / _gm.SecondsPerTick
+                    : 1f;
+                _eventModalPauseCaptured = true;
+            }
+
+            // Force pause while the event modal is open.
+            _gm.IsPaused = true;
+            _topBar?.RefreshSpeedButtons();
+
+            RemoveEventDecisionModal(restoreSpeed: false);
+
+            var modal = new ModalOverlay();
+            modal.AddToClassList("ws-modal-overlay--top-left");
+            modal.Title = pending.definition.title ?? "EVENT";
+            modal.BackdropCloseEnabled = false;
+            modal.CloseButtonVisible = false;
+
+            // Chain indicator badge.
+            if (IsChainEvent(pending))
+            {
+                var chainBadge = new Label("Part of a chain");
+                chainBadge.style.alignSelf = Align.FlexStart;
+                chainBadge.style.paddingLeft = 6;
+                chainBadge.style.paddingRight = 6;
+                chainBadge.style.paddingTop = 2;
+                chainBadge.style.paddingBottom = 2;
+                chainBadge.style.marginBottom = 8;
+                chainBadge.style.borderTopLeftRadius = 3;
+                chainBadge.style.borderTopRightRadius = 3;
+                chainBadge.style.borderBottomLeftRadius = 3;
+                chainBadge.style.borderBottomRightRadius = 3;
+                chainBadge.style.backgroundColor = new Color(0.21f, 0.30f, 0.45f, 0.9f);
+                chainBadge.style.color = new Color(0.86f, 0.92f, 1.0f, 1f);
+                chainBadge.style.fontSize = 10;
+                chainBadge.style.unityFontStyleAndWeight = FontStyle.Bold;
+                modal.BodyContent.Add(chainBadge);
+            }
+
+            // Description block (scrollable for long text).
+            var descriptionScroll = new ScrollView(ScrollViewMode.Vertical);
+            descriptionScroll.style.maxHeight = 260;
+            descriptionScroll.style.marginBottom = 10;
+            var desc = new Label(pending.definition.description ?? string.Empty);
+            desc.style.whiteSpace = WhiteSpace.Normal;
+            desc.style.unityTextAlign = TextAnchor.UpperLeft;
+            desc.style.fontSize = 13;
+            desc.style.color = new Color(0.84f, 0.90f, 1f, 1f);
+            descriptionScroll.Add(desc);
+            modal.BodyContent.Add(descriptionScroll);
+
+            // Required choices (1-4).
+            var choicesRoot = new VisualElement();
+            choicesRoot.style.flexDirection = FlexDirection.Column;
+
+            int count = pending.definition.choices?.Count ?? 0;
+            int renderCount = Mathf.Min(4, count);
+            for (int i = 0; i < renderCount; i++)
+            {
+                int choiceIndex = i;
+                var choice = pending.definition.choices[choiceIndex];
+                string choiceLabel = string.IsNullOrWhiteSpace(choice.label)
+                    ? $"Choice {choiceIndex + 1}"
+                    : choice.label;
+
+                var btn = new Button(() => OnEventChoiceClicked(pending, choiceIndex))
+                {
+                    text = choiceLabel,
+                };
+                btn.AddToClassList("ws-btn");
+                btn.style.unityTextAlign = TextAnchor.MiddleLeft;
+                btn.style.whiteSpace = WhiteSpace.Normal;
+                btn.style.paddingLeft = 10;
+                btn.style.paddingRight = 10;
+                btn.style.paddingTop = 8;
+                btn.style.paddingBottom = 8;
+                if (i > 0) btn.style.marginTop = 6;
+                choicesRoot.Add(btn);
+            }
+
+            // Some events are informational and contain no explicit choices.
+            // Keep the flow dismissible so the pause overlay cannot get stuck.
+            if (renderCount == 0)
+            {
+                var continueBtn = new Button(() => RemoveEventDecisionModal(restoreSpeed: true))
+                {
+                    text = "CONTINUE",
+                };
+                continueBtn.AddToClassList("ws-btn");
+                continueBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+                continueBtn.style.paddingLeft = 10;
+                continueBtn.style.paddingRight = 10;
+                continueBtn.style.paddingTop = 8;
+                continueBtn.style.paddingBottom = 8;
+                choicesRoot.Add(continueBtn);
+            }
+
+            modal.BodyContent.Add(choicesRoot);
+
+            _contentArea.Add(modal);
+            _eventDecisionModal = modal;
+            _eventDecisionModal.Show();
+        }
+
+        private void OnEventChoiceClicked(PendingEvent pending, int choiceIndex)
+        {
+            if (_gm?.Events == null || _gm?.Station == null || pending?.definition == null) return;
+            if (choiceIndex < 0 || choiceIndex >= pending.definition.choices.Count) return;
+
+            string choiceId = pending.definition.choices[choiceIndex].id;
+            _gm.Events.ResolveChoice(pending, choiceId, _gm.Station);
+            RemoveEventDecisionModal(restoreSpeed: true);
+        }
+
+        private void RemoveEventDecisionModal(bool restoreSpeed)
+        {
+            if (_eventDecisionModal != null)
+            {
+                if (_eventDecisionModal.parent == _contentArea)
+                    _contentArea.Remove(_eventDecisionModal);
+                _eventDecisionModal = null;
+            }
+
+            if (restoreSpeed && _gm != null && _eventModalPauseCaptured)
+            {
+                _gm.SetSpeed(_eventModalPriorTicksPerSecond);
+                _gm.IsPaused = _eventModalPriorPaused;
+                _topBar?.RefreshSpeedButtons();
+                _eventModalPauseCaptured = false;
+            }
+
+            // Drain any queued expertise prompts that were deferred while the
+            // event decision modal was active (UI-028).
+            if (_expertisePromptQueue.Count > 0 && _activeExpertisePrompt == null)
+                ShowNextExpertisePrompt();
+        }
+
+        private bool IsChainEvent(PendingEvent pending)
+        {
+            if (pending == null) return false;
+
+            // Preferred signal from event context if present.
+            if (pending.context != null)
+            {
+                if (TryContextBool(pending.context, "part_of_chain")) return true;
+                if (TryContextBool(pending.context, "is_chain")) return true;
+                if (TryContextBool(pending.context, "chain")) return true;
+            }
+
+            // Fallback: event requires any chain flag in trigger conditions.
+            if (pending.definition?.triggerConditions != null && _gm?.Station != null)
+            {
+                foreach (var cond in pending.definition.triggerConditions)
+                {
+                    if (cond == null) continue;
+                    if (cond.type != "chain_flag_set") continue;
+                    if (_gm.Station.HasChainFlag(cond.target)) return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryContextBool(Dictionary<string, object> ctx, string key)
+        {
+            if (ctx == null || string.IsNullOrEmpty(key)) return false;
+            if (!ctx.TryGetValue(key, out var raw) || raw == null) return false;
+
+            if (raw is bool b) return b;
+            if (raw is string s && bool.TryParse(s, out var parsed)) return parsed;
+
+            try
+            {
+                return Convert.ToBoolean(raw);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void OnGameLoaded()
@@ -1970,6 +2358,253 @@ namespace Waystation.UI
             _ghostBuildableId   = null;
             _ghostRotation      = 0;
             GameHUD.InBuildMode = false;
+        }
+
+        // ── Expertise Slot Unlock Prompt (UI-028) ────────────────────────────
+
+        private void OnExpertiseSlotEarned(NPCInstance npc, string skillId, int skillLevel)
+        {
+            _expertisePromptQueue.Enqueue(new ExpertisePromptEntry
+            {
+                npc = npc,
+                skillId = skillId,
+                skillLevel = skillLevel,
+            });
+
+            // Only show immediately if no modal is currently blocking.
+            if (_activeExpertisePrompt == null && _eventDecisionModal == null)
+                ShowNextExpertisePrompt();
+        }
+
+        /// <summary>
+        /// Dequeues the next expertise prompt entry and shows it.
+        /// Called after each prompt is resolved and after event decision modal
+        /// dismissal if the queue is non-empty.
+        /// </summary>
+        private void ShowNextExpertisePrompt()
+        {
+            if (_expertisePromptQueue.Count == 0) return;
+            if (_gm == null || _contentArea == null) return;
+
+            // Defer if an event decision modal is currently active.
+            if (_eventDecisionModal != null) return;
+
+            var entry = _expertisePromptQueue.Dequeue();
+
+            // Capture prior pause state once (before first prompt in a batch).
+            if (!_expertisePauseCaptured)
+            {
+                _expertisePriorPaused = _gm.IsPaused;
+                _expertisePriorTicksPerSecond = _gm.SecondsPerTick > 0.0001f
+                    ? 1f / _gm.SecondsPerTick
+                    : 1f;
+                _expertisePauseCaptured = true;
+            }
+
+            _gm.IsPaused = true;
+            _topBar?.RefreshSpeedButtons();
+
+            // Remove any stale prompt.
+            RemoveActiveExpertisePrompt(restoreSpeed: false);
+
+            var prompt = new ExpertiseSlotPrompt();
+            prompt.MandatoryMode = true;
+            prompt.NpcName = entry.npc?.name ?? "Unknown";
+
+            // Resolve skill display name.
+            string skillDisplayName = entry.skillId;
+            SkillDefinition skillDef = null;
+            if (_gm.Registry?.Skills != null &&
+                _gm.Registry.Skills.TryGetValue(entry.skillId, out skillDef))
+            {
+                skillDisplayName = skillDef.displayName ?? entry.skillId;
+            }
+            prompt.SkillInfo = $"{skillDisplayName} reached level {entry.skillLevel}";
+
+            // Queue depth indicator: "1 of N" where N = this prompt + remaining.
+            int totalPending = _expertisePromptQueue.Count + 1;
+            prompt.QueueInfo = totalPending > 1
+                ? $"1 of {totalPending} pending"
+                : null;
+
+            // Populate expertise options based on skill type.
+            bool isDomain = skillDef != null && skillDef.IsDomainSkill;
+            if (isDomain && skillDef.domainExpertiseSlots != null)
+            {
+                // Domain path: show options from the slot matching this level.
+                foreach (var slot in skillDef.domainExpertiseSlots)
+                {
+                    if (slot.unlockLevel > entry.skillLevel) continue;
+                    foreach (var opt in slot.options)
+                    {
+                        if (entry.npc.chosenExpertise.Contains(opt.id)) continue;
+                        prompt.AddExpertiseOption(opt.id, opt.name ?? opt.id,
+                            opt.description ?? "");
+                    }
+                }
+            }
+            else
+            {
+                // Legacy path: show all selectable expertise for this skill.
+                var selectable = _gm.Skills?.GetSelectableExpertise(entry.npc, showAll: false)
+                    ?? new List<ExpertiseDefinition>();
+                foreach (var expDef in selectable)
+                {
+                    if (string.IsNullOrEmpty(expDef.requiredSkillId) ||
+                        expDef.requiredSkillId == entry.skillId)
+                    {
+                        prompt.AddExpertiseOption(expDef.expertiseId,
+                            expDef.displayName ?? expDef.expertiseId,
+                            expDef.description ?? "");
+                    }
+                }
+            }
+
+            var capturedEntry = entry;
+            prompt.OnConfirmed += expertiseId =>
+                OnExpertisePromptConfirmed(capturedEntry, expertiseId, isDomain);
+
+            _contentArea.Add(prompt);
+            _activeExpertisePrompt = prompt;
+            prompt.Show();
+        }
+
+        private void OnExpertisePromptConfirmed(ExpertisePromptEntry entry,
+                                                 string expertiseId, bool isDomain)
+        {
+            if (_gm?.Skills != null && _gm?.Station != null && entry.npc != null)
+            {
+                if (isDomain)
+                    _gm.Skills.ChooseDomainExpertise(entry.npc, entry.skillId,
+                        expertiseId, _gm.Station);
+                else
+                    _gm.Skills.ChooseExpertise(entry.npc, expertiseId, _gm.Station);
+            }
+
+            RemoveActiveExpertisePrompt(restoreSpeed: _expertisePromptQueue.Count == 0);
+
+            // Show next queued prompt if any remain.
+            if (_expertisePromptQueue.Count > 0)
+                ShowNextExpertisePrompt();
+        }
+
+        private void RemoveActiveExpertisePrompt(bool restoreSpeed)
+        {
+            if (_activeExpertisePrompt != null)
+            {
+                if (_activeExpertisePrompt.parent == _contentArea)
+                    _contentArea.Remove(_activeExpertisePrompt);
+                _activeExpertisePrompt = null;
+            }
+
+            if (restoreSpeed && _gm != null && _expertisePauseCaptured)
+            {
+                _gm.SetSpeed(_expertisePriorTicksPerSecond);
+                _gm.IsPaused = _expertisePriorPaused;
+                _topBar?.RefreshSpeedButtons();
+                _expertisePauseCaptured = false;
+            }
+        }
+
+        // ── Departure Warning Panel (UI-030) ────────────────────────────────
+
+        private void OnDepartureWarning(NPCInstance npc, int deadlineTick)
+        {
+            int announcedAt = npc.traitProfile?.departure?.announcedAtTick
+                              ?? (_gm?.Station?.tick ?? 0);
+
+            var entry = new DepartureWarningEntry
+            {
+                npc = npc,
+                deadlineTick = deadlineTick,
+                announcedAtTick = announcedAt,
+            };
+
+            if (_activeDepartureWarning != null)
+            {
+                _departureWarningQueue.Enqueue(entry);
+                return;
+            }
+
+            ShowDepartureWarning(entry);
+        }
+
+        private void ShowDepartureWarning(DepartureWarningEntry entry)
+        {
+            if (_contentArea == null || _gm == null) return;
+
+            var panel = new DepartureWarningPanel();
+            panel.NpcUid = entry.npc.uid;
+            panel.NpcName = entry.npc.name ?? "Unknown";
+            panel.DeadlineTick = entry.deadlineTick;
+            panel.AnnouncedAtTick = entry.announcedAtTick;
+            panel.SetTensionStage(_gm.Tension.GetTensionStage(entry.npc));
+
+            int currentTick = _gm.Station?.tick ?? 0;
+            panel.UpdateCountdown(currentTick);
+
+            panel.OnInterveneClicked += () => OnDepartureInterveneClicked(entry);
+            panel.OnDismissClicked += () => DismissDepartureWarning();
+
+            _contentArea.Add(panel);
+            _activeDepartureWarning = panel;
+            _departureOutcomeDismissCountdown = -1;
+        }
+
+        private void OnDepartureInterveneClicked(DepartureWarningEntry entry)
+        {
+            if (_gm == null || _activeDepartureWarning == null) return;
+
+            var (ok, msg) = _gm.AttemptDepartureIntervention(entry.npc.uid);
+            _activeDepartureWarning.ShowOutcome(ok, msg);
+
+            // Auto-dismiss after ~8 ticks (≈2 in-game hours) so the panel
+            // clears itself without requiring player action.
+            _departureOutcomeDismissCountdown = 8;
+        }
+
+        private void DismissDepartureWarning()
+        {
+            RemoveActiveDepartureWarning();
+            if (_departureWarningQueue.Count > 0)
+                ShowDepartureWarning(_departureWarningQueue.Dequeue());
+        }
+
+        private void RemoveActiveDepartureWarning()
+        {
+            if (_activeDepartureWarning != null)
+            {
+                if (_activeDepartureWarning.parent == _contentArea)
+                    _contentArea.Remove(_activeDepartureWarning);
+                _activeDepartureWarning = null;
+                _departureOutcomeDismissCountdown = -1;
+            }
+        }
+
+        private void UpdateDepartureWarningOnTick(StationState station)
+        {
+            if (_activeDepartureWarning == null) return;
+
+            int currentTick = station?.tick ?? 0;
+            _activeDepartureWarning.UpdateCountdown(currentTick);
+
+            // If the deadline has passed and no outcome shown, auto-dismiss.
+            if (currentTick >= _activeDepartureWarning.DeadlineTick &&
+                _departureOutcomeDismissCountdown < 0)
+            {
+                DismissDepartureWarning();
+                return;
+            }
+
+            // Auto-dismiss countdown after showing outcome.
+            if (_departureOutcomeDismissCountdown > 0)
+            {
+                _departureOutcomeDismissCountdown--;
+            }
+            else if (_departureOutcomeDismissCountdown == 0)
+            {
+                DismissDepartureWarning();
+            }
         }
     }
 }
