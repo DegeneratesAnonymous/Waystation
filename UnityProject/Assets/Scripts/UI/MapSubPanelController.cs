@@ -119,8 +119,9 @@ namespace Waystation.UI
         private bool _canvasHasPointer;
         private string _proximityHoverTarget;
         private float _proximityHoverTime;
-        private const float HoverProximityThreshold = 18f;
-        private const float TooltipDelaySeconds = 0.5f;
+        private const float HoverProximityThreshold = 22f;
+        private const float TooltipDelaySeconds = 0.4f;
+        private SolarSystemState _currentOrbitSys; // held for canvas click forwarding
         private const float OrbitPreviewTicksPerSecond = 1.0f;
         private const float MinutesPerTick = 15f;
 
@@ -910,9 +911,31 @@ namespace Waystation.UI
                 _orbitPanning = false;
                 _orbitCanvas.ReleasePointer(evt.pointerId);
             });
+            _orbitCanvas.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                _canvasHasPointer = true;
+            });
             _orbitCanvas.RegisterCallback<PointerLeaveEvent>(_ =>
             {
                 _canvasHasPointer = false;
+                // Immediately clear hover so the ring doesn't stick.
+                if (_hoverOrbitBodyIndex >= 0 || _hoverMoonVisual != null || _hoverStation)
+                {
+                    ClearHoverScale();
+                    _hoverOrbitBodyIndex = -1;
+                    _hoverMoonVisual = null;
+                    _hoverStation = false;
+                    _proximityHoverTarget = null;
+                    HideSystemHoverTooltip();
+                }
+            });
+
+            // Canvas-level click: find the nearest body by proximity and select it.
+            // This avoids reliance on per-dot hit-testing for tiny moving elements.
+            _orbitCanvas.RegisterCallback<ClickEvent>(evt =>
+            {
+                if (_orbitPanning) return;
+                HandleCanvasClick(evt);
             });
 
             return card;
@@ -951,22 +974,39 @@ namespace Waystation.UI
             _orbitWorld.Add(star);
             _starDotEl = star;
 
+            _currentOrbitSys = sys;
+
             // ── Orbital bodies ────────────────────────────────────────────────
             int count = Mathf.Min(sys.bodies.Count, 9);
-            // Distribute radii proportionally: 12% of half-width for innermost,
-            // 88% for outermost — so orbits scale with the canvas size.
+            // Use actual orbitalRadius data for proportional ring placement.
+            // Apply sqrt scale so inner planets aren't crammed while outer ones
+            // still have room.
             float halfW = Mathf.Max(centerX, 60f);
-            float innerR = halfW * 0.11f;
-            float bottomReserve = 240f;
-            float verticalLimit = Mathf.Max(30f, canvasH - bottomReserve - centerY);
-            float outerR = Mathf.Min(halfW * 0.74f, verticalLimit);
+            float innerR = halfW * 0.12f;
+            float bottomReserve = 180f;
+            float verticalLimit = Mathf.Max(60f, canvasH - bottomReserve - centerY);
+            float outerR = Mathf.Min(halfW * 0.78f, verticalLimit);
+
+            // Gather actual orbital radii and compute mapping.
+            float minAU = float.MaxValue, maxAU = float.MinValue;
+            for (int i = 0; i < count; i++)
+            {
+                float r = sys.bodies[i].orbitalRadius;
+                if (r <= 0f) r = 0.5f + i * 1.5f; // fallback
+                if (r < minAU) minAU = r;
+                if (r > maxAU) maxAU = r;
+            }
+            float auRange = Mathf.Max(0.1f, maxAU - minAU);
 
             for (int i = 0; i < count; i++)
             {
                 var   body   = sys.bodies[i];
-                float radius = count == 1
-                    ? (innerR + outerR) * 0.5f
-                    : innerR + i * (outerR - innerR) / (count - 1f);
+                float bodyAU = body.orbitalRadius > 0f ? body.orbitalRadius : (0.5f + i * 1.5f);
+                // Sqrt-scaled normalisation for better inner/outer distribution.
+                float t = count == 1 ? 0.5f : Mathf.Sqrt((bodyAU - minAU) / auRange);
+                float radius = innerR + t * (outerR - innerR);
+                // Enforce minimum gap so rings never stack.
+                radius = Mathf.Max(radius, innerR + i * 14f);
 
                 var ring = new VisualElement();
                 ring.style.position = Position.Absolute;
@@ -1001,29 +1041,9 @@ namespace Waystation.UI
                 if (!ColorUtility.TryParseHtmlString(body.colorHex, out Color bodyColor))
                     bodyColor = new Color(0.62f, 0.68f, 0.76f, 1f);
                 dot.style.backgroundColor = bodyColor;
+                dot.pickingMode = PickingMode.Ignore;
 
                 int capturedIdx = i;
-                dot.RegisterCallback<ClickEvent>(_ =>
-                {
-                    if (capturedIdx >= 0 && capturedIdx < sys.bodies.Count)
-                    {
-                        var clickedBody = sys.bodies[capturedIdx];
-                        if (_routePlotterActive)
-                        {
-                            float a = clickedBody.initialPhase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, clickedBody.orbitalPeriod));
-                            AddRouteWaypoint(new RouteWaypoint
-                            {
-                                name = clickedBody.name ?? BodyTypeLabel(clickedBody.bodyType),
-                                orbitalRadius = clickedBody.orbitalRadius,
-                                angle = a,
-                                isSystem = false,
-                            });
-                            return;
-                        }
-                        SelectOrbitBody(capturedIdx);
-                        ShowBodyDetail(clickedBody, _viewedSystemIsHome && sys.stationOrbitIndex == capturedIdx);
-                    }
-                });
                 _orbitWorld.Add(dot);
 
                 var ov = new OrbitVisual
@@ -1055,6 +1075,7 @@ namespace Waystation.UI
                         moonCol = new Color(0.62f, 0.62f, 0.62f, 1f);
                     moonDot.style.backgroundColor = moonCol;
                     moonDot.style.opacity         = 0.75f;
+                    moonDot.pickingMode = PickingMode.Ignore;
                     _orbitWorld.Add(moonDot);
                     var moonVisual = new MoonVisual
                     {
@@ -1067,8 +1088,6 @@ namespace Waystation.UI
                         name            = moon.name ?? "Moon",
                     };
                     _moonVisuals.Add(moonVisual);
-
-                    moonDot.RegisterCallback<ClickEvent>(_ => ShowBodyDetail(moon, false));
                 }
             }
 
@@ -1097,11 +1116,7 @@ namespace Waystation.UI
                 _stationDot.style.borderRightColor  = new Color(0.60f, 1f, 0.70f, 0.8f);
                 _stationDot.style.borderBottomColor = new Color(0.60f, 1f, 0.70f, 0.8f);
                 _stationDot.style.borderLeftColor   = new Color(0.60f, 1f, 0.70f, 0.8f);
-                _stationDot.RegisterCallback<ClickEvent>(_ =>
-                {
-                    if (_stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
-                        SelectOrbitBody(_stationParentBodyIndex);
-                });
+                _stationDot.pickingMode = PickingMode.Ignore;
                 _orbitWorld.Add(_stationDot);
             }
             else
@@ -1528,6 +1543,138 @@ namespace Waystation.UI
             }
             if (_hoverMoonVisual != null)
                 _hoverMoonVisual.dot.style.scale = new Scale(new Vector3(1f, 1f, 1f));
+        }
+
+        /// <summary>Canvas-level click handler: finds nearest body/moon/station by proximity and selects it.</summary>
+        private void HandleCanvasClick(ClickEvent evt)
+        {
+            if (_orbitCanvas == null) return;
+            var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+            if (sys == null) return;
+
+            // Convert click position to world coordinates (same transform as hover).
+            float canvasW = _orbitCanvas.resolvedStyle.width;
+            float canvasH = _orbitCanvas.resolvedStyle.height;
+            if (canvasW < 10f || canvasH < 10f) return;
+            float pivotX = canvasW * 0.5f;
+            float pivotY = canvasH * 0.5f;
+            Vector2 localPos = evt.localPosition;
+            float worldPtrX = (localPos.x - pivotX - _orbitPan.x) / Mathf.Max(0.01f, _orbitZoom) + pivotX;
+            float worldPtrY = (localPos.y - pivotY - _orbitPan.y) / Mathf.Max(0.01f, _orbitZoom) + pivotY;
+
+            float bestDistSq = float.MaxValue;
+            int bestBodyIdx = -1;
+            SolarBody bestBody = null;
+            SolarBody bestMoonBody = null;
+            bool bestStation = false;
+
+            // Bodies.
+            foreach (var bv in _orbitVisuals)
+            {
+                float dx = bv.currentCenterX - worldPtrX;
+                float dy = bv.currentCenterY - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBodyIdx = bv.bodyIndex;
+                    bestBody = bv.bodyIndex < sys.bodies.Count ? sys.bodies[bv.bodyIndex] : null;
+                    bestMoonBody = null;
+                    bestStation = false;
+                }
+            }
+
+            // Moons.
+            foreach (var moon in _moonVisuals)
+            {
+                float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
+                float mx = moon.parent.currentCenterX + Mathf.Cos(moonAngle) * moon.moonOrbitRadius;
+                float my = moon.parent.currentCenterY + Mathf.Sin(moonAngle) * moon.moonOrbitRadius;
+                float dx = mx - worldPtrX;
+                float dy = my - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBodyIdx = -1;
+                    bestBody = null;
+                    bestMoonBody = sys.bodies.Count > moon.parent.bodyIndex && moon.parent.bodyIndex >= 0
+                        ? sys.bodies[moon.parent.bodyIndex].moons.Count > 0
+                            ? FindMoonByName(sys.bodies[moon.parent.bodyIndex], moon.name)
+                            : null
+                        : null;
+                    bestStation = false;
+                }
+            }
+
+            // Station.
+            if (_stationDot != null && _stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
+            {
+                var host = _orbitVisuals[_stationParentBodyIndex];
+                float stOrbitR = host.size * 1.5f + 10f;
+                float stationPeriodTicks = Mathf.Max(8f, host.orbitalPeriodTicks * 0.10f);
+                float stAngle = StationPhaseOffset + Mathf.PI * 2f * (_orbitTime / stationPeriodTicks);
+                float sx = host.currentCenterX + Mathf.Cos(stAngle) * stOrbitR;
+                float sy = host.currentCenterY + Mathf.Sin(stAngle) * stOrbitR;
+                float dx = sx - worldPtrX;
+                float dy = sy - worldPtrY;
+                float dSq = dx * dx + dy * dy;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestBodyIdx = _stationParentBodyIndex;
+                    bestBody = bestBodyIdx < sys.bodies.Count ? sys.bodies[bestBodyIdx] : null;
+                    bestMoonBody = null;
+                    bestStation = true;
+                }
+            }
+
+            float threshold = HoverProximityThreshold / Mathf.Max(0.01f, _orbitZoom);
+            float threshSq = threshold * threshold;
+            if (bestDistSq > threshSq) return; // click was too far from anything
+
+            // Route plotter mode: add waypoint instead of selecting.
+            if (_routePlotterActive && bestBody != null && !bestStation)
+            {
+                float a = bestBody.initialPhase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, bestBody.orbitalPeriod));
+                AddRouteWaypoint(new RouteWaypoint
+                {
+                    name = bestBody.name ?? BodyTypeLabel(bestBody.bodyType),
+                    orbitalRadius = bestBody.orbitalRadius,
+                    angle = a,
+                    isSystem = false,
+                });
+                return;
+            }
+
+            if (bestStation)
+            {
+                SelectOrbitBody(_stationParentBodyIndex);
+                if (bestBody != null)
+                    ShowBodyDetail(bestBody, true);
+                return;
+            }
+
+            if (bestMoonBody != null)
+            {
+                ShowBodyDetail(bestMoonBody, false);
+                return;
+            }
+
+            if (bestBodyIdx >= 0 && bestBody != null)
+            {
+                SelectOrbitBody(bestBodyIdx);
+                ShowBodyDetail(bestBody, _viewedSystemIsHome && sys.stationOrbitIndex == bestBodyIdx);
+            }
+        }
+
+        /// <summary>Find a moon SolarBody by name from a parent body's moons list.</summary>
+        private SolarBody FindMoonByName(SolarBody parent, string moonName)
+        {
+            if (parent?.moons == null) return null;
+            foreach (var m in parent.moons)
+                if (m.name == moonName) return m;
+            return parent.moons.Count > 0 ? parent.moons[0] : null;
         }
 
         private VisualElement BuildBodyRow(SolarBody body, bool hasStation, int bodyIndex, SolarSystemState sys)
