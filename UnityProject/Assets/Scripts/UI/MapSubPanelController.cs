@@ -110,6 +110,8 @@ namespace Waystation.UI
         private VisualElement _orbitCanvas;
         private VisualElement _orbitSelectionRing;
         private VisualElement _orbitHoverRing;
+        private VisualElement _dashedOrbitOverlay;  // Painter2D layer for dashed moon/station orbits
+        private VisualElement _routeLineOverlay;    // Painter2D layer for dashed route lines
         private float _orbitTime;
         private int _selectedOrbitBodyIndex = -1;
         private int _hoverOrbitBodyIndex = -1;
@@ -169,6 +171,7 @@ namespace Waystation.UI
             public float orbitalRadius; // AU for bodies
             public float angle;         // radians at selection time
             public Vector2 positionLY;  // for systems (sector view)
+            public Vector2 viewportPos; // pixel position relative to chart viewport (for route lines)
             public bool isSystem;       // true = LY scale, false = AU scale
         }
         private const float ReferencePanelWidth  = 1600f;
@@ -1153,6 +1156,61 @@ namespace Waystation.UI
             _orbitHoverRing.style.borderLeftColor   = new Color(1f, 1f, 1f, 0.90f);
             _orbitHoverRing.style.display = DisplayStyle.None;
             _orbitWorld.Add(_orbitHoverRing);
+
+            // ── Dashed orbit overlay (moon orbits + station orbit) ────────────
+            _dashedOrbitOverlay = new VisualElement();
+            _dashedOrbitOverlay.style.position = Position.Absolute;
+            _dashedOrbitOverlay.style.left = 0;
+            _dashedOrbitOverlay.style.top = 0;
+            _dashedOrbitOverlay.style.width = canvasW;
+            _dashedOrbitOverlay.style.height = canvasH;
+            _dashedOrbitOverlay.pickingMode = PickingMode.Ignore;
+            _dashedOrbitOverlay.generateVisualContent += ctx =>
+            {
+                var painter = ctx.painter2D;
+                painter.lineWidth = 0.8f;
+                painter.lineCap = LineCap.Butt;
+
+                // Dashed circles for moon orbits.
+                var moonOrbitColor = new Color(0.35f, 0.45f, 0.60f, 0.30f);
+                foreach (var moon in _moonVisuals)
+                {
+                    float cx = moon.parent.currentCenterX;
+                    float cy = moon.parent.currentCenterY;
+                    float r = moon.moonOrbitRadius;
+                    painter.strokeColor = moonOrbitColor;
+                    DrawDashedCircle(painter, cx, cy, r, 4f, 4f);
+                }
+
+                // Dashed circle for station orbit around its host body.
+                if (_stationDot != null && _stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
+                {
+                    var host = _orbitVisuals[_stationParentBodyIndex];
+                    float stOrbitR = host.size * 1.5f + 10f;
+                    painter.strokeColor = new Color(0.25f, 1.00f, 0.50f, 0.25f);
+                    DrawDashedCircle(painter, host.currentCenterX, host.currentCenterY, stOrbitR, 3f, 5f);
+                }
+
+                // Dashed route lines (system-view: between orbital bodies).
+                if (_routePlotterActive && _routeWaypoints.Count >= 2)
+                {
+                    painter.lineWidth = 1.2f;
+                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.70f);
+                    for (int i = 1; i < _routeWaypoints.Count; i++)
+                    {
+                        var a = _routeWaypoints[i - 1];
+                        var b = _routeWaypoints[i];
+                        if (a.isSystem || b.isSystem) continue;
+                        // Compute positions from orbital data relative to orbit center.
+                        float ax = _orbitCenterX + Mathf.Cos(a.angle) * FindRadiusForAU(a.orbitalRadius);
+                        float ay = _orbitCenterY + Mathf.Sin(a.angle) * FindRadiusForAU(a.orbitalRadius);
+                        float bx = _orbitCenterX + Mathf.Cos(b.angle) * FindRadiusForAU(b.orbitalRadius);
+                        float by = _orbitCenterY + Mathf.Sin(b.angle) * FindRadiusForAU(b.orbitalRadius);
+                        DrawDashedLine(painter, ax, ay, bx, by, 6f, 4f);
+                    }
+                }
+            };
+            _orbitWorld.Add(_dashedOrbitOverlay);
         }
 
         private void ApplyOrbitWorldTransform()
@@ -1218,6 +1276,7 @@ namespace Waystation.UI
                 UpdateProximityHover(dt);
                 UpdateOrbitSelectionRing();
                 UpdateOrbitHoverRing();
+                _dashedOrbitOverlay?.MarkDirtyRepaint();
             }).Every(33);
         }
 
@@ -1234,6 +1293,8 @@ namespace Waystation.UI
             _orbitWorld             = null;
             _orbitSelectionRing     = null;
             _orbitHoverRing         = null;
+            _dashedOrbitOverlay     = null;
+            _routeLineOverlay       = null;
             _orbitCanvas            = null;
             _hoverOrbitBodyIndex    = -1;
             _hoverMoonVisual        = null;
@@ -1675,6 +1736,81 @@ namespace Waystation.UI
             foreach (var m in parent.moons)
                 if (m.name == moonName) return m;
             return parent.moons.Count > 0 ? parent.moons[0] : null;
+        }
+
+        // ── Dashed drawing helpers (Painter2D) ─────────────────────────────────
+
+        /// <summary>Draws a dashed circle using Painter2D arc segments.</summary>
+        private static void DrawDashedCircle(Painter2D painter, float cx, float cy, float radius, float dashPx, float gapPx)
+        {
+            if (radius < 1f) return;
+            float circumference = 2f * Mathf.PI * radius;
+            float step = dashPx + gapPx;
+            int segCount = Mathf.Max(1, Mathf.FloorToInt(circumference / step));
+            float dashAngle = (dashPx / circumference) * 360f;
+            float stepAngle = 360f / segCount;
+
+            for (int i = 0; i < segCount; i++)
+            {
+                float startDeg = i * stepAngle;
+                float endDeg = startDeg + dashAngle;
+                float startRad = startDeg * Mathf.Deg2Rad;
+                float endRad = endDeg * Mathf.Deg2Rad;
+
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(cx + Mathf.Cos(startRad) * radius, cy + Mathf.Sin(startRad) * radius));
+
+                // Approximate arc with a few line segments for smoothness.
+                int arcSteps = Mathf.Max(2, Mathf.CeilToInt(dashAngle / 15f));
+                for (int s = 1; s <= arcSteps; s++)
+                {
+                    float t = startRad + (endRad - startRad) * (s / (float)arcSteps);
+                    painter.LineTo(new Vector2(cx + Mathf.Cos(t) * radius, cy + Mathf.Sin(t) * radius));
+                }
+                painter.Stroke();
+            }
+        }
+
+        /// <summary>Draws a dashed straight line using Painter2D.</summary>
+        private static void DrawDashedLine(Painter2D painter, float x0, float y0, float x1, float y1, float dashPx, float gapPx)
+        {
+            float dx = x1 - x0;
+            float dy = y1 - y0;
+            float len = Mathf.Sqrt(dx * dx + dy * dy);
+            if (len < 0.5f) return;
+            float nx = dx / len;
+            float ny = dy / len;
+            float step = dashPx + gapPx;
+            float pos = 0f;
+
+            while (pos < len)
+            {
+                float dashEnd = Mathf.Min(pos + dashPx, len);
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(x0 + nx * pos, y0 + ny * pos));
+                painter.LineTo(new Vector2(x0 + nx * dashEnd, y0 + ny * dashEnd));
+                painter.Stroke();
+                pos += step;
+            }
+        }
+
+        /// <summary>Finds the pixel radius for a given AU value from the current orbit visuals.</summary>
+        private float FindRadiusForAU(float au)
+        {
+            float bestDist = float.MaxValue;
+            float bestRadius = 60f;
+            foreach (var ov in _orbitVisuals)
+            {
+                var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
+                if (sys == null || ov.bodyIndex >= sys.bodies.Count) continue;
+                float diff = Mathf.Abs(sys.bodies[ov.bodyIndex].orbitalRadius - au);
+                if (diff < bestDist)
+                {
+                    bestDist = diff;
+                    bestRadius = ov.radius;
+                }
+            }
+            return bestRadius;
         }
 
         private VisualElement BuildBodyRow(SolarBody body, bool hasStation, int bodyIndex, SolarSystemState sys)
@@ -2527,10 +2663,21 @@ namespace Waystation.UI
                 {
                     if (_routePlotterActive)
                     {
+                        // Compute viewport-relative position for route line drawing.
+                        Vector2 vpPos = Vector2.zero;
+                        if (_sectorChartViewport != null)
+                        {
+                            var dotBound = dot.worldBound;
+                            var vpBound = _sectorChartViewport.worldBound;
+                            vpPos = new Vector2(
+                                dotBound.center.x - vpBound.x,
+                                dotBound.center.y - vpBound.y);
+                        }
                         AddRouteWaypoint(new RouteWaypoint
                         {
                             name = capturedNeighbor.systemName,
                             positionLY = capturedNeighbor.positionLY,
+                            viewportPos = vpPos,
                             isSystem = true,
                         });
                         return;
@@ -3184,6 +3331,35 @@ namespace Waystation.UI
             VisualElement parent = _currentView == MapLayer.System ? _orbitCanvas : _sectorChartViewport;
             if (parent == null) return;
 
+            // Route line overlay (Painter2D) for dashed lines between waypoints.
+            if (_currentView == MapLayer.Sector && _sectorChartViewport != null)
+            {
+                _routeLineOverlay = new VisualElement();
+                _routeLineOverlay.style.position = Position.Absolute;
+                _routeLineOverlay.style.left = 0;
+                _routeLineOverlay.style.top = 0;
+                _routeLineOverlay.style.right = 0;
+                _routeLineOverlay.style.bottom = 0;
+                _routeLineOverlay.pickingMode = PickingMode.Ignore;
+                _routeLineOverlay.generateVisualContent += ctx =>
+                {
+                    if (_routeWaypoints.Count < 2) return;
+                    var painter = ctx.painter2D;
+                    painter.lineWidth = 1.5f;
+                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.75f);
+                    painter.lineCap = LineCap.Round;
+                    for (int ri = 1; ri < _routeWaypoints.Count; ri++)
+                    {
+                        var wa = _routeWaypoints[ri - 1];
+                        var wb = _routeWaypoints[ri];
+                        if (!wa.isSystem || !wb.isSystem) continue;
+                        DrawDashedLine(painter, wa.viewportPos.x, wa.viewportPos.y,
+                                               wb.viewportPos.x, wb.viewportPos.y, 6f, 4f);
+                    }
+                };
+                _sectorChartViewport.Add(_routeLineOverlay);
+            }
+
             _routeOverlay = new VisualElement();
             _routeOverlay.style.position = Position.Absolute;
             _routeOverlay.style.right = 10;
@@ -3226,6 +3402,8 @@ namespace Waystation.UI
             {
                 _routeWaypoints.Clear();
                 UpdateRouteOverlay();
+                _routeLineOverlay?.MarkDirtyRepaint();
+                _dashedOrbitOverlay?.MarkDirtyRepaint();
             }) { text = "Clear" };
             clearBtn.style.fontSize = Fs(9);
             clearBtn.style.color = ColTextMid;
@@ -3318,12 +3496,19 @@ namespace Waystation.UI
                 _routeOverlay.RemoveFromHierarchy();
                 _routeOverlay = null;
             }
+            if (_routeLineOverlay != null)
+            {
+                _routeLineOverlay.RemoveFromHierarchy();
+                _routeLineOverlay = null;
+            }
         }
 
         private void AddRouteWaypoint(RouteWaypoint wp)
         {
             _routeWaypoints.Add(wp);
             UpdateRouteOverlay();
+            _routeLineOverlay?.MarkDirtyRepaint();
+            _dashedOrbitOverlay?.MarkDirtyRepaint();
         }
 
         private void UpdateRouteOverlay()
@@ -3395,6 +3580,8 @@ namespace Waystation.UI
                     {
                         _routeWaypoints.RemoveAt(capturedIndex);
                         UpdateRouteOverlay();
+                        _routeLineOverlay?.MarkDirtyRepaint();
+                        _dashedOrbitOverlay?.MarkDirtyRepaint();
                     }
                 }) { text = "✕" };
                 rmBtn.style.width = 16;
