@@ -2,7 +2,9 @@
   {
     "id": "job.guard_post",
     "display_name": "Guard Post",
+    "description": "Stand guard at a security post.",
     "phase": "day",
+    "task_tags": ["melee", "ranged"],
     "allowed_classes": [
       "class.security"
     ],
@@ -23,7 +25,9 @@
   {
     "id": "job.patrol",
     "display_name": "Patrol",
+    "description": "Patrol the station corridors and docks.",
     "phase": "day",
+    "task_tags": ["melee", "ranged", "stealth"],
     "allowed_classes": [
       "class.security"
     ],
@@ -42,7 +46,9 @@
   {
     "id": "job.contraband_inspection",
     "display_name": "Contraband Inspection",
+    "description": "Inspect cargo and visitors for contraband.",
     "phase": "day",
+    "task_tags": ["concealment", "bypass"],
     "allowed_classes": [
       "class.security"
     ],
@@ -60,7 +66,9 @@
   {
     "id": "job.module_maintenance",
     "display_name": "Module Maintenance",
+    "description": "Perform routine maintenance on station modules.",
     "phase": "day",
+    "task_tags": ["maintenance", "systems"],
     "allowed_classes": [
       "class.engineering"
     ],
@@ -82,7 +90,9 @@
   {
     "id": "job.power_management",
     "display_name": "Power Management",
+    "description": "Manage and optimise station power systems.",
     "phase": "day",
+    "task_tags": ["systems", "maintenance"],
     "allowed_classes": [
       "class.engineering"
     ],
@@ -102,7 +112,9 @@
   {
     "id": "job.life_support",
     "display_name": "Life Support",
+    "description": "Monitor and maintain life support systems.",
     "phase": "any",
+    "task_tags": ["systems", "maintenance"],
     "allowed_classes": [
       "class.engineering"
     ],
@@ -122,7 +134,9 @@
   {
     "id": "job.dock_control",
     "display_name": "Dock Control",
+    "description": "Manage docking operations and ship traffic.",
     "phase": "day",
+    "task_tags": ["piloting", "wayfinding"],
     "allowed_classes": [
       "class.operations"
     ],
@@ -143,7 +157,9 @@
   {
     "id": "job.visitor_intake",
     "display_name": "Visitor Intake",
+    "description": "Process and welcome incoming visitors.",
     "phase": "day",
+    "task_tags": ["negotiation", "articulation"],
     "allowed_classes": [
       "class.operations"
     ],
@@ -164,7 +180,9 @@
   {
     "id": "job.resource_management",
     "display_name": "Resource Management",
+    "description": "Track and allocate station resources.",
     "phase": "day",
+    "task_tags": ["systems"],
     "allowed_classes": [
       "class.operations"
     ],
@@ -182,7 +200,9 @@
   {
     "id": "job.rest",
     "display_name": "Resting",
+    "description": "Rest and recover energy.",
     "phase": "night",
+    "task_tags": ["recovery"],
     "allowed_classes": [],
     "preferred_module_category": "hab",
     "fallback_module_category": "utility",
@@ -199,7 +219,9 @@
   {
     "id": "job.eat",
     "display_name": "Eating",
+    "description": "Eat a meal.",
     "phase": "any",
+    "task_tags": [],
     "allowed_classes": [],
     "preferred_module_category": "hab",
     "fallback_module_category": "utility",
@@ -216,8 +238,10 @@
   {
     "id": "job.haul",
     "display_name": "Hauling",
+    "description": "Move cargo and supplies around the station.",
     "schema_version": "1",
     "phase": "day",
+    "task_tags": ["maintenance"],
     "allowed_classes": [
       "class.security",
       "class.engineering",
@@ -237,8 +261,10 @@
   {
     "id": "job.refine",
     "display_name": "Refining",
+    "description": "Process raw materials into refined goods.",
     "schema_version": "1",
     "phase": "day",
+    "task_tags": ["manufacturing"],
     "allowed_classes": [
       "class.engineering",
       "class.operations"
@@ -257,8 +283,10 @@
   {
     "id": "job.craft",
     "display_name": "Crafting",
+    "description": "Craft items at a workbench.",
     "schema_version": "1",
     "phase": "day",
+    "task_tags": ["manufacturing"],
     "allowed_classes": [
       "class.engineering",
       "class.operations"
@@ -279,8 +307,10 @@
   {
     "id": "job.wander",
     "display_name": "Wandering",
+    "description": "Wander the station.",
     "schema_version": "1",
     "phase": "any",
+    "task_tags": [],
     "allowed_classes": [
       "class.security",
       "class.engineering",
@@ -300,7 +330,9 @@
   {
     "id": "job.recreate",
     "display_name": "Recreation",
+    "description": "Engage in recreational activities.",
     "phase": "any",
+    "task_tags": [],
     "allowed_classes": [],
     "preferred_module_category": "recreation",
     "fallback_module_category": "lounge",
@@ -317,7 +349,9 @@
   {
     "id": "job.research_industry",
     "display_name": "Industry Research",
+    "description": "Research industrial technologies.",
     "phase": "day",
+    "task_tags": ["research", "analysis"],
     "allowed_classes": [
       "class.engineering",
       "class.operations"
@@ -337,7 +371,9 @@
   {
     "id": "job.research_exploration",
     "display_name": "Exploration Research",
+    "description": "Research exploration and navigation data.",
     "phase": "day",
+    "task_tags": ["research", "analysis", "cartography"],
     "allowed_classes": [
       "class.engineering",
       "class.operations"
@@ -357,7 +393,9 @@
   {
     "id": "job.research_diplomacy",
     "display_name": "Diplomacy Research",
+    "description": "Research diplomatic relations and faction data.",
     "phase": "day",
+    "task_tags": ["research", "analysis"],
     "allowed_classes": [
       "class.operations"
     ],
@@ -376,7 +414,9 @@
   {
     "id": "job.research_security",
     "display_name": "Security Research",
+    "description": "Research security technologies and protocols.",
     "phase": "day",
+    "task_tags": ["research", "analysis"],
     "allowed_classes": [
       "class.security",
       "class.operations"
@@ -396,7 +436,9 @@
   {
     "id": "job.research_science",
     "display_name": "Scientific Research",
+    "description": "Conduct scientific research and experiments.",
     "phase": "day",
+    "task_tags": ["research", "analysis"],
     "allowed_classes": [
       "class.engineering",
       "class.operations"
@@ -416,7 +458,9 @@
   {
     "id": "job.build",
     "display_name": "Construction",
+    "description": "Build new station structures.",
     "phase": "day",
+    "task_tags": ["engineering"],
     "allowed_classes": [
       "class.engineering"
     ],
@@ -435,7 +479,9 @@
   {
     "id": "job.repair",
     "display_name": "Repair",
+    "description": "Repair damaged modules and equipment.",
     "phase": "day",
+    "task_tags": ["maintenance", "engineering"],
     "allowed_classes": [
       "class.engineering"
     ],
@@ -454,8 +500,10 @@
   {
     "id": "job.haul_body",
     "display_name": "Body Disposal",
+    "description": "Remove and process deceased bodies.",
     "schema_version": "1",
     "phase": "day",
+    "task_tags": ["maintenance"],
     "allowed_classes": [
       "class.security",
       "class.engineering",
@@ -476,8 +524,10 @@
   {
     "id": "job.counselling",
     "display_name": "Counselling Session",
+    "description": "Provide psychological counselling to crew.",
     "schema_version": "1",
     "phase": "day",
+    "task_tags": ["psychology", "treatment"],
     "allowed_classes": [
       "class.counsellor"
     ],

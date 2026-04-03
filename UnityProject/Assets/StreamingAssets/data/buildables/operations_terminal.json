@@ -1,0 +1,29 @@
+[
+  {
+    "id": "buildable.operations_terminal",
+    "display_name": "Operations Terminal",
+    "category": "object",
+    "description": "A command-and-control terminal assigned to a department. Enables push-channel task distribution through the communication hierarchy. Department Leads pathfind here to receive and distribute pending tasks. Requires power to function; when unpowered or destroyed, the department falls back to pull-mode.",
+    "build_time_ticks": 40,
+    "required_materials": {
+      "item.steel_plate": 10,
+      "item.electronics": 8,
+      "item.wiring": 5
+    },
+    "required_skills": {
+      "engineering": 2
+    },
+    "required_tags": [],
+    "size": 1,
+    "max_health": 150,
+    "beauty_score": 3,
+    "furniture_tag": "surface",
+    "requires_power": true,
+    "power_draw": 50.0,
+    "idle_power_draw": 10.0,
+    "network_type": "electric",
+    "node_role": "consumer",
+    "demand_watts": 5.0,
+    "schema_version": "1"
+  }
+]

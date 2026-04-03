@@ -463,6 +463,12 @@
             "name": "Persuasion",
             "description": "Unlocks high-stakes negotiation and trade influence tasks.",
             "task_tags_unlocked": ["persuasion", "trade_influence"]
+          },
+          {
+            "id": "exp_articulation",
+            "name": "Articulation",
+            "description": "Grants +2 Leadership Capacity, improving how many direct reports a lead can manage.",
+            "task_tags_unlocked": ["articulation"]
           }
         ]
       },

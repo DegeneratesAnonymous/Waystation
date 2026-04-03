@@ -2,7 +2,9 @@
   {
     "id": "job.farming",
     "display_name": "Farming",
+    "description": "Tend crops and manage agricultural production.",
     "phase": "day",
+    "task_tags": ["cultivation"],
     "allowed_classes": [
       "class.farming"
     ],

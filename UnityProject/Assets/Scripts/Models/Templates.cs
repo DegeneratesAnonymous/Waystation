@@ -759,8 +759,12 @@ namespace Waystation.Models
     {
         public string id;
         public string displayName;
+        public string description              = "";
         public string phase                  = "any"; // "day" | "night" | "any"
         public List<string> allowedClasses   = new List<string>();
+        public List<string> taskTags         = new List<string>();
+        public bool   isBaseJob              = false;
+        public bool   isWildcard             = false;
         public string preferredModuleCategory = "utility";
         public string fallbackModuleCategory  = "utility";
         public int    durationTicks           = 4;
@@ -776,7 +780,10 @@ namespace Waystation.Models
             {
                 id                      = raw.GetString("id"),
                 displayName             = raw.GetString("display_name", raw.GetString("id")),
+                description             = raw.GetString("description", ""),
                 phase                   = raw.GetString("phase", "any"),
+                isBaseJob               = raw.GetBool("is_base_job", false),
+                isWildcard              = raw.GetBool("is_wildcard", false),
                 preferredModuleCategory = raw.GetString("preferred_module_category", "utility"),
                 fallbackModuleCategory  = raw.GetString("fallback_module_category",  "utility"),
                 durationTicks           = raw.GetInt("duration_ticks", 4),
@@ -784,6 +791,7 @@ namespace Waystation.Models
                 schemaVersion           = raw.GetString("schema_version", "1")
             };
             foreach (var s in raw.GetStringList("allowed_classes")) j.allowedClasses.Add(s);
+            foreach (var s in raw.GetStringList("task_tags")) j.taskTags.Add(s);
             if (raw.ContainsKey("resource_effects") && raw["resource_effects"] is Dictionary<string, object> re)
                 foreach (var kv in re)
                     j.resourceEffects[kv.Key] = Convert.ToSingle(kv.Value);

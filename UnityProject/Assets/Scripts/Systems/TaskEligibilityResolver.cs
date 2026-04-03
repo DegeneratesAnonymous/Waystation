@@ -140,5 +140,49 @@ namespace Waystation.Systems
         /// </summary>
         public static string GetSoftLockExpertise(string taskType)
             => SoftLockRegistry.TryGetValue(taskType, out var id) ? id : null;
+
+        // ── Job Tag Filter (WO-JOB-001) ───────────────────────────────────────
+
+        /// <summary>
+        /// Returns true if the NPC passes the job-layer tag filter for the given task tags.
+        /// An unassigned NPC (null departmentId) bypasses the filter entirely (wildcard).
+        /// For assigned NPCs, at least one task tag must intersect with at least one
+        /// job's task_tags in their department. A wildcard job ("*" tag) matches any task.
+        /// </summary>
+        public static bool PassesJobTagFilter(
+            NPCInstance npc,
+            List<string> taskTags,
+            Department department,
+            Dictionary<string, JobDefinition> jobRegistry)
+        {
+            // Unassigned NPCs pass all job-layer checks
+            if (string.IsNullOrEmpty(npc?.departmentId) || department == null)
+                return true;
+
+            if (taskTags == null || taskTags.Count == 0)
+                return true;
+
+            if (jobRegistry == null)
+                return true;
+
+            foreach (var jobId in department.allowedJobs)
+            {
+                if (!jobRegistry.TryGetValue(jobId, out var jobDef))
+                    continue;
+
+                // Wildcard job matches everything
+                if (jobDef.isWildcard || jobDef.taskTags.Contains("*"))
+                    return true;
+
+                // Check for tag intersection
+                foreach (var tag in taskTags)
+                {
+                    if (jobDef.taskTags.Contains(tag))
+                        return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

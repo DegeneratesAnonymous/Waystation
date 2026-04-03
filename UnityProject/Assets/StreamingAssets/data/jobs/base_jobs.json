@@ -1,0 +1,131 @@
+[
+  {
+    "id": "job_combat_ops",
+    "display_name": "Combat Operations",
+    "description": "Armed combat and defensive operations including melee, ranged, and close-quarters fighting.",
+    "task_tags": ["melee", "ranged", "close_quarters", "marksmanship", "unarmed", "sidearms"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_physical_training",
+    "display_name": "Physical Training",
+    "description": "Physical conditioning, endurance training, and recovery activities.",
+    "task_tags": ["athletics", "fortitude", "recovery"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_resource_extraction",
+    "display_name": "Resource Extraction",
+    "description": "Mining, salvage, and raw material extraction operations.",
+    "task_tags": ["extraction"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_covert_ops",
+    "display_name": "Covert Operations",
+    "description": "Stealth, infiltration, sabotage, and intelligence gathering.",
+    "task_tags": ["stealth", "concealment", "bypass", "sabotage", "impersonation"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_structural_work",
+    "display_name": "Structural Work",
+    "description": "Construction and structural modification of the station.",
+    "task_tags": ["engineering"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_item_production",
+    "display_name": "Item Production",
+    "description": "Manufacturing goods and equipment at workbenches.",
+    "task_tags": ["manufacturing"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_station_upkeep",
+    "display_name": "Station Upkeep",
+    "description": "Routine maintenance and systems monitoring.",
+    "task_tags": ["maintenance", "systems"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_advanced_fabrication",
+    "display_name": "Advanced Fabrication",
+    "description": "High-tech fabrication requiring specialised skill and equipment.",
+    "task_tags": ["advanced_fabrication"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_research",
+    "display_name": "Research",
+    "description": "Scientific research, data analysis, and cartographic surveys.",
+    "task_tags": ["research", "analysis", "cartography"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_navigation",
+    "display_name": "Navigation Duties",
+    "description": "Piloting, wayfinding, and spatial surveying.",
+    "task_tags": ["piloting", "wayfinding", "surveying"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_medical_care",
+    "display_name": "Medical Care",
+    "description": "Diagnosis, treatment, and psychological counselling.",
+    "task_tags": ["diagnosis", "treatment", "psychology"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_surgery",
+    "display_name": "Surgical Procedures",
+    "description": "Surgical operations and prosthetic fitting.",
+    "task_tags": ["surgery", "prosthetics"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_cultivation",
+    "display_name": "Cultivation",
+    "description": "Growing crops and producing botanical medicines.",
+    "task_tags": ["cultivation", "apothecary"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_food_prep",
+    "display_name": "Food Preparation",
+    "description": "Cooking and preparing meals in the galley.",
+    "task_tags": ["culinary"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_crew_relations",
+    "display_name": "Crew Relations",
+    "description": "Interpersonal communication, morale management, and social influence.",
+    "task_tags": ["articulation", "manipulation", "performance", "intimidation", "negotiation"],
+    "is_base_job": true,
+    "schema_version": "2"
+  },
+  {
+    "id": "job_general_duties",
+    "display_name": "General Duties",
+    "description": "Catch-all job that covers any task tag. Assigned to departments that need flexible coverage.",
+    "task_tags": ["*"],
+    "is_base_job": true,
+    "is_wildcard": true,
+    "schema_version": "2"
+  }
+]
