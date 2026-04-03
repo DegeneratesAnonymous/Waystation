@@ -134,7 +134,9 @@ namespace Waystation.UI
         {
             public int bodyIndex;
             public VisualElement dot;
-            public float radius;
+            public float radius;           // semi-major axis in pixels
+            public float eccentricity;     // 0 = circle, 0.01–0.12 for planets
+            public float periapsisAngle;   // radians — rotation of the ellipse
             public float orbitalPeriodTicks;
             public float phase;
             public float size;
@@ -146,7 +148,9 @@ namespace Waystation.UI
         {
             public OrbitVisual parent;
             public VisualElement dot;
-            public float moonOrbitRadius;  // pixel radius around parent body center
+            public float moonOrbitRadius;  // semi-major axis around parent (px)
+            public float eccentricity;     // small: 0.005–0.04
+            public float periapsisAngle;   // radians
             public float orbitalPeriodTicks;
             public float phase;
             public float size;
@@ -1001,26 +1005,71 @@ namespace Waystation.UI
             }
             float auRange = Mathf.Max(0.1f, maxAU - minAU);
 
+            // ── Pass 1: compute semi-major axis + eccentricity per body ───────
+            var orbitParams = new List<(float semiMajor, float eccentricity, float periapsisAngle)>();
             for (int i = 0; i < count; i++)
             {
                 var   body   = sys.bodies[i];
                 float bodyAU = body.orbitalRadius > 0f ? body.orbitalRadius : (0.5f + i * 1.5f);
-                // Sqrt-scaled normalisation for better inner/outer distribution.
                 float t = count == 1 ? 0.5f : Mathf.Sqrt((bodyAU - minAU) / auRange);
-                float radius = innerR + t * (outerR - innerR);
-                // Enforce minimum gap so rings never stack.
-                radius = Mathf.Max(radius, innerR + i * 14f);
+                float semiMajor = innerR + t * (outerR - innerR);
+                semiMajor = Mathf.Max(semiMajor, innerR + i * 14f);
+
+                float ecc = DeriveEccentricity(body);
+                float omega = DerivePeriapsisAngle(body);
+                orbitParams.Add((semiMajor, ecc, omega));
+            }
+
+            // ── Pass 2: collision avoidance ───────────────────────────────────
+            // Ensure periapsis of orbit i > apoapsis of orbit i−1 + minGap.
+            const float minGapPx = 10f;
+            for (int i = 1; i < orbitParams.Count; i++)
+            {
+                var prev = orbitParams[i - 1];
+                var curr = orbitParams[i];
+                float prevApoapsis = prev.semiMajor * (1f + prev.eccentricity);
+                float currPeriapsis = curr.semiMajor * (1f - curr.eccentricity);
+
+                if (currPeriapsis < prevApoapsis + minGapPx)
+                {
+                    // Push current orbit outward so periapsis clears.
+                    float needed = prevApoapsis + minGapPx;
+                    float newSemiMajor = needed / (1f - curr.eccentricity);
+                    orbitParams[i] = (newSemiMajor, curr.eccentricity, curr.periapsisAngle);
+                }
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                var   body   = sys.bodies[i];
+                var   op     = orbitParams[i];
+                float radius = op.semiMajor;
+                float ecc    = op.eccentricity;
+                float omega  = op.periapsisAngle;
+
+                // Ellipse geometry: semi-minor axis and focal offset.
+                float semiMinor = radius * Mathf.Sqrt(1f - ecc * ecc);
+                // The star sits at one focus; the ellipse center is offset by a*e along the periapsis direction.
+                float focalOffset = radius * ecc;
+                // Ellipse center relative to star.
+                float ellCx = centerX - Mathf.Cos(omega) * focalOffset;
+                float ellCy = centerY - Mathf.Sin(omega) * focalOffset;
 
                 var ring = new VisualElement();
                 ring.style.position = Position.Absolute;
-                ring.style.left     = centerX - radius;
-                ring.style.top      = centerY - radius;
+                ring.style.left     = ellCx - radius;
+                ring.style.top      = ellCy - semiMinor;
                 ring.style.width    = radius * 2f;
-                ring.style.height   = radius * 2f;
-                ring.style.borderTopLeftRadius     = radius;
-                ring.style.borderTopRightRadius    = radius;
-                ring.style.borderBottomLeftRadius  = radius;
-                ring.style.borderBottomRightRadius = radius;
+                ring.style.height   = semiMinor * 2f;
+                ring.style.borderTopLeftRadius     = Length.Percent(50);
+                ring.style.borderTopRightRadius    = Length.Percent(50);
+                ring.style.borderBottomLeftRadius  = Length.Percent(50);
+                ring.style.borderBottomRightRadius = Length.Percent(50);
+                // Rotate the ellipse to align with the periapsis angle.
+                if (Mathf.Abs(omega) > 0.001f)
+                    ring.style.rotate = new Rotate(new Angle(omega * Mathf.Rad2Deg, AngleUnit.Degree));
+                ring.style.transformOrigin = new TransformOrigin(
+                    Length.Percent(50), Length.Percent(50));
                 ring.style.borderTopWidth    = 1;
                 ring.style.borderRightWidth  = 1;
                 ring.style.borderBottomWidth = 1;
@@ -1051,12 +1100,14 @@ namespace Waystation.UI
 
                 var ov = new OrbitVisual
                 {
-                    bodyIndex    = i,
-                    dot          = dot,
-                    radius       = radius,
+                    bodyIndex      = i,
+                    dot            = dot,
+                    radius         = radius,
+                    eccentricity   = ecc,
+                    periapsisAngle = omega,
                     orbitalPeriodTicks = Mathf.Max(1f, body.orbitalPeriod),
-                    phase        = body.initialPhase,
-                    size         = bodySize,
+                    phase          = body.initialPhase,
+                    size           = bodySize,
                 };
                 _orbitVisuals.Add(ov);
 
@@ -1085,6 +1136,8 @@ namespace Waystation.UI
                         parent          = ov,
                         dot             = moonDot,
                         moonOrbitRadius = moonOrbitBaseR + m * 6f,
+                        eccentricity    = DeriveMoonEccentricity(moon, m),
+                        periapsisAngle  = (moon.initialPhase * 2.3f + m * 1.1f) % (Mathf.PI * 2f),
                         orbitalPeriodTicks = Mathf.Max(12f, ov.orbitalPeriodTicks * (0.13f + m * 0.06f)),
                         phase           = moon.initialPhase,
                         size            = moonSize,
@@ -1168,34 +1221,35 @@ namespace Waystation.UI
             _dashedOrbitOverlay.generateVisualContent += ctx =>
             {
                 var painter = ctx.painter2D;
-                painter.lineWidth = 0.8f;
+                painter.lineWidth = 0.6f;
                 painter.lineCap = LineCap.Butt;
 
-                // Dashed circles for moon orbits.
-                var moonOrbitColor = new Color(0.35f, 0.45f, 0.60f, 0.30f);
+                // Dashed ellipses for moon orbits.
+                var moonOrbitColor = new Color(0.35f, 0.45f, 0.60f, 0.18f);
                 foreach (var moon in _moonVisuals)
                 {
-                    float cx = moon.parent.currentCenterX;
-                    float cy = moon.parent.currentCenterY;
-                    float r = moon.moonOrbitRadius;
+                    float pcx = moon.parent.currentCenterX;
+                    float pcy = moon.parent.currentCenterY;
                     painter.strokeColor = moonOrbitColor;
-                    DrawDashedCircle(painter, cx, cy, r, 4f, 4f);
+                    DrawDashedEllipse(painter, pcx, pcy, moon.moonOrbitRadius,
+                        moon.eccentricity, moon.periapsisAngle, 3f, 4f);
                 }
 
-                // Dashed circle for station orbit around its host body.
+                // Dashed ellipse for station orbit around its host body.
                 if (_stationDot != null && _stationParentBodyIndex >= 0 && _stationParentBodyIndex < _orbitVisuals.Count)
                 {
                     var host = _orbitVisuals[_stationParentBodyIndex];
                     float stOrbitR = host.size * 1.5f + 10f;
-                    painter.strokeColor = new Color(0.25f, 1.00f, 0.50f, 0.25f);
-                    DrawDashedCircle(painter, host.currentCenterX, host.currentCenterY, stOrbitR, 3f, 5f);
+                    painter.strokeColor = new Color(0.25f, 1.00f, 0.50f, 0.15f);
+                    DrawDashedEllipse(painter, host.currentCenterX, host.currentCenterY,
+                        stOrbitR, 0.01f, 0f, 3f, 5f);
                 }
 
                 // Dashed route lines (system-view: between orbital bodies).
                 if (_routePlotterActive && _routeWaypoints.Count >= 2)
                 {
-                    painter.lineWidth = 1.2f;
-                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.70f);
+                    painter.lineWidth = 1.0f;
+                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.50f);
                     for (int i = 1; i < _routeWaypoints.Count; i++)
                     {
                         var a = _routeWaypoints[i - 1];
@@ -1232,30 +1286,26 @@ namespace Waystation.UI
                 float cx = _orbitCenterX;
                 float cy = _orbitCenterY;
 
-                // Animate main orbital bodies and record their screen centres.
+                // Animate main orbital bodies using elliptical orbits.
                 foreach (var body in _orbitVisuals)
                 {
                     float angle = body.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, body.orbitalPeriodTicks));
-                    float x = cx + Mathf.Cos(angle) * body.radius - body.size * 0.5f;
-                    float y = cy + Mathf.Sin(angle) * body.radius - body.size * 0.5f;
-                    body.dot.style.left  = x;
-                    body.dot.style.top   = y;
-                    body.currentCenterX  = x + body.size * 0.5f;
-                    body.currentCenterY  = y + body.size * 0.5f;
+                    var pos = EllipticalPos(cx, cy, body.radius, body.eccentricity, body.periapsisAngle, angle);
+                    body.dot.style.left = pos.x - body.size * 0.5f;
+                    body.dot.style.top  = pos.y - body.size * 0.5f;
+                    body.currentCenterX = pos.x;
+                    body.currentCenterY = pos.y;
                 }
 
-                // Animate moons orbiting their parent bodies.
+                // Animate moons on slightly elliptical orbits around their parent.
                 foreach (var moon in _moonVisuals)
                 {
                     float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
-                    float mx = moon.parent.currentCenterX
-                             + Mathf.Cos(moonAngle) * moon.moonOrbitRadius
-                             - moon.size * 0.5f;
-                    float my = moon.parent.currentCenterY
-                             + Mathf.Sin(moonAngle) * moon.moonOrbitRadius
-                             - moon.size * 0.5f;
-                    moon.dot.style.left = mx;
-                    moon.dot.style.top  = my;
+                    var moonPos = EllipticalPos(
+                        moon.parent.currentCenterX, moon.parent.currentCenterY,
+                        moon.moonOrbitRadius, moon.eccentricity, moon.periapsisAngle, moonAngle);
+                    moon.dot.style.left = moonPos.x - moon.size * 0.5f;
+                    moon.dot.style.top  = moonPos.y - moon.size * 0.5f;
                 }
 
                 // Animate station orbiting its host body.
@@ -1333,15 +1383,14 @@ namespace Waystation.UI
                 return;
             }
 
-            // Compute position from orbital math (avoids resolvedStyle lag/bounce).
+            // Compute position from elliptical orbital math.
             float angle = selected.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, selected.orbitalPeriodTicks));
-            float dotCx  = _orbitCenterX + Mathf.Cos(angle) * selected.radius;
-            float dotCy  = _orbitCenterY + Mathf.Sin(angle) * selected.radius;
+            var selPos = EllipticalPos(_orbitCenterX, _orbitCenterY, selected.radius, selected.eccentricity, selected.periapsisAngle, angle);
             float ringSize = selected.size + 10f;
             _orbitSelectionRing.style.width  = ringSize;
             _orbitSelectionRing.style.height = ringSize;
-            _orbitSelectionRing.style.left   = dotCx - ringSize * 0.5f;
-            _orbitSelectionRing.style.top    = dotCy - ringSize * 0.5f;
+            _orbitSelectionRing.style.left   = selPos.x - ringSize * 0.5f;
+            _orbitSelectionRing.style.top    = selPos.y - ringSize * 0.5f;
             _orbitSelectionRing.style.borderTopLeftRadius     = ringSize * 0.5f;
             _orbitSelectionRing.style.borderTopRightRadius    = ringSize * 0.5f;
             _orbitSelectionRing.style.borderBottomLeftRadius  = ringSize * 0.5f;
@@ -1369,13 +1418,14 @@ namespace Waystation.UI
                 {
                     float moonAngle = _hoverMoonVisual.phase
                                     + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, _hoverMoonVisual.orbitalPeriodTicks));
-                    float moonCx = _hoverMoonVisual.parent.currentCenterX + Mathf.Cos(moonAngle) * _hoverMoonVisual.moonOrbitRadius;
-                    float moonCy = _hoverMoonVisual.parent.currentCenterY + Mathf.Sin(moonAngle) * _hoverMoonVisual.moonOrbitRadius;
+                    var moonHovPos = EllipticalPos(
+                        _hoverMoonVisual.parent.currentCenterX, _hoverMoonVisual.parent.currentCenterY,
+                        _hoverMoonVisual.moonOrbitRadius, _hoverMoonVisual.eccentricity, _hoverMoonVisual.periapsisAngle, moonAngle);
                     float moonRing = _hoverMoonVisual.size + 10f;
                     _orbitHoverRing.style.width = moonRing;
                     _orbitHoverRing.style.height = moonRing;
-                    _orbitHoverRing.style.left = moonCx - moonRing * 0.5f;
-                    _orbitHoverRing.style.top = moonCy - moonRing * 0.5f;
+                    _orbitHoverRing.style.left = moonHovPos.x - moonRing * 0.5f;
+                    _orbitHoverRing.style.top = moonHovPos.y - moonRing * 0.5f;
                     _orbitHoverRing.style.borderTopLeftRadius = moonRing * 0.5f;
                     _orbitHoverRing.style.borderTopRightRadius = moonRing * 0.5f;
                     _orbitHoverRing.style.borderBottomLeftRadius = moonRing * 0.5f;
@@ -1415,13 +1465,12 @@ namespace Waystation.UI
             }
 
             float angle = hovered.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, hovered.orbitalPeriodTicks));
-            float dotCx = _orbitCenterX + Mathf.Cos(angle) * hovered.radius;
-            float dotCy = _orbitCenterY + Mathf.Sin(angle) * hovered.radius;
+            var hovPos = EllipticalPos(_orbitCenterX, _orbitCenterY, hovered.radius, hovered.eccentricity, hovered.periapsisAngle, angle);
             float ringSize = hovered.size + 12f;
             _orbitHoverRing.style.width = ringSize;
             _orbitHoverRing.style.height = ringSize;
-            _orbitHoverRing.style.left = dotCx - ringSize * 0.5f;
-            _orbitHoverRing.style.top = dotCy - ringSize * 0.5f;
+            _orbitHoverRing.style.left = hovPos.x - ringSize * 0.5f;
+            _orbitHoverRing.style.top = hovPos.y - ringSize * 0.5f;
             _orbitHoverRing.style.borderTopLeftRadius = ringSize * 0.5f;
             _orbitHoverRing.style.borderTopRightRadius = ringSize * 0.5f;
             _orbitHoverRing.style.borderBottomLeftRadius = ringSize * 0.5f;
@@ -1488,14 +1537,14 @@ namespace Waystation.UI
                 }
             }
 
-            // Check moons.
+            // Check moons (elliptical positions).
             foreach (var moon in _moonVisuals)
             {
                 float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
-                float mx = moon.parent.currentCenterX + Mathf.Cos(moonAngle) * moon.moonOrbitRadius;
-                float my = moon.parent.currentCenterY + Mathf.Sin(moonAngle) * moon.moonOrbitRadius;
-                float dx = mx - worldPtrX;
-                float dy = my - worldPtrY;
+                var mPos = EllipticalPos(moon.parent.currentCenterX, moon.parent.currentCenterY,
+                    moon.moonOrbitRadius, moon.eccentricity, moon.periapsisAngle, moonAngle);
+                float dx = mPos.x - worldPtrX;
+                float dy = mPos.y - worldPtrY;
                 float dSq = dx * dx + dy * dy;
                 if (dSq < bestDistSq)
                 {
@@ -1645,14 +1694,14 @@ namespace Waystation.UI
                 }
             }
 
-            // Moons.
+            // Moons (elliptical).
             foreach (var moon in _moonVisuals)
             {
                 float moonAngle = moon.phase + Mathf.PI * 2f * (_orbitTime / Mathf.Max(1f, moon.orbitalPeriodTicks));
-                float mx = moon.parent.currentCenterX + Mathf.Cos(moonAngle) * moon.moonOrbitRadius;
-                float my = moon.parent.currentCenterY + Mathf.Sin(moonAngle) * moon.moonOrbitRadius;
-                float dx = mx - worldPtrX;
-                float dy = my - worldPtrY;
+                var mClickPos = EllipticalPos(moon.parent.currentCenterX, moon.parent.currentCenterY,
+                    moon.moonOrbitRadius, moon.eccentricity, moon.periapsisAngle, moonAngle);
+                float dx = mClickPos.x - worldPtrX;
+                float dy = mClickPos.y - worldPtrY;
                 float dSq = dx * dx + dy * dy;
                 if (dSq < bestDistSq)
                 {
@@ -1738,6 +1787,73 @@ namespace Waystation.UI
             return parent.moons.Count > 0 ? parent.moons[0] : null;
         }
 
+        // ── Elliptical orbit helpers ──────────────────────────────────────────
+
+        /// <summary>
+        /// Computes the position of a body on an elliptical orbit.
+        /// Uses the Kepler first-law polar equation: r(θ) = a(1−e²)/(1+e·cos(θ−ω))
+        /// then converts to Cartesian offset from the focal point (the star).
+        /// </summary>
+        private static Vector2 EllipticalPos(float cx, float cy, float semiMajor, float eccentricity, float periapsisAngle, float trueAnomaly)
+        {
+            float e = Mathf.Clamp(eccentricity, 0f, 0.5f);
+            float theta = trueAnomaly - periapsisAngle;
+            float r = semiMajor * (1f - e * e) / (1f + e * Mathf.Cos(theta));
+            return new Vector2(
+                cx + Mathf.Cos(trueAnomaly) * r,
+                cy + Mathf.Sin(trueAnomaly) * r);
+        }
+
+        /// <summary>
+        /// Derives a deterministic eccentricity for a body based on its properties.
+        /// Mineral-rich / dense bodies get higher eccentricity (gravitational perturbation).
+        /// Gas giants get very low eccentricity (circular, stable orbits).
+        /// </summary>
+        private static float DeriveEccentricity(SolarBody body)
+        {
+            // Base eccentricity from body type (realistic ranges).
+            float e;
+            switch (body.bodyType)
+            {
+                case BodyType.GasGiant:     e = 0.012f; break; // very circular
+                case BodyType.IcePlanet:    e = 0.018f; break;
+                case BodyType.RockyPlanet:  e = 0.035f; break;
+                case BodyType.AsteroidBelt: e = 0.08f;  break; // belts are scattered
+                default:                    e = 0.03f;  break;
+            }
+
+            // Mineral-rich/dense bodies: higher eccentricity due to formation dynamics.
+            if (body.tags.Contains("rich_ore"))         e += 0.025f;
+            if (body.tags.Contains("ice_deposits"))     e += 0.015f;
+            if (body.tags.Contains("ancient_ruins"))    e += 0.01f;
+            if (body.tags.Contains("storm_activity"))   e += 0.008f;
+
+            // Larger bodies tend toward more circular orbits (self-clearing).
+            e *= Mathf.Lerp(1.2f, 0.7f, Mathf.Clamp01(body.size / 4f));
+
+            // Deterministic variation from initial phase (so each body is unique).
+            float variation = Mathf.Sin(body.initialPhase * 7.3f + body.orbitalRadius * 2.1f) * 0.015f;
+            e += variation;
+
+            return Mathf.Clamp(e, 0.005f, 0.12f);
+        }
+
+        /// <summary>
+        /// Derives periapsis angle from body properties (deterministic, no RNG needed).
+        /// </summary>
+        private static float DerivePeriapsisAngle(SolarBody body)
+        {
+            // Spread periapsis angles using orbital parameters as seed.
+            return (body.initialPhase * 3.7f + body.orbitalRadius * 1.9f) % (Mathf.PI * 2f);
+        }
+
+        /// <summary>Derives small eccentricity for moons (nearly circular).</summary>
+        private static float DeriveMoonEccentricity(SolarBody moon, int moonIndex)
+        {
+            float e = 0.008f + Mathf.Abs(Mathf.Sin(moon.initialPhase * 5.1f + moonIndex * 1.7f)) * 0.025f;
+            return Mathf.Clamp(e, 0.005f, 0.035f);
+        }
+
         // ── Dashed drawing helpers (Painter2D) ─────────────────────────────────
 
         /// <summary>Draws a dashed circle using Painter2D arc segments.</summary>
@@ -1766,6 +1882,46 @@ namespace Waystation.UI
                 {
                     float t = startRad + (endRad - startRad) * (s / (float)arcSteps);
                     painter.LineTo(new Vector2(cx + Mathf.Cos(t) * radius, cy + Mathf.Sin(t) * radius));
+                }
+                painter.Stroke();
+            }
+        }
+
+        /// <summary>
+        /// Draws a dashed ellipse using the Kepler polar equation.
+        /// The focus (star or parent body) is at (cx, cy).
+        /// </summary>
+        private static void DrawDashedEllipse(Painter2D painter, float cx, float cy, float semiMajor,
+            float eccentricity, float periapsisAngle, float dashPx, float gapPx)
+        {
+            if (semiMajor < 1f) return;
+            float e = Mathf.Clamp(eccentricity, 0f, 0.5f);
+            // Approximate circumference for dash stepping.
+            float semiMinor = semiMajor * Mathf.Sqrt(1f - e * e);
+            float circumference = Mathf.PI * (3f * (semiMajor + semiMinor) - Mathf.Sqrt((3f * semiMajor + semiMinor) * (semiMajor + 3f * semiMinor)));
+            float step = dashPx + gapPx;
+            int segCount = Mathf.Max(4, Mathf.FloorToInt(circumference / step));
+            float dashFrac = dashPx / step;
+            float stepAngle = Mathf.PI * 2f / segCount;
+
+            for (int i = 0; i < segCount; i++)
+            {
+                float startAngle = i * stepAngle;
+                float endAngle = startAngle + stepAngle * dashFrac;
+
+                // Start point.
+                float theta0 = startAngle - periapsisAngle;
+                float r0 = semiMajor * (1f - e * e) / (1f + e * Mathf.Cos(theta0));
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(cx + Mathf.Cos(startAngle) * r0, cy + Mathf.Sin(startAngle) * r0));
+
+                int arcSteps = Mathf.Max(2, Mathf.CeilToInt((endAngle - startAngle) * Mathf.Rad2Deg / 12f));
+                for (int s = 1; s <= arcSteps; s++)
+                {
+                    float t = startAngle + (endAngle - startAngle) * (s / (float)arcSteps);
+                    float thetaT = t - periapsisAngle;
+                    float rT = semiMajor * (1f - e * e) / (1f + e * Mathf.Cos(thetaT));
+                    painter.LineTo(new Vector2(cx + Mathf.Cos(t) * rT, cy + Mathf.Sin(t) * rT));
                 }
                 painter.Stroke();
             }
@@ -3345,8 +3501,8 @@ namespace Waystation.UI
                 {
                     if (_routeWaypoints.Count < 2) return;
                     var painter = ctx.painter2D;
-                    painter.lineWidth = 1.5f;
-                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.75f);
+                    painter.lineWidth = 1.2f;
+                    painter.strokeColor = new Color(0.28f, 0.50f, 0.68f, 0.50f);
                     painter.lineCap = LineCap.Round;
                     for (int ri = 1; ri < _routeWaypoints.Count; ri++)
                     {
