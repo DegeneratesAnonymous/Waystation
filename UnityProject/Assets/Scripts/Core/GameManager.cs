@@ -356,7 +356,8 @@ namespace Waystation.Core
                 // non-pausing departure warning panel (UI-030).
                 var alert = MakeDepartureAlertEvent(npc, deadline);
                 var category = alert.definition.hostile ? LogCategory.Alert : LogCategory.World;
-                EventLogBuffer.Instance?.Add(category, alert.definition.description ?? alert.definition.id);
+                var tickFired = Station?.tick ?? 0;
+                EventLogBuffer.Instance?.Add(category, alert.definition.description ?? alert.definition.id, tickFired);
                 OnDepartureWarning?.Invoke(npc, deadline);
             };
             Tension.OnNpcDeparted += npc =>

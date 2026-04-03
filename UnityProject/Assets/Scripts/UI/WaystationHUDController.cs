@@ -1153,7 +1153,7 @@ namespace Waystation.UI
         private void OnEventLogStripFallbackClick(ClickEvent evt)
         {
             if (_eventLog == null || _eventLog.IsExpanded) return;
-            var entry = EventLogBuffer.Instance.GetCollapsedEntry();
+            var entry = _eventLog.CurrentPreviewEntry ?? EventLogBuffer.Instance.GetCollapsedEntry();
             if (entry == null) return;
             OnEventNotificationClicked(entry);
         }
@@ -1163,8 +1163,6 @@ namespace Waystation.UI
             if (entry == null) return;
 
             EnsureEventInfoDrawer();
-
-            Debug.Log($"[WaystationHUDController] Event notification clicked: '{entry.BodyText}'");
 
             string cat = entry.Category switch
             {
@@ -1353,10 +1351,11 @@ namespace Waystation.UI
 
             if (_ready && _gm != null)
             {
-                bool paused = _gm.IsPaused;
-                if (_wasPausedLastFrame && !paused)
-                    ModalOverlay.ForceHideAllVisible();
-                _wasPausedLastFrame = paused;
+                // Keep pause state in sync, but do not forcibly dismiss modal overlays when
+                // leaving pause. Mandatory prompts (for example event/skill decisions) may
+                // intentionally hold the game in a paused state and must remain visible until
+                // their owning flow resolves them.
+                _wasPausedLastFrame = _gm.IsPaused;
             }
 
             // Keep the shared GameHUD.InBuildMode in sync with the ghost placement state.
@@ -1617,7 +1616,10 @@ namespace Waystation.UI
             // EventLogController auto-subscribes to EventLogBuffer.OnBufferChanged
             // so no manual call to OnBufferChanged is needed here.
             var category = pending.definition.hostile ? LogCategory.Alert : LogCategory.World;
-            EventLogBuffer.Instance.Add(category, pending.definition.description ?? pending.definition.id);
+            EventLogBuffer.Instance.Add(
+                category,
+                pending.definition.description ?? pending.definition.id,
+                tickFired: _gm?.Station?.tick ?? 0);
 
             ShowEventDecisionModal(pending);
         }

@@ -89,6 +89,18 @@ namespace Waystation.UI
         /// <summary>The currently active category filter, or null for All.</summary>
         public LogCategory? ActiveFilter => _activeFilter;
 
+        /// <summary>The entry currently shown in the collapsed preview, or null if none.</summary>
+        public LogEntry CurrentPreviewEntry
+        {
+            get
+            {
+                var entries = EventLogBuffer.Instance.Entries;
+                if (entries.Count == 0) return null;
+                int idx = Mathf.Clamp(_previewIndex, 0, entries.Count - 1);
+                return entries[idx];
+            }
+        }
+
         // ── Constructor ───────────────────────────────────────────────────────
 
         public EventLogController()
@@ -206,12 +218,16 @@ namespace Waystation.UI
             // Context info (tile selection, right-aligned)
             _contextLabel = new Label("");
             _contextLabel.AddToClassList("ws-event-log__context");
-            _contextLabel.style.fontSize      = 9;
-            _contextLabel.style.color         = new Color(0.55f, 0.65f, 0.8f, 0.85f);
-            _contextLabel.style.flexShrink    = 0;
-            _contextLabel.style.marginLeft    = 6;
+            _contextLabel.style.fontSize       = 9;
+            _contextLabel.style.color          = new Color(0.55f, 0.65f, 0.8f, 0.85f);
+            _contextLabel.style.flexShrink     = 1;
+            _contextLabel.style.minWidth       = 0;
+            _contextLabel.style.marginLeft     = 6;
             _contextLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _contextLabel.style.display       = DisplayStyle.None;
+            _contextLabel.style.overflow       = Overflow.Hidden;
+            _contextLabel.style.whiteSpace     = WhiteSpace.NoWrap;
+            _contextLabel.style.textOverflow   = TextOverflow.Ellipsis;
+            _contextLabel.style.display        = DisplayStyle.None;
             _header.Add(_contextLabel);
 
             // Chevron (expand/collapse)

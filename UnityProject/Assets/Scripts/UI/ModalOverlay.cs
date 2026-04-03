@@ -172,13 +172,15 @@ namespace Waystation.UI
         public void ClearFooter() => _footer.Clear();
 
         /// <summary>
-        /// Defensive cleanup for stale dim backdrops. Hides every live modal overlay.
+        /// Defensive cleanup for stale dim backdrops. Hides only live modal overlays
+        /// that are dismissible by default.
         /// </summary>
         public static void ForceHideAllVisible()
         {
             foreach (var overlay in s_liveOverlays)
             {
                 if (overlay == null) continue;
+                if (!overlay.BackdropCloseEnabled) continue;
                 overlay.Hide();
             }
         }

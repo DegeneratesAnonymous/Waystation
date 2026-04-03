@@ -250,6 +250,7 @@ namespace Waystation.View
         private void OnDestroy()
         {
             if (_gm != null) _gm.OnTick -= OnTick;
+            TileContextText = "";
         }
 
         private void Update()

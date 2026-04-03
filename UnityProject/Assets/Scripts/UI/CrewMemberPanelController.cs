@@ -497,8 +497,9 @@ namespace Waystation.UI
                 return;
             }
 
-            // ── Group domain skills by primary stat ────────────────────────────
+            // ── Group domain skills by primary stat; collect core skills separately ──
             var domainGroups = new Dictionary<string, List<(SkillInstance inst, SkillDefinition def)>>();
+            var coreSkills   = new List<(SkillInstance inst, SkillDefinition def)>();
 
             foreach (var inst in _npc.skillInstances)
             {
@@ -511,6 +512,10 @@ namespace Waystation.UI
                     if (!domainGroups.ContainsKey(def.primaryStat))
                         domainGroups[def.primaryStat] = new List<(SkillInstance, SkillDefinition)>();
                     domainGroups[def.primaryStat].Add((inst, def));
+                }
+                else
+                {
+                    coreSkills.Add((inst, def));
                 }
             }
 
@@ -628,6 +633,37 @@ namespace Waystation.UI
             perceptionCard.Add(perceptionDescLbl);
 
             root.Add(perceptionCard);
+
+            // ── Core / non-domain skills section ──────────────────────────────
+            if (coreSkills.Count > 0)
+            {
+                var coreHeader = new VisualElement();
+                coreHeader.style.flexShrink        = 0;
+                coreHeader.style.flexDirection     = FlexDirection.Row;
+                coreHeader.style.alignItems        = Align.Center;
+                coreHeader.style.marginTop         = 10;
+                coreHeader.style.marginBottom      = 3;
+                coreHeader.style.paddingBottom     = 2;
+                coreHeader.style.borderBottomWidth = 1;
+                coreHeader.style.borderBottomColor = new Color(0.35f, 0.4f, 0.55f, 0.5f);
+
+                var coreTitleLbl = new Label("CORE SKILLS");
+                coreTitleLbl.style.fontSize = 11;
+                coreTitleLbl.style.color    = new Color(0.6f, 0.72f, 0.9f);
+                coreTitleLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                coreTitleLbl.style.flexGrow = 1;
+                coreHeader.Add(coreTitleLbl);
+
+                var coreCountLbl = new Label($"{coreSkills.Count} skill{(coreSkills.Count != 1 ? "s" : "")}");
+                coreCountLbl.style.fontSize = 9;
+                coreCountLbl.style.color    = new Color(0.45f, 0.45f, 0.55f);
+                coreHeader.Add(coreCountLbl);
+
+                root.Add(coreHeader);
+
+                foreach (var (inst, def) in coreSkills)
+                    root.Add(BuildDomainSkillRow(inst, def));
+            }
         }
 
         /// <summary>Build a card-style row for a domain skill.</summary>
@@ -723,10 +759,10 @@ namespace Waystation.UI
 
                 if (showCap)
                 {
-                    var capLbl = new Label("Cap: 6");
+                    var capLbl = new Label("Cap: " + SkillSystem.NonProficientLevelCap);
                     capLbl.style.fontSize = 9;
                     capLbl.style.color    = new Color(0.88f, 0.68f, 0.10f);
-                    capLbl.tooltip = "Not proficient \u2014 XP at 50% rate, max level 6";
+                    capLbl.tooltip = "Not proficient \u2014 XP at 50% rate, max level " + SkillSystem.NonProficientLevelCap;
                     detailRow.Add(capLbl);
                 }
 
