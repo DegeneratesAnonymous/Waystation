@@ -79,20 +79,20 @@ namespace Waystation.Core
                     if (item is not Dictionary<string, object> chData) continue;
 
                     // Match channel by "id" field; fall back to positional if no id present
-                    Channel ch = null;
+                    Channel channel = null;
                     if (chData.ContainsKey("id"))
                     {
                         int configId = Convert.ToInt32(chData["id"]);
-                        ch = _channels.Find(c => c.Id == configId);
+                        channel = _channels.Find(c => c.Id == configId);
                     }
-                    if (ch == null) continue;
+                    if (channel == null) continue;
 
                     if (chData.ContainsKey("default_cadence"))
-                        ch.DefaultCadence = Convert.ToInt32(chData["default_cadence"]);
+                        channel.DefaultCadence = Convert.ToInt32(chData["default_cadence"]);
                     if (chData.ContainsKey("budget_ms"))
-                        ch.BudgetMs = Convert.ToSingle(chData["budget_ms"]);
+                        channel.BudgetMs = Convert.ToSingle(chData["budget_ms"]);
                     if (chData.ContainsKey("name"))
-                        ch.Name = chData["name"].ToString();
+                        channel.Name = chData["name"].ToString();
                 }
             }
 
