@@ -64,17 +64,17 @@ namespace Waystation.Systems
         {
             return archetype switch
             {
-                SectorArchetype.Confluence      => (4, 7),
-                SectorArchetype.MineralBelt     => (3, 6),
-                SectorArchetype.SingularityReach => (2, 4),
-                SectorArchetype.RemnantsZone    => (1, 3),
-                SectorArchetype.StormBelt       => (2, 5),
-                SectorArchetype.NebulaField     => (3, 6),
-                SectorArchetype.ContestedCore   => (4, 7),
-                SectorArchetype.Cradle          => (3, 6),
-                SectorArchetype.FrontierScatter => (2, 4),
-                SectorArchetype.VoidFringe      => (1, 2),
-                _ => (1, 2),
+                SectorArchetype.Confluence       => (16, 20),
+                SectorArchetype.MineralBelt      => (13, 18),
+                SectorArchetype.NebulaField      => (12, 17),
+                SectorArchetype.ContestedCore    => (15, 20),
+                SectorArchetype.Cradle           => (12, 17),
+                SectorArchetype.FrontierScatter  => (10, 14),
+                SectorArchetype.StormBelt        => (8, 14),
+                SectorArchetype.SingularityReach => (6, 12),
+                SectorArchetype.RemnantsZone     => (4, 10),
+                SectorArchetype.VoidFringe       => (3, 7),
+                _ => (3, 7),
             };
         }
 
