@@ -142,6 +142,24 @@ namespace Waystation.UI
         private VisualElement _starDotEl;
         private readonly List<(VisualElement ring, float radius)> _orbitRingEls
             = new List<(VisualElement ring, float radius)>();
+        private VisualElement _orbitWorld;
+        private float _orbitZoom = 1f;
+        private Vector2 _orbitPan = Vector2.zero;
+        private bool _orbitPanning;
+        private Vector2 _orbitPanStartMouse;
+        private Vector2 _orbitPanStartOffset;
+
+        // Sector chart interaction state.
+        private VisualElement _sectorChartViewport;
+        private VisualElement _sectorChartWorld;
+        private float _sectorZoom = 1f;
+        private Vector2 _sectorPan = Vector2.zero;
+        private bool _sectorPanning;
+        private Vector2 _sectorPanStartMouse;
+        private Vector2 _sectorPanStartOffset;
+
+        private int Fs(float size)
+            => Mathf.RoundToInt(size * _fontScale);
 
         // ── Events ────────────────────────────────────────────────────────────
 
@@ -450,8 +468,8 @@ namespace Waystation.UI
                 return;
             }
 
-            // Star name header
-            var starHeader = new Label($"{sys.systemName}  ·  {StarTypeLabel(sys.starType)}");
+            // Star name header (system type removed here; details remain in sidebar)
+            var starHeader = new Label(sys.systemName);
             starHeader.AddToClassList(SectionHeaderClass);
             starHeader.style.fontSize       = (int)(15 * _fontScale);
             starHeader.style.color          = ColAccentText;
@@ -460,41 +478,101 @@ namespace Waystation.UI
             starHeader.style.paddingBottom  = 8;
             root.Add(starHeader);
 
+            // Collapsible map key / legend in top-left of the map content.
+            root.Add(BuildMapLegend());
+
             // Pictorial orbital view for quick spatial readability.
             root.Add(BuildOrbitVisualization(sys));
 
-            // Orbital bodies section
+            // Compact two-column list area: Orbital Bodies (left) + POIs (right).
+            var listsRow = new VisualElement();
+            listsRow.style.flexDirection = FlexDirection.Row;
+            listsRow.style.alignItems = Align.FlexStart;
+            listsRow.style.marginTop = 4;
+            listsRow.style.marginBottom = 8;
+            listsRow.style.alignSelf = Align.FlexStart;
+            root.Add(listsRow);
+
+            var bodiesCard = new VisualElement();
+            bodiesCard.style.width = 420;
+            bodiesCard.style.maxWidth = 470;
+            bodiesCard.style.minWidth = 300;
+            bodiesCard.style.maxHeight = 200;
+            bodiesCard.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.95f);
+            bodiesCard.style.borderTopWidth = 1;
+            bodiesCard.style.borderRightWidth = 1;
+            bodiesCard.style.borderBottomWidth = 1;
+            bodiesCard.style.borderLeftWidth = 1;
+            bodiesCard.style.borderTopColor = ColDivider;
+            bodiesCard.style.borderRightColor = ColDivider;
+            bodiesCard.style.borderBottomColor = ColDivider;
+            bodiesCard.style.borderLeftColor = ColDivider;
+            bodiesCard.style.marginRight = 10;
+            listsRow.Add(bodiesCard);
+
+            var bodiesHdr = MakeSectionHeader("ORBITAL BODIES");
+            bodiesHdr.style.marginBottom = 0;
+            bodiesCard.Add(bodiesHdr);
+
+            var bodiesScroll = new ScrollView(ScrollViewMode.Vertical);
+            bodiesScroll.style.flexGrow = 1;
+            bodiesScroll.style.maxHeight = 165;
+            bodiesScroll.style.paddingLeft = 4;
+            bodiesScroll.style.paddingRight = 4;
+            bodiesCard.Add(bodiesScroll);
+
             if (sys.bodies.Count > 0)
             {
-                var bodiesHdr = MakeSectionHeader("ORBITAL BODIES");
-                root.Add(bodiesHdr);
-
                 for (int i = 0; i < sys.bodies.Count; i++)
                 {
                     var body = sys.bodies[i];
                     bool isStation = sys.stationOrbitIndex == i;
                     var row = BuildBodyRow(body, isStation, i, sys);
-                    root.Add(row);
-                    // Moon sub-rows (indented under parent body)
+                    bodiesScroll.Add(row);
                     foreach (var moon in body.moons)
-                        root.Add(BuildMoonRow(moon));
-                    // Station sub-row shown below its host body
+                        bodiesScroll.Add(BuildMoonRow(moon));
                     if (isStation)
-                        root.Add(BuildStationSubRow());
+                        bodiesScroll.Add(BuildStationSubRow());
                 }
             }
             else
             {
                 var noData = new Label("No orbital bodies catalogued.");
                 noData.style.color = ColTextMid;
-                root.Add(noData);
+                noData.style.fontSize = Fs(10);
+                bodiesScroll.Add(noData);
             }
 
-            // POIs section
+            var poiCard = new VisualElement();
+            poiCard.style.width = 300;
+            poiCard.style.maxWidth = 340;
+            poiCard.style.minWidth = 220;
+            poiCard.style.maxHeight = 200;
+            poiCard.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.95f);
+            poiCard.style.borderTopWidth = 1;
+            poiCard.style.borderRightWidth = 1;
+            poiCard.style.borderBottomWidth = 1;
+            poiCard.style.borderLeftWidth = 1;
+            poiCard.style.borderTopColor = ColDivider;
+            poiCard.style.borderRightColor = ColDivider;
+            poiCard.style.borderBottomColor = ColDivider;
+            poiCard.style.borderLeftColor = ColDivider;
+            listsRow.Add(poiCard);
+
+            var poiHdr = MakeSectionHeader("POINTS OF INTEREST");
+            poiHdr.style.marginBottom = 0;
+            poiCard.Add(poiHdr);
+
+            var poiScroll = new ScrollView(ScrollViewMode.Vertical);
+            poiScroll.style.flexGrow = 1;
+            poiScroll.style.maxHeight = 165;
+            poiScroll.style.paddingLeft = 4;
+            poiScroll.style.paddingRight = 4;
+            poiCard.Add(poiScroll);
+
             var pois = _map?.GetDiscoveredPois(_station);
             if (pois != null && pois.Count > 0)
             {
-                root.Add(MakeSectionHeader("POINTS OF INTEREST"));
                 foreach (var poi in pois)
                 {
                     var poiRow = new VisualElement();
@@ -509,13 +587,17 @@ namespace Waystation.UI
                     var poiName = new Label(poi.displayName ?? poi.poiType);
                     poiName.style.color     = ColTextBright;
                     poiName.style.flexGrow  = 1;
-                    var poiType = new Label(poi.poiType);
-                    poiType.style.color  = ColTextMid;
-                    poiType.style.width  = 110;
+                    poiName.style.fontSize  = Fs(10);
                     poiRow.Add(poiName);
-                    poiRow.Add(poiType);
-                    root.Add(poiRow);
+                    poiScroll.Add(poiRow);
                 }
+            }
+            else
+            {
+                var noPoi = new Label("No points of interest detected.");
+                noPoi.style.color = ColTextMid;
+                noPoi.style.fontSize = Fs(10);
+                poiScroll.Add(noPoi);
             }
 
             _viewArea.Add(root);
@@ -526,6 +608,9 @@ namespace Waystation.UI
             _orbitVisuals.Clear();
             _moonVisuals.Clear();
             _orbitRingEls.Clear();
+            _orbitZoom = 1f;
+            _orbitPan = Vector2.zero;
+            _orbitPanning = false;
             _starDotEl         = null;
             _stationDot        = null;
 
@@ -569,6 +654,7 @@ namespace Waystation.UI
             _orbitCanvas.style.borderRightColor  = new Color(0.14f, 0.20f, 0.30f, 1f);
             _orbitCanvas.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
             _orbitCanvas.style.borderLeftColor   = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _orbitCanvas.style.overflow = Overflow.Hidden;
             card.Add(_orbitCanvas);
 
             // Height: canvas 280 + title ~24 + padding 16
@@ -590,12 +676,51 @@ namespace Waystation.UI
                 StartOrbitAnimation();
             });
 
+            _orbitCanvas.RegisterCallback<WheelEvent>(evt =>
+            {
+                float zoom = Mathf.Clamp(_orbitZoom * (1f - evt.delta.y * 0.0015f), 0.55f, 2.4f);
+                if (Mathf.Abs(zoom - _orbitZoom) < 0.001f) return;
+                _orbitZoom = zoom;
+                ApplyOrbitWorldTransform();
+                evt.StopPropagation();
+            });
+            _orbitCanvas.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 1) return; // right-drag to pan
+                _orbitPanning = true;
+                _orbitPanStartMouse = evt.position;
+                _orbitPanStartOffset = _orbitPan;
+                _orbitCanvas.CapturePointer(evt.pointerId);
+            });
+            _orbitCanvas.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!_orbitPanning) return;
+                Vector2 delta = evt.position - _orbitPanStartMouse;
+                _orbitPan = _orbitPanStartOffset + delta;
+                ApplyOrbitWorldTransform();
+            });
+            _orbitCanvas.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                if (evt.button != 1) return;
+                _orbitPanning = false;
+                _orbitCanvas.ReleasePointer(evt.pointerId);
+            });
+
             return card;
         }
 
         private void BuildOrbitContent(SolarSystemState sys, float centerX, float centerY)
         {
             if (_orbitCanvas == null) return;
+
+            _orbitWorld = new VisualElement();
+            _orbitWorld.style.position = Position.Absolute;
+            _orbitWorld.style.left = 0;
+            _orbitWorld.style.top = 0;
+            _orbitWorld.style.right = 0;
+            _orbitWorld.style.bottom = 0;
+            _orbitCanvas.Add(_orbitWorld);
+            ApplyOrbitWorldTransform();
 
             // ── Star ─────────────────────────────────────────────────────────
             float starSize = Mathf.Clamp(22f + sys.starSize * 3f, 22f, 34f);
@@ -612,7 +737,7 @@ namespace Waystation.UI
             if (!ColorUtility.TryParseHtmlString(sys.starColorHex, out Color starColor))
                 starColor = new Color(0.96f, 0.86f, 0.44f, 1f);
             star.style.backgroundColor = starColor;
-            _orbitCanvas.Add(star);
+            _orbitWorld.Add(star);
             _starDotEl = star;
 
             // ── Orbital bodies ────────────────────────────────────────────────
@@ -648,7 +773,7 @@ namespace Waystation.UI
                 ring.style.borderRightColor  = new Color(0.18f, 0.25f, 0.36f, 0.75f);
                 ring.style.borderBottomColor = new Color(0.18f, 0.25f, 0.36f, 0.75f);
                 ring.style.borderLeftColor   = new Color(0.18f, 0.25f, 0.36f, 0.75f);
-                _orbitCanvas.Add(ring);
+                _orbitWorld.Add(ring);
                 _orbitRingEls.Add((ring, radius));
 
                 float bodySize = Mathf.Clamp(7f + body.size * 1.8f, 7f, 14f);
@@ -678,7 +803,7 @@ namespace Waystation.UI
                         ShowBodyDetail(sys.bodies[capturedIdx], sys.stationOrbitIndex == capturedIdx);
                     }
                 });
-                _orbitCanvas.Add(dot);
+                _orbitWorld.Add(dot);
 
                 float angularSpeed = 0.25f + (1f / Mathf.Max(30f, body.orbitalPeriod)) * 20f;
                 var ov = new OrbitVisual
@@ -711,7 +836,7 @@ namespace Waystation.UI
                     moonDot.style.backgroundColor = moonCol;
                     moonDot.style.opacity         = 0.75f;
                     moonDot.tooltip               = moon.name ?? "Moon";
-                    _orbitCanvas.Add(moonDot);
+                    _orbitWorld.Add(moonDot);
                     _moonVisuals.Add(new MoonVisual
                     {
                         parent          = ov,
@@ -748,7 +873,7 @@ namespace Waystation.UI
                 _stationDot.style.borderBottomColor = new Color(0.60f, 1f, 0.70f, 0.8f);
                 _stationDot.style.borderLeftColor   = new Color(0.60f, 1f, 0.70f, 0.8f);
                 _stationDot.tooltip = "Your Station";
-                _orbitCanvas.Add(_stationDot);
+                _orbitWorld.Add(_stationDot);
             }
             else
             {
@@ -768,7 +893,14 @@ namespace Waystation.UI
             _orbitSelectionRing.style.borderBottomColor = new Color(1f, 1f, 1f, 0.95f);
             _orbitSelectionRing.style.borderLeftColor   = new Color(1f, 1f, 1f, 0.95f);
             _orbitSelectionRing.style.display = DisplayStyle.None;
-            _orbitCanvas.Add(_orbitSelectionRing);
+            _orbitWorld.Add(_orbitSelectionRing);
+        }
+
+        private void ApplyOrbitWorldTransform()
+        {
+            if (_orbitWorld == null) return;
+            _orbitWorld.transform.position = new Vector3(_orbitPan.x, _orbitPan.y, 0f);
+            _orbitWorld.transform.scale = new Vector3(_orbitZoom, _orbitZoom, 1f);
         }
 
         private void StartOrbitAnimation()
@@ -837,6 +969,7 @@ namespace Waystation.UI
             _stationDot             = null;
             _stationParentBodyIndex = -1;
             _starDotEl              = null;
+            _orbitWorld             = null;
             _orbitSelectionRing     = null;
             _orbitCanvas            = null;
         }
@@ -921,14 +1054,8 @@ namespace Waystation.UI
             nameLabel.AddToClassList(SystemBodyNameClass);
             nameLabel.style.color     = ColTextBright;
             nameLabel.style.flexGrow  = 1;
+            nameLabel.style.fontSize  = Fs(11);
             row.Add(nameLabel);
-
-            // Body type
-            var typeLabel = new Label(BodyTypeLabel(body.bodyType));
-            typeLabel.AddToClassList(SystemBodyTypeClass);
-            typeLabel.style.color = ColTextMid;
-            typeLabel.style.width = 100;
-            row.Add(typeLabel);
 
             // Hover highlight
             row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = ColBodyRowHov);
@@ -987,11 +1114,6 @@ namespace Waystation.UI
                 nameLabel.style.fontSize = (int)(10 * _fontScale);
                 row.Add(nameLabel);
 
-                var typeLabel = new Label("Moon");
-                typeLabel.style.color    = ColTextMid;
-                typeLabel.style.fontSize = (int)(9 * _fontScale);
-                row.Add(typeLabel);
-
                 return row;
             }
 
@@ -1035,6 +1157,81 @@ namespace Waystation.UI
 
                 return row;
             }
+
+        private VisualElement BuildMapLegend()
+        {
+            var card = new VisualElement();
+            card.style.alignSelf = Align.FlexStart;
+            card.style.marginBottom = 8;
+            card.style.backgroundColor = new Color(0.07f, 0.10f, 0.16f, 0.95f);
+            card.style.borderTopWidth = 1;
+            card.style.borderRightWidth = 1;
+            card.style.borderBottomWidth = 1;
+            card.style.borderLeftWidth = 1;
+            card.style.borderTopColor = ColDivider;
+            card.style.borderRightColor = ColDivider;
+            card.style.borderBottomColor = ColDivider;
+            card.style.borderLeftColor = ColDivider;
+
+            var toggle = new Button { text = "MAP KEY ▾" };
+            toggle.style.fontSize = Fs(10);
+            toggle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            toggle.style.paddingLeft = 8;
+            toggle.style.paddingRight = 8;
+            toggle.style.paddingTop = 4;
+            toggle.style.paddingBottom = 4;
+            toggle.style.backgroundColor = new Color(0.10f, 0.14f, 0.22f, 1f);
+            toggle.style.color = ColTextBright;
+            card.Add(toggle);
+
+            var body = new VisualElement();
+            body.style.paddingLeft = 8;
+            body.style.paddingRight = 8;
+            body.style.paddingTop = 6;
+            body.style.paddingBottom = 6;
+            body.style.display = DisplayStyle.None;
+            card.Add(body);
+
+            body.Add(BuildLegendLine("●", new Color(0.80f, 0.68f, 0.52f, 1f), "Planet body"));
+            body.Add(BuildLegendLine("◆", new Color(0.25f, 1.00f, 0.50f, 1f), "Your station"));
+            body.Add(BuildLegendLine("○", new Color(0.56f, 0.71f, 0.90f, 0.8f), "Orbit ring"));
+            body.Add(BuildLegendLine("•", new Color(0.64f, 0.74f, 0.84f, 0.9f), "Moon"));
+            body.Add(BuildLegendLine("✦", new Color(0.55f, 0.74f, 1f, 1f), "Detected sector"));
+            body.Add(BuildLegendLine("✦", new Color(0.25f, 0.80f, 0.45f, 1f), "Visited sector"));
+            body.Add(BuildLegendLine("☁", new Color(0.44f, 0.53f, 0.68f, 0.7f), "Nebula field"));
+
+            bool expanded = false;
+            toggle.clicked += () =>
+            {
+                expanded = !expanded;
+                body.style.display = expanded ? DisplayStyle.Flex : DisplayStyle.None;
+                toggle.text = expanded ? "MAP KEY ▴" : "MAP KEY ▾";
+            };
+
+            return card;
+        }
+
+        private VisualElement BuildLegendLine(string icon, Color iconColor, string text)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 2;
+
+            var iconLabel = new Label(icon);
+            iconLabel.style.width = 14;
+            iconLabel.style.minWidth = 14;
+            iconLabel.style.color = iconColor;
+            iconLabel.style.fontSize = Fs(10);
+            row.Add(iconLabel);
+
+            var textLabel = new Label(text);
+            textLabel.style.color = ColTextBright;
+            textLabel.style.fontSize = Fs(10);
+            row.Add(textLabel);
+
+            return row;
+        }
 
         private void BuildSectorView()
         {
@@ -1097,8 +1294,8 @@ namespace Waystation.UI
         private VisualElement BuildSectorStarChart(StationState station)
         {
             var card = new VisualElement();
-            card.style.height = 360;
-            card.style.minHeight = 360;
+            card.style.height = 280;
+            card.style.minHeight = 280;
             card.style.marginBottom = 12;
             card.style.paddingTop = 8;
             card.style.paddingBottom = 8;
@@ -1116,141 +1313,227 @@ namespace Waystation.UI
 
             var title = new Label("SECTOR STAR CHART");
             title.style.color = ColAccentText;
-            title.style.fontSize = 11;
+            title.style.fontSize = Fs(11);
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.marginBottom = 6;
             card.Add(title);
 
-            var canvas = new VisualElement();
-            canvas.style.position = Position.Relative;
-            canvas.style.height = 320;
-            canvas.style.backgroundColor = new Color(0.03f, 0.05f, 0.09f, 0.95f);
-            canvas.style.borderTopWidth = 1;
-            canvas.style.borderRightWidth = 1;
-            canvas.style.borderBottomWidth = 1;
-            canvas.style.borderLeftWidth = 1;
-            canvas.style.borderTopColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            canvas.style.borderRightColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            canvas.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            canvas.style.borderLeftColor = new Color(0.14f, 0.20f, 0.30f, 1f);
-            card.Add(canvas);
+            _sectorChartViewport = new VisualElement();
+            _sectorChartViewport.style.position = Position.Relative;
+            _sectorChartViewport.style.height = 238;
+            _sectorChartViewport.style.overflow = Overflow.Hidden;
+            _sectorChartViewport.style.backgroundColor = new Color(0.03f, 0.05f, 0.09f, 0.95f);
+            _sectorChartViewport.style.borderTopWidth = 1;
+            _sectorChartViewport.style.borderRightWidth = 1;
+            _sectorChartViewport.style.borderBottomWidth = 1;
+            _sectorChartViewport.style.borderLeftWidth = 1;
+            _sectorChartViewport.style.borderTopColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _sectorChartViewport.style.borderRightColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _sectorChartViewport.style.borderBottomColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            _sectorChartViewport.style.borderLeftColor = new Color(0.14f, 0.20f, 0.30f, 1f);
+            card.Add(_sectorChartViewport);
+
+            _sectorChartWorld = new VisualElement();
+            _sectorChartWorld.style.position = Position.Absolute;
+            _sectorChartWorld.style.left = 0;
+            _sectorChartWorld.style.top = 0;
+            _sectorChartWorld.style.right = 0;
+            _sectorChartWorld.style.bottom = 0;
+            _sectorChartViewport.Add(_sectorChartWorld);
+
+            _sectorZoom = 1f;
+            _sectorPan = Vector2.zero;
+            _sectorPanning = false;
+            ApplySectorWorldTransform();
 
             var sectors = new List<SectorData>(station.sectors.Values);
             if (sectors.Count == 0) return card;
 
-            float minX = float.MaxValue;
-            float maxX = float.MinValue;
-            float minY = float.MaxValue;
-            float maxY = float.MinValue;
-            foreach (var s in sectors)
+            void RebuildChart(float width, float height)
             {
-                if (s.coordinates.x < minX) minX = s.coordinates.x;
-                if (s.coordinates.x > maxX) maxX = s.coordinates.x;
-                if (s.coordinates.y < minY) minY = s.coordinates.y;
-                if (s.coordinates.y > maxY) maxY = s.coordinates.y;
-            }
+                _sectorChartWorld.Clear();
+                AddNebulaBackdrop(_sectorChartWorld, width, height, station.galaxySeed);
 
-            float rangeX = Mathf.Max(1f, maxX - minX);
-            float rangeY = Mathf.Max(1f, maxY - minY);
-            const float pad = 18f;
-            const float plotW = 780f;
-            const float plotH = 284f;
-            canvas.style.width = plotW + pad * 2f;
-
-            var posMap = new Dictionary<string, Vector2>();
-            foreach (var s in sectors)
-            {
-                float nx = (s.coordinates.x - minX) / rangeX;
-                float ny = (s.coordinates.y - minY) / rangeY;
-                // Invert y for top-left UI coordinates.
-                float px = pad + nx * plotW;
-                float py = pad + (1f - ny) * plotH;
-                posMap[s.uid] = new Vector2(px, py);
-            }
-
-            // Draw subtle links between nearby discovered sectors.
-            var linkPairs = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var a in sectors)
-            {
-                if (a.discoveryState == SectorDiscoveryState.Uncharted) continue;
-                SectorData nearest = null;
-                float nearestDist = float.MaxValue;
-                foreach (var b in sectors)
+                float minX = float.MaxValue;
+                float maxX = float.MinValue;
+                float minY = float.MaxValue;
+                float maxY = float.MinValue;
+                foreach (var s in sectors)
                 {
-                    if (ReferenceEquals(a, b) || b.discoveryState == SectorDiscoveryState.Uncharted) continue;
-                    float d = Vector2.Distance(a.coordinates, b.coordinates);
-                    if (d < nearestDist)
+                    if (s.coordinates.x < minX) minX = s.coordinates.x;
+                    if (s.coordinates.x > maxX) maxX = s.coordinates.x;
+                    if (s.coordinates.y < minY) minY = s.coordinates.y;
+                    if (s.coordinates.y > maxY) maxY = s.coordinates.y;
+                }
+
+                float rangeX = Mathf.Max(1f, maxX - minX);
+                float rangeY = Mathf.Max(1f, maxY - minY);
+                float pad = 18f;
+                float plotW = Mathf.Max(220f, width - pad * 2f);
+                float plotH = Mathf.Max(140f, height - pad * 2f);
+
+                var posMap = new Dictionary<string, Vector2>();
+                foreach (var s in sectors)
+                {
+                    float nx = (s.coordinates.x - minX) / rangeX;
+                    float ny = (s.coordinates.y - minY) / rangeY;
+                    float px = pad + nx * plotW;
+                    float py = pad + (1f - ny) * plotH;
+                    posMap[s.uid] = new Vector2(px, py);
+                }
+
+                var linkPairs = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var a in sectors)
+                {
+                    if (a.discoveryState == SectorDiscoveryState.Uncharted) continue;
+                    SectorData nearest = null;
+                    float nearestDist = float.MaxValue;
+                    foreach (var b in sectors)
                     {
-                        nearestDist = d;
-                        nearest = b;
+                        if (ReferenceEquals(a, b) || b.discoveryState == SectorDiscoveryState.Uncharted) continue;
+                        float d = Vector2.Distance(a.coordinates, b.coordinates);
+                        if (d < nearestDist)
+                        {
+                            nearestDist = d;
+                            nearest = b;
+                        }
                     }
+
+                    if (nearest == null || nearestDist > 18f) continue;
+                    string k1 = string.Compare(a.uid, nearest.uid, StringComparison.Ordinal) < 0
+                        ? a.uid + "|" + nearest.uid
+                        : nearest.uid + "|" + a.uid;
+                    if (!linkPairs.Add(k1)) continue;
+
+                    Vector2 p1 = posMap[a.uid];
+                    Vector2 p2 = posMap[nearest.uid];
+                    AddSectorLane(_sectorChartWorld, p1, p2);
                 }
 
-                if (nearest == null || nearestDist > 18f) continue;
-                string k1 = string.Compare(a.uid, nearest.uid, StringComparison.Ordinal) < 0
-                    ? a.uid + "|" + nearest.uid
-                    : nearest.uid + "|" + a.uid;
-                if (!linkPairs.Add(k1)) continue;
+                foreach (var s in sectors)
+                {
+                    Vector2 p = posMap[s.uid];
+                    float size = s.discoveryState switch
+                    {
+                        SectorDiscoveryState.Visited => 12f,
+                        SectorDiscoveryState.Detected => 9f,
+                        _ => 7f,
+                    };
 
-                Vector2 p1 = posMap[a.uid];
-                Vector2 p2 = posMap[nearest.uid];
-                AddSectorLane(canvas, p1, p2);
+                    var node = new VisualElement();
+                    node.style.position = Position.Absolute;
+                    node.style.left = p.x - size * 0.5f;
+                    node.style.top = p.y - size * 0.5f;
+                    node.style.width = size;
+                    node.style.height = size;
+                    node.style.borderTopLeftRadius = size * 0.5f;
+                    node.style.borderTopRightRadius = size * 0.5f;
+                    node.style.borderBottomLeftRadius = size * 0.5f;
+                    node.style.borderBottomRightRadius = size * 0.5f;
+                    node.style.backgroundColor = s.discoveryState switch
+                    {
+                        SectorDiscoveryState.Visited => new Color(0.25f, 0.80f, 0.45f, 1f),
+                        SectorDiscoveryState.Detected => new Color(0.39f, 0.75f, 1.00f, 0.92f),
+                        _ => new Color(0.36f, 0.40f, 0.48f, 0.60f),
+                    };
+
+                    node.tooltip = s.discoveryState == SectorDiscoveryState.Uncharted
+                        ? "Uncharted sector"
+                        : s.ShortCodeAndCoord();
+
+                    if (s.discoveryState != SectorDiscoveryState.Uncharted)
+                    {
+                        var captured = s;
+                        node.RegisterCallback<PointerEnterEvent>(_ =>
+                        {
+                            node.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f));
+                            node.style.backgroundColor = new Color(0.70f, 0.88f, 1.00f, 1f);
+                        });
+                        node.RegisterCallback<PointerLeaveEvent>(_ =>
+                        {
+                            node.style.scale = new Scale(new Vector3(1f, 1f, 1f));
+                            node.style.backgroundColor = captured.discoveryState == SectorDiscoveryState.Visited
+                                ? new Color(0.25f, 0.80f, 0.45f, 1f)
+                                : new Color(0.39f, 0.75f, 1.00f, 0.92f);
+                        });
+                        node.RegisterCallback<ClickEvent>(_ => ShowSectorDetail(captured));
+                    }
+
+                    _sectorChartWorld.Add(node);
+                }
             }
 
-            foreach (var s in sectors)
+            _sectorChartViewport.RegisterCallback<GeometryChangedEvent>(evt =>
             {
-                Vector2 p = posMap[s.uid];
-                float size = s.discoveryState switch
-                {
-                    SectorDiscoveryState.Visited => 13f,
-                    SectorDiscoveryState.Detected => 10f,
-                    _ => 7f,
-                };
-
-                var node = new VisualElement();
-                node.style.position = Position.Absolute;
-                node.style.left = p.x - size * 0.5f;
-                node.style.top = p.y - size * 0.5f;
-                node.style.width = size;
-                node.style.height = size;
-                node.style.borderTopLeftRadius = size * 0.5f;
-                node.style.borderTopRightRadius = size * 0.5f;
-                node.style.borderBottomLeftRadius = size * 0.5f;
-                node.style.borderBottomRightRadius = size * 0.5f;
-                node.style.backgroundColor = s.discoveryState switch
-                {
-                    SectorDiscoveryState.Visited => new Color(0.25f, 0.80f, 0.45f, 1f),
-                    SectorDiscoveryState.Detected => new Color(0.39f, 0.75f, 1.00f, 0.92f),
-                    _ => new Color(0.36f, 0.40f, 0.48f, 0.60f),
-                };
-
-                string tooltipText = s.discoveryState == SectorDiscoveryState.Uncharted
-                    ? "Uncharted sector"
-                    : s.ShortCodeAndCoord();
-                node.tooltip = tooltipText;
-
-                if (s.discoveryState != SectorDiscoveryState.Uncharted)
-                {
-                    var captured = s;
-                    node.RegisterCallback<PointerEnterEvent>(_ =>
-                    {
-                        node.style.scale = new Scale(new Vector3(1.25f, 1.25f, 1f));
-                        node.style.backgroundColor = new Color(0.70f, 0.88f, 1.00f, 1f);
-                    });
-                    node.RegisterCallback<PointerLeaveEvent>(_ =>
-                    {
-                        node.style.scale = new Scale(new Vector3(1f, 1f, 1f));
-                        node.style.backgroundColor = captured.discoveryState == SectorDiscoveryState.Visited
-                            ? new Color(0.25f, 0.80f, 0.45f, 1f)
-                            : new Color(0.39f, 0.75f, 1.00f, 0.92f);
-                    });
-                    node.RegisterCallback<ClickEvent>(_ => ShowSectorDetail(captured));
-                }
-
-                canvas.Add(node);
-            }
+                if (evt.newRect.width < 20f || evt.newRect.height < 20f) return;
+                RebuildChart(evt.newRect.width, evt.newRect.height);
+            });
+            _sectorChartViewport.RegisterCallback<WheelEvent>(evt =>
+            {
+                float zoom = Mathf.Clamp(_sectorZoom * (1f - evt.delta.y * 0.0015f), 0.55f, 3.0f);
+                if (Mathf.Abs(zoom - _sectorZoom) < 0.001f) return;
+                _sectorZoom = zoom;
+                ApplySectorWorldTransform();
+                evt.StopPropagation();
+            });
+            _sectorChartViewport.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 1) return;
+                _sectorPanning = true;
+                _sectorPanStartMouse = evt.position;
+                _sectorPanStartOffset = _sectorPan;
+                _sectorChartViewport.CapturePointer(evt.pointerId);
+            });
+            _sectorChartViewport.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!_sectorPanning) return;
+                Vector2 delta = evt.position - _sectorPanStartMouse;
+                _sectorPan = _sectorPanStartOffset + delta;
+                ApplySectorWorldTransform();
+            });
+            _sectorChartViewport.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                if (evt.button != 1) return;
+                _sectorPanning = false;
+                _sectorChartViewport.ReleasePointer(evt.pointerId);
+            });
 
             return card;
+        }
+
+        private void ApplySectorWorldTransform()
+        {
+            if (_sectorChartWorld == null) return;
+            _sectorChartWorld.transform.position = new Vector3(_sectorPan.x, _sectorPan.y, 0f);
+            _sectorChartWorld.transform.scale = new Vector3(_sectorZoom, _sectorZoom, 1f);
+        }
+
+        private static void AddNebulaBackdrop(VisualElement parent, float width, float height, int seed)
+        {
+            var rng = new System.Random(seed ^ 0x5f3759df);
+            int blobs = 5;
+            for (int i = 0; i < blobs; i++)
+            {
+                float w = 90f + (float)rng.NextDouble() * 180f;
+                float h = 50f + (float)rng.NextDouble() * 120f;
+                float x = (float)rng.NextDouble() * Mathf.Max(1f, width - w);
+                float y = (float)rng.NextDouble() * Mathf.Max(1f, height - h);
+                var neb = new VisualElement();
+                neb.style.position = Position.Absolute;
+                neb.style.left = x;
+                neb.style.top = y;
+                neb.style.width = w;
+                neb.style.height = h;
+                neb.style.borderTopLeftRadius = h * 0.5f;
+                neb.style.borderTopRightRadius = h * 0.5f;
+                neb.style.borderBottomLeftRadius = h * 0.5f;
+                neb.style.borderBottomRightRadius = h * 0.5f;
+                float r = 0.16f + (float)rng.NextDouble() * 0.18f;
+                float g = 0.20f + (float)rng.NextDouble() * 0.20f;
+                float b = 0.30f + (float)rng.NextDouble() * 0.28f;
+                neb.style.backgroundColor = new Color(r, g, b, 0.12f);
+                parent.Add(neb);
+            }
         }
 
         private static void AddSectorLane(VisualElement parent, Vector2 a, Vector2 b)
