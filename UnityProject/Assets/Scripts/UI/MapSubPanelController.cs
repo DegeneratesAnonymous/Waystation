@@ -1950,25 +1950,6 @@ namespace Waystation.UI
             }
         }
 
-        /// <summary>Finds the pixel radius for a given AU value from the current orbit visuals.</summary>
-        private float FindRadiusForAU(float au)
-        {
-            float bestDist = float.MaxValue;
-            float bestRadius = 60f;
-            foreach (var ov in _orbitVisuals)
-            {
-                var sys = _currentOrbitSys ?? _viewedSystem ?? _station?.solarSystem;
-                if (sys == null || ov.bodyIndex >= sys.bodies.Count) continue;
-                float diff = Mathf.Abs(sys.bodies[ov.bodyIndex].orbitalRadius - au);
-                if (diff < bestDist)
-                {
-                    bestDist = diff;
-                    bestRadius = ov.radius;
-                }
-            }
-            return bestRadius;
-        }
-
         /// <summary>
         /// Compute the canvas position of a route waypoint body using the matching
         /// OrbitVisual's elliptical parameters.
@@ -2522,7 +2503,16 @@ namespace Waystation.UI
                     cluster.style.backgroundColor = new Color(0.03f, 0.05f, 0.10f, 0.85f);
                     sectorBox.Add(cluster);
 
-                    int dotCount = sector.systemCount > 0 ? sector.systemCount : 12;
+                    int dotCount;
+                    {
+                        bool isHomeSector = _station?.solarSystem != null &&
+                            Mathf.Approximately(sector.coordinates.x, GalaxyGenerator.HomeX) &&
+                            Mathf.Approximately(sector.coordinates.y, GalaxyGenerator.HomeY);
+                        var generatedSystems = SolarSystemGenerator.GenerateSectorSystems(sector, isHomeSector, _station?.solarSystem);
+                        dotCount = generatedSystems != null && generatedSystems.Count > 0
+                            ? generatedSystems.Count
+                            : (sector.systemCount > 0 ? sector.systemCount : 12);
+                    }
                     AddSectorSystemCluster(cluster, cellW - 2f, cellH - 2f, station.galaxySeed ^ sector.uid.GetHashCode(), sector, dotCount, hoverName, hoverNameText);
 
                     var capturedSector = sector;
@@ -2849,11 +2839,13 @@ namespace Waystation.UI
                 {
                     if (_routePlotterActive)
                     {
+                        Vector2 dotViewportPos = this.WorldToLocal(dot.worldBound.center);
                         AddRouteWaypoint(new RouteWaypoint
                         {
                             name = capturedNeighbor.systemName,
                             positionLY = capturedNeighbor.positionLY,
                             dotElement = dot,
+                            viewportPos = dotViewportPos,
                             isSystem = true,
                         });
                         return;
@@ -3715,7 +3707,16 @@ namespace Waystation.UI
                 sendShipBtn.SetEnabled(false);
             }
 
+            sendShipBtn.clicked += HandleSendShipClicked;
             _routeOverlay.Add(sendShipBtn);
+        }
+
+        /// <summary>Raised when the player clicks "Send Ship" in the route plotter panel.</summary>
+        public event Action OnSendShipRequested;
+
+        private void HandleSendShipClicked()
+        {
+            OnSendShipRequested?.Invoke();
         }
 
         private void HideRouteOverlay()

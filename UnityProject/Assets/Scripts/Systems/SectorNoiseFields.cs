@@ -148,7 +148,7 @@ namespace Waystation.Systems
             float t = 0.5f - x * x - y * y;
             if (t < 0f) return 0f;
             t *= t;
-            int gi = Perm[ix + Perm[iy & 255] & 255] % 12;
+            int gi = Perm[(ix + Perm[iy & 255]) & 255] % 12;
             return t * t * (Grad2[gi][0] * x + Grad2[gi][1] * y);
         }
 

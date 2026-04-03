@@ -175,6 +175,7 @@ namespace Waystation.Systems
             var shipInstance = ShipInstance.Create(
                 inspectorTemplate.id, name, inspectorTemplate.role, "inspect", factionId, inspectorTemplate.threatLevel);
             station.AddShip(shipInstance);
+            _lastArrivalTick = station.tick;
             PendingDecisions.Add(shipInstance.uid);
             station.LogEvent($"Inspection patrol inbound: {shipInstance.name}.");
             _eventSystem.QueueEvent("event.arrival_generic",
