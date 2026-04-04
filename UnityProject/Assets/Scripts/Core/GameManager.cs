@@ -1043,7 +1043,7 @@ namespace Waystation.Core
                 {
                     foreach (var shipUid in abandoned)
                     {
-                        Station.Log($"Ship {shipUid} abandoned the docking queue after waiting too long.");
+                        Debug.Log($"[GameManager] Ship {shipUid} abandoned the docking queue after waiting too long.");
                         if (Station.ships.TryGetValue(shipUid, out var abandonedShip))
                             Station.ModifyFactionRep(abandonedShip.factionId, -2f);
                     }
