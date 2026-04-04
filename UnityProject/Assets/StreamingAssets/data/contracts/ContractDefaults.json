@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "standing_deal_defaults": {
+    "quantity_per_shipment": 50,
+    "shipment_interval_days": 14,
+    "min_player_buy_fraction": 0.5,
+    "price_markup_range": [0.95, 1.15]
+  },
+  "ad_campaign_defaults": {
+    "duration_days_range": [30, 90],
+    "cost_per_day_range": [5.0, 25.0]
+  },
+  "relay_agreement_defaults": {
+    "flat_fee_per_week_range": [50.0, 200.0],
+    "revenue_share_percent_range": [5.0, 15.0],
+    "notice_period_days": 7
+  },
+  "supply_contract_defaults": {
+    "quantity_range": [50, 300],
+    "deadline_days_range": [7, 30],
+    "payment_multiplier": 1.5,
+    "penalty_fraction": 0.25
+  },
+  "exclusivity_defaults": {
+    "duration_days_range": [30, 90],
+    "signing_bonus_range": [200.0, 1000.0],
+    "weekly_payment_range": [25.0, 100.0],
+    "breach_penalty_multiplier": 2.0
+  },
+  "escort_defaults": {
+    "duration_days_range": [7, 30],
+    "payment_range": [500.0, 2000.0],
+    "no_incident_bonus_fraction": 0.2
+  },
+  "infrastructure_defaults": {
+    "deadline_days_range": [14, 60],
+    "payment_range": [1000.0, 5000.0],
+    "weekly_bonus_range": [25.0, 150.0]
+  }
+}

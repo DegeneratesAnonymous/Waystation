@@ -1,0 +1,179 @@
+{
+  "schema_version": "1",
+  "events": [
+    {
+      "id": "visitor_raider_approach",
+      "category": "visitor",
+      "title": "Raider Approaching",
+      "description": "A hostile vessel has been detected on approach. Prepare defences or attempt communication.",
+      "weight": 0.0,
+      "cooldown": 24,
+      "hostile": true,
+      "expires_in": 6,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": [],
+      "trigger_conditions": [],
+      "choices": [
+        {
+          "id": "raise_shields",
+          "label": "Raise shields and arm weapons (costs 15 power)",
+          "conditions": [
+            { "type": "resource_above", "target": "power", "value": 15 }
+          ],
+          "outcomes": [
+            { "type": "remove_resource", "target": "power", "value": 15 },
+            { "type": "set_tag", "target": "combat_ready" },
+            { "type": "log_message", "value": "Defences activated. Ready for engagement." }
+          ]
+        },
+        {
+          "id": "hail_raider",
+          "label": "Attempt to hail and negotiate",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "Hailing the raider vessel... they might listen." }
+          ],
+          "followup_event": "visitor_raider_negotiation"
+        },
+        {
+          "id": "ignore_raider",
+          "label": "Hope they pass by",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "Taking no action. The raider draws closer." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    },
+    {
+      "id": "visitor_smuggler_detected",
+      "category": "visitor",
+      "title": "Contraband Detected",
+      "description": "Station scanners have detected illegal goods aboard a docked vessel.",
+      "weight": 0.0,
+      "cooldown": 48,
+      "hostile": false,
+      "expires_in": 12,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": [],
+      "trigger_conditions": [],
+      "choices": [
+        {
+          "id": "confiscate",
+          "label": "Confiscate the goods and impound the ship",
+          "conditions": [],
+          "outcomes": [
+            { "type": "add_resource", "target": "credits", "value": 75 },
+            { "type": "log_message", "value": "Contraband seized. The smuggler is furious." }
+          ]
+        },
+        {
+          "id": "look_away",
+          "label": "Look the other way (for a cut)",
+          "conditions": [],
+          "outcomes": [
+            { "type": "add_resource", "target": "credits", "value": 30 },
+            { "type": "log_message", "value": "You accepted a bribe. The smuggler appreciates your discretion." }
+          ]
+        },
+        {
+          "id": "expel",
+          "label": "Order the ship to leave immediately",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "The smuggler has been expelled from the station." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    },
+    {
+      "id": "visitor_medical_emergency",
+      "category": "visitor",
+      "title": "Medical Emergency — Incoming Ship",
+      "description": "A vessel is requesting emergency docking. Their crew is injured and needs medical attention.",
+      "weight": 3.0,
+      "cooldown": 96,
+      "hostile": false,
+      "expires_in": 6,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": ["medical_emergency"],
+      "trigger_conditions": [
+        { "type": "tag_present", "target": "medical.medbay" }
+      ],
+      "choices": [
+        {
+          "id": "treat_crew",
+          "label": "Treat the injured crew (costs 10 food, 5 power)",
+          "conditions": [
+            { "type": "resource_above", "target": "food", "value": 10 },
+            { "type": "resource_above", "target": "power", "value": 5 }
+          ],
+          "outcomes": [
+            { "type": "remove_resource", "target": "food", "value": 10 },
+            { "type": "remove_resource", "target": "power", "value": 5 },
+            { "type": "add_resource", "target": "credits", "value": 50 },
+            { "type": "log_message", "value": "Injured crew treated. Your station's reputation improves." }
+          ]
+        },
+        {
+          "id": "deny_docking",
+          "label": "Deny docking request",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "Docking denied. The ship limps away." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    },
+    {
+      "id": "visitor_trade_windfall",
+      "category": "visitor",
+      "title": "Trade Windfall",
+      "description": "A wealthy merchant convoy has arrived, looking to offload surplus goods at bargain prices.",
+      "weight": 2.0,
+      "cooldown": 168,
+      "hostile": false,
+      "expires_in": 24,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": ["trade_windfall"],
+      "trigger_conditions": [
+        { "type": "docked_ships_above", "target": "", "value": 2 }
+      ],
+      "choices": [
+        {
+          "id": "buy_surplus",
+          "label": "Buy their surplus (costs 200 credits, gain resources)",
+          "conditions": [
+            { "type": "resource_above", "target": "credits", "value": 200 }
+          ],
+          "outcomes": [
+            { "type": "remove_resource", "target": "credits", "value": 200 },
+            { "type": "add_resource", "target": "food", "value": 50 },
+            { "type": "add_resource", "target": "parts", "value": 30 },
+            { "type": "log_message", "value": "Surplus goods purchased at excellent prices!" }
+          ]
+        },
+        {
+          "id": "decline_offer",
+          "label": "Decline the offer",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "The merchants move along to the next station." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    }
+  ]
+}

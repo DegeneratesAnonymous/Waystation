@@ -9,6 +9,7 @@ namespace Waystation.Systems
     {
         public const int TicksPerHour     = 4;             // 4 × 15 min = 1 hour
         public const int TicksPerDay      = 24 * TicksPerHour; // 24-hour day (96 ticks)
+        public const int TicksPerWeek     = 7  * TicksPerDay;  // 7-day week (672 ticks)
         public const int DayStartTick     = 6  * TicksPerHour;  // 06:00
         public const int DayEndTick       = 18 * TicksPerHour;  // 18:00
 

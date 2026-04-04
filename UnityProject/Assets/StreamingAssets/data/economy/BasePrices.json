@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "base_prices": {
+    "food":   4.0,
+    "parts":  8.0,
+    "oxygen": 3.0,
+    "ice":    2.0,
+    "fuel":   6.0,
+    "power":  5.0
+  },
+  "notes": "Galaxy-wide baseline price per resource. Faction buy/sell prices derive from these via the deficit/surplus price formula."
+}

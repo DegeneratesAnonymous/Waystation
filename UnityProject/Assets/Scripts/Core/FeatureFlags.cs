@@ -284,5 +284,49 @@ namespace Waystation.Core
         /// When false, all systems tick via GameManager.OnTick as before.
         /// </summary>
         public static bool UseTickScheduler = true;
+
+        // ── Phase 4: Faction Economy Stack (FAC-006 → FAC-009) ────────────────
+
+        /// <summary>
+        /// Enables simulated faction economies with demand-driven pricing,
+        /// deficit/surplus calculation, and economy-driven trader dispatch.
+        /// When false, the older static EconomySystem pricing is used.
+        /// </summary>
+        public static bool UseSimulatedFactionEconomy = true;
+
+        /// <summary>
+        /// Enables physical visitor simulation: approach stages, docking policy
+        /// evaluation, docking queue with abandonment, and bay management.
+        /// When false, VisitorSystem uses the older probability-based arrivals.
+        /// </summary>
+        public static bool UsePhysicalVisitorSimulation = true;
+
+        /// <summary>
+        /// Enables the ContractsSystem: standing deals, ad campaigns, relay
+        /// agreements, supply contracts, exclusivity, escort, and infrastructure
+        /// contracts. When false, contract-related logic is skipped.
+        /// </summary>
+        public static bool UseContractsSystem = true;
+
+        /// <summary>
+        /// Enables the extended event system: urgency tiers, trigger evaluation
+        /// across 4 categories, critical event modal, and auto-resolution.
+        /// When false, the base EventSystem operates as before.
+        /// </summary>
+        public static bool UseExtendedEventSystem = true;
+
+        /// <summary>
+        /// Enables the diplomat role: player-dispatched diplomat NPCs that
+        /// travel to foreign stations and negotiate on behalf of the player.
+        /// Requires UseExtendedEventSystem = true for full outcome events.
+        /// </summary>
+        public static bool UseDiplomatRole = true;
+
+        /// <summary>
+        /// Enables station quests: broadcast-injected quests generated from
+        /// station deficits/surpluses that attract traders.
+        /// Requires UseSimulatedFactionEconomy = true.
+        /// </summary>
+        public static bool UseStationQuests = true;
     }
 }

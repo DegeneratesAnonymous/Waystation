@@ -1,0 +1,154 @@
+{
+  "schema_version": "1",
+  "events": [
+    {
+      "id": "faction_hostility_declared",
+      "category": "faction",
+      "title": "Faction Declares Hostility",
+      "description": "Relations have deteriorated beyond repair. This faction now considers your station hostile.",
+      "weight": 0.0,
+      "cooldown": 0,
+      "hostile": true,
+      "expires_in": 24,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": [],
+      "trigger_conditions": [],
+      "choices": [
+        {
+          "id": "offer_tribute",
+          "label": "Offer tribute to restore peace (costs 500 credits)",
+          "conditions": [
+            { "type": "resource_above", "target": "credits", "value": 500 }
+          ],
+          "outcomes": [
+            { "type": "remove_resource", "target": "credits", "value": 500 },
+            { "type": "log_message", "value": "Tribute accepted. Tensions eased slightly." }
+          ]
+        },
+        {
+          "id": "fortify",
+          "label": "Fortify defences and prepare for trouble",
+          "conditions": [],
+          "outcomes": [
+            { "type": "set_tag", "target": "defence_alert" },
+            { "type": "log_message", "value": "Station on high alert. Defences fortified." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    },
+    {
+      "id": "faction_alliance_offered",
+      "category": "faction",
+      "title": "Alliance Proposal",
+      "description": "Your excellent relations with this faction have earned an alliance offer. This brings trade bonuses and mutual defence.",
+      "weight": 0.0,
+      "cooldown": 0,
+      "hostile": false,
+      "expires_in": 72,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": [],
+      "trigger_conditions": [],
+      "choices": [
+        {
+          "id": "accept_alliance",
+          "label": "Accept the alliance",
+          "conditions": [],
+          "outcomes": [
+            { "type": "set_tag", "target": "alliance_active" },
+            { "type": "log_message", "value": "Alliance formed! Trade bonuses and mutual defence active." }
+          ]
+        },
+        {
+          "id": "decline_alliance",
+          "label": "Remain independent for now",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "Alliance offer declined. Relations remain friendly." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    },
+    {
+      "id": "faction_trade_dispute",
+      "category": "faction",
+      "title": "Trade Dispute",
+      "description": "A faction trader claims they were shortchanged on a recent deal. They demand compensation.",
+      "weight": 2.0,
+      "cooldown": 168,
+      "hostile": false,
+      "expires_in": 48,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": ["trade_dispute_triggered"],
+      "trigger_conditions": [
+        { "type": "visitor_count_above", "target": "", "value": 0 }
+      ],
+      "choices": [
+        {
+          "id": "pay_compensation",
+          "label": "Pay compensation (costs 100 credits)",
+          "conditions": [
+            { "type": "resource_above", "target": "credits", "value": 100 }
+          ],
+          "outcomes": [
+            { "type": "remove_resource", "target": "credits", "value": 100 },
+            { "type": "log_message", "value": "Compensation paid. Dispute resolved amicably." }
+          ]
+        },
+        {
+          "id": "dismiss_claim",
+          "label": "Dismiss the claim",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "Claim dismissed. The trader is unhappy." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    },
+    {
+      "id": "contract_breach_consequence",
+      "category": "faction",
+      "title": "Contract Breach — Retaliation",
+      "description": "A faction is retaliating after your breach of contract. Expect reduced trade and possible hostility.",
+      "weight": 0.0,
+      "cooldown": 0,
+      "hostile": false,
+      "expires_in": 48,
+      "required_tags": [],
+      "excluded_tags": [],
+      "reactive_triggers": [],
+      "trigger_conditions": [],
+      "choices": [
+        {
+          "id": "apologise",
+          "label": "Formally apologise and offer reparations (200 credits)",
+          "conditions": [
+            { "type": "resource_above", "target": "credits", "value": 200 }
+          ],
+          "outcomes": [
+            { "type": "remove_resource", "target": "credits", "value": 200 },
+            { "type": "log_message", "value": "Reparations paid. Faction hostility reduced." }
+          ]
+        },
+        {
+          "id": "ignore_breach",
+          "label": "Ignore it — what breach?",
+          "conditions": [],
+          "outcomes": [
+            { "type": "log_message", "value": "The faction takes note of your indifference." }
+          ]
+        }
+      ],
+      "auto_outcomes": [],
+      "followup_events": []
+    }
+  ]
+}
