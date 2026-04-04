@@ -262,6 +262,64 @@ namespace Waystation.Systems
             return all;
         }
 
+        // ── Interaction Weight ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns a base float modifier for interaction quality based on faction relationship.
+        /// Same faction → 0.0. No faction → 0.0. Different factions: visitor → -0.4,
+        /// non-visitor crew from different factions → 0.0.
+        /// For rep-based weights (Allied +0.2, Friendly +0.1, Neutral 0.0, Unfriendly -0.2,
+        /// Hostile -0.4, visitor from hostile -0.6), use the overload that accepts StationState.
+        /// </summary>
+        public static float GetInteractionWeight(NPCInstance npcA, NPCInstance npcB)
+        {
+            if (string.IsNullOrEmpty(npcA.factionId) || string.IsNullOrEmpty(npcB.factionId))
+                return 0f;
+            if (npcA.factionId == npcB.factionId)
+                return 0f;
+
+            // For visitor NPCs from hostile factions, apply stronger penalty
+            bool eitherIsVisitor = npcA.IsVisitor() || npcB.IsVisitor();
+
+            // Use a simple rep-based estimate: check if we can derive reputation
+            // from statusTags or factionId naming. Since we don't have station context here,
+            // use the NPC's own faction-level reputation hints from their status tags.
+            // Full implementation defers to station.factionReputation lookups at call site.
+            // This static helper returns a base weight; callers with station access can override.
+            if (eitherIsVisitor)
+                return -0.4f; // visitor default; caller overrides with actual rep
+
+            return 0f; // same-station NPCs with different factionIds — neutral default
+        }
+
+        /// <summary>
+        /// Returns faction interaction weight using station reputation data.
+        /// </summary>
+        public float GetInteractionWeight(NPCInstance npcA, NPCInstance npcB, StationState station)
+        {
+            if (string.IsNullOrEmpty(npcA.factionId) || string.IsNullOrEmpty(npcB.factionId))
+                return 0f;
+            if (npcA.factionId == npcB.factionId)
+                return 0f;
+
+            // Check which NPC is the "other" faction relative to the station
+            string otherFactionId = npcA.IsVisitor() ? npcA.factionId : npcB.factionId;
+            bool eitherIsVisitor = npcA.IsVisitor() || npcB.IsVisitor();
+
+            float rep = 0f;
+            if (station.factionReputation.TryGetValue(otherFactionId, out float fRep))
+                rep = fRep;
+
+            // Map reputation to interaction weight
+            // Allied (≥75) → +0.2, Friendly (≥40) → +0.1, Neutral (≥-20) → 0.0,
+            // Unfriendly (≥-50) → -0.2, Hostile (<-50) → -0.4 / -0.6 for visitors
+            if (rep >= 75f) return 0.2f;
+            if (rep >= 40f) return 0.1f;
+            if (rep >= -20f) return 0f;
+            if (rep >= -50f) return -0.2f;
+            return eitherIsVisitor ? -0.6f : -0.4f;
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         private static string RepLabel(float rep)

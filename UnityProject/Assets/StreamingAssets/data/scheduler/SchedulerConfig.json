@@ -1,0 +1,38 @@
+{
+  "target_frame_budget_ms": 10.0,
+  "budget_warning_threshold": 0.9,
+  "cost_calibration_enabled": true,
+  "cost_calibration_window_ticks": 100,
+  "channels": [
+    {
+      "id": 0,
+      "name": "Immediate",
+      "default_cadence": 1,
+      "budget_ms": 4.0
+    },
+    {
+      "id": 1,
+      "name": "Fast",
+      "default_cadence": 4,
+      "budget_ms": 2.5
+    },
+    {
+      "id": 2,
+      "name": "Medium",
+      "default_cadence": 10,
+      "budget_ms": 1.5
+    },
+    {
+      "id": 3,
+      "name": "Slow",
+      "default_cadence": 24,
+      "budget_ms": 1.2
+    },
+    {
+      "id": 4,
+      "name": "Weekly",
+      "default_cadence": 168,
+      "budget_ms": 0.8
+    }
+  ]
+}

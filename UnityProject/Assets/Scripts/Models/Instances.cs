@@ -315,6 +315,10 @@ namespace Waystation.Models
         // Tick at which marriage event was last fired (for re-fire interval)
         public int    lastMarriageEventTick = -1;
 
+        // First impressions (WO-NPC-014)
+        public bool firstImpressionSet = false;
+        public bool secondhandImpressionSet = false;
+
         // ── Mentor / Student bond ─────────────────────────────────────────────
         // UID of the NPC who is the Mentor in this bond.  Non-null only when
         // relationshipType == RelationshipType.Mentor.
@@ -439,6 +443,16 @@ namespace Waystation.Models
         public int    acquisitionTick;
     }
 
+    /// <summary>Position on a personality axis with directional pressure accumulators.</summary>
+    [Serializable]
+    public class AxisState
+    {
+        public string axisId;
+        public int currentStage;        // -3 to +3
+        public float positivePressure;  // accumulates toward + direction
+        public float negativePressure;  // accumulates toward - direction
+    }
+
     /// <summary>Per-NPC trait state: active traits plus sustained condition pressure.</summary>
     [Serializable]
     public class NpcTraitProfile
@@ -468,6 +482,10 @@ namespace Waystation.Models
 
         /// <summary>Per-lineage cooldown: key = lineageId, value = in-game tick when cooldown expires.</summary>
         public Dictionary<string, int> lineageCooldownEndTick = new Dictionary<string, int>();
+
+        // ── Axis states ───────────────────────────────────────────────────────
+        /// <summary>Current state on each personality axis.</summary>
+        public List<AxisState> axisStates = new List<AxisState>();
 
         // ── Departure state ───────────────────────────────────────────────────
         /// <summary>
@@ -976,6 +994,10 @@ namespace Waystation.Models
         // Assigned at NPC generation from background and trait data.
         // Non-proficient skills: XP accrues at 50% rate and cap at level 6.
         public List<string> proficiencySkillIds = new List<string>();
+
+        // Current tile position — updated by pathfinding/movement system
+        public int tileCol = 0;
+        public int tileRow = 0;
 
         // Pathfinding state — managed by AntennaSystem/ShipVisitStateMachine
         // Tile position target when actively walking

@@ -414,7 +414,12 @@ namespace Waystation.Systems
                 // Sustained starvation (≥ 3 days) registers trait condition pressure:
                 // repeated pressure can eventually trigger a desperation or resourcefulness trait.
                 if (h.starvationDayCount >= 3)
+                {
                     _traits?.RegisterConditionPressure(npc, TraitConditionCategory.SustainedStarvation, 2f);
+                    // 12-axis: starvation pushes Work Ethic toward resourceful (+)
+                    if (FeatureFlags.UseFullTraitSystem)
+                        _traits?.AddPressure(npc, "work_ethic", 2f);
+                }
             }
             else if (h.starvationDayCount > 0)
             {

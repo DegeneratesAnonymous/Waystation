@@ -154,6 +154,13 @@ namespace Waystation.Core
         // ── Hierarchy distribution (WO-JOB-002) ──────────────────────────────────────────────
         public HierarchyDistributor     Hierarchy     { get; private set; }
 
+        // ── Interaction system (WO-NPC-014) ───────────────────────────────────────────────────
+        public InteractionSystem        Interactions  { get; private set; }
+
+        // ── Tick scheduler (WO-SYS-001) ───────────────────────────────────────────────────────
+        public TickScheduler            Scheduler     { get; private set; }
+        public LegacyTickSubscriber     LegacyTick    { get; private set; }
+
         // ── Economy system ─────────────────────────────────────────────────────────────────────
         public EconomySystem            Economy       { get; private set; }
 
@@ -523,6 +530,38 @@ namespace Waystation.Core
             {
                 Crafting = new CraftingSystem(Registry);
                 Crafting.SetSkillSystem(Skills);
+            }
+
+            // Interaction system (WO-NPC-014) — replaces ConversationSystem outcomes
+            if (FeatureFlags.UseInteractionSystem)
+            {
+                Interactions = new InteractionSystem();
+                Interactions.SetDependencies(Traits, Mood, Factions, Skills);
+                // Disable legacy ConversationSystem when InteractionSystem is active
+                Conversations.Enabled = false;
+            }
+
+            // Full trait system axis data loading (WO-NPC-015)
+            if (FeatureFlags.UseFullTraitSystem)
+            {
+                string traitDefsPath = System.IO.Path.Combine(Application.streamingAssetsPath, "data", "traits", "TraitDefinitions.json");
+                string traitMatrixPath = System.IO.Path.Combine(Application.streamingAssetsPath, "data", "traits", "TraitCompatibilityMatrix.json");
+                if (System.IO.File.Exists(traitDefsPath) && System.IO.File.Exists(traitMatrixPath))
+                {
+                    string defsJson = System.IO.File.ReadAllText(traitDefsPath);
+                    string matrixJson = System.IO.File.ReadAllText(traitMatrixPath);
+                    Traits.LoadAxisData(defsJson, matrixJson);
+                }
+            }
+
+            // Tick scheduler (WO-SYS-001) — multi-channel load balancing
+            if (FeatureFlags.UseTickScheduler)
+            {
+                Scheduler = new TickScheduler();
+                string schedulerConfigPath = System.IO.Path.Combine(Application.streamingAssetsPath, "data", "scheduler", "SchedulerConfig.json");
+                if (System.IO.File.Exists(schedulerConfigPath))
+                    Scheduler.LoadConfig(System.IO.File.ReadAllText(schedulerConfigPath));
+                LegacyTick = new LegacyTickSubscriber(Scheduler);
             }
         }
 
@@ -930,6 +969,9 @@ namespace Waystation.Core
 
             Proximity.Tick(Station, Mood, Relationships);
             Conversations.Tick(Station, Mood, Relationships);
+            // Interaction system: five-input quality conversations (WO-NPC-014)
+            if (FeatureFlags.UseInteractionSystem)
+                Interactions?.Tick(Station);
             Relationships.Tick(Station, Mood);
 
             // Skill system
@@ -946,9 +988,19 @@ namespace Waystation.Core
                     {
                         if (!npc.IsCrew()) continue;
                         if (npc.moodScore < MoodSystem.CrisisThreshold)
+                        {
                             Traits.RegisterConditionPressure(npc, TraitConditionCategory.LowMood, 2f);
+                            // 12-axis: low mood pushes Disposition toward pessimistic (-)
+                            if (FeatureFlags.UseFullTraitSystem)
+                                Traits.AddPressure(npc, "disposition", -2f);
+                        }
                         else if (npc.moodScore >= MoodSystem.ThrivingThreshold)
+                        {
                             Traits.RegisterConditionPressure(npc, TraitConditionCategory.HighMood, 1f);
+                            // 12-axis: high mood pushes Disposition toward optimistic (+)
+                            if (FeatureFlags.UseFullTraitSystem)
+                                Traits.AddPressure(npc, "disposition", 1f);
+                        }
                     }
                 }
                 Traits.Tick(Station);
@@ -968,6 +1020,10 @@ namespace Waystation.Core
             }
 
             OnTick?.Invoke(Station);
+
+            // Tick scheduler: execute budget-scheduled systems (WO-SYS-001)
+            if (FeatureFlags.UseTickScheduler)
+                Scheduler?.Tick(Station.tick);
 
             // Autosave: non-blocking, fires at the configured interval (0 = disabled).
             if (FeatureFlags.FullSaveLoad && autosaveIntervalTicks > 0
