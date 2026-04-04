@@ -8,7 +8,7 @@ namespace Waystation.Systems
     public class DockingQueue
     {
         // ── Constants ─────────────────────────────────────────────────────────
-        public const int DefaultAbandonmentTicks = 72; // 3 days (24 ticks/day)
+        public static readonly int DefaultAbandonmentTicks = 3 * TimeSystem.TicksPerDay; // 3 days
 
         // ── State ─────────────────────────────────────────────────────────────
         private readonly List<QueuedShip> _queue = new List<QueuedShip>();

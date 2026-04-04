@@ -15,11 +15,11 @@ namespace Waystation.Systems
     {
         // ── Constants ─────────────────────────────────────────────────────────
         private const int MaxActiveQuests = 5;
-        private const int QuestDurationTicks = 336; // 14 days
+        private static readonly int QuestDurationTicks = TimeSystem.TicksPerDay * 14; // 14 days
         private const float MinDeficitForQuest = 0.3f;
         private const float MinSurplusForQuest = 0.4f;
         private const float QuestPriceBonus = 0.25f; // 25% price bonus for quest items
-        private const int RefreshCooldownTicks = 168; // 7 days between refresh attempts
+        private static readonly int RefreshCooldownTicks = TimeSystem.TicksPerDay * 7; // 7 days between refresh attempts
 
         // ── State ─────────────────────────────────────────────────────────────
         private readonly List<StationQuestEntry> _activeQuests = new List<StationQuestEntry>();
@@ -172,7 +172,6 @@ namespace Waystation.Systems
         {
             if (_broadcastNetwork == null) return;
 
-            // Get or create player broadcast
             var pendingQuests = new List<StationQuestEntry>();
             foreach (var quest in _activeQuests)
             {
@@ -180,8 +179,7 @@ namespace Waystation.Systems
                     pendingQuests.Add(quest);
             }
 
-            // The BroadcastNetwork.SendPlayerBroadcast handles quest injection
-            // via PriceBroadcast.pendingQuests field
+            _broadcastNetwork.UpdatePlayerQuestBroadcast(pendingQuests);
         }
 
         // ── Queries ───────────────────────────────────────────────────────────

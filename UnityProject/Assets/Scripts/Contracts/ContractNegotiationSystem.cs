@@ -34,7 +34,7 @@ namespace Waystation.Systems
         {
             if (!ContractRegistry.CanNegotiate(factionId, station)) return null;
 
-            var contract = _registry.CreateContract(ContractType.StandingDeal, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.StandingDeal, factionId, npcUid, station.tick);
             contract.standingDealTerms = new StandingDealTerms
             {
                 good = good,
@@ -52,7 +52,7 @@ namespace Waystation.Systems
         {
             if (!ContractRegistry.CanNegotiate(factionId, station)) return null;
 
-            var contract = _registry.CreateContract(ContractType.AdCampaign, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.AdCampaign, factionId, npcUid, station.tick);
             contract.adCampaignTerms = new AdCampaignTerms
             {
                 relayStationId = relayStationId,
@@ -75,7 +75,7 @@ namespace Waystation.Systems
             bool hasPriorTrade = HasPriorTradeHistory(factionId, station);
             if (!hasPriorTrade) return null;
 
-            var contract = _registry.CreateContract(ContractType.RelayAgreement, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.RelayAgreement, factionId, npcUid, station.tick);
             contract.relayAgreementTerms = new RelayAgreementTerms
             {
                 relayStationId = relayStationId,
@@ -94,7 +94,7 @@ namespace Waystation.Systems
         {
             if (!ContractRegistry.CanNegotiate(factionId, station)) return null;
 
-            var contract = _registry.CreateContract(ContractType.Supply, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.Supply, factionId, npcUid, station.tick);
             contract.supplyTerms = new SupplyContractTerms
             {
                 resource = resource,
@@ -115,7 +115,7 @@ namespace Waystation.Systems
         {
             if (!ContractRegistry.CanNegotiate(factionId, station)) return null;
 
-            var contract = _registry.CreateContract(ContractType.Exclusivity, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.Exclusivity, factionId, npcUid, station.tick);
             contract.exclusivityTerms = new ExclusivityTerms
             {
                 good = good,
@@ -135,7 +135,7 @@ namespace Waystation.Systems
         {
             if (!ContractRegistry.CanNegotiate(factionId, station)) return null;
 
-            var contract = _registry.CreateContract(ContractType.Escort, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.Escort, factionId, npcUid, station.tick);
             contract.escortTerms = new EscortContractTerms
             {
                 escortTargetShipId = targetShipId,
@@ -154,7 +154,7 @@ namespace Waystation.Systems
         {
             if (!ContractRegistry.CanNegotiate(factionId, station)) return null;
 
-            var contract = _registry.CreateContract(ContractType.Infrastructure, factionId, npcUid);
+            var contract = _registry.CreateContract(ContractType.Infrastructure, factionId, npcUid, station.tick);
             contract.infrastructureTerms = new InfrastructureContractTerms
             {
                 requiredCapabilityTag = capabilityTag,

@@ -12,9 +12,9 @@ namespace Waystation.Systems
     public class BroadcastNetwork
     {
         // ── Constants ─────────────────────────────────────────────────────────
-        public const int BroadcastIntervalTicks = 24;   // daily
-        public const int StalenessThreshold     = 168;  // 7 days × 24 ticks/day
-        public const int MaxRelayHops           = 2;
+        public static readonly int BroadcastIntervalTicks = TimeSystem.TicksPerDay;       // daily
+        public static readonly int StalenessThreshold     = 7 * TimeSystem.TicksPerDay;   // 7 days
+        public const int MaxRelayHops                     = 2;
 
         // CommArray tier → sector range
         private static readonly int[] TierRange = { 0, 1, 3, 7 };
@@ -110,6 +110,16 @@ namespace Waystation.Systems
             }
             foreach (var key in stale)
                 _broadcasts.Remove(key);
+        }
+
+        /// <summary>
+        /// Update the pending quests on the cached player broadcast so they are
+        /// included in the next outgoing packet.
+        /// </summary>
+        public void UpdatePlayerQuestBroadcast(List<StationQuestEntry> quests)
+        {
+            if (_broadcasts.TryGetValue("player_station", out var broadcast))
+                broadcast.pendingQuests = new List<StationQuestEntry>(quests);
         }
 
         // ── Queries ───────────────────────────────────────────────────────────

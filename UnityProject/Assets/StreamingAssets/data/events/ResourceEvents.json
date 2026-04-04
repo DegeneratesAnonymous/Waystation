@@ -1,172 +1,267 @@
-{
-  "schema_version": "1",
-  "events": [
-    {
-      "id": "resource_oxygen_depleted",
-      "category": "resource",
-      "title": "Oxygen Depleted — Life Support Failing",
-      "description": "Oxygen reserves have hit zero. Crew and visitors are suffocating. Immediate action required.",
-      "weight": 10.0,
-      "cooldown": 0,
-      "hostile": true,
-      "expires_in": 3,
-      "required_tags": [],
-      "excluded_tags": [],
-      "reactive_triggers": [],
-      "trigger_conditions": [
-        { "type": "resource_below", "target": "oxygen", "value": 1 }
-      ],
-      "choices": [
-        {
-          "id": "emergency_vent",
-          "label": "Emergency atmospheric purge (costs 20 power)",
-          "conditions": [
-            { "type": "resource_above", "target": "power", "value": 20 }
-          ],
-          "outcomes": [
-            { "type": "remove_resource", "target": "power", "value": 20 },
-            { "type": "add_resource", "target": "oxygen", "value": 30 },
-            { "type": "log_message", "value": "Emergency atmospheric purge restored partial oxygen." }
-          ]
-        },
-        {
-          "id": "ration_air",
-          "label": "Ration remaining air and pray for a supply ship",
-          "conditions": [],
-          "outcomes": [
-            { "type": "add_resource", "target": "oxygen", "value": 10 },
-            { "type": "log_message", "value": "Air rationing buys some time. Find a supply source quickly." }
-          ]
-        }
-      ],
-      "auto_outcomes": [],
-      "followup_events": []
-    },
-    {
-      "id": "resource_oxygen_low",
-      "category": "resource",
-      "title": "Oxygen Reserves Low",
-      "description": "Oxygen supplies are running critically low. Consider reducing crew activity or sourcing more.",
-      "weight": 5.0,
-      "cooldown": 48,
-      "hostile": false,
-      "expires_in": 12,
-      "required_tags": [],
-      "excluded_tags": [],
-      "reactive_triggers": [],
-      "trigger_conditions": [
-        { "type": "resource_below", "target": "oxygen", "value": 50 }
-      ],
-      "choices": [],
-      "auto_outcomes": [
-        { "type": "log_message", "value": "Warning: Oxygen reserves are critically low." },
-        { "type": "set_chain_flag", "target": "oxygen_alert" }
-      ],
-      "followup_events": []
-    },
-    {
-      "id": "resource_food_depleted",
-      "category": "resource",
-      "title": "Food Stores Exhausted",
-      "description": "The station has run out of food. Crew morale will plummet and health will deteriorate.",
-      "weight": 10.0,
-      "cooldown": 0,
-      "hostile": true,
-      "expires_in": 6,
-      "required_tags": [],
-      "excluded_tags": [],
-      "reactive_triggers": [],
-      "trigger_conditions": [
-        { "type": "resource_below", "target": "food", "value": 1 }
-      ],
-      "choices": [
-        {
-          "id": "emergency_rations",
-          "label": "Distribute emergency rations (costs 50 credits)",
-          "conditions": [
-            { "type": "resource_above", "target": "credits", "value": 50 }
-          ],
-          "outcomes": [
-            { "type": "remove_resource", "target": "credits", "value": 50 },
-            { "type": "add_resource", "target": "food", "value": 25 },
-            { "type": "log_message", "value": "Emergency rations purchased. Find a sustainable food source." }
-          ]
-        },
-        {
-          "id": "tighten_belts",
-          "label": "Crew tightens belts",
-          "conditions": [],
-          "outcomes": [
-            { "type": "add_resource", "target": "food", "value": 5 },
-            { "type": "log_message", "value": "Crew is hungry but holding together. Morale suffers." }
-          ]
-        }
-      ],
-      "auto_outcomes": [],
-      "followup_events": []
-    },
-    {
-      "id": "resource_food_low",
-      "category": "resource",
-      "title": "Food Supplies Running Low",
-      "description": "Food reserves are dwindling. Plan restocking before the situation becomes dire.",
-      "weight": 5.0,
-      "cooldown": 48,
-      "hostile": false,
-      "expires_in": 24,
-      "required_tags": [],
-      "excluded_tags": [],
-      "reactive_triggers": [],
-      "trigger_conditions": [
-        { "type": "resource_below", "target": "food", "value": 30 }
-      ],
-      "choices": [],
-      "auto_outcomes": [
-        { "type": "log_message", "value": "Warning: Food supplies are running low." },
-        { "type": "set_chain_flag", "target": "food_alert" }
-      ],
-      "followup_events": []
-    },
-    {
-      "id": "resource_power_failure",
-      "category": "resource",
-      "title": "Total Power Failure",
-      "description": "All power generation has ceased. Station systems are offline. This is a life-threatening emergency.",
-      "weight": 10.0,
-      "cooldown": 0,
-      "hostile": true,
-      "expires_in": 2,
-      "required_tags": [],
-      "excluded_tags": [],
-      "reactive_triggers": [],
-      "trigger_conditions": [
-        { "type": "resource_below", "target": "power", "value": 1 }
-      ],
-      "choices": [
-        {
-          "id": "reroute_fuel",
-          "label": "Convert fuel to emergency power (costs 30 fuel)",
-          "conditions": [
-            { "type": "resource_above", "target": "fuel", "value": 30 }
-          ],
-          "outcomes": [
-            { "type": "remove_resource", "target": "fuel", "value": 30 },
-            { "type": "add_resource", "target": "power", "value": 50 },
-            { "type": "log_message", "value": "Emergency fuel conversion restored partial power." }
-          ]
-        },
-        {
-          "id": "minimal_systems",
-          "label": "Activate minimal life support only",
-          "conditions": [],
-          "outcomes": [
-            { "type": "add_resource", "target": "power", "value": 10 },
-            { "type": "log_message", "value": "Minimal systems online. Most station functions are dark." }
-          ]
-        }
-      ],
-      "auto_outcomes": [],
-      "followup_events": []
-    }
-  ]
-}
+[
+  {
+    "id": "resource_oxygen_depleted",
+    "category": "resource",
+    "title": "Oxygen Depleted \u2014 Life Support Failing",
+    "description": "Oxygen reserves have hit zero. Crew and visitors are suffocating. Immediate action required.",
+    "weight": 10.0,
+    "cooldown": 0,
+    "hostile": true,
+    "expires_in": 3,
+    "required_tags": [],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [
+      {
+        "type": "resource_below",
+        "target": "oxygen",
+        "value": 1
+      }
+    ],
+    "choices": [
+      {
+        "id": "emergency_vent",
+        "label": "Emergency atmospheric purge (costs 20 power)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "power",
+            "value": 20
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "power",
+            "value": 20
+          },
+          {
+            "type": "add_resource",
+            "target": "oxygen",
+            "value": 30
+          },
+          {
+            "type": "log_message",
+            "value": "Emergency atmospheric purge restored partial oxygen."
+          }
+        ]
+      },
+      {
+        "id": "ration_air",
+        "label": "Ration remaining air and pray for a supply ship",
+        "conditions": [],
+        "outcomes": [
+          {
+            "type": "add_resource",
+            "target": "oxygen",
+            "value": 10
+          },
+          {
+            "type": "log_message",
+            "value": "Air rationing buys some time. Find a supply source quickly."
+          }
+        ]
+      }
+    ],
+    "auto_outcomes": [],
+    "followup_events": []
+  },
+  {
+    "id": "resource_oxygen_low",
+    "category": "resource",
+    "title": "Oxygen Reserves Low",
+    "description": "Oxygen supplies are running critically low. Consider reducing crew activity or sourcing more.",
+    "weight": 5.0,
+    "cooldown": 48,
+    "hostile": false,
+    "expires_in": 12,
+    "required_tags": [],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [
+      {
+        "type": "resource_below",
+        "target": "oxygen",
+        "value": 50
+      }
+    ],
+    "choices": [],
+    "auto_outcomes": [
+      {
+        "type": "log_message",
+        "value": "Warning: Oxygen reserves are critically low."
+      },
+      {
+        "type": "set_chain_flag",
+        "target": "oxygen_alert"
+      }
+    ],
+    "followup_events": []
+  },
+  {
+    "id": "resource_food_depleted",
+    "category": "resource",
+    "title": "Food Stores Exhausted",
+    "description": "The station has run out of food. Crew morale will plummet and health will deteriorate.",
+    "weight": 10.0,
+    "cooldown": 0,
+    "hostile": true,
+    "expires_in": 6,
+    "required_tags": [],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [
+      {
+        "type": "resource_below",
+        "target": "food",
+        "value": 1
+      }
+    ],
+    "choices": [
+      {
+        "id": "emergency_rations",
+        "label": "Distribute emergency rations (costs 50 credits)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "credits",
+            "value": 50
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "credits",
+            "value": 50
+          },
+          {
+            "type": "add_resource",
+            "target": "food",
+            "value": 25
+          },
+          {
+            "type": "log_message",
+            "value": "Emergency rations purchased. Find a sustainable food source."
+          }
+        ]
+      },
+      {
+        "id": "tighten_belts",
+        "label": "Crew tightens belts",
+        "conditions": [],
+        "outcomes": [
+          {
+            "type": "add_resource",
+            "target": "food",
+            "value": 5
+          },
+          {
+            "type": "log_message",
+            "value": "Crew is hungry but holding together. Morale suffers."
+          }
+        ]
+      }
+    ],
+    "auto_outcomes": [],
+    "followup_events": []
+  },
+  {
+    "id": "resource_food_low",
+    "category": "resource",
+    "title": "Food Supplies Running Low",
+    "description": "Food reserves are dwindling. Plan restocking before the situation becomes dire.",
+    "weight": 5.0,
+    "cooldown": 48,
+    "hostile": false,
+    "expires_in": 24,
+    "required_tags": [],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [
+      {
+        "type": "resource_below",
+        "target": "food",
+        "value": 30
+      }
+    ],
+    "choices": [],
+    "auto_outcomes": [
+      {
+        "type": "log_message",
+        "value": "Warning: Food supplies are running low."
+      },
+      {
+        "type": "set_chain_flag",
+        "target": "food_alert"
+      }
+    ],
+    "followup_events": []
+  },
+  {
+    "id": "resource_power_failure",
+    "category": "resource",
+    "title": "Total Power Failure",
+    "description": "All power generation has ceased. Station systems are offline. This is a life-threatening emergency.",
+    "weight": 10.0,
+    "cooldown": 0,
+    "hostile": true,
+    "expires_in": 2,
+    "required_tags": [],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [
+      {
+        "type": "resource_below",
+        "target": "power",
+        "value": 1
+      }
+    ],
+    "choices": [
+      {
+        "id": "reroute_fuel",
+        "label": "Convert fuel to emergency power (costs 30 fuel)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "fuel",
+            "value": 30
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "fuel",
+            "value": 30
+          },
+          {
+            "type": "add_resource",
+            "target": "power",
+            "value": 50
+          },
+          {
+            "type": "log_message",
+            "value": "Emergency fuel conversion restored partial power."
+          }
+        ]
+      },
+      {
+        "id": "minimal_systems",
+        "label": "Activate minimal life support only",
+        "conditions": [],
+        "outcomes": [
+          {
+            "type": "add_resource",
+            "target": "power",
+            "value": 10
+          },
+          {
+            "type": "log_message",
+            "value": "Minimal systems online. Most station functions are dark."
+          }
+        ]
+      }
+    ],
+    "auto_outcomes": [],
+    "followup_events": []
+  }
+]

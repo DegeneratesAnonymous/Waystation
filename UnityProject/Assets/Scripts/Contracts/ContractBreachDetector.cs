@@ -11,10 +11,10 @@ namespace Waystation.Systems
         // ── Constants ─────────────────────────────────────────────────────────
         private const float StandingDealRepPenalty    = -5f;
         private const float StandingDealCreditPenalty = -15f;
-        private const int   StandingDealSuspensionTicks = 336; // 14 days
-        private const int   CreditGracePeriodTicks   = 168;    // 7 days
+        private static readonly int StandingDealSuspensionTicks = TimeSystem.TicksPerDay * 14; // 14 days
+        private static readonly int CreditGracePeriodTicks      = TimeSystem.TicksPerWeek;     // 7 days
         private const float RelayRepSuspendThreshold = 0f;     // Neutral
-        private const int   RelayRecoveryWindowTicks = 336;    // 14 days
+        private static readonly int RelayRecoveryWindowTicks    = TimeSystem.TicksPerDay * 14; // 14 days
 
         // ── Dependencies ──────────────────────────────────────────────────────
         private ContractRegistry _registry;
@@ -70,7 +70,7 @@ namespace Waystation.Systems
             var terms = c.standingDealTerms;
             if (terms == null) return;
 
-            int intervalTicks = terms.shipmentIntervalDays * 24; // days → ticks
+            int intervalTicks = terms.shipmentIntervalDays * TimeSystem.TicksPerDay; // days → ticks
             if (tick - terms.lastShipmentTick < intervalTicks) return;
 
             // Shipment is due — check if player fulfilled their buy obligation

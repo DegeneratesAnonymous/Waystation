@@ -9,7 +9,7 @@ namespace Waystation.Systems
     public class ContractRegistry
     {
         // ── Constants ─────────────────────────────────────────────────────────
-        public const int PendingExpiryTicks = 168; // 7 days pending before auto-expire
+        public static readonly int PendingExpiryTicks = TimeSystem.TicksPerWeek; // 7 days pending before auto-expire
         public const float NegotiationRepThreshold = 20f;
 
         // ── State ─────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ namespace Waystation.Systems
         // ── Contract Management ───────────────────────────────────────────────
 
         /// <summary>Create a new contract in Pending status.</summary>
-        public Contract CreateContract(ContractType type, string factionId, string npcUid)
+        public Contract CreateContract(ContractType type, string factionId, string npcUid, int currentTick = 0)
         {
             var contract = new Contract
             {
@@ -33,7 +33,8 @@ namespace Waystation.Systems
                 type = type,
                 counterpartyFaction = factionId,
                 negotiatedWithNpc = npcUid,
-                status = ContractStatus.Pending
+                status = ContractStatus.Pending,
+                startTick = currentTick   // record proposal time for pending-expiry calculations
             };
             _contracts[contract.id] = contract;
             return contract;
@@ -95,7 +96,7 @@ namespace Waystation.Systems
                 // Expire old pending contracts
                 if (c.status == ContractStatus.Pending)
                 {
-                    if (tick - c.startTick > PendingExpiryTicks || (c.startTick == 0 && c.lastEvaluatedTick > 0 && tick - c.lastEvaluatedTick > PendingExpiryTicks))
+                    if (tick - c.startTick > PendingExpiryTicks)
                     {
                         c.status = ContractStatus.Expired;
                         c.LogEvent($"Expired (unanswered) at tick {tick}");

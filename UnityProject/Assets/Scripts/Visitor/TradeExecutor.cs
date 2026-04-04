@@ -10,8 +10,10 @@ namespace Waystation.Systems
     {
         // ── Dependencies ──────────────────────────────────────────────────────
         private TradeSystem _tradeSystem;
+        private FactionEconomySystem _factionEconomy;
 
         public void SetTradeSystem(TradeSystem ts) => _tradeSystem = ts;
+        public void SetFactionEconomy(FactionEconomySystem fes) => _factionEconomy = fes;
 
         // ── Trade Execution ───────────────────────────────────────────────────
 
@@ -125,8 +127,15 @@ namespace Waystation.Systems
             return GetBasePrice(resourceId) * 1.2f;
         }
 
-        private static float GetBasePrice(string resourceId)
+        private float GetBasePrice(string resourceId)
         {
+            // Prefer shared base price table from FactionEconomySystem to avoid drift
+            if (_factionEconomy != null)
+            {
+                float price = _factionEconomy.BasePrices.Get(resourceId);
+                if (price > 0f) return price;
+            }
+            // Last-resort hardcoded defaults (kept in sync with BasePrices.json)
             switch (resourceId)
             {
                 case "food":   return 4f;

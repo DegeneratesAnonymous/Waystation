@@ -54,39 +54,98 @@ namespace Waystation.Systems
             // Oxygen critical
             if (station.GetResource("oxygen") <= 0f)
             {
-                FireWithUrgency("resource_oxygen_depleted", EventUrgency.Critical, station);
+                if (!station.HasChainFlag("resource_oxygen_depleted_fired"))
+                {
+                    _chainFlags?.Set("resource_oxygen_depleted_fired", station);
+                    FireWithUrgency("resource_oxygen_depleted", EventUrgency.Critical, station);
+                }
             }
-            else if (station.GetResource("oxygen") < 50f)
+            else
             {
-                FireWithUrgency("resource_oxygen_low", EventUrgency.TimeSensitive, station);
+                // Condition cleared — allow re-fire next time it occurs
+                _chainFlags?.Clear("resource_oxygen_depleted_fired", station);
+
+                if (station.GetResource("oxygen") < 50f)
+                {
+                    if (!station.HasChainFlag("resource_oxygen_low_fired"))
+                    {
+                        _chainFlags?.Set("resource_oxygen_low_fired", station);
+                        FireWithUrgency("resource_oxygen_low", EventUrgency.TimeSensitive, station);
+                    }
+                }
+                else
+                {
+                    _chainFlags?.Clear("resource_oxygen_low_fired", station);
+                }
             }
 
             // Food critical
             if (station.GetResource("food") <= 0f)
             {
-                FireWithUrgency("resource_food_depleted", EventUrgency.Critical, station);
+                if (!station.HasChainFlag("resource_food_depleted_fired"))
+                {
+                    _chainFlags?.Set("resource_food_depleted_fired", station);
+                    FireWithUrgency("resource_food_depleted", EventUrgency.Critical, station);
+                }
             }
-            else if (station.GetResource("food") < 30f)
+            else
             {
-                FireWithUrgency("resource_food_low", EventUrgency.TimeSensitive, station);
+                _chainFlags?.Clear("resource_food_depleted_fired", station);
+
+                if (station.GetResource("food") < 30f)
+                {
+                    if (!station.HasChainFlag("resource_food_low_fired"))
+                    {
+                        _chainFlags?.Set("resource_food_low_fired", station);
+                        FireWithUrgency("resource_food_low", EventUrgency.TimeSensitive, station);
+                    }
+                }
+                else
+                {
+                    _chainFlags?.Clear("resource_food_low_fired", station);
+                }
             }
 
             // Power failure
             if (station.GetResource("power") <= 0f)
             {
-                FireWithUrgency("resource_power_failure", EventUrgency.Critical, station);
+                if (!station.HasChainFlag("resource_power_failure_fired"))
+                {
+                    _chainFlags?.Set("resource_power_failure_fired", station);
+                    FireWithUrgency("resource_power_failure", EventUrgency.Critical, station);
+                }
+            }
+            else
+            {
+                _chainFlags?.Clear("resource_power_failure_fired", station);
             }
 
             // Hull breach (infrastructure)
             if (station.HasTag("hull_breach_active"))
             {
-                FireWithUrgency("infrastructure_hull_breach", EventUrgency.Critical, station);
+                if (!station.HasChainFlag("infrastructure_hull_breach_fired"))
+                {
+                    _chainFlags?.Set("infrastructure_hull_breach_fired", station);
+                    FireWithUrgency("infrastructure_hull_breach", EventUrgency.Critical, station);
+                }
+            }
+            else
+            {
+                _chainFlags?.Clear("infrastructure_hull_breach_fired", station);
             }
 
             // Fire
             if (station.HasTag("fire_active"))
             {
-                FireWithUrgency("infrastructure_fire", EventUrgency.Critical, station);
+                if (!station.HasChainFlag("infrastructure_fire_fired"))
+                {
+                    _chainFlags?.Set("infrastructure_fire_fired", station);
+                    FireWithUrgency("infrastructure_fire", EventUrgency.Critical, station);
+                }
+            }
+            else
+            {
+                _chainFlags?.Clear("infrastructure_fire_fired", station);
             }
         }
 
@@ -238,13 +297,13 @@ namespace Waystation.Systems
             switch (urgency)
             {
                 case EventUrgency.Critical:
-                    OnCriticalEvent?.Invoke(eventId, context);
                     _events?.QueueEvent(eventId, context);
+                    OnCriticalEvent?.Invoke(eventId, context);
                     break;
 
                 case EventUrgency.TimeSensitive:
-                    OnTimeSensitiveEvent?.Invoke(eventId, context);
                     _events?.QueueEvent(eventId, context);
+                    OnTimeSensitiveEvent?.Invoke(eventId, context);
                     break;
 
                 default:

@@ -76,9 +76,10 @@ namespace Waystation.Systems
                 if (res == "credits") continue; // factions don't produce/consume credits as a resource
                 float baseProd = 20f + rng.Next(0, 30);
                 float baseCons = 15f + rng.Next(0, 35);
-                p.production[res]  = baseProd;
-                p.consumption[res] = baseCons;
-                p.stockpile[res]   = baseProd * 8f; // ~2 months buffer to start
+                p.production[res]      = baseProd;
+                p.consumption[res]     = baseCons;
+                p.baseConsumption[res] = baseCons; // snapshot baseline for modifier calculations
+                p.stockpile[res]       = baseProd * 8f; // ~2 months buffer to start
             }
             p.traderFleetSize = 2 + rng.Next(0, 4);
             p.economicHealth  = 0.7f + (float)rng.NextDouble() * 0.3f;
@@ -178,13 +179,18 @@ namespace Waystation.Systems
 
         private void ApplyConditionModifiers(FactionEconomyProfile p, StationState station)
         {
+            // Reset consumption to baseline before applying condition modifiers
+            // to prevent compounding across weekly ticks.
+            foreach (var kv in p.baseConsumption)
+                p.consumption[kv.Key] = kv.Value;
+
             // War: consumption of military resources +40%, health −0.15/week
             // (Check chain flags for war state)
             string warFlag = $"faction_war_{p.factionId}_active";
             if (station.chainFlags != null && station.chainFlags.TryGetValue(warFlag, out bool atWar) && atWar)
             {
-                p.consumption["parts"] = p.consumption.Get("parts") * (1f + WarConsumptionBoost);
-                p.consumption["fuel"]  = p.consumption.Get("fuel")  * (1f + WarConsumptionBoost);
+                p.consumption["parts"] = p.baseConsumption.Get("parts") * (1f + WarConsumptionBoost);
+                p.consumption["fuel"]  = p.baseConsumption.Get("fuel")  * (1f + WarConsumptionBoost);
                 p.economicHealth = Mathf.Max(MinEconomicHealth, p.economicHealth - WarHealthDecay);
             }
 

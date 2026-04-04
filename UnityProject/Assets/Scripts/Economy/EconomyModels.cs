@@ -37,11 +37,12 @@ namespace Waystation.Systems
     public class FactionEconomyProfile
     {
         public string      factionId;
-        public ResourceMap production   = new ResourceMap();   // units/week
-        public ResourceMap consumption  = new ResourceMap();   // units/week
-        public ResourceMap stockpile    = new ResourceMap();   // current holdings
-        public ResourceMap deficit      = new ResourceMap();   // shortfall
-        public ResourceMap surplus      = new ResourceMap();   // excess above buffer
+        public ResourceMap production      = new ResourceMap();   // units/week
+        public ResourceMap consumption     = new ResourceMap();   // units/week (current, may be modified)
+        public ResourceMap baseConsumption = new ResourceMap();   // units/week (unmodified baseline)
+        public ResourceMap stockpile       = new ResourceMap();   // current holdings
+        public ResourceMap deficit         = new ResourceMap();   // shortfall
+        public ResourceMap surplus         = new ResourceMap();   // excess above buffer
         public PriceMap    buyPrices    = new PriceMap();      // what they'll pay
         public PriceMap    sellPrices   = new PriceMap();      // what they'll sell for
         public float       economicHealth = 1.0f;              // 0.0–1.0
@@ -82,7 +83,7 @@ namespace Waystation.Systems
 
     /// <summary>
     /// Price broadcast packet sent by a station on the daily tick.
-    /// Cached by receiving stations; stale after 7 days (168 ticks at 24/day).
+    /// Cached by receiving stations; stale after 7 days.
     /// </summary>
     public class PriceBroadcast
     {
@@ -99,7 +100,7 @@ namespace Waystation.Systems
         public List<StationQuestEntry> pendingQuests = new List<StationQuestEntry>();
 
         /// <summary>Broadcasts older than this many ticks are stale.</summary>
-        public const int StalenessThresholdTicks = 168; // 7 days × 24 ticks/day
+        public static readonly int StalenessThresholdTicks = TimeSystem.TicksPerWeek; // 7 days
         /// <summary>Max relay hops before a broadcast is too stale to re-relay.</summary>
         public const int MaxRelayHops = 2;
 

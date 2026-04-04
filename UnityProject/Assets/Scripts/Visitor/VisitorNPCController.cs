@@ -102,14 +102,18 @@ namespace Waystation.Systems
         /// </summary>
         public static bool IsRecurringContact(NPCInstance visitor, StationState station)
         {
-            if (visitor == null) return false;
-            // A recurring contact is a visitor whose ship has visited 3+ times
+            if (visitor == null || station == null) return false;
+
+            // A recurring contact is a visitor whose ship has visited 3+ times.
+            string shipUid = visitor.assignedShipUid;
+            if (string.IsNullOrEmpty(shipUid)) return false;
+
             int visitCount = 0;
             if (station.visitHistory != null)
             {
                 foreach (var record in station.visitHistory)
                 {
-                    if (record.shipName == visitor.name)
+                    if (record.shipUid == shipUid)
                         visitCount++;
                 }
             }
