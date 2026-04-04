@@ -328,5 +328,13 @@ namespace Waystation.Core
         /// Requires UseSimulatedFactionEconomy = true.
         /// </summary>
         public static bool UseStationQuests = true;
+
+        // ── Creator Mode ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Enables Creator Mode: tile sprite editor accessible from the main menu.
+        /// When false, the Creator Mode menu entry is hidden.
+        /// </summary>
+        public static bool UseCreatorMode = true;
     }
 }

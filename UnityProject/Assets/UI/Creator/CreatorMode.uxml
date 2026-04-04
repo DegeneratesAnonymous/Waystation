@@ -1,0 +1,212 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="creator-root" class="creator-root">
+
+        <!-- ═════════════════════ LIBRARY PANEL ═════════════════════ -->
+        <ui:VisualElement name="library-panel" class="library-panel">
+
+            <!-- Corner rivets -->
+            <ui:VisualElement class="rivet rivet-tl" />
+            <ui:VisualElement class="rivet rivet-tr" />
+            <ui:VisualElement class="rivet rivet-bl" />
+            <ui:VisualElement class="rivet rivet-br" />
+
+            <!-- Header -->
+            <ui:VisualElement class="panel-header">
+                <ui:VisualElement class="title-block">
+                    <ui:Label class="title-icon" text="◆" />
+                    <ui:VisualElement class="title-text">
+                        <ui:Label name="library-title" class="title" text="CREATOR MODE" />
+                        <ui:Label class="title-sub" text="TILE SPRITE EDITOR" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Button name="btn-back-menu" class="close-btn" text="✕" />
+            </ui:VisualElement>
+
+            <!-- New asset buttons -->
+            <ui:VisualElement class="section-label">
+                <ui:Label text="CREATE NEW" />
+                <ui:VisualElement class="section-line" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="new-asset-row">
+                <ui:Button name="btn-new-floor" class="new-asset-btn">
+                    <ui:Label class="new-asset-icon" text="⬜" />
+                    <ui:Label class="new-asset-label" text="Floor Tile" />
+                </ui:Button>
+                <ui:Button name="btn-new-wall" class="new-asset-btn">
+                    <ui:Label class="new-asset-icon" text="▐" />
+                    <ui:Label class="new-asset-label" text="Wall Tile" />
+                </ui:Button>
+                <ui:Button name="btn-new-furniture" class="new-asset-btn">
+                    <ui:Label class="new-asset-icon" text="☐" />
+                    <ui:Label class="new-asset-label" text="Furniture" />
+                </ui:Button>
+            </ui:VisualElement>
+
+            <!-- From template / import -->
+            <ui:VisualElement class="import-row">
+                <ui:Button name="btn-from-template" class="action-btn" text="⊞  FROM TEMPLATE" />
+                <ui:Button name="btn-import-png" class="action-btn" text="⤓  IMPORT PNG" />
+            </ui:VisualElement>
+
+            <!-- Search / filter -->
+            <ui:VisualElement class="section-label">
+                <ui:Label text="ASSET LIBRARY" />
+                <ui:VisualElement class="section-line" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="search-row">
+                <ui:TextField name="library-search" class="search-field" />
+                <ui:VisualElement class="filter-btns">
+                    <ui:Button name="filter-all" class="filter-btn filter-btn--active" text="All" />
+                    <ui:Button name="filter-floor" class="filter-btn" text="Floor" />
+                    <ui:Button name="filter-wall" class="filter-btn" text="Wall" />
+                    <ui:Button name="filter-furniture" class="filter-btn" text="Furn" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Asset grid -->
+            <ui:ScrollView name="library-scroll" class="library-scroll">
+                <ui:VisualElement name="asset-grid" class="asset-grid" />
+            </ui:ScrollView>
+        </ui:VisualElement>
+
+        <!-- ═════════════════════ EDITOR AREA ═════════════════════ -->
+        <ui:VisualElement name="editor-area" class="editor-area hidden">
+
+            <!-- Top bar: back, title, save/export -->
+            <ui:VisualElement name="editor-topbar" class="editor-topbar">
+                <ui:Button name="btn-back-to-library" class="topbar-btn" text="◀ LIBRARY" />
+                <ui:Label name="editor-title" class="editor-title" text="Untitled" />
+                <ui:VisualElement class="topbar-actions">
+                    <ui:Button name="btn-save" class="topbar-btn" text="💾 SAVE" />
+                    <ui:Button name="btn-export" class="topbar-btn topbar-btn--accent" text="⤒ EXPORT" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Main editor layout -->
+            <ui:VisualElement name="editor-body" class="editor-body">
+
+                <!-- Left: Toolbar -->
+                <ui:VisualElement name="toolbar" class="toolbar">
+                    <ui:VisualElement class="tool-group">
+                        <ui:Label class="tool-group-label" text="DRAW" />
+                        <ui:Button name="btn-pencil" class="tool-btn tool-active" tooltip="Pencil (P)" text="✏" />
+                        <ui:Button name="btn-eraser" class="tool-btn" tooltip="Eraser (E)" text="◻" />
+                        <ui:Button name="btn-eyedropper" class="tool-btn" tooltip="Eyedropper (I)" text="💧" />
+                        <ui:Button name="btn-fill" class="tool-btn" tooltip="Fill (G)" text="🪣" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="tool-group">
+                        <ui:Label class="tool-group-label" text="SHAPE" />
+                        <ui:Button name="btn-line" class="tool-btn" tooltip="Line (L)" text="╱" />
+                        <ui:Button name="btn-rect" class="tool-btn" tooltip="Rectangle (R)" text="▭" />
+                        <ui:Button name="btn-ellipse" class="tool-btn" tooltip="Ellipse (O)" text="◯" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="tool-group">
+                        <ui:Label class="tool-group-label" text="SELECT" />
+                        <ui:Button name="btn-select" class="tool-btn" tooltip="Select (S)" text="⛶" />
+                        <ui:Button name="btn-wand" class="tool-btn" tooltip="Magic Wand (W)" text="✦" />
+                        <ui:Button name="btn-move" class="tool-btn" tooltip="Move (M)" text="✥" />
+                    </ui:VisualElement>
+
+                    <!-- More tools expander -->
+                    <ui:VisualElement name="more-tools" class="tool-group more-tools">
+                        <ui:Button name="btn-more-tools" class="tool-btn tool-btn--expand" text="▾ MORE" />
+                        <ui:VisualElement name="advanced-tools" class="advanced-tools hidden">
+                            <ui:Button name="btn-mirror" class="tool-btn" tooltip="Mirror Paint (H)" text="⇔" />
+                            <ui:Button name="btn-symmetry" class="tool-btn" tooltip="Rotational Symmetry" text="✿" />
+                            <ui:Button name="btn-lasso" class="tool-btn" tooltip="Lasso" text="⊙" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <!-- Tool options bar -->
+                    <ui:VisualElement name="tool-options" class="tool-options" />
+
+                    <!-- Undo / Redo -->
+                    <ui:VisualElement class="tool-group tool-group--actions">
+                        <ui:Button name="btn-undo" class="tool-btn" tooltip="Undo (Ctrl+Z)" text="↶" />
+                        <ui:Button name="btn-redo" class="tool-btn" tooltip="Redo (Ctrl+Shift+Z)" text="↷" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <!-- Center: Canvas -->
+                <ui:VisualElement name="canvas-panel" class="canvas-panel">
+                    <ui:VisualElement name="canvas-viewport" class="canvas-viewport">
+                        <ui:VisualElement name="canvas-image" class="canvas-image" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <!-- Right: Inspector + Palette -->
+                <ui:VisualElement name="right-panel" class="right-panel">
+
+                    <!-- Palette -->
+                    <ui:VisualElement name="palette-panel" class="palette-panel">
+                        <ui:VisualElement class="section-label">
+                            <ui:Label text="PALETTE" />
+                            <ui:VisualElement class="section-line" />
+                        </ui:VisualElement>
+
+                        <!-- FG / BG swatches -->
+                        <ui:VisualElement class="fg-bg-row">
+                            <ui:VisualElement name="fg-swatch" class="active-swatch fg-swatch" />
+                            <ui:VisualElement name="bg-swatch" class="active-swatch bg-swatch" />
+                            <ui:Button name="btn-swap-colours" class="swap-btn" text="⇄" />
+                        </ui:VisualElement>
+
+                        <ui:VisualElement name="swatch-grid" class="swatch-grid" />
+
+                        <ui:VisualElement class="section-label section-label--small">
+                            <ui:Label text="RECENT" />
+                        </ui:VisualElement>
+                        <ui:VisualElement name="recent-colours" class="recent-colours" />
+                    </ui:VisualElement>
+
+                    <!-- Inspector -->
+                    <ui:VisualElement name="inspector-panel" class="inspector-panel">
+                        <ui:VisualElement class="section-label">
+                            <ui:Label name="asset-type-label" text="FLOOR TILE" />
+                            <ui:VisualElement class="section-line" />
+                        </ui:VisualElement>
+
+                        <!-- Variant tabs -->
+                        <ui:VisualElement name="variant-tabs" class="variant-tabs" />
+
+                        <!-- Properties -->
+                        <ui:ScrollView class="inspector-scroll">
+                            <ui:VisualElement name="properties-section" class="properties-section" />
+                        </ui:ScrollView>
+
+                        <!-- Context preview -->
+                        <ui:VisualElement class="section-label section-label--small">
+                            <ui:Label text="PREVIEW" />
+                        </ui:VisualElement>
+                        <ui:VisualElement name="context-preview" class="context-preview" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Status bar -->
+            <ui:VisualElement name="status-bar" class="status-bar">
+                <ui:Label name="status-tool" class="status-item" text="Pencil" />
+                <ui:Label name="status-coord" class="status-item" text="X:0 Y:0" />
+                <ui:Label name="status-zoom" class="status-item" text="8x" />
+                <ui:Label name="status-size" class="status-item" text="64×64" />
+                <ui:Label name="status-variant" class="status-item" text="Variant 0" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ═════════════════════ TEMPLATE BROWSER MODAL ═════════════════════ -->
+        <ui:VisualElement name="template-browser" class="modal-overlay hidden">
+            <ui:VisualElement class="modal-dialog modal-dialog--wide">
+                <ui:VisualElement class="panel-header">
+                    <ui:Label class="title" text="TEMPLATES" />
+                    <ui:Button name="btn-close-templates" class="close-btn" text="✕" />
+                </ui:VisualElement>
+                <ui:ScrollView class="template-scroll">
+                    <ui:VisualElement name="template-grid" class="template-grid" />
+                </ui:ScrollView>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>
