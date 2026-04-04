@@ -15,7 +15,7 @@ namespace Waystation.Creator.TileEditor.Export
             tex.Apply();
 
             string path = Path.Combine(assetDir, $"variant_{variantIndex}.png");
-            File.WriteAllBytes(path, ImageConversion.EncodeToPNG(tex));
+            File.WriteAllBytes(path, tex.EncodeToPNG());
             Object.Destroy(tex);
         }
 
@@ -26,7 +26,7 @@ namespace Waystation.Creator.TileEditor.Export
 
             byte[] data = File.ReadAllBytes(path);
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (!ImageConversion.LoadImage(tex, data))
+            if (!tex.LoadImage(data))
             {
                 Object.Destroy(tex);
                 return null;
@@ -63,7 +63,7 @@ namespace Waystation.Creator.TileEditor.Export
 
             thumb.Apply();
             string path = Path.Combine(assetDir, "thumbnail.png");
-            File.WriteAllBytes(path, ImageConversion.EncodeToPNG(thumb));
+            File.WriteAllBytes(path, thumb.EncodeToPNG());
             Object.Destroy(thumb);
         }
     }

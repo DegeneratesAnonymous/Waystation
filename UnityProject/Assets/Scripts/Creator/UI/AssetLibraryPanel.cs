@@ -83,7 +83,7 @@ namespace Waystation.Creator.UI
             {
                 var data = System.IO.File.ReadAllBytes(thumbPath);
                 var tex = new Texture2D(2, 2);
-                ImageConversion.LoadImage(tex, data);
+                tex.LoadImage(data);
                 thumb.style.backgroundImage = new StyleBackground(tex);
             }
 

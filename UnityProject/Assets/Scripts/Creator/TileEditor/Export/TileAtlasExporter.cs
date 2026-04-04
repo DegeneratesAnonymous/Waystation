@@ -74,7 +74,7 @@ namespace Waystation.Creator.TileEditor.Export
 
         public static byte[] EncodeAtlasToPNG(Texture2D atlas)
         {
-            return ImageConversion.EncodeToPNG(atlas);
+            return atlas.EncodeToPNG();
         }
 
         private static Texture2D CreateAtlasTexture(int w, int h)
