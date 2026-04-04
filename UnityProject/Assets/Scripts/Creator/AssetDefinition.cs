@@ -38,6 +38,8 @@ namespace Waystation.Creator
         public bool allow_rotation = true;
         public bool status_led_enabled;
         public PointData status_led_position;
+        public int direction_count = 1;
+        public int state_count = 1;
     }
 
     [System.Serializable]

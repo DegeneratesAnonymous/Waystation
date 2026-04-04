@@ -48,10 +48,11 @@ namespace Waystation.Creator.TileEditor.Palette
             new PaletteSwatch("dmgSpall", "Damage Spall",     0x2e, 0x28, 0x38),
             new PaletteSwatch("dmgScorch","Damage Scorch",    0x1c, 0x18, 0x1e),
             new PaletteSwatch("dstVoid",  "Destroyed Void",   0x09, 0x0a, 0x0d),
+            new PaletteSwatch("dstCrack", "Destroyed Crack",  0x12, 0x10, 0x1a),
             new PaletteSwatch("dstRubble","Destroyed Rubble", 0x20, 0x1c, 0x2a),
         };
 
-        public const int MaxRecentColours = 8;
+        public const int MaxRecentColours = 6;
         private readonly List<Color32> _recentColours = new List<Color32>();
         private readonly List<Creator.CustomSwatch> _customSwatches;
 
@@ -88,15 +89,28 @@ namespace Waystation.Creator.TileEditor.Palette
 
         public static Color32 HexToColour(string hex)
         {
+            if (hex == null)
+                return new Color32(0, 0, 0, 255);
+
             hex = hex.TrimStart('#');
-            if (hex.Length == 6)
+            if (hex.Length != 6 && hex.Length != 8)
+                return new Color32(0, 0, 0, 255);
+
+            if (!byte.TryParse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out byte r) ||
+                !byte.TryParse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out byte g) ||
+                !byte.TryParse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out byte b))
             {
-                byte r = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
-                byte g = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
-                byte b = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
-                return new Color32(r, g, b, 255);
+                return new Color32(0, 0, 0, 255);
             }
-            return new Color32(0, 0, 0, 255);
+
+            byte a = 255;
+            if (hex.Length == 8 &&
+                !byte.TryParse(hex.Substring(6, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out a))
+            {
+                return new Color32(0, 0, 0, 255);
+            }
+
+            return new Color32(r, g, b, a);
         }
 
         public static string ColourToHex(Color32 c)

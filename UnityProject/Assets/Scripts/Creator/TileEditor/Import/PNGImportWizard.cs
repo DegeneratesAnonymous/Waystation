@@ -49,12 +49,12 @@ namespace Waystation.Creator.TileEditor.Import
         private void DetectTileSize()
         {
             // If image is exactly 64xN or Nx64, assume 64px tiles
-            if (SourceImage.width % 64 == 0 || SourceImage.height % 64 == 0)
+            if (SourceImage.width % 64 == 0 && SourceImage.height % 64 == 0)
             {
                 DetectedTileW = 64;
                 DetectedTileH = 64;
             }
-            else if (SourceImage.width % 66 == 0 || SourceImage.height % 66 == 0)
+            else if (SourceImage.width % 66 == 0 && SourceImage.height % 66 == 0)
             {
                 // Padded format (66px slots)
                 DetectedTileW = 64;
@@ -64,12 +64,12 @@ namespace Waystation.Creator.TileEditor.Import
                 GridOffsetX = 1;
                 GridOffsetY = 1;
             }
-            else if (SourceImage.width % 32 == 0 || SourceImage.height % 32 == 0)
+            else if (SourceImage.width % 32 == 0 && SourceImage.height % 32 == 0)
             {
                 DetectedTileW = 32;
                 DetectedTileH = 32;
             }
-            else if (SourceImage.width % 16 == 0 || SourceImage.height % 16 == 0)
+            else if (SourceImage.width % 16 == 0 && SourceImage.height % 16 == 0)
             {
                 DetectedTileW = 16;
                 DetectedTileH = 16;

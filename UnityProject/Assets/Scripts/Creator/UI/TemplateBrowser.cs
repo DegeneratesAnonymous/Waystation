@@ -62,6 +62,14 @@ namespace Waystation.Creator.UI
             var icon = new VisualElement();
             icon.AddToClassList("template-icon");
 
+            // Load preview texture if available
+            if (!string.IsNullOrEmpty(entry.resourcePath))
+            {
+                var tex = Resources.Load<Texture2D>(entry.resourcePath);
+                if (tex != null)
+                    icon.style.backgroundImage = new StyleBackground(tex);
+            }
+
             var nameLabel = new Label(entry.name);
             nameLabel.AddToClassList("template-name");
 

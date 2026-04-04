@@ -133,6 +133,7 @@ namespace Waystation.Creator.TileEditor
             {
                 Canvas.ApplyChanges();
                 MarkDirty();
+                NotifyCanvasChanged();
             }
         }
 
@@ -143,6 +144,7 @@ namespace Waystation.Creator.TileEditor
             {
                 Canvas.ApplyChanges();
                 MarkDirty();
+                NotifyCanvasChanged();
             }
         }
 
@@ -156,6 +158,7 @@ namespace Waystation.Creator.TileEditor
             GetActiveUndoManager().CommitAction(Canvas.Pixels);
             Canvas.ApplyChanges();
             MarkDirty();
+            NotifyCanvasChanged();
         }
 
         public void SwapColours()

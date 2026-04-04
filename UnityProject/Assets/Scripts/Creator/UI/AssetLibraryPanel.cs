@@ -9,6 +9,7 @@ namespace Waystation.Creator.UI
         private readonly VisualElement _root;
         private readonly AssetLibrary _library;
         private readonly System.Action<AssetDefinition> _onOpenAsset;
+        private readonly List<Texture2D> _thumbnailTextures = new List<Texture2D>();
 
         private TextField _searchField;
         private VisualElement _assetGrid;
@@ -59,6 +60,11 @@ namespace Waystation.Creator.UI
             if (_assetGrid == null) return;
             _assetGrid.Clear();
 
+            // Destroy previously cached thumbnails
+            foreach (var tex in _thumbnailTextures)
+                if (tex != null) Object.Destroy(tex);
+            _thumbnailTextures.Clear();
+
             var assets = _library.Search(_searchQuery, _typeFilter);
 
             foreach (var def in assets)
@@ -85,6 +91,7 @@ namespace Waystation.Creator.UI
                 var tex = new Texture2D(2, 2);
                 tex.LoadImage(data);
                 thumb.style.backgroundImage = new StyleBackground(tex);
+                _thumbnailTextures.Add(tex);
             }
 
             var nameLabel = new Label(def.name);

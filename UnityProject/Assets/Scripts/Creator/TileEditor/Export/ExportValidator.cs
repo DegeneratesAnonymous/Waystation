@@ -34,8 +34,8 @@ namespace Waystation.Creator.TileEditor.Export
             int emptyCount = 0;
             for (int i = 0; i < 16; i++)
                 if (!controller.HasVariantContent(i)) emptyCount++;
-            if (emptyCount > 13)
-                result.Errors.Add("Too many empty variants — at least 3 of 16 variants must have content.");
+            if (emptyCount > 0)
+                result.Errors.Add($"{emptyCount} of 16 wall variants are empty — all variants must have content (use auto-generate for missing variants).");
 
             return result;
         }

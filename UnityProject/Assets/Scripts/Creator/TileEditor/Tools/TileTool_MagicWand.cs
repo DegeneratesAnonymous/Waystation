@@ -49,10 +49,11 @@ namespace Waystation.Creator.TileEditor.Tools
             {
                 int idx = stack.Pop();
                 if (visited[idx]) continue;
+                visited[idx] = true;
+
                 int x = idx % w, y = idx / w;
                 if (!ColorsMatch(canvas.GetPixel(x, y), target)) continue;
 
-                visited[idx] = true;
                 SelectedPixels.Add(idx);
 
                 if (x > 0) stack.Push(y * w + (x - 1));

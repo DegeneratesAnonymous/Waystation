@@ -103,6 +103,26 @@ namespace Waystation.Creator.UI
             if (target != null)
             {
                 _tooltipElement.style.position = Position.Absolute;
+                var bounds = target.worldBound;
+                switch (step.position)
+                {
+                    case "bottom":
+                        _tooltipElement.style.left = bounds.x;
+                        _tooltipElement.style.top = bounds.yMax + 8;
+                        break;
+                    case "top":
+                        _tooltipElement.style.left = bounds.x;
+                        _tooltipElement.style.top = bounds.y - 120;
+                        break;
+                    case "right":
+                        _tooltipElement.style.left = bounds.xMax + 8;
+                        _tooltipElement.style.top = bounds.y;
+                        break;
+                    case "left":
+                        _tooltipElement.style.left = bounds.x - 260;
+                        _tooltipElement.style.top = bounds.y;
+                        break;
+                }
             }
         }
 

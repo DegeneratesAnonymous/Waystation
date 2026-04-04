@@ -121,7 +121,9 @@ namespace Waystation.Creator.TileEditor
         {
             float px = (viewportPos.x - PanOffset.x) / Zoom;
             float py = (viewportPos.y - PanOffset.y) / Zoom;
-            return new PixelCoord(Mathf.FloorToInt(px), Mathf.FloorToInt(py));
+            int pixelX = Mathf.FloorToInt(px);
+            int pixelY = Height - 1 - Mathf.FloorToInt(py);
+            return new PixelCoord(pixelX, pixelY);
         }
 
         public bool ShouldShowPixelGrid()

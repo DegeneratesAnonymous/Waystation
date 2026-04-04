@@ -9,9 +9,9 @@ namespace Waystation.Creator.TileEditor.WallBitmask
         {
             int halfH = h / 2;
             var arm = new Color32[w * halfH];
-            for (int y = halfH; y < h; y++)
+            for (int y = 0; y < halfH; y++)
                 for (int x = 0; x < w; x++)
-                    arm[(y - halfH) * w + x] = tilePixels[y * w + x];
+                    arm[y * w + x] = tilePixels[y * w + x];
             return arm;
         }
 
@@ -20,9 +20,9 @@ namespace Waystation.Creator.TileEditor.WallBitmask
         {
             int halfH = h / 2;
             var arm = new Color32[w * halfH];
-            for (int y = 0; y < halfH; y++)
+            for (int y = halfH; y < h; y++)
                 for (int x = 0; x < w; x++)
-                    arm[y * w + x] = tilePixels[y * w + x];
+                    arm[(y - halfH) * w + x] = tilePixels[y * w + x];
             return arm;
         }
 

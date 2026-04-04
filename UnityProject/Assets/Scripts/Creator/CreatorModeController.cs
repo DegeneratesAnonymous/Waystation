@@ -6,6 +6,7 @@ using Waystation.Creator.TileEditor.Palette;
 using Waystation.Creator.TileEditor.Preview;
 using Waystation.Creator.TileEditor.Export;
 using Waystation.Creator.TileEditor.WallBitmask;
+using Waystation.Creator.UI;
 using Waystation.Core;
 
 namespace Waystation.Creator
@@ -23,8 +24,16 @@ namespace Waystation.Creator
         private BitmaskAutoGenerator _bitmaskGenerator;
         private DevMode.DevModeOverlay _devOverlay;
 
+        // UI panel controllers
+        private AssetLibraryPanel _assetLibraryPanel;
+        private CanvasPanel _canvasPanelController;
+        private InspectorPanel _inspectorPanelController;
+        private PalettePanel _palettePanelController;
+        private StatusBar _statusBarController;
+
         // UI panel references
         private VisualElement _root;
+        private VisualElement _editorArea;
         private VisualElement _libraryPanel;
         private VisualElement _canvasPanel;
         private VisualElement _inspectorPanel;
@@ -108,12 +117,25 @@ namespace Waystation.Creator
 
         private void BindUI()
         {
+            _editorArea = _root.Q("editor-area");
             _libraryPanel = _root.Q("library-panel");
             _canvasPanel = _root.Q("canvas-panel");
             _inspectorPanel = _root.Q("inspector-panel");
             _toolBar = _root.Q("toolbar");
             _palettePanel = _root.Q("palette-panel");
             _statusBar = _root.Q("status-bar");
+
+            // Instantiate panel controllers
+            if (_libraryPanel != null)
+                _assetLibraryPanel = new AssetLibraryPanel(_libraryPanel, _library, OpenAsset);
+            if (_canvasPanel != null)
+                _canvasPanelController = new CanvasPanel(_canvasPanel, _editor);
+            if (_inspectorPanel != null)
+                _inspectorPanelController = new InspectorPanel(_inspectorPanel, this);
+            if (_palettePanel != null)
+                _palettePanelController = new PalettePanel(_palettePanel, _editor, _palette, _devOverlay);
+            if (_statusBar != null)
+                _statusBarController = new StatusBar(_statusBar, _editor);
 
             // Library buttons
             _root.Q<Button>("btn-new-floor")?.RegisterCallback<ClickEvent>(_ => CreateAsset("floor_tile"));
@@ -192,6 +214,7 @@ namespace Waystation.Creator
         {
             _isEditing = false;
             _libraryPanel?.RemoveFromClassList("hidden");
+            _editorArea?.AddToClassList("hidden");
             _canvasPanel?.AddToClassList("hidden");
             _inspectorPanel?.AddToClassList("hidden");
         }
@@ -243,6 +266,7 @@ namespace Waystation.Creator
                 _bitmaskGenerator = new BitmaskAutoGenerator(_editor);
 
             _libraryPanel?.AddToClassList("hidden");
+            _editorArea?.RemoveFromClassList("hidden");
             _canvasPanel?.RemoveFromClassList("hidden");
             _inspectorPanel?.RemoveFromClassList("hidden");
 
@@ -335,10 +359,20 @@ namespace Waystation.Creator
                     sidecarJson = TileSidecarExporter.ExportWallSidecar(_currentAsset);
                     break;
                 case "furniture":
-                    // Simplified for now
-                    atlas = TileAtlasExporter.ExportFloorAtlas(
-                        _editor.GetVariantPixels(0), null, null);
-                    sidecarJson = TileSidecarExporter.ExportFurnitureSidecar(_currentAsset, 1, 1);
+                    var fp = _currentAsset.editor_state?.footprint;
+                    int fpW = fp?.w ?? 1;
+                    int fpH = fp?.h ?? 1;
+                    int dirCount = _currentAsset.editor_state?.direction_count ?? 1;
+                    int stCount = _currentAsset.editor_state?.state_count ?? 1;
+                    int cellsPerTile = fpW * fpH;
+                    atlas = TileAtlasExporter.ExportFurnitureAtlas(
+                        fpW, fpH, dirCount, stCount,
+                        (dir, state, cell) =>
+                        {
+                            int variantIdx = dir * stCount * cellsPerTile + state * cellsPerTile + cell;
+                            return _editor.GetVariantPixels(variantIdx);
+                        });
+                    sidecarJson = TileSidecarExporter.ExportFurnitureSidecar(_currentAsset, dirCount, stCount);
                     break;
             }
 
@@ -378,6 +412,23 @@ namespace Waystation.Creator
                 _editor.Canvas.Width, _editor.Canvas.Height);
         }
 
+        private static readonly System.Collections.Generic.Dictionary<string, string> _toolButtonMap =
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "pencil", "btn-pencil" },
+                { "eraser", "btn-eraser" },
+                { "eyedropper", "btn-eyedropper" },
+                { "fill", "btn-fill" },
+                { "line", "btn-line" },
+                { "rectangle", "btn-rect" },
+                { "select", "btn-select" },
+                { "ellipse", "btn-ellipse" },
+                { "move", "btn-move" },
+                { "mirrorpaint", "btn-mirror" },
+                { "symmetry", "btn-symmetry" },
+                { "magicwand", "btn-wand" },
+            };
+
         private void UpdateToolUI()
         {
             // Update active tool highlighting in toolbar
@@ -386,8 +437,8 @@ namespace Waystation.Creator
                 btn.RemoveFromClassList("tool-active");
 
             string activeName = _editor.ActiveTool?.Name?.ToLowerInvariant();
-            if (activeName != null)
-                _toolBar.Q<Button>($"btn-{activeName}")?.AddToClassList("tool-active");
+            if (activeName != null && _toolButtonMap.TryGetValue(activeName, out var btnName))
+                _toolBar.Q<Button>(btnName)?.AddToClassList("tool-active");
         }
 
         private void UpdateTitleBar()

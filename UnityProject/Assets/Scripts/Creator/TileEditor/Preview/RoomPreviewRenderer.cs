@@ -69,13 +69,14 @@ namespace Waystation.Creator.TileEditor.Preview
         private static void BlitTile(Color32[] dest, int destW, int destX, int destY,
             Color32[] tile, int tileW, int tileH)
         {
+            int destH = dest.Length / destW;
             for (int y = 0; y < tileH; y++)
             {
                 for (int x = 0; x < tileW; x++)
                 {
                     int dx = destX + x;
                     int dy = destY + y;
-                    if (dx >= 0 && dx < destW && dy >= 0 && dy < destW) // basic safety
+                    if (dx >= 0 && dx < destW && dy >= 0 && dy < destH)
                     {
                         int srcIdx = y * tileW + x;
                         int dstIdx = dy * destW + dx;

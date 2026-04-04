@@ -114,8 +114,8 @@ namespace Waystation.Creator.UI
             // Type-specific properties
             if (def.type == "wall_tile")
             {
-                var slabField = new SliderInt("South Slab Height", 0, 32);
-                slabField.value = def.editor_state?.south_slab_height ?? 5;
+                var slabField = new SliderInt("South Slab Height", 4, 8);
+                slabField.value = Mathf.Clamp(def.editor_state?.south_slab_height ?? 5, 4, 8);
                 slabField.RegisterValueChangedCallback(evt =>
                 {
                     if (def.editor_state != null)
