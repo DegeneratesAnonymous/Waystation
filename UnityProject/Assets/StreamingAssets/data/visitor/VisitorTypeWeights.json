@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "visitor_type_weights": {
+    "trader":    0.45,
+    "diplomat":  0.08,
+    "refugee":   0.12,
+    "raider":    0.08,
+    "inspector": 0.05,
+    "smuggler":  0.07,
+    "medical":   0.03,
+    "passerby":  0.07,
+    "unknown":   0.05
+  },
+  "notes": "Relative frequency weights for visitor type selection. Weights are normalised at runtime."
+}

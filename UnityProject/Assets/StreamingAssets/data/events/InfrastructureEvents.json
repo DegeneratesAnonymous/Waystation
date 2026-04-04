@@ -1,0 +1,218 @@
+[
+  {
+    "id": "infrastructure_hull_breach",
+    "category": "infrastructure",
+    "title": "Hull Breach Detected",
+    "description": "A section of the station hull has been compromised. Atmosphere is venting into space.",
+    "weight": 8.0,
+    "cooldown": 48,
+    "hostile": true,
+    "expires_in": 4,
+    "required_tags": [
+      "hull_breach_active"
+    ],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [],
+    "choices": [
+      {
+        "id": "emergency_seal",
+        "label": "Emergency hull seal (costs 15 parts)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "parts",
+            "value": 15
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "parts",
+            "value": 15
+          },
+          {
+            "type": "clear_tag",
+            "target": "hull_breach_active"
+          },
+          {
+            "type": "log_message",
+            "value": "Emergency hull seal applied. Breach contained."
+          }
+        ]
+      },
+      {
+        "id": "evacuate_section",
+        "label": "Seal off and evacuate the affected section",
+        "conditions": [],
+        "outcomes": [
+          {
+            "type": "log_message",
+            "value": "Section sealed off. The breach remains but is isolated."
+          },
+          {
+            "type": "set_chain_flag",
+            "target": "section_sealed"
+          }
+        ]
+      }
+    ],
+    "auto_outcomes": [
+      {
+        "type": "remove_resource",
+        "target": "oxygen",
+        "value": 10
+      },
+      {
+        "type": "log_message",
+        "value": "Atmospheric venting detected \u2014 oxygen levels dropping."
+      }
+    ],
+    "followup_events": []
+  },
+  {
+    "id": "infrastructure_fire",
+    "category": "infrastructure",
+    "title": "Fire Aboard Station",
+    "description": "A fire has broken out in the station. Crew are in danger and equipment may be damaged.",
+    "weight": 6.0,
+    "cooldown": 72,
+    "hostile": true,
+    "expires_in": 3,
+    "required_tags": [
+      "fire_active"
+    ],
+    "excluded_tags": [],
+    "reactive_triggers": [],
+    "trigger_conditions": [],
+    "choices": [
+      {
+        "id": "suppress_fire",
+        "label": "Deploy fire suppression system (costs 10 power)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "power",
+            "value": 10
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "power",
+            "value": 10
+          },
+          {
+            "type": "clear_tag",
+            "target": "fire_active"
+          },
+          {
+            "type": "log_message",
+            "value": "Fire suppression systems activated. Fire extinguished."
+          }
+        ]
+      },
+      {
+        "id": "vent_atmosphere",
+        "label": "Vent atmosphere to starve the fire (costs 20 oxygen)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "oxygen",
+            "value": 20
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "oxygen",
+            "value": 20
+          },
+          {
+            "type": "clear_tag",
+            "target": "fire_active"
+          },
+          {
+            "type": "log_message",
+            "value": "Section atmosphere vented. Fire extinguished but oxygen reserves reduced."
+          }
+        ]
+      }
+    ],
+    "auto_outcomes": [
+      {
+        "type": "remove_resource",
+        "target": "parts",
+        "value": 5
+      },
+      {
+        "type": "log_message",
+        "value": "Fire is spreading \u2014 equipment damaged."
+      }
+    ],
+    "followup_events": []
+  },
+  {
+    "id": "infrastructure_equipment_failure",
+    "category": "infrastructure",
+    "title": "Equipment Malfunction",
+    "description": "A critical piece of station equipment has failed. Production output is reduced.",
+    "weight": 3.0,
+    "cooldown": 96,
+    "hostile": false,
+    "expires_in": 48,
+    "required_tags": [],
+    "excluded_tags": [],
+    "reactive_triggers": [
+      "equipment_degraded"
+    ],
+    "trigger_conditions": [
+      {
+        "type": "tick_above",
+        "target": "",
+        "value": 100
+      }
+    ],
+    "choices": [
+      {
+        "id": "repair_equipment",
+        "label": "Repair immediately (costs 8 parts)",
+        "conditions": [
+          {
+            "type": "resource_above",
+            "target": "parts",
+            "value": 8
+          }
+        ],
+        "outcomes": [
+          {
+            "type": "remove_resource",
+            "target": "parts",
+            "value": 8
+          },
+          {
+            "type": "log_message",
+            "value": "Equipment repaired. Full production restored."
+          }
+        ]
+      },
+      {
+        "id": "workaround",
+        "label": "Implement a workaround (reduced output continues)",
+        "conditions": [],
+        "outcomes": [
+          {
+            "type": "set_chain_flag",
+            "target": "equipment_workaround"
+          },
+          {
+            "type": "log_message",
+            "value": "Workaround in place. Output reduced until proper repair."
+          }
+        ]
+      }
+    ],
+    "auto_outcomes": [],
+    "followup_events": []
+  }
+]

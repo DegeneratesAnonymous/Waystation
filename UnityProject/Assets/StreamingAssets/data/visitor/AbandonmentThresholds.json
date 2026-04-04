@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "abandonment_thresholds": {
+    "trader": 288,
+    "diplomat": 480,
+    "refugee": 672,
+    "raider": 96,
+    "inspector": 384,
+    "smuggler": 192,
+    "medical": -1,
+    "passerby": 96,
+    "unknown": 192
+  },
+  "notes": "Per-visitor-type queue abandonment durations in ticks (96 ticks/day). -1 = never abandons (medical emergencies)."
+}

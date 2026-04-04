@@ -170,6 +170,25 @@ namespace Waystation.Core
         // ── Crafting system (EXP-005) ──────────────────────────────────────────────────────────
         public CraftingSystem           Crafting      { get; private set; }
 
+        // ── Phase 4: Faction Economy Stack (FAC-006 → FAC-009) ─────────────────────────────────
+        public FactionEconomySystem     FactionEconomy   { get; private set; }
+        public BroadcastNetwork         BroadcastNet     { get; private set; }
+        public TraderDispatchSystem     TraderDispatch   { get; private set; }
+        public DockingPolicyEvaluator   DockingPolicy    { get; private set; }
+        public DockingQueue             DockQueue        { get; private set; }
+        public DockingBayManager        DockingBays      { get; private set; }
+        public TradeExecutor            TradeExec        { get; private set; }
+        public VisitorNPCController     VisitorNPCs      { get; private set; }
+        public ContractRegistry         Contracts        { get; private set; }
+        public ContractNegotiationSystem ContractNeg     { get; private set; }
+        public ContractBreachDetector   ContractBreach   { get; private set; }
+        public RevenueShareTracker      RevenueTracker   { get; private set; }
+        public ChainFlagRegistry        ChainFlags       { get; private set; }
+        public TriggerEvaluator         Triggers         { get; private set; }
+        public CriticalEventModal       CriticalModal    { get; private set; }
+        public DiplomatRole             Diplomats        { get; private set; }
+        public StationQuestSystem       StationQuests    { get; private set; }
+
         // ── Runtime state ─────────────────────────────────────────────────────
         public StationState Station  { get; private set; }
         public bool         IsLoaded { get; private set; }
@@ -563,6 +582,83 @@ namespace Waystation.Core
                     Scheduler.LoadConfig(System.IO.File.ReadAllText(schedulerConfigPath));
                 LegacyTick = new LegacyTickSubscriber(Scheduler);
             }
+
+            // ── Phase 4: Faction Economy Stack (FAC-006 → FAC-009) ─────────
+
+            // Layer 1: Faction Economy (#213)
+            if (FeatureFlags.UseSimulatedFactionEconomy)
+            {
+                FactionEconomy = new FactionEconomySystem();
+                string basePricesPath = System.IO.Path.Combine(Application.streamingAssetsPath, "data", "economy", "BasePrices.json");
+                if (System.IO.File.Exists(basePricesPath))
+                    FactionEconomy.LoadBasePrices(System.IO.File.ReadAllText(basePricesPath));
+                string modifiersPath = System.IO.Path.Combine(Application.streamingAssetsPath, "data", "economy", "EconomyModifiers.json");
+                if (System.IO.File.Exists(modifiersPath))
+                    FactionEconomy.LoadConditionModifiers(System.IO.File.ReadAllText(modifiersPath));
+
+                BroadcastNet = new BroadcastNetwork();
+                TraderDispatch = new TraderDispatchSystem();
+                TraderDispatch.SetDependencies(FactionEconomy, BroadcastNet);
+            }
+
+            // Layer 2: Visitor Pipeline (#214)
+            if (FeatureFlags.UsePhysicalVisitorSimulation)
+            {
+                DockingPolicy = new DockingPolicyEvaluator();
+                DockQueue = new DockingQueue();
+                DockingBays = new DockingBayManager();
+                TradeExec = new TradeExecutor();
+                TradeExec.SetTradeSystem(Trade);
+                if (FactionEconomy != null)
+                    TradeExec.SetFactionEconomy(FactionEconomy);
+                VisitorNPCs = new VisitorNPCController();
+            }
+
+            // Layer 3: Contracts (#215)
+            if (FeatureFlags.UseContractsSystem)
+            {
+                Contracts = new ContractRegistry();
+                ContractNeg = new ContractNegotiationSystem();
+                ContractNeg.SetDependencies(Contracts, FactionEconomy);
+                ContractBreach = new ContractBreachDetector();
+                ContractBreach.SetDependencies(Contracts, BroadcastNet);
+                RevenueTracker = new RevenueShareTracker();
+            }
+
+            // Layer 4: Extended Events (#212)
+            if (FeatureFlags.UseExtendedEventSystem)
+            {
+                ChainFlags = new ChainFlagRegistry();
+                Triggers = new TriggerEvaluator();
+                Triggers.SetDependencies(Events, ChainFlags, FactionEconomy, Contracts);
+                CriticalModal = new CriticalEventModal();
+
+                // Wire critical events to modal + pause
+                Triggers.OnCriticalEvent += (eventId, ctx) =>
+                {
+                    var pending = Events.GetPending().Find(p => p.definition?.id == eventId);
+                    if (pending != null)
+                        CriticalModal.Show(eventId, pending, ctx);
+                    else
+                        IsPaused = true; // fallback pause
+                };
+
+                CriticalModal.OnPauseRequested += pause => IsPaused = pause;
+            }
+
+            // Diplomat role
+            if (FeatureFlags.UseDiplomatRole)
+            {
+                Diplomats = new DiplomatRole();
+                Diplomats.SetDependencies(Fleet, Events);
+            }
+
+            // Station Quests
+            if (FeatureFlags.UseStationQuests && FeatureFlags.UseSimulatedFactionEconomy)
+            {
+                StationQuests = new StationQuestSystem();
+                StationQuests.SetDependencies(FactionEconomy, BroadcastNet);
+            }
         }
 
         // ── New game ─────────────────────────────────────────────────────────
@@ -926,6 +1022,80 @@ namespace Waystation.Core
             // Economy system: docking fees and faction contract payments.
             // Runs after Visitors.Tick so newly-docked ships are already in the docked list.
             Economy.Tick(Station);
+
+            // ── Phase 4: Faction Economy Stack tick calls ─────────────────────
+
+            // Faction Economy: weekly tick for price recalculation, dispatch evaluation
+            if (FeatureFlags.UseSimulatedFactionEconomy && Station.tick % TimeSystem.TicksPerWeek == 0)
+            {
+                FactionEconomy?.TickWeekly(Station);
+                TraderDispatch?.EvaluateDispatches(Station);
+            }
+            // Broadcast network: daily tick for staleness purge
+            if (FeatureFlags.UseSimulatedFactionEconomy && Station.tick % TimeSystem.TicksPerDay == 0)
+                BroadcastNet?.TickDaily(Station.tick);
+
+            // Docking queue: check abandonment every tick when physical visitor sim is active
+            if (FeatureFlags.UsePhysicalVisitorSimulation)
+            {
+                var abandoned = DockQueue?.CheckAbandonment(Station.tick);
+                if (abandoned != null)
+                {
+                    foreach (var shipUid in abandoned)
+                    {
+                        Station.Log($"Ship {shipUid} abandoned the docking queue after waiting too long.");
+                        if (Station.ships.TryGetValue(shipUid, out var abandonedShip))
+                            Station.ModifyFactionRep(abandonedShip.factionId, -2f);
+                    }
+                }
+            }
+
+            // Contracts: weekly tick for evaluation, breach detection, revenue share
+            if (FeatureFlags.UseContractsSystem && Station.tick % TimeSystem.TicksPerWeek == 0)
+            {
+                Contracts?.TickWeekly(Station);
+                ContractBreach?.CheckBreaches(Station);
+                // Disburse revenue share for active relay agreements
+                if (RevenueTracker != null && Contracts != null)
+                {
+                    foreach (var c in Contracts.GetActiveByType(ContractType.RelayAgreement))
+                    {
+                        if (c.relayAgreementTerms?.compensationType == RelayCompensationType.RevenueShare)
+                        {
+                            float payment = RevenueTracker.DisburseRevenueShare(
+                                c.relayAgreementTerms.relayStationId,
+                                c.relayAgreementTerms.revenueSharePercent);
+                            if (payment > 0f)
+                                Station.ModifyResource("credits", -payment);
+                        }
+                    }
+                    RevenueTracker.ResetPeriod();
+                }
+            }
+
+            // Extended Event triggers: per channel
+            if (FeatureFlags.UseExtendedEventSystem)
+            {
+                // Channel 0: resource + visitor triggers (every tick)
+                Triggers?.EvaluateResourceTriggers(Station);
+                Triggers?.EvaluateVisitorTriggers(Station);
+
+                // Channel 2: faction triggers (every 10 ticks)
+                if (Station.tick % 10 == 0)
+                    Triggers?.EvaluateFactionTriggers(Station);
+
+                // Channel 4: scheduled triggers (weekly)
+                if (Station.tick % TimeSystem.TicksPerWeek == 0)
+                    Triggers?.EvaluateScheduledTriggers(Station);
+            }
+
+            // Diplomat missions: medium tick (every 10 ticks)
+            if (FeatureFlags.UseDiplomatRole && Station.tick % 10 == 0)
+                Diplomats?.Tick(Station);
+
+            // Station quests: weekly tick
+            if (FeatureFlags.UseStationQuests && Station.tick % TimeSystem.TicksPerWeek == 0)
+                StationQuests?.TickWeekly(Station);
 
             // Farming / climate (temperature before farming so planter temps are fresh)
             Temperature.Tick(Station);

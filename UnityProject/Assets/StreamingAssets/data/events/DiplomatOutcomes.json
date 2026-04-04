@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "diplomat_outcomes": {
+    "critical_failure": [
+      "The diplomat's ship was impounded and the crew detained. All communication has been cut off.",
+      "A diplomatic incident escalated beyond recovery. Your representative was expelled under guard.",
+      "The faction's leadership took severe offence. Your diplomat barely escaped with their life."
+    ],
+    "failure": [
+      "Talks broke down after the initial meeting. The faction showed no interest in further dialogue.",
+      "Your diplomat was received politely but firmly turned away. No agreements were reached.",
+      "A cultural misunderstanding torpedoed the negotiations before they could begin."
+    ],
+    "partial": [
+      "Some progress was made, but the faction wants more concessions before committing.",
+      "Your diplomat secured a minor trade concession but the larger deal fell through.",
+      "Initial talks were positive. The faction is open to continuing discussions."
+    ],
+    "success": [
+      "Negotiations were successful! The faction is pleased with the terms agreed upon.",
+      "Your diplomat charmed the faction leadership. A solid trade agreement is in place.",
+      "Excellent diplomatic work. Both sides are satisfied with the outcome."
+    ],
+    "exceptional": [
+      "A historic agreement! The faction has offered exclusive trade rights and mutual defence.",
+      "Your diplomat impressed the faction so thoroughly they've offered an alliance.",
+      "Outstanding success — the faction is sending a reciprocal diplomatic envoy with gifts."
+    ]
+  },
+  "interception_outcomes": [
+    "The ship was ambushed by pirates in a disputed corridor.",
+    "An uncharted debris field forced a dangerous detour through hostile space.",
+    "Faction patrol ships challenged the vessel's right of passage."
+  ],
+  "quest_visibility_tiers": {
+    "tier_1": {
+      "comm_array_tier": 1,
+      "range_sectors": 1,
+      "description": "Local broadcast — visible to nearby stations only"
+    },
+    "tier_2": {
+      "comm_array_tier": 2,
+      "range_sectors": 3,
+      "description": "Regional broadcast — visible to stations within 3 sectors"
+    },
+    "tier_3": {
+      "comm_array_tier": 3,
+      "range_sectors": 7,
+      "description": "Wide broadcast — visible across most of known space"
+    }
+  }
+}

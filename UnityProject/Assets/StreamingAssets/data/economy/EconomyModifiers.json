@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "condition_modifiers": {
+    "war_declared": {
+      "consumption_multiplier": { "parts": 1.4, "fuel": 1.4 },
+      "health_delta_per_week": -0.15
+    },
+    "resource_node_destroyed": {
+      "production_zero": true,
+      "notes": "Affected resource production drops to 0 until rebuilt."
+    },
+    "trade_route_disrupted": {
+      "stockpile_growth_reduction": 0.5,
+      "notes": "Stockpile growth rate halved for goods sourced via disrupted route."
+    },
+    "government_corporate": {
+      "health_baseline_bonus": 0.1
+    },
+    "government_warlord": {
+      "health_baseline_penalty": -0.1
+    },
+    "population_mood_below_30": {
+      "health_delta_per_week": -0.05
+    }
+  }
+}
