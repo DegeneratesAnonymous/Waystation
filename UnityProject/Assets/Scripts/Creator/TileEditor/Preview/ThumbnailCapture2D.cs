@@ -34,7 +34,7 @@ namespace Waystation.Creator.TileEditor.Preview
         public static byte[] CaptureAsPNG(PixelCanvas2D canvas)
         {
             var thumb = Capture(canvas);
-            byte[] png = thumb.EncodeToPNG();
+            byte[] png = ImageConversion.EncodeToPNG(thumb);
             Object.Destroy(thumb);
             return png;
         }

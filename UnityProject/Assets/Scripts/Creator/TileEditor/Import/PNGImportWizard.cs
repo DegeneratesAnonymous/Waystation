@@ -31,7 +31,7 @@ namespace Waystation.Creator.TileEditor.Import
             if (!File.Exists(path)) return false;
             byte[] data = File.ReadAllBytes(path);
             SourceImage = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (!SourceImage.LoadImage(data)) return false;
+            if (!ImageConversion.LoadImage(SourceImage, data)) return false;
 
             // Detect tile size from image dimensions
             DetectTileSize();
@@ -41,7 +41,7 @@ namespace Waystation.Creator.TileEditor.Import
         public bool LoadImage(byte[] pngData)
         {
             SourceImage = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (!SourceImage.LoadImage(pngData)) return false;
+            if (!ImageConversion.LoadImage(SourceImage, pngData)) return false;
             DetectTileSize();
             return true;
         }
